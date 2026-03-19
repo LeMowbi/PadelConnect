@@ -1,0 +1,29 @@
+{
+  "name": "floppy-wings",
+  "version": "1.0.0",
+  "description": "Flappy Bird style game with skins and microtransactions",
+  "private": true,
+  "scripts": {
+    "start": "npx serve . -p 3000",
+    "build": "echo 'No build step needed - pure HTML5/JS'",
+    "ios": "npx cap sync ios && npx cap open ios",
+    "android": "npx cap sync android && npx cap open android",
+    "sync": "npx cap sync",
+    "add:ios": "npx cap add ios",
+    "add:android": "npx cap add android"
+  },
+  "dependencies": {
+    "@capacitor/app": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/haptics": "^6.0.0",
+    "@capacitor/splash-screen": "^6.0.0",
+    "@capacitor/status-bar": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0",
+    "serve": "^14.2.0"
+  },
+  "keywords": ["game", "flappy-bird", "mobile", "ios", "android", "capacitor"],
+  "author": "FloppyWings Team",
+  "license": "MIT"
+}
