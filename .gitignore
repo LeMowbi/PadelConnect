@@ -6,6 +6,10 @@ node_modules/
 # Expo
 .expo/
 dist/
+
+# Build web empaqueté (artefact, non versionné)
+PadelCo-web.zip
+PadelCo-web.tar.gz
 web-build/
 expo-env.d.ts
 
