@@ -150,7 +150,7 @@ export function Button({
           shadowCard,
           { borderRadius: size === 'sm' ? radius.sm : radius.md },
           full && { alignSelf: 'stretch' },
-          pressed && { opacity: 0.9 },
+          pressed && { opacity: 0.9, transform: [{ scale: 0.97 }] },
           disabled && { opacity: 0.45 },
         ]}
       >
@@ -175,7 +175,7 @@ export function Button({
         size === 'sm' && btn.sm,
         { backgroundColor: tone.bg, borderColor: tone.border },
         full && { alignSelf: 'stretch' },
-        pressed && { opacity: 0.85 },
+        pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] },
         disabled && { opacity: 0.45 },
       ]}
     >

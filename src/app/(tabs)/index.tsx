@@ -6,6 +6,7 @@ import { ClubCard } from '@/components/ClubCard';
 import { CompetitionCard } from '@/components/CompetitionCard';
 import { Logo } from '@/components/Logo';
 import { MatchCard } from '@/components/MatchCard';
+import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
 import { Card, IconCircle, SectionHeader, Txt } from '@/components/ui';
 import { clubsByName } from '@/data/clubs';
@@ -36,6 +37,7 @@ export default function HomeScreen() {
 
   return (
     <Screen>
+      <Reveal>
       {/* Hero */}
       <LinearGradient colors={['#1B1812', colors.bg]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
         <View style={styles.brandRow}>
@@ -120,6 +122,7 @@ export default function HomeScreen() {
           Tous les clubs sont présentés à égalité, sans classement ni hiérarchie.
         </Txt>
       </View>
+      </Reveal>
     </Screen>
   );
 }

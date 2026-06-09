@@ -49,7 +49,7 @@ export default function ClubAdmin() {
   const coaches = state.clubCoaches[club.id] ?? [];
   const boosted = state.boostedClubIds.includes(club.id);
   const shareBoost = () =>
-    Share.share({ message: `Bonjour PadelCo, je souhaite booster le profil de ${club.name} (paiement par Wave).` }).catch(() => {});
+    Share.share({ message: `Bonjour PadelConnect, je souhaite booster le profil de ${club.name} (paiement par Wave).` }).catch(() => {});
   const reservations = state.reservations.filter((r) => r.clubId === club.id);
   const comps = [
     ...state.myCompetitions.filter((c) => c.clubId === club.id),
@@ -115,12 +115,12 @@ export default function ClubAdmin() {
             <IconCircle icon="megaphone" />
             <View style={{ flex: 1 }}>
               <Txt variant="h3">Mettre {club.name} en avant</Txt>
-              <Txt variant="muted">Apparais en tête de liste avec un badge « Sponsorisé ». Paiement par Wave auprès de PadelCo.</Txt>
+              <Txt variant="muted">Apparais en tête de liste avec un badge « Sponsorisé ». Paiement par Wave auprès de PadelConnect.</Txt>
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
             <View style={{ flex: 1 }}>
-              <Button size="sm" label="Contacter PadelCo" icon="paper-plane" onPress={shareBoost} full />
+              <Button size="sm" label="Contacter PadelConnect" icon="paper-plane" onPress={shareBoost} full />
             </View>
             <Button
               size="sm"

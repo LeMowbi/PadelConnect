@@ -1,4 +1,4 @@
-// Système de design PadelCo — sobre, épuré, sensation « luxe + sport ».
+// Système de design PadelConnect — sobre, épuré, sensation « luxe + sport ».
 // Base sombre, accent or champagne (luxe) et vert émeraude (sport).
 
 export const colors = {

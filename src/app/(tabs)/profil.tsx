@@ -298,7 +298,7 @@ export default function ProfilScreen() {
         <Card onPress={() => router.push('/operateur')} style={[styles.cta, { marginTop: spacing.sm }]}>
           <IconCircle icon="stats-chart" color={colors.green} bg={colors.greenSoft} />
           <View style={{ flex: 1 }}>
-            <Txt variant="h3">Espace opérateur (PadelCo)</Txt>
+            <Txt variant="h3">Espace opérateur (PadelConnect)</Txt>
             <Txt variant="muted">Réservations payées & commission par club.</Txt>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />

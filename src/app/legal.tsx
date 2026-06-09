@@ -8,12 +8,12 @@ export default function Legal() {
       <Card style={{ marginTop: spacing.sm }}>
         <Txt variant="h3">Conditions d'utilisation</Txt>
         <Txt variant="body" style={{ marginTop: spacing.sm }}>
-          PadelCo met en relation des joueurs et des clubs de padel à Abidjan (réservation de
+          PadelConnect met en relation des joueurs et des clubs de padel à Abidjan (réservation de
           créneaux, recherche de partenaires, coachs et compétitions). L'application est fournie
           « en l'état » pendant sa phase de prototype.
         </Txt>
         <Txt variant="body" style={{ marginTop: spacing.sm }}>
-          Les résultats de matchs sont déclarés par les joueurs eux-mêmes : PadelCo n'en garantit
+          Les résultats de matchs sont déclarés par les joueurs eux-mêmes : PadelConnect n'en garantit
           pas l'exactitude. Les tarifs et disponibilités affichés sont indicatifs et relèvent de la
           responsabilité de chaque club.
         </Txt>
@@ -36,7 +36,7 @@ export default function Legal() {
       <Card style={{ marginTop: spacing.md }}>
         <Txt variant="h3">Contact</Txt>
         <Txt variant="body" style={{ marginTop: spacing.sm }}>
-          PadelCo · Abidjan
+          PadelConnect · Abidjan
         </Txt>
         <Txt variant="muted">moustaphabitar01@gmail.com</Txt>
       </Card>

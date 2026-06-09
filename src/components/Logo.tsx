@@ -1,7 +1,7 @@
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { colors, font } from '@/theme';
 
-// Logo PadelCo : symbole (« p » or + balle émeraude) + nom.
+// Logo PadelConnect : symbole (« p » or + balle émeraude) + nom.
 export function Logo({ size = 30, tagline }: { size?: number; tagline?: string }) {
   return (
     <View style={styles.row}>
@@ -12,7 +12,7 @@ export function Logo({ size = 30, tagline }: { size?: number; tagline?: string }
       />
       <View>
         <Text style={styles.word}>
-          Padel<Text style={{ color: colors.gold }}>Co</Text>
+          Padel<Text style={{ color: colors.gold }}>Connect</Text>
         </Text>
         {tagline ? <Text style={styles.tagline}>{tagline}</Text> : null}
       </View>

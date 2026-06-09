@@ -84,7 +84,7 @@ export default function NouveauMatch() {
 
       <Label text="Qui peut voir ce match ?" />
       <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
-        <VisibilityOption active={visibility === 'public'} onPress={() => setVisibility('public')} icon="earth" title="Public" desc="Visible par tous les joueurs de PadelCo." />
+        <VisibilityOption active={visibility === 'public'} onPress={() => setVisibility('public')} icon="earth" title="Public" desc="Visible par tous les joueurs de PadelConnect." />
         <VisibilityOption active={visibility === 'amis'} onPress={() => setVisibility('amis')} icon="people" title="Amis uniquement" desc="Visible seulement par tes amis." />
       </View>
 
