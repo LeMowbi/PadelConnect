@@ -1,14 +1,24 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { RatingStars } from '@/components/RatingStars';
 import { Screen } from '@/components/Screen';
+import { SegmentedControl } from '@/components/SegmentedControl';
 import { Card, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
 import { getClub } from '@/data/clubs';
 import { coaches, type Coach } from '@/data/coaches';
 import { useApp } from '@/store/AppContext';
 import { fcfa, initials } from '@/lib/format';
 import { colors, radius, spacing } from '@/theme';
+
+const TABS = ['Tous', 'Débutant', 'Intermédiaire', 'Avancé'] as const;
+
+function inRange(level: number, tab: (typeof TABS)[number]) {
+  if (tab === 'Débutant') return level < 2.5;
+  if (tab === 'Intermédiaire') return level >= 2.5 && level < 4.5;
+  if (tab === 'Avancé') return level >= 4.5;
+  return true;
+}
 
 function CoachRow({ coach }: { coach: Coach }) {
   const router = useRouter();
@@ -32,12 +42,10 @@ function CoachRow({ coach }: { coach: Coach }) {
             </Txt>
           </View>
         </View>
-        <View style={{ alignItems: 'flex-end' }}>
+        <View style={{ alignItems: 'flex-end', gap: 4 }}>
+          <Tag label={`Niv. ${coach.levelValue.toFixed(1)}`} tone="gold" />
           <Txt variant="price" style={{ fontSize: 15 }}>
             {fcfa(coach.pricePerHour)}
-          </Txt>
-          <Txt variant="small" color={colors.textFaint}>
-            /heure
           </Txt>
         </View>
       </View>
@@ -52,20 +60,20 @@ function CoachRow({ coach }: { coach: Coach }) {
 
 export default function CoachsScreen() {
   const { state } = useApp();
-  const clubCoaches = Object.entries(state.clubCoaches).flatMap(([clubId, list]) =>
-    list.map((c) => ({ ...c, clubName: getClub(clubId)?.name ?? 'Club' }))
+  const [tab, setTab] = useState<(typeof TABS)[number]>('Tous');
+
+  const list = [...coaches].sort((a, b) => b.levelValue - a.levelValue).filter((c) => inRange(c.levelValue, tab));
+  const clubCoaches = Object.entries(state.clubCoaches).flatMap(([clubId, l]) =>
+    l.map((c) => ({ ...c, clubName: getClub(clubId)?.name ?? 'Club' }))
   );
 
   return (
-    <Screen back title="Coachs" subtitle="Réserve un entraînement à Abidjan">
-      <View style={styles.note}>
-        <Ionicons name="information-circle-outline" size={15} color={colors.textFaint} />
-        <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
-          Profils de démonstration — à remplacer par de vrais coachs partenaires.
-        </Txt>
+    <Screen back title="Coachs" subtitle="Classés par niveau — trouve le bon entraîneur">
+      <View style={{ marginTop: spacing.xs }}>
+        <SegmentedControl options={TABS} value={tab} onChange={setTab} />
       </View>
 
-      {coaches.map((c) => (
+      {list.map((c) => (
         <CoachRow key={c.id} coach={c} />
       ))}
 
@@ -103,5 +111,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   specs: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
-  note: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
 });

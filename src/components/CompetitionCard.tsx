@@ -14,11 +14,14 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
   return (
     <Card onPress={() => router.push(`/competition/${comp.id}`)} style={{ marginBottom: spacing.md }}>
       <View style={styles.topRow}>
-        <Tag
-          label={byClub ? `Club · ${comp.organizer}` : `Joueur · ${comp.organizer}`}
-          tone={byClub ? 'neutral' : 'green'}
-          icon={byClub ? 'business' : 'person'}
-        />
+        <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', flex: 1 }}>
+          <Tag
+            label={byClub ? `Club · ${comp.organizer}` : `Joueur · ${comp.organizer}`}
+            tone={byClub ? 'neutral' : 'green'}
+            icon={byClub ? 'business' : 'person'}
+          />
+          {comp.official ? <Tag label="Officielle" tone="gold" icon="shield-checkmark" /> : null}
+        </View>
         <Txt variant="muted">{comp.date}</Txt>
       </View>
 

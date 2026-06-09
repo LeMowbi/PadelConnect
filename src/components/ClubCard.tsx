@@ -13,6 +13,7 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
   const router = useRouter();
   const { state, toggleFavorite } = useApp();
   const fav = state.favoriteClubIds.includes(club.id);
+  const boosted = state.boostedClubIds.includes(club.id);
   const photo = clubGallery(club, state.clubPhotos[club.id] ?? [])[0];
   const go = () => router.push(`/club/${club.id}`);
 
@@ -59,7 +60,7 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
           <Txt variant="h3" numberOfLines={1} style={{ flex: 1 }}>
             {club.name}
           </Txt>
-          <Tag label={club.type} tone="neutral" />
+          {boosted ? <Tag label="Sponsorisé" tone="gold" icon="megaphone" /> : <Tag label={club.type} tone="neutral" />}
         </View>
         <View style={styles.areaRow}>
           <Ionicons name="location-outline" size={14} color={colors.textMuted} />

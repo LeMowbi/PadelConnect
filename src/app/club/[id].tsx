@@ -32,6 +32,7 @@ export default function ClubDetail() {
   }
 
   const fav = state.favoriteClubIds.includes(club.id);
+  const boosted = state.boostedClubIds.includes(club.id);
   const gallery = clubGallery(club, state.clubPhotos[club.id] ?? []);
   const offers = offersForClub(club, state.clubOffers[club.id] ?? []);
   const reviews = [
@@ -74,6 +75,7 @@ export default function ClubDetail() {
       ) : null}
 
       <View style={styles.tags}>
+        {boosted ? <Tag label="Sponsorisé" tone="gold" icon="megaphone" /> : null}
         <Tag label={club.type} tone="neutral" />
         <Tag label={`${club.courts} terrains`} tone="neutral" />
         <Tag label={`${club.rating.toFixed(1)} ★ (${club.reviewsCount})`} tone="gold" />

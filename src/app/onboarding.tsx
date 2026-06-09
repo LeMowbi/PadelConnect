@@ -4,26 +4,24 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LevelStepper } from '@/components/LevelStepper';
 import { Logo } from '@/components/Logo';
 import { Button, Txt } from '@/components/ui';
+import { levelLabel } from '@/data/matches';
 import { pickImage } from '@/lib/pickImage';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
 export default function Onboarding() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { setAccount, loadDemo } = useApp();
+  const { setAccount, setLevel, loadDemo } = useApp();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [photoUri, setPhotoUri] = useState<string | undefined>(undefined);
+  const [lvl, setLvl] = useState(3.0);
 
-  const ready =
-    firstName.trim().length >= 2 &&
-    lastName.trim().length >= 1 &&
-    phone.replace(/\D/g, '').length >= 8;
+  const ready = firstName.trim().length >= 2 && lastName.trim().length >= 1 && phone.replace(/\D/g, '').length >= 8;
 
   const choosePhoto = async () => {
     const uri = await pickImage();
@@ -33,6 +31,7 @@ export default function Onboarding() {
   const create = () => {
     if (!ready) return;
     setAccount({ firstName: firstName.trim(), lastName: lastName.trim(), phone: phone.trim(), photoUri });
+    setLevel(lvl);
     router.replace('/');
   };
 
@@ -43,23 +42,18 @@ export default function Onboarding() {
 
   return (
     <View style={styles.root}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}>
-        {/* Héros dégradé */}
-        <LinearGradient
-          colors={['#1A1710', '#15171C', colors.bg]}
-          style={[styles.hero, { paddingTop: insets.top + spacing.xl }]}
-        >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xxxl }}>
+        <LinearGradient colors={['#1B1812', '#15171C', colors.bg]} style={styles.hero}>
           <Logo size={40} />
           <Txt variant="display" style={{ fontSize: 30, marginTop: spacing.xl }}>
             Bienvenue 👋
           </Txt>
           <Txt variant="muted" style={{ marginTop: 4 }}>
-            Crée ton profil pour réserver, jouer et suivre tes résultats.
+            Crée ton profil pour réserver, jouer et progresser.
           </Txt>
         </LinearGradient>
 
         <View style={styles.body}>
-          {/* Photo optionnelle */}
           <View style={{ alignItems: 'center' }}>
             <Pressable onPress={choosePhoto} style={styles.avatar}>
               {photoUri ? (
@@ -76,6 +70,16 @@ export default function Onboarding() {
           <Field label="Prénom" value={firstName} onChangeText={setFirstName} placeholder="Ex. Moustapha" />
           <Field label="Nom" value={lastName} onChangeText={setLastName} placeholder="Ex. Bitar" />
           <Field label="Numéro de téléphone" value={phone} onChangeText={setPhone} placeholder="+225 07 00 00 00 00" keyboardType="phone-pad" />
+
+          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+            Ton niveau de jeu
+          </Txt>
+          <View style={styles.levelBox}>
+            <LevelStepper value={lvl} onChange={setLvl} />
+            <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
+              {levelLabel(lvl)} · évoluera selon tes compétitions officielles
+            </Txt>
+          </View>
 
           <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
             <Button label="Créer mon profil" icon="checkmark" onPress={create} disabled={!ready} full />
@@ -125,7 +129,7 @@ function Field({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  hero: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
+  hero: { paddingHorizontal: spacing.lg, paddingTop: spacing.xxxl, paddingBottom: spacing.xl },
   body: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   avatar: {
     width: 96,
@@ -139,6 +143,15 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   avatarImg: { width: '100%', height: '100%' },
+  levelBox: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.lg,
+    marginTop: spacing.sm,
+  },
   input: {
     backgroundColor: colors.surface,
     borderWidth: 1,

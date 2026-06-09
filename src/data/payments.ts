@@ -1,5 +1,5 @@
-// Moyens de paiement proposés (Côte d'Ivoire). Dans le prototype, le paiement
-// est SIMULÉ — à brancher plus tard sur un agrégateur (CinetPay / PayDunya).
+// Moyens de paiement proposés (Côte d'Ivoire) : Wave et espèces uniquement.
+// Paiement SIMULÉ dans le prototype — à brancher plus tard sur Wave (et un agrégateur).
 
 import type { IconName } from '@/components/ui';
 
@@ -13,10 +13,6 @@ export type PaymentMethod = {
 
 export const paymentMethods: PaymentMethod[] = [
   { id: 'wave', label: 'Wave', hint: 'Mobile money', icon: 'phone-portrait', accent: '#1DC4FF' },
-  { id: 'orange', label: 'Orange Money', hint: 'Mobile money', icon: 'phone-portrait', accent: '#FF7900' },
-  { id: 'mtn', label: 'MTN MoMo', hint: 'Mobile money', icon: 'phone-portrait', accent: '#FFCC00' },
-  { id: 'moov', label: 'Moov Money', hint: 'Mobile money', icon: 'phone-portrait', accent: '#1466B8' },
-  { id: 'carte', label: 'Carte bancaire', hint: 'Visa · Mastercard', icon: 'card', accent: '#C9A24B' },
   { id: 'espece', label: 'Payer au club', hint: 'Espèces sur place', icon: 'cash', accent: '#1FB57A' },
 ];
 

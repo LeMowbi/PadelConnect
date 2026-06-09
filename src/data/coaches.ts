@@ -4,6 +4,7 @@ export type Coach = {
   id: string;
   name: string;
   level: string;
+  levelValue: number; // niveau enseigné (1.0 → 7.0), pour le classement
   area: string;
   pricePerHour: number; // FCFA — indicatif
   rating: number;
@@ -17,6 +18,7 @@ export const coaches: Coach[] = [
     id: 'coach-1',
     name: 'Coach Aïcha K. (démo)',
     level: 'Initiation & intermédiaire',
+    levelValue: 3.0,
     area: 'Cocody',
     pricePerHour: 15000,
     rating: 4.8,
@@ -27,7 +29,8 @@ export const coaches: Coach[] = [
   {
     id: 'coach-2',
     name: 'Coach David T. (démo)',
-    level: 'Intermédiaire & avancé',
+    level: 'Avancé & compétition',
+    levelValue: 5.5,
     area: 'Marcory',
     pricePerHour: 18000,
     rating: 4.7,
@@ -38,7 +41,8 @@ export const coaches: Coach[] = [
   {
     id: 'coach-3',
     name: 'Coach Marina S. (démo)',
-    level: 'Tous niveaux',
+    level: 'Intermédiaire & avancé',
+    levelValue: 4.5,
     area: 'Riviera',
     pricePerHour: 16000,
     rating: 4.6,
@@ -50,6 +54,7 @@ export const coaches: Coach[] = [
     id: 'coach-4',
     name: 'Coach Yann B. (démo)',
     level: 'Débutant & enfants',
+    levelValue: 1.5,
     area: 'Zone 4',
     pricePerHour: 14000,
     rating: 4.9,

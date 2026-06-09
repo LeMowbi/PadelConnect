@@ -7,29 +7,50 @@ import { LevelStepper } from '@/components/LevelStepper';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
 import { levelLabel } from '@/data/matches';
-import { seedFriends } from '@/data/user';
 import { useApp } from '@/store/AppContext';
 import { initials } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
 import { colors, radius, spacing } from '@/theme';
 
+const FIVE_H = 5 * 3600000;
+
 export default function ProfilScreen() {
   const router = useRouter();
-  const { state, stats, setLevel, setDefaultVisibility, setReservationResult, cancelReservation, signOut, resetAll } = useApp();
-  const { account, level, defaultVisibility, reservations } = state;
+  const {
+    state,
+    stats,
+    setReservationResult,
+    cancelReservation,
+    confirmInvite,
+    recordOfficialResult,
+    addFriend,
+    removeFriend,
+    setDefaultVisibility,
+    signOut,
+    resetAll,
+  } = useApp();
+  const { account, level, defaultVisibility, reservations, friends, officialResults } = state;
 
   const [editing, setEditing] = useState(false);
+  const [fName, setFName] = useState('');
+  const [fLevel, setFLevel] = useState(3.0);
 
-  if (!account) return null; // protégé par l'onboarding
+  if (!account) return null;
 
   const toValidate = reservations.filter((r) => !r.result);
-  const history = reservations
-    .filter((r) => r.result)
-    .sort((a, b) => (b.resultAt ?? 0) - (a.resultAt ?? 0));
+  const history = reservations.filter((r) => r.result).sort((a, b) => (b.resultAt ?? 0) - (a.resultAt ?? 0));
+
+  const badges = [
+    { label: 'Première partie', ok: stats.played >= 1 },
+    { label: '5 parties', ok: stats.played >= 5 },
+    { label: 'Série de 3', ok: stats.streak >= 3 },
+    { label: 'Compétiteur', ok: officialResults.length >= 1 },
+    { label: 'Niveau 4+', ok: level >= 4 },
+    { label: '5 amis', ok: friends.length >= 5 },
+  ];
 
   return (
     <Screen title="Profil">
-      {/* Compte */}
       {editing ? (
         <EditAccount onDone={() => setEditing(false)} />
       ) : (
@@ -50,33 +71,57 @@ export default function ProfilScreen() {
               </Txt>
               <Txt variant="muted">{account.phone}</Txt>
               <View style={{ marginTop: spacing.sm }}>
-                <Tag label={`Niveau ${level.toFixed(1)} · ${levelLabel(level)}`} tone="gold" icon="ribbon" />
+                <Tag label={`Niveau ${level.toFixed(2)} · ${levelLabel(level)}`} tone="gold" icon="ribbon" />
               </View>
             </View>
           </View>
-          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+          <View style={{ marginTop: spacing.md }}>
             <Button size="sm" label="Modifier le profil" icon="create-outline" variant="secondary" onPress={() => setEditing(true)} />
           </View>
         </Card>
       )}
 
-      {/* Niveau */}
+      {/* Niveau (évolue via compétitions officielles) */}
       <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title="Mon niveau de jeu" />
+        <SectionHeader title="Mon niveau" />
         <Card>
-          <Txt variant="muted" style={{ marginBottom: spacing.md }}>
-            Échelle 1.0 (débutant) à 7.0 (pro). Aide à trouver des joueurs de ton niveau.
-          </Txt>
-          <View style={{ alignItems: 'center' }}>
-            <LevelStepper value={level} onChange={setLevel} />
-            <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
-              {levelLabel(level)}
-            </Txt>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+            <IconCircle icon="ribbon" />
+            <View style={{ flex: 1 }}>
+              <Txt variant="h2" color={colors.gold}>
+                {level.toFixed(2)}
+              </Txt>
+              <Txt variant="muted">{levelLabel(level)} · évolue selon tes compétitions officielles.</Txt>
+            </View>
           </View>
+          <Divider style={{ marginVertical: spacing.md }} />
+          <Txt variant="label" color={colors.textFaint}>
+            Résultat d'une compétition officielle
+          </Txt>
+          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+            <View style={{ flex: 1 }}>
+              <Button size="sm" label="Gagnée (+0.25)" icon="trending-up" onPress={() => recordOfficialResult('Compétition officielle', 'win')} full />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button size="sm" label="Perdue (-0.25)" icon="trending-down" variant="danger" onPress={() => recordOfficialResult('Compétition officielle', 'loss')} full />
+            </View>
+          </View>
+          {officialResults.length > 0 ? (
+            <View style={{ marginTop: spacing.md, gap: 6 }}>
+              {officialResults.slice(0, 3).map((o) => (
+                <View key={o.id} style={styles.histRow}>
+                  <Tag label={o.result === 'win' ? 'Gagnée' : 'Perdue'} tone={o.result === 'win' ? 'green' : 'danger'} />
+                  <Txt variant="muted" style={{ flex: 1 }}>
+                    {o.title} → Niveau {o.levelAfter.toFixed(2)}
+                  </Txt>
+                </View>
+              ))}
+            </View>
+          ) : null}
         </Card>
       </View>
 
-      {/* Statistiques */}
+      {/* Statistiques (parties amicales) */}
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Mes statistiques" />
         <View style={styles.stats}>
@@ -88,8 +133,23 @@ export default function ProfilScreen() {
         <Card style={{ marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
           <IconCircle icon="flame" color={colors.gold} bg={colors.goldSoft} size={40} />
           <Txt variant="body">
-            Série actuelle : <Txt variant="body" color={colors.gold} style={{ fontWeight: '700' }}>{stats.streak} victoire{stats.streak > 1 ? 's' : ''}</Txt>
+            Série :{' '}
+            <Txt variant="body" color={colors.gold} style={{ fontWeight: '700' }}>
+              {stats.streak} victoire{stats.streak > 1 ? 's' : ''}
+            </Txt>
           </Txt>
+        </Card>
+      </View>
+
+      {/* Trophées (fun) */}
+      <View style={{ marginTop: spacing.xl }}>
+        <SectionHeader title="Trophées" />
+        <Card>
+          <View style={styles.badges}>
+            {badges.map((b) => (
+              <Tag key={b.label} label={b.label} tone={b.ok ? 'gold' : 'neutral'} icon={b.ok ? 'trophy' : 'lock-closed'} />
+            ))}
+          </View>
         </Card>
       </View>
 
@@ -105,25 +165,46 @@ export default function ProfilScreen() {
             <Txt variant="muted">Aucune partie en attente. Bien joué !</Txt>
           </Card>
         ) : (
-          toValidate.map((r) => (
-            <Card key={r.id} style={{ marginBottom: spacing.sm }}>
-              <Txt variant="h3" style={{ fontSize: 15 }}>
-                {r.clubName}
-              </Txt>
-              <Txt variant="muted" style={{ marginTop: 2 }}>
-                {r.date} · {r.time} · {r.players} joueurs
-              </Txt>
-              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
-                <View style={{ flex: 1 }}>
-                  <Button size="sm" label="J'ai gagné" icon="trophy" onPress={() => setReservationResult(r.id, 'win')} full />
+          toValidate.map((r) => {
+            const canCancel = r.startsAt - Date.now() > FIVE_H;
+            return (
+              <Card key={r.id} style={{ marginBottom: spacing.sm }}>
+                <Txt variant="h3" style={{ fontSize: 15 }}>
+                  {r.clubName}
+                </Txt>
+                <Txt variant="muted" style={{ marginTop: 2 }}>
+                  {r.date} · {r.time} · {r.players} joueurs
+                </Txt>
+                {r.invited.length > 0 ? (
+                  <View style={styles.invited}>
+                    {r.invited.map((iv) => (
+                      <Pressable key={iv.id} onPress={() => confirmInvite(r.id, iv.id)} style={[styles.inviteChip, iv.confirmed && styles.inviteOk]}>
+                        <Ionicons name={iv.confirmed ? 'checkmark-circle' : 'time-outline'} size={13} color={iv.confirmed ? colors.green : colors.textMuted} />
+                        <Txt variant="small" color={iv.confirmed ? colors.green : colors.textMuted}>
+                          {iv.name}
+                        </Txt>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+                <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+                  <View style={{ flex: 1 }}>
+                    <Button size="sm" label="J'ai gagné" icon="trophy" onPress={() => setReservationResult(r.id, 'win')} full />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Button size="sm" label="J'ai perdu" icon="close" variant="danger" onPress={() => setReservationResult(r.id, 'loss')} full />
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Button size="sm" label="J'ai perdu" icon="close" variant="danger" onPress={() => setReservationResult(r.id, 'loss')} full />
-                </View>
-              </View>
-              <Button size="sm" label="Annuler la réservation" variant="ghost" onPress={() => cancelReservation(r.id)} />
-            </Card>
-          ))
+                {canCancel ? (
+                  <Button size="sm" label="Annuler la réservation" variant="ghost" onPress={() => cancelReservation(r.id)} />
+                ) : (
+                  <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
+                    Annulation impossible (moins de 5h avant) — à régler avec le club.
+                  </Txt>
+                )}
+              </Card>
+            );
+          })
         )}
       </View>
 
@@ -168,9 +249,9 @@ export default function ProfilScreen() {
 
       {/* Amis */}
       <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title={`Amis · ${seedFriends.length}`} />
+        <SectionHeader title={`Mes amis · ${friends.length}`} />
         <Card>
-          {seedFriends.map((f, i) => (
+          {friends.map((f, i) => (
             <View key={f.id}>
               {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
               <View style={styles.friend}>
@@ -182,20 +263,43 @@ export default function ProfilScreen() {
                 <Txt variant="body" style={{ flex: 1, fontWeight: '600' }}>
                   {f.name}
                 </Txt>
-                <Tag label={f.level} tone="neutral" />
+                <Tag label={`Niv. ${f.level.toFixed(1)}`} tone="neutral" />
+                <Pressable onPress={() => removeFriend(f.id)} hitSlop={8}>
+                  <Ionicons name="close-circle" size={20} color={colors.textFaint} />
+                </Pressable>
               </View>
             </View>
           ))}
+          <Divider style={{ marginVertical: spacing.md }} />
+          <Txt variant="label" color={colors.textFaint}>
+            Ajouter un ami
+          </Txt>
+          <TextInput value={fName} onChangeText={setFName} placeholder="Nom de l'ami" placeholderTextColor={colors.textFaint} style={styles.input} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md }}>
+            <Txt variant="muted">Niveau</Txt>
+            <LevelStepper value={fLevel} onChange={setFLevel} />
+          </View>
+          <View style={{ marginTop: spacing.md }}>
+            <Button size="sm" label="Ajouter l'ami" icon="person-add" onPress={() => { addFriend(fName, fLevel); setFName(''); }} />
+          </View>
         </Card>
       </View>
 
       {/* Espace Club */}
       <View style={{ marginTop: spacing.xl }}>
-        <Card onPress={() => router.push('/club-admin')} style={styles.clubCta}>
+        <Card onPress={() => router.push('/club-admin')} style={styles.cta}>
           <IconCircle icon="business" />
           <View style={{ flex: 1 }}>
             <Txt variant="h3">Tu gères un club ?</Txt>
-            <Txt variant="muted">Ouvre l’Espace Club : photos, créneaux, réservations, compétitions.</Txt>
+            <Txt variant="muted">Espace Club : page, photos, offres, créneaux, compétitions.</Txt>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+        </Card>
+        <Card onPress={() => router.push('/operateur')} style={[styles.cta, { marginTop: spacing.sm }]}>
+          <IconCircle icon="stats-chart" color={colors.green} bg={colors.greenSoft} />
+          <View style={{ flex: 1 }}>
+            <Txt variant="h3">Espace opérateur (PadelCo)</Txt>
+            <Txt variant="muted">Réservations payées & commission par club.</Txt>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
         </Card>
@@ -264,17 +368,7 @@ function Stat({ value, label, color }: { value: number | string; label: string; 
   );
 }
 
-function VisChip({
-  active,
-  icon,
-  label,
-  onPress,
-}: {
-  active: boolean;
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-}) {
+function VisChip({ active, icon, label, onPress }: { active: boolean; icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} style={[styles.visChip, active && styles.visChipActive]}>
       <Ionicons name={icon} size={16} color={active ? colors.onGold : colors.textMuted} />
@@ -307,7 +401,19 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     alignItems: 'center',
   },
-  histRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  histRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  invited: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  inviteChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+  },
+  inviteOk: { backgroundColor: colors.greenSoft },
   visChip: {
     flex: 1,
     flexDirection: 'row',
@@ -330,7 +436,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  clubCta: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  cta: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   input: {
     backgroundColor: colors.bg,
     borderWidth: 1,

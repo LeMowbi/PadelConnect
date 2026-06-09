@@ -70,6 +70,7 @@ export default function NouvelleCompetition() {
       fee: fee.trim() || 'Gratuit',
       slots,
       registered: 0,
+      official: asClub,
     });
     router.replace(asClub ? '/club-admin' : '/competitions');
   };

@@ -14,6 +14,7 @@ export type Competition = {
   fee: string; // frais d'inscription
   slots: number;
   registered: number;
+  official?: boolean;
   createdByMe?: boolean;
 };
 
@@ -32,6 +33,7 @@ export const seedCompetitions: Competition[] = [
     fee: '10 000 FCFA / équipe',
     slots: 16,
     registered: 11,
+    official: true,
   },
   {
     id: 'c2',
@@ -47,6 +49,7 @@ export const seedCompetitions: Competition[] = [
     fee: '5 000 FCFA / joueur',
     slots: 24,
     registered: 18,
+    official: true,
   },
   {
     id: 'c3',

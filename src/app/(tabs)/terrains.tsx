@@ -16,12 +16,13 @@ export default function TerrainsScreen() {
   const [filter, setFilter] = useState('Tous');
 
   const list = useMemo(() => {
-    if (filter === 'Favoris') return clubsByName.filter((c) => state.favoriteClubIds.includes(c.id));
-    if (filter === 'Couvert' || filter === 'Extérieur' || filter === 'Mixte') {
-      return clubsByName.filter((c) => c.type === filter);
-    }
-    return clubsByName;
-  }, [filter, state.favoriteClubIds]);
+    let base = clubsByName;
+    if (filter === 'Favoris') base = clubsByName.filter((c) => state.favoriteClubIds.includes(c.id));
+    else if (filter === 'Couvert' || filter === 'Extérieur' || filter === 'Mixte') base = clubsByName.filter((c) => c.type === filter);
+    const boosted = state.boostedClubIds;
+    // Clubs sponsorisés d'abord (signalés par un badge), le reste en ordre alphabétique.
+    return [...base].sort((a, b) => Number(boosted.includes(b.id)) - Number(boosted.includes(a.id)));
+  }, [filter, state.favoriteClubIds, state.boostedClubIds]);
 
   return (
     <Screen title="Terrains" subtitle={`${clubsByName.length} clubs de padel à Abidjan`}>

@@ -53,8 +53,9 @@ export default function CoachDetail() {
         <Divider style={{ marginVertical: spacing.md }} />
         <Txt variant="body">{coach.bio}</Txt>
         <View style={styles.specs}>
+          <Tag label={`Niveau ${coach.levelValue.toFixed(1)}`} tone="gold" />
           {coach.specialties.map((s) => (
-            <Tag key={s} label={s} tone="gold" />
+            <Tag key={s} label={s} tone="neutral" />
           ))}
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.md }}>
