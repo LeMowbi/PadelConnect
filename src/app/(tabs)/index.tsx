@@ -8,7 +8,7 @@ import { Logo } from '@/components/Logo';
 import { MatchCard } from '@/components/MatchCard';
 import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
-import { Card, IconCircle, SectionHeader, Txt } from '@/components/ui';
+import { Button, Card, IconCircle, SectionHeader, Txt } from '@/components/ui';
 import { clubsByName } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { seedMatches } from '@/data/matches';
@@ -18,11 +18,13 @@ import { colors, radius, spacing } from '@/theme';
 type Action = { icon: keyof typeof Ionicons.glyphMap; label: string; route: string; tint: string; bg: string };
 
 const ACTIONS: Action[] = [
-  { icon: 'calendar', label: 'Réserver un terrain', route: '/reserver', tint: colors.blue, bg: colors.blueSoft },
   { icon: 'tennisball', label: 'Trouver un match', route: '/matchs', tint: colors.gold, bg: colors.goldSoft },
-  { icon: 'school', label: 'Trouver un coach', route: '/coachs', tint: colors.green, bg: colors.greenSoft },
-  { icon: 'book', label: 'Découvrir le padel', route: '/decouvrir', tint: colors.blue, bg: colors.blueSoft },
+  { icon: 'trophy', label: 'Compétitions', route: '/competitions', tint: colors.green, bg: colors.greenSoft },
+  { icon: 'school', label: 'Trouver un coach', route: '/coachs', tint: colors.blue, bg: colors.blueSoft },
+  { icon: 'book', label: 'Découvrir le padel', route: '/decouvrir', tint: colors.gold, bg: colors.goldSoft },
 ];
+
+const TAB_ROUTES = new Set(['/reserver', '/matchs', '/competitions']);
 
 function countdown(ts: number): string {
   const diff = ts - Date.now();
@@ -34,12 +36,10 @@ function countdown(ts: number): string {
   return `dans ${m} min`;
 }
 
-const TAB_ROUTES = new Set(['/reserver', '/matchs', '/competitions']);
-
 export default function HomeScreen() {
   const router = useRouter();
   const { state } = useApp();
-  // Onglets : on bascule l'onglet (navigate) ; écrans empilés : push (pour garder le bouton retour).
+  // Onglets : on bascule l'onglet (navigate) ; écrans empilés : push (pour garder le retour).
   const go = (route: string) => (TAB_ROUTES.has(route) ? router.navigate(route as never) : router.push(route as never));
 
   const nearbyClubs = clubsByName;
@@ -55,95 +55,98 @@ export default function HomeScreen() {
   return (
     <Screen>
       <Reveal>
-      {/* Hero */}
-      <LinearGradient colors={['#E6F1ED', colors.bg]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
-        <View style={styles.brandRow}>
-          <Logo size={30} />
-          <View style={styles.cityChip}>
-            <Ionicons name="location-outline" size={13} color={colors.textMuted} />
-            <Txt variant="small" color={colors.textMuted}>
-              Abidjan
-            </Txt>
+        {/* Hero */}
+        <LinearGradient colors={['#E6F1ED', colors.bg]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
+          <View style={styles.brandRow}>
+            <Logo size={30} />
+            <View style={styles.cityChip}>
+              <Ionicons name="location-outline" size={13} color={colors.textMuted} />
+              <Txt variant="small" color={colors.textMuted}>
+                Abidjan
+              </Txt>
+            </View>
           </View>
-        </View>
-        <Txt variant="display" style={{ marginTop: spacing.sm }}>
-          Bonjour, {state.account?.firstName ?? ''}
-        </Txt>
-        <Txt variant="muted" style={{ marginTop: 4 }}>
-          Réserve un terrain, trouve un partenaire ou un coach — partout à Abidjan.
-        </Txt>
-      </LinearGradient>
-
-      {/* Actions rapides */}
-      <View style={styles.grid}>
-        {ACTIONS.map((a) => (
-          <Card key={a.label} onPress={() => go(a.route)} style={styles.tile}>
-            <IconCircle icon={a.icon} color={a.tint} bg={a.bg} />
-            <Txt variant="h3" style={{ marginTop: spacing.sm }} numberOfLines={2}>
-              {a.label}
-            </Txt>
-          </Card>
-        ))}
-      </View>
-
-      {/* Rappel de match */}
-      {upcoming ? (
-        <LinearGradient colors={[colors.gold, colors.goldDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.reminder}>
-          <View style={styles.bell}>
-            <Ionicons name="notifications" size={20} color={colors.onGold} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Txt variant="label" color="rgba(255,255,255,0.85)">
-              Rappel de match
-            </Txt>
-            <Txt variant="h3" color={colors.white} style={{ marginTop: 2 }}>
-              {upcoming.clubName}
-            </Txt>
-            <Txt variant="small" color="rgba(255,255,255,0.92)">
-              {upcoming.date} à {upcoming.time} · {upcoming.court}
-            </Txt>
-          </View>
-          <View style={styles.countChip}>
-            <Txt variant="small" color={colors.onGold} style={{ fontWeight: '700' }}>
-              {countdown(upcoming.startsAt)}
-            </Txt>
+          <Txt variant="display" style={{ marginTop: spacing.md }}>
+            Bonjour, {state.account?.firstName ?? ''}
+          </Txt>
+          <Txt variant="muted" style={{ marginTop: 4 }}>
+            Un terrain libre près de toi en quelques secondes.
+          </Txt>
+          <View style={{ marginTop: spacing.lg }}>
+            <Button label="Réserver un terrain" icon="calendar" onPress={() => go('/reserver')} full />
           </View>
         </LinearGradient>
-      ) : null}
 
-      {/* Terrains */}
-      <View style={styles.section}>
-        <SectionHeader title="Terrains près de toi" actionLabel="Voir tout" onAction={() => router.push('/clubs')} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md, paddingRight: spacing.lg }}>
-          {nearbyClubs.map((c) => (
-            <ClubCard key={c.id} club={c} compact />
+        {/* Rappel de match */}
+        {upcoming ? (
+          <LinearGradient colors={[colors.gold, colors.goldDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.reminder}>
+            <View style={styles.bell}>
+              <Ionicons name="notifications" size={20} color={colors.onGold} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Txt variant="label" color="rgba(255,255,255,0.85)">
+                Rappel de match
+              </Txt>
+              <Txt variant="h3" color={colors.white} style={{ marginTop: 2 }}>
+                {upcoming.clubName}
+              </Txt>
+              <Txt variant="small" color="rgba(255,255,255,0.92)">
+                {upcoming.date} à {upcoming.time} · {upcoming.court}
+              </Txt>
+            </View>
+            <View style={styles.countChip}>
+              <Txt variant="small" color={colors.onGold} style={{ fontWeight: '700' }}>
+                {countdown(upcoming.startsAt)}
+              </Txt>
+            </View>
+          </LinearGradient>
+        ) : null}
+
+        {/* Accès rapide */}
+        <View style={[styles.grid, { marginTop: spacing.lg }]}>
+          {ACTIONS.map((a) => (
+            <Card key={a.label} onPress={() => go(a.route)} style={styles.tile}>
+              <IconCircle icon={a.icon} color={a.tint} bg={a.bg} />
+              <Txt variant="h3" style={{ marginTop: spacing.sm, fontSize: 15 }} numberOfLines={2}>
+                {a.label}
+              </Txt>
+            </Card>
           ))}
-        </ScrollView>
-      </View>
+        </View>
 
-      {/* Matchs ouverts */}
-      <View style={styles.section}>
-        <SectionHeader title="Matchs ouverts" actionLabel="Voir tout" onAction={() => go('/matchs')} />
-        {matches.map((m) => (
-          <MatchCard key={m.id} match={m} />
-        ))}
-      </View>
+        {/* Terrains */}
+        <View style={styles.section}>
+          <SectionHeader title="Terrains près de toi" actionLabel="Voir tout" onAction={() => router.push('/clubs')} />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md, paddingRight: spacing.lg }}>
+            {nearbyClubs.map((c) => (
+              <ClubCard key={c.id} club={c} compact />
+            ))}
+          </ScrollView>
+        </View>
 
-      {/* Compétitions */}
-      <View style={styles.section}>
-        <SectionHeader title="Compétitions à venir" actionLabel="Voir tout" onAction={() => go('/competitions')} />
-        {competitions.map((c) => (
-          <CompetitionCard key={c.id} comp={c} />
-        ))}
-      </View>
+        {/* Matchs ouverts */}
+        <View style={styles.section}>
+          <SectionHeader title="Matchs ouverts" actionLabel="Voir tout" onAction={() => go('/matchs')} />
+          {matches.map((m) => (
+            <MatchCard key={m.id} match={m} />
+          ))}
+        </View>
 
-      {/* Note d'égalité (pas de classement) */}
-      <View style={styles.note}>
-        <Ionicons name="heart-outline" size={15} color={colors.textFaint} />
-        <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
-          Tous les clubs sont présentés à égalité, sans classement ni hiérarchie.
-        </Txt>
-      </View>
+        {/* Compétitions */}
+        <View style={styles.section}>
+          <SectionHeader title="Compétitions à venir" actionLabel="Voir tout" onAction={() => go('/competitions')} />
+          {competitions.map((c) => (
+            <CompetitionCard key={c.id} comp={c} />
+          ))}
+        </View>
+
+        {/* Note d'égalité (pas de classement) */}
+        <View style={styles.note}>
+          <Ionicons name="heart-outline" size={15} color={colors.textFaint} />
+          <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
+            Tous les clubs sont présentés à égalité, sans classement ni hiérarchie.
+          </Txt>
+        </View>
       </Reveal>
     </Screen>
   );
@@ -152,7 +155,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   hero: {
     marginTop: spacing.sm,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
     padding: spacing.lg,
     borderRadius: radius.xl,
     borderWidth: 1,
@@ -171,12 +174,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  tile: { width: '47%', flexGrow: 1, minHeight: 110, justifyContent: 'space-between' },
+  tile: { width: '47%', flexGrow: 1, minHeight: 104, justifyContent: 'space-between' },
   reminder: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     padding: spacing.lg,
     borderRadius: radius.lg,
   },

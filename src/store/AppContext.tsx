@@ -95,7 +95,7 @@ type AppContextType = {
   addCompetition: (c: Omit<Competition, 'id' | 'createdByMe'>) => void;
   registerCompetition: (id: string, partner: string) => void;
   unregisterCompetition: (id: string) => void;
-  addReservation: (r: Omit<Reservation, 'id' | 'createdAt'>) => void;
+  addReservation: (r: Omit<Reservation, 'id' | 'createdAt'>) => boolean;
   setReservationResult: (id: string, result: 'win' | 'loss') => void;
   cancelReservation: (id: string) => void;
   confirmInvite: (reservationId: string, friendId: string) => void;
@@ -214,13 +214,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           delete next[id];
           return { ...s, compRegistrations: next };
         }),
-      addReservation: (r) =>
-        setState((s) => {
-          // Anti double-réservation : un même TERRAIN ne peut être pris 2× au même créneau.
-          // (Deux terrains différents au même horaire restent possibles.) Indexé sur dateKey.
-          if (s.reservations.some((x) => x.clubId === r.clubId && x.dateKey === r.dateKey && x.time === r.time && x.court === r.court)) return s;
-          return { ...s, reservations: [{ ...r, id: uid(), createdAt: Date.now() }, ...s.reservations] };
-        }),
+      addReservation: (r) => {
+        // Anti double-réservation : un même TERRAIN ne peut être pris 2× au même créneau.
+        // (Deux terrains différents au même horaire restent possibles.) Indexé sur dateKey.
+        const taken = (x: Reservation) => x.clubId === r.clubId && x.dateKey === r.dateKey && x.time === r.time && x.court === r.court;
+        if (state.reservations.some(taken)) return false;
+        setState((s) => (s.reservations.some(taken) ? s : { ...s, reservations: [{ ...r, id: uid(), createdAt: Date.now() }, ...s.reservations] }));
+        return true;
+      },
       setReservationResult: (id, result) =>
         setState((s) => ({
           ...s,

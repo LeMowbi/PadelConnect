@@ -50,7 +50,10 @@ export default function NouveauMatch() {
     const startsAt = slotTimestamp(day.value, slot);
     if (startsAt <= Date.now()) return;
     const invited = state.friends.filter((f) => friendIds.includes(f.id)).map((f) => ({ id: f.id, name: f.name, confirmed: false }));
-    addReservation({ clubId: club.id, clubName: club.name, court, date: day.label, dateKey: day.key, time: slot, startsAt, players: 4, invited });
+    if (!addReservation({ clubId: club.id, clubName: club.name, court, date: day.label, dateKey: day.key, time: slot, startsAt, players: 4, invited })) {
+      setCourt(null); // terrain pris entre-temps : on redemande
+      return;
+    }
     addMatch({
       clubId: club.id,
       clubName: club.name,

@@ -56,8 +56,9 @@ export default function ReserverScreen() {
     const startsAt = slotTimestamp(day.value, slot);
     if (startsAt <= Date.now()) return;
     const invited = state.friends.filter((f) => friendIds.includes(f.id)).map((f) => ({ id: f.id, name: f.name, confirmed: false }));
-    addReservation({ clubId: club.id, clubName: club.name, court, date: day.label, dateKey: day.key, time: slot, startsAt, players, invited });
-    setDone(true);
+    const ok = addReservation({ clubId: club.id, clubName: club.name, court, date: day.label, dateKey: day.key, time: slot, startsAt, players, invited });
+    if (ok) setDone(true);
+    else setCourt(null); // terrain pris entre-temps
   };
 
   if (done) {

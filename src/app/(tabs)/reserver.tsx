@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { BookingSheet } from '@/components/BookingSheet';
 import { Chip } from '@/components/Chip';
 import { Screen } from '@/components/Screen';
 import { Button, Card, EmptyState, Txt } from '@/components/ui';
+import type { Club } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { clubsFreeAt, slotGrid, type AvailCtx } from '@/lib/availability';
 import { nextDays, slotTimestamp } from '@/lib/days';
@@ -17,6 +19,7 @@ export default function ReserverScreen() {
 
   const days = useMemo(() => nextDays(7), []);
   const [day, setDay] = useState(days[0]);
+  const [sheet, setSheet] = useState<{ club: Club; time: string } | null>(null);
 
   const ctx: AvailCtx = {
     clubSlots: state.clubSlots,
@@ -33,8 +36,7 @@ export default function ReserverScreen() {
     })
     .filter((r) => r.ts > Date.now()); // on masque les heures déjà passées
 
-  const open = (clubId: string, time: string) =>
-    router.push(`/reserver/${clubId}?dateKey=${encodeURIComponent(day.key)}&time=${encodeURIComponent(time)}`);
+  const open = (club: Club, time: string) => setSheet({ club, time });
 
   return (
     <Screen title="Réserver" subtitle="Choisis un créneau — on te montre les terrains libres">
@@ -70,7 +72,7 @@ export default function ReserverScreen() {
                 </Txt>
               ) : (
                 row.clubs.map(({ club, free }) => (
-                  <Pressable key={club.id} onPress={() => open(club.id, row.time)} style={styles.clubChip}>
+                  <Pressable key={club.id} onPress={() => open(club, row.time)} style={styles.clubChip}>
                     <Txt variant="small" color={colors.text} style={{ fontWeight: '700' }}>
                       {club.name}
                     </Txt>
@@ -90,6 +92,8 @@ export default function ReserverScreen() {
       <View style={{ marginTop: spacing.lg }}>
         <Button label="Parcourir les clubs (carte, photos, avis)" icon="business-outline" variant="secondary" onPress={() => router.push('/clubs')} full />
       </View>
+
+      {sheet ? <BookingSheet club={sheet.club} day={day} time={sheet.time} onClose={() => setSheet(null)} /> : null}
     </Screen>
   );
 }
