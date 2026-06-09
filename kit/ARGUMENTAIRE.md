@@ -1,13 +1,13 @@
-# PadelCo — Argumentaire (document interne)
+# PadelConnect — Argumentaire (document interne)
 
-Ce document est **pour toi** : il complète la page de présentation (`PadelCo-presentation.html`).
+Ce document est **pour toi** : il complète la page de présentation (`PadelConnect-presentation.html`).
 Il explique **ce que les clubs gagnent**, **ce que toi tu gagnes**, comment aborder un club et
 comment répondre aux objections.
 
 ---
 
 ## Le pitch en une phrase
-« PadelCo, c'est l'appli unique du padel à Abidjan : réserver un terrain, trouver un partenaire
+« PadelConnect, c'est l'appli unique du padel à Abidjan : réserver un terrain, trouver un partenaire
 ou un adversaire, prendre un coach et organiser des compétitions — tous les clubs réunis au même
 endroit, à égalité. »
 
@@ -56,7 +56,7 @@ possèdes la relation clients, la marque et les futurs revenus.**
 
 ## Réponses aux objections fréquentes
 - **« On a déjà notre propre appli / système. »**
-  → « Parfait. PadelCo ne remplace pas votre système : il vous amène en plus les joueurs qui ne
+  → « Parfait. PadelConnect ne remplace pas votre système : il vous amène en plus les joueurs qui ne
   vous connaissent pas encore et ceux qui cherchent un partenaire. Vous restez visibles là où les
   joueurs cherchent : une seule appli pour tout Abidjan. »
 - **« C'est payant ? »**

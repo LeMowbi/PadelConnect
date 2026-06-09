@@ -4,6 +4,9 @@ Ce document répond à tes questions : **est-ce possible ?**, **comment coder l'
 **comment la mettre en ligne sur Apple et Android ?**, **comment la présenter aux terrains ?**,
 **comment la vendre ?** et **comment tout relier ?**
 
+> 💡 Pour une version courte et orientée action (présenter au club, installer, qui fait quoi pour
+> construire la vraie app), commence par **[GUIDE-LANCEMENT.md](./GUIDE-LANCEMENT.md)**.
+
 ---
 
 ## 1. Est-ce possible ? — Oui, clairement.
@@ -28,9 +31,11 @@ montrer aux clubs et à d'éventuels investisseurs.
 - **Technologie : React Native + Expo** (langage TypeScript). Un **seul code** produit l'app
   **iOS ET Android** (et même une version web). C'est le choix le plus rapide et le moins cher
   pour une première app, utilisé par des milliers d'apps en production.
-- **Navigation** : `expo-router` (onglets en bas : Accueil, Terrains, Jouer, Compétitions, Profil).
+- **Navigation** : `expo-router` (onglets en bas : Accueil, Réserver, Jouer, Compétitions, Profil).
+- **Réservation** : parcours **jour → créneau → club disponible → terrain**, calculé terrain par
+  terrain. **Sans paiement en ligne** : on réserve, le tarif (indicatif) se règle au club.
 - **Données du prototype** : simulées et stockées sur le téléphone (pas encore de serveur).
-- **Design** : système sobre « luxe + sport » (fond sombre, accents or et vert émeraude).
+- **Design** : thème **clair** « luxe + sport » (vert profond du terrain + touche de vert lime de la balle).
 
 ---
 
@@ -93,6 +98,11 @@ Plusieurs sources de revenus, à activer progressivement :
 
 > Conseil : **gratuit au lancement** pour amasser des utilisateurs et des clubs, puis introduire
 > la commission / l'abonnement une fois la valeur prouvée.
+
+> **Comment tu encaisses la commission (sans prélèvement automatique).** Au lieu de prélever sur
+> chaque réservation, l'**Espace opérateur** te donne, par club, l'**historique des réservations** et
+> le **montant de commission** correspondant. Tu **transmets cet historique au club**, et le **club te
+> règle** (par Wave, par exemple). Simple, transparent, et tu ne touches pas à l'argent des clubs.
 
 ---
 

@@ -1,19 +1,21 @@
-# Installer / montrer le prototype PadelCo
+# Installer / montrer le prototype PadelConnect
 
 Trois façons, de la plus simple à la plus « pro ». **Recommandé : le lien web.**
+
+> Déjà en ligne : **https://lemowbi.github.io/Test-1/** (tu peux partager ce lien directement).
 
 ---
 
 ## 1) Lien web (recommandé) — un lien à ouvrir sur n'importe quel téléphone
-La version web est livrée dans le fichier **`PadelCo-web.zip`** (dossier `dist`).
+La version web est livrée dans le fichier **`PadelConnect-web.zip`** (dossier `dist`).
 C'est la façon la plus simple de montrer l'app aux clubs : pas besoin d'ordinateur côté club.
 
 ### Le plus rapide : Netlify Drop (gratuit, 1 minute)
-1. Décompresse `PadelCo-web.zip` → tu obtiens un dossier `dist`.
+1. Décompresse `PadelConnect-web.zip` → tu obtiens un dossier `dist`.
 2. Va sur **https://app.netlify.com/drop**
-3. **Glisse le dossier `dist`** dans la page. Tu obtiens aussitôt un lien public (ex. `https://padelco-xyz.netlify.app`).
+3. **Glisse le dossier `dist`** dans la page. Tu obtiens aussitôt un lien public (ex. `https://padelconnect-xyz.netlify.app`).
 4. Ouvre ce lien sur ton téléphone → menu **Partager** → **« Ajouter à l'écran d'accueil »**.
-   Une icône PadelCo apparaît : ça s'ouvre comme une vraie app.
+   Une icône PadelConnect apparaît : ça s'ouvre comme une vraie app.
 
 > Astuce : crée un compte Netlify (gratuit) pour garder le lien et pouvoir le mettre à jour.
 
