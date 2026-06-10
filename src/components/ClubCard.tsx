@@ -30,7 +30,16 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
     return (
       <Card onPress={go} style={styles.compact}>
         <View>
-          <ClubPhoto uri={photo} accent={club.accent} initials={initials(club.name)} height={96} rounded={radius.md} />
+          <ClubPhoto
+            uri={photo}
+            accent={club.accent}
+            initials={initials(club.name)}
+            height={150}
+            rounded={radius.md}
+            overlay
+            caption={club.name}
+            subtitle={club.area}
+          />
           {heart}
           {boosted ? (
             <View style={styles.boostBadge}>
@@ -38,19 +47,15 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
             </View>
           ) : null}
         </View>
-        <Txt variant="h3" numberOfLines={1} style={{ marginTop: spacing.sm }}>
-          {club.name}
-        </Txt>
-        <View style={styles.areaRow}>
-          <Ionicons name="location-outline" size={13} color={colors.textMuted} />
-          <Txt variant="muted" numberOfLines={1} style={{ flex: 1 }}>
-            {club.area}
-          </Txt>
-        </View>
-        <View style={styles.ratingRow}>
-          <RatingStars value={rating} size={13} />
-          <Txt variant="small" color={colors.textMuted}>
-            {rating.toFixed(1)}
+        <View style={styles.compactFooter}>
+          <View style={styles.ratingRow}>
+            <RatingStars value={rating} size={13} />
+            <Txt variant="small" color={colors.textMuted}>
+              {rating.toFixed(1)}
+            </Txt>
+          </View>
+          <Txt variant="small" color={colors.gold} style={{ fontWeight: '700' }}>
+            dès {fcfa(club.priceFrom)}/h
           </Txt>
         </View>
       </Card>
@@ -93,7 +98,14 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  compact: { width: 220, padding: spacing.sm },
+  compact: { width: 250, padding: spacing.sm },
+  compactFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.sm,
+    paddingHorizontal: 2,
+  },
   heart: {
     position: 'absolute',
     top: spacing.sm,

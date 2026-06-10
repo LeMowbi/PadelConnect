@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -13,6 +14,7 @@ import { clubsByName } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { seedMatches, upcomingMatches } from '@/data/matches';
 import { dayKey } from '@/lib/days';
+import { initials } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
@@ -63,11 +65,23 @@ export default function HomeScreen() {
         <LinearGradient colors={['#E6F1ED', colors.bg]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
           <View style={styles.brandRow}>
             <Logo size={30} />
-            <View style={styles.cityChip}>
-              <Ionicons name="location-outline" size={13} color={colors.textMuted} />
-              <Txt variant="small" color={colors.textMuted}>
-                Abidjan
-              </Txt>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+              <View style={styles.cityChip}>
+                <Ionicons name="location-outline" size={13} color={colors.textMuted} />
+                <Txt variant="small" color={colors.textMuted}>
+                  Abidjan
+                </Txt>
+              </View>
+              {/* Avatar → raccourci vers le Profil */}
+              <Pressable onPress={() => router.navigate('/profil' as never)} style={styles.avatarBtn} hitSlop={6}>
+                {state.account?.photoUri ? (
+                  <Image source={{ uri: state.account.photoUri }} style={styles.avatarImg} contentFit="cover" />
+                ) : (
+                  <Txt variant="small" color={colors.gold} style={{ fontWeight: '800' }}>
+                    {initials(`${state.account?.firstName ?? ''} ${state.account?.lastName ?? ''}`)}
+                  </Txt>
+                )}
+              </Pressable>
             </View>
           </View>
           <Txt variant="display" style={{ marginTop: spacing.md }}>
@@ -161,6 +175,18 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  avatarBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
+    backgroundColor: colors.goldSoft,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImg: { width: '100%', height: '100%' },
   cityChip: {
     flexDirection: 'row',
     alignItems: 'center',

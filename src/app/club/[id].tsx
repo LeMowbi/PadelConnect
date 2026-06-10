@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { ClubPhoto } from '@/components/ClubPhoto';
 import { ContactButtons } from '@/components/ContactButtons';
 import { RatingStars } from '@/components/RatingStars';
@@ -24,6 +25,8 @@ export default function ClubDetail() {
   const [rating, setRating] = useState(0);
   const [text, setText] = useState('');
   const [sent, setSent] = useState(false);
+  const [viewer, setViewer] = useState<number | null>(null); // photo ouverte en plein écran
+  const { width: winW } = useWindowDimensions();
 
   if (!club) {
     return (
@@ -58,17 +61,19 @@ export default function ClubDetail() {
 
   return (
     <Screen back>
-      {/* Photo héros */}
+      {/* Photo héros — touche pour ouvrir en plein écran */}
       <View>
-        <ClubPhoto
-          uri={gallery[0]}
-          accent={club.accent}
-          initials={initials(club.name)}
-          height={220}
-          overlay
-          caption={club.name}
-          subtitle={`${club.area} · ${club.city}`}
-        />
+        <Pressable onPress={() => setViewer(0)}>
+          <ClubPhoto
+            uri={gallery[0]}
+            accent={club.accent}
+            initials={initials(club.name)}
+            height={220}
+            overlay
+            caption={club.name}
+            subtitle={`${club.area} · ${club.city}`}
+          />
+        </Pressable>
         <Pressable onPress={() => toggleFavorite(club.id)} hitSlop={8} style={styles.favBtn}>
           <Ionicons name={fav ? 'heart' : 'heart-outline'} size={22} color={fav ? colors.danger : colors.white} />
         </Pressable>
@@ -77,7 +82,9 @@ export default function ClubDetail() {
       {gallery.length > 1 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, marginTop: spacing.sm }}>
           {gallery.slice(1).map((uri, i) => (
-            <ClubPhoto key={`${uri}-${i}`} uri={uri} accent={club.accent} height={72} width={104} rounded={radius.md} />
+            <Pressable key={`${uri}-${i}`} onPress={() => setViewer(i + 1)}>
+              <ClubPhoto uri={uri} accent={club.accent} height={72} width={104} rounded={radius.md} />
+            </Pressable>
           ))}
         </ScrollView>
       ) : null}
@@ -170,6 +177,41 @@ export default function ClubDetail() {
       <View style={{ marginTop: spacing.xl }}>
         <Txt variant="h2">Avis des joueurs</Txt>
 
+        {/* Résumé : grande note + répartition des étoiles des avis affichés */}
+        <Card style={{ marginTop: spacing.md }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.lg }}>
+            <View style={{ alignItems: 'center' }}>
+              <Txt variant="display" color={colors.gold}>
+                {avgRating.toFixed(1)}
+              </Txt>
+              <RatingStars value={avgRating} size={13} />
+              <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
+                {ratingCount} avis
+              </Txt>
+            </View>
+            <View style={{ flex: 1, gap: 5 }}>
+              {[5, 4, 3, 2, 1].map((s) => {
+                const n = reviews.filter((r) => Math.round(r.rating) === s).length;
+                const pct = reviews.length ? Math.round((n / reviews.length) * 100) : 0;
+                return (
+                  <View key={s} style={styles.barRow}>
+                    <Txt variant="small" color={colors.textMuted} style={{ width: 10, textAlign: 'center' }}>
+                      {s}
+                    </Txt>
+                    <Ionicons name="star" size={10} color={colors.gold} />
+                    <View style={styles.summaryTrack}>
+                      <View style={[styles.summaryFill, { width: (`${pct}%` as `${number}%`) }]} />
+                    </View>
+                    <Txt variant="small" color={colors.textFaint} style={{ width: 18, textAlign: 'right' }}>
+                      {n}
+                    </Txt>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        </Card>
+
         <Card style={{ marginTop: spacing.md }}>
           {sent ? (
             <View style={{ alignItems: 'center', paddingVertical: spacing.sm }}>
@@ -219,6 +261,34 @@ export default function ClubDetail() {
           ))
         )}
       </View>
+
+      {/* Visionneuse photos plein écran (défilement horizontal) */}
+      {viewer !== null ? (
+        <Modal visible animationType="fade" onRequestClose={() => setViewer(null)}>
+          <View style={styles.viewer}>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              ref={(r) => r?.scrollTo({ x: viewer * winW, animated: false })}
+            >
+              {gallery.map((uri, i) => (
+                <View key={`${uri}-${i}`} style={{ width: winW, justifyContent: 'center' }}>
+                  <Image source={{ uri }} contentFit="contain" transition={150} style={{ width: winW, height: '80%' }} />
+                </View>
+              ))}
+            </ScrollView>
+            <Pressable onPress={() => setViewer(null)} hitSlop={10} style={styles.viewerClose}>
+              <Ionicons name="close" size={24} color={colors.white} />
+            </Pressable>
+            <View style={styles.viewerHint}>
+              <Txt variant="small" color="rgba(255,255,255,0.85)">
+                {gallery.length} photo{gallery.length > 1 ? 's — fais défiler' : ''}
+              </Txt>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
     </Screen>
   );
 }
@@ -253,4 +323,20 @@ const styles = StyleSheet.create({
   },
   reviewHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   coachRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  barRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  summaryTrack: { flex: 1, height: 6, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
+  summaryFill: { height: 6, borderRadius: radius.pill, backgroundColor: colors.gold },
+  viewer: { flex: 1, backgroundColor: '#000', justifyContent: 'center' },
+  viewerClose: {
+    position: 'absolute',
+    top: 48,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewerHint: { position: 'absolute', bottom: 40, alignSelf: 'center' },
 });
