@@ -57,7 +57,7 @@ export default function CompetitionDetail() {
           tone={byClub ? 'blue' : 'green'}
           icon={byClub ? 'business' : 'person'}
         />
-        {comp.official ? <Tag label="Officiel" tone="gold" icon="shield-checkmark" /> : null}
+        {comp.official ? <Tag label="Officiel" tone="amber" icon="shield-checkmark" /> : null}
       </View>
       <Txt variant="display" style={{ fontSize: 26, marginTop: spacing.md }}>
         {comp.title}

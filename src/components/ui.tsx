@@ -53,13 +53,14 @@ export function Txt({
 const txt = StyleSheet.create({
   display: {
     fontSize: font.size.display,
+    fontFamily: font.family.heavy,
     fontWeight: font.weight.heavy,
     color: colors.text,
     letterSpacing: -0.5,
   },
-  h1: { fontSize: font.size.xxl, fontWeight: font.weight.bold, color: colors.text, letterSpacing: -0.3 },
-  h2: { fontSize: font.size.xl, fontWeight: font.weight.bold, color: colors.text },
-  h3: { fontSize: font.size.lg, fontWeight: font.weight.semibold, color: colors.text },
+  h1: { fontSize: font.size.xxl, fontFamily: font.family.heavy, fontWeight: font.weight.bold, color: colors.text, letterSpacing: -0.3 },
+  h2: { fontSize: font.size.xl, fontFamily: font.family.bold, fontWeight: font.weight.bold, color: colors.text, letterSpacing: -0.2 },
+  h3: { fontSize: font.size.lg, fontFamily: font.family.bold, fontWeight: font.weight.semibold, color: colors.text },
   body: { fontSize: font.size.md, fontWeight: font.weight.regular, color: colors.text, lineHeight: 22 },
   small: { fontSize: font.size.sm, fontWeight: font.weight.regular, color: colors.text },
   muted: { fontSize: font.size.sm, fontWeight: font.weight.regular, color: colors.textMuted, lineHeight: 19 },
@@ -70,7 +71,7 @@ const txt = StyleSheet.create({
     letterSpacing: 1.1,
     textTransform: 'uppercase',
   },
-  price: { fontSize: font.size.lg, fontWeight: font.weight.bold, color: colors.gold },
+  price: { fontSize: font.size.lg, fontFamily: font.family.bold, fontWeight: font.weight.bold, color: colors.gold },
 });
 
 /* ---------------------------------- Carte --------------------------------- */
@@ -197,18 +198,18 @@ const btn = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    height: 50,
+    height: 52,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.md,
     borderWidth: 1,
   },
-  sm: { height: 38, paddingHorizontal: spacing.md, borderRadius: radius.sm },
-  label: { fontSize: font.size.md, fontWeight: font.weight.bold },
+  sm: { height: 40, paddingHorizontal: spacing.md, borderRadius: radius.sm },
+  label: { fontSize: font.size.md, fontFamily: font.family.bold, fontWeight: font.weight.bold },
 });
 
 /* ---------------------------------- Tag ----------------------------------- */
 
-type TagTone = 'gold' | 'green' | 'neutral' | 'danger' | 'blue' | 'coral' | 'purple';
+type TagTone = 'gold' | 'green' | 'neutral' | 'danger' | 'blue' | 'coral' | 'purple' | 'amber';
 
 export function Tag({
   label,
@@ -236,6 +237,7 @@ const tagTones: Record<TagTone, { bg: string; fg: string }> = {
   blue: { bg: colors.blueSoft, fg: colors.blue },
   coral: { bg: colors.coralSoft, fg: colors.coral },
   purple: { bg: colors.purpleSoft, fg: colors.purple },
+  amber: { bg: colors.amberSoft, fg: colors.amber },
 };
 
 const tag = StyleSheet.create({

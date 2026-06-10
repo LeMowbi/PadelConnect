@@ -43,7 +43,7 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
           {heart}
           {boosted ? (
             <View style={styles.boostBadge}>
-              <Tag label="Sponsorisé" tone="gold" icon="megaphone" />
+              <Tag label="Sponsorisé" tone="amber" icon="megaphone" />
             </View>
           ) : null}
         </View>
@@ -59,7 +59,7 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
             </View>
           )}
           <Txt variant="small" color={colors.gold} style={{ fontWeight: '700' }}>
-            dès {fcfa(club.priceFrom)}/h
+            dès {fcfa(club.priceFrom)}
           </Txt>
         </View>
       </Card>
@@ -77,7 +77,7 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
           <Txt variant="h3" numberOfLines={1} style={{ flex: 1 }}>
             {club.name}
           </Txt>
-          {boosted ? <Tag label="Sponsorisé" tone="gold" icon="megaphone" /> : <Tag label={club.type} tone="neutral" />}
+          {boosted ? <Tag label="Sponsorisé" tone="amber" icon="megaphone" /> : <Tag label={club.type} tone="neutral" />}
         </View>
         <View style={styles.areaRow}>
           <Ionicons name="location-outline" size={14} color={colors.textMuted} />
@@ -96,8 +96,8 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
               </Txt>
             </View>
           )}
-          <Txt variant="small" color={colors.textMuted}>
-            dès {fcfa(club.priceFrom)}/h
+          <Txt variant="small" color={colors.gold} style={{ fontWeight: '700' }}>
+            dès {fcfa(club.priceFrom)} · session
           </Txt>
         </View>
       </View>

@@ -431,7 +431,7 @@ export default function ClubAdmin() {
                 <Txt variant="h3">Mettre {club.name} en avant</Txt>
                 <Txt variant="muted">Apparais en tête de liste avec un badge « Sponsorisé ». Paiement par Wave auprès de PadelConnect, qui active le boost.</Txt>
               </View>
-              {boosted ? <Tag label="Actif" tone="gold" icon="megaphone" /> : null}
+              {boosted ? <Tag label="Actif" tone="amber" icon="megaphone" /> : null}
             </View>
             <View style={{ marginTop: spacing.md }}>
               <Button size="sm" label="Contacter PadelConnect" icon="paper-plane" onPress={shareBoost} full />
@@ -586,7 +586,7 @@ export default function ClubAdmin() {
           <Card style={{ marginTop: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
             <IconCircle icon="cash" color={colors.purple} bg={colors.purpleSoft} size={40} />
             <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
-              Tarif affiché aux joueurs : <Txt variant="small" style={{ fontWeight: '700' }}>dès {fcfa(club.priceFrom)}/h</Txt> — le règlement se fait directement au club.
+              Tarif affiché aux joueurs : <Txt variant="small" style={{ fontWeight: '700' }}>dès {fcfa(club.priceFrom)} la session (1h30)</Txt> — le règlement se fait directement au club.
             </Txt>
           </Card>
         </>

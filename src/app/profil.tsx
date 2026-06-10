@@ -137,9 +137,9 @@ export default function ProfilScreen() {
         <SectionHeader title="Mes statistiques" />
         <View style={styles.stats}>
           <Stat value={stats.wins} label="Victoires" color={colors.green} bg={colors.greenSoft} />
-          <Stat value={stats.losses} label="Défaites" color={colors.danger} bg={colors.dangerSoft} />
+          <Stat value={stats.losses} label="Défaites" color={colors.textMuted} bg={colors.surfaceAlt} />
           <Stat value={stats.played} label="Parties" color={colors.blue} bg={colors.blueSoft} />
-          <Stat value={`${stats.winRate}%`} label="Réussite" color={colors.gold} bg={colors.goldSoft} />
+          <Stat value={`${stats.winRate}%`} label="Réussite" color={colors.amber} bg={colors.amberSoft} />
         </View>
         <Card style={{ marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
           <IconCircle icon="flame" color={colors.gold} bg={colors.goldSoft} size={40} />
@@ -158,7 +158,7 @@ export default function ProfilScreen() {
         <Card>
           <View style={styles.badges}>
             {badges.map((b) => (
-              <Tag key={b.label} label={b.label} tone={b.ok ? 'gold' : 'neutral'} icon={b.ok ? 'trophy' : 'lock-closed'} />
+              <Tag key={b.label} label={b.label} tone={b.ok ? 'amber' : 'neutral'} icon={b.ok ? 'trophy' : 'lock-closed'} />
             ))}
           </View>
         </Card>

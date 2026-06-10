@@ -28,7 +28,7 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
       <View style={styles.top}>
         <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', flex: 1 }}>
           <Tag label={byClub ? `Club · ${comp.organizer}` : `Joueur · ${comp.organizer}`} tone={byClub ? 'blue' : 'green'} icon={byClub ? 'business' : 'person'} />
-          {comp.official ? <Tag label="Officiel" tone="gold" icon="shield-checkmark" /> : null}
+          {comp.official ? <Tag label="Officiel" tone="amber" icon="shield-checkmark" /> : null}
         </View>
         <Txt variant="muted">{comp.date}</Txt>
       </View>

@@ -11,7 +11,7 @@ export type Club = {
   courts: number; // nombre de terrains (indicatif)
   blurb: string;
   amenities: string[];
-  priceFrom: number; // FCFA / heure — INDICATIF
+  priceFrom: number; // FCFA / session (1h30) — INDICATIF, « dès » (heures creuses)
   rating: number; // moyenne communautaire (démo)
   reviewsCount: number; // démo
   mapsQuery: string; // requête Google Maps
@@ -40,7 +40,7 @@ export const clubs: Club[] = [
     blurb:
       "Club proposant la réservation de créneaux et la création de matchs entre joueurs, situé du côté de Cocody Danga / Riviera Golf.",
     amenities: ['Réservation en ligne', 'Vestiaires', 'Location de raquettes'],
-    priceFrom: 14000,
+    priceFrom: 15000,
     rating: 4.6,
     reviewsCount: 38,
     mapsQuery: 'Abidjan Padel Cocody',
@@ -56,7 +56,7 @@ export const clubs: Club[] = [
     blurb:
       "Destination sport & lifestyle avec terrains de padel en extérieur, café et restaurant. Réservation via application.",
     amenities: ['Café & restaurant', 'Terrasse', 'Vestiaires'],
-    priceFrom: 13000,
+    priceFrom: 14000,
     rating: 4.7,
     reviewsCount: 52,
     mapsQuery: 'District Club Padel Abidjan',
@@ -104,7 +104,7 @@ export const clubs: Club[] = [
     blurb:
       "Parmi les premiers terrains de padel du pays, installés du côté de l'Hôtel Ivoire à Cocody.",
     amenities: ['Vestiaires', 'Cadre arboré', 'Buvette'],
-    priceFrom: 15000,
+    priceFrom: 16000,
     rating: 4.6,
     reviewsCount: 47,
     mapsQuery: 'Padel Magic Hotel Ivoire Cocody Abidjan',
@@ -136,7 +136,7 @@ export const clubs: Club[] = [
     blurb:
       "Quatre terrains au cœur de la Zone 4 (Rue du Dr Blanchard), à Marcory. Très accessible depuis le Plateau.",
     amenities: ['Vestiaires', 'Bar', 'Location de raquettes'],
-    priceFrom: 14000,
+    priceFrom: 15000,
     rating: 4.5,
     reviewsCount: 41,
     mapsQuery: 'Padel Zone 4 Rue du Docteur Blanchard Marcory Abidjan',
@@ -152,7 +152,7 @@ export const clubs: Club[] = [
     blurb:
       "Club indoor à Cocody Danga avec terrains couverts homologués FIP, salle de sport et café. À 5 min du Plateau et de la Riviera.",
     amenities: ['Terrains couverts', 'Café La Pausa', 'Salle de sport', 'Vestiaires'],
-    priceFrom: 20000,
+    priceFrom: 22000,
     rating: 4.8,
     reviewsCount: 73,
     mapsQuery: 'Padelta Cocody Danga Abidjan',

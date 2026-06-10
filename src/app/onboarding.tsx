@@ -12,7 +12,7 @@ import { levelLabel } from '@/data/matches';
 import { pickImage } from '@/lib/pickImage';
 import { GENDERS, ageFrom, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing } from '@/theme';
+import { colors, gradients, radius, spacing } from '@/theme';
 
 export default function Onboarding() {
   const router = useRouter();
@@ -54,7 +54,7 @@ export default function Onboarding() {
   return (
     <View style={styles.root}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xxxl }}>
-        <LinearGradient colors={['#D8EEE4', '#F2EEDE', colors.bg]} style={styles.hero}>
+        <LinearGradient colors={gradients.heroSoft} style={styles.hero}>
           <Logo size={40} />
           <Txt variant="display" style={{ fontSize: 30, marginTop: spacing.xl }}>
             Bienvenue 👋

@@ -8,6 +8,7 @@ import type { Match, Visibility } from '@/data/matches';
 import type { Review } from '@/data/reviews';
 import { seedFriends, type Friend } from '@/data/user';
 import { dayKey, nextDays } from '@/lib/days';
+import { ACCENTS } from '@/theme';
 
 export type Account = {
   firstName: string;
@@ -320,7 +321,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setState((s) => {
           const n = name.trim();
           if (n.length < 2) return s;
-          const accents = ['#1FB57A', '#C9A24B', '#3FA7D6', '#E0653A', '#7C5CD6'];
+          const accents = ACCENTS;
           const club: CustomClub = {
             id: uid(),
             name: n,

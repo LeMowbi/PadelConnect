@@ -16,7 +16,7 @@ import { seedMatches, upcomingMatches } from '@/data/matches';
 import { dayKey } from '@/lib/days';
 import { initials } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing } from '@/theme';
+import { colors, gradients, radius, spacing } from '@/theme';
 
 type Action = { icon: keyof typeof Ionicons.glyphMap; label: string; route: string; tint: string; bg: string };
 
@@ -67,7 +67,7 @@ export default function HomeScreen() {
     <Screen>
       <Reveal>
         {/* Hero */}
-        <LinearGradient colors={['#D8EEE4', '#F2EEDE', colors.bg]} start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 1 }} style={styles.hero}>
+        <LinearGradient colors={gradients.heroSoft} start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 1 }} style={styles.hero}>
           <View style={styles.brandRow}>
             <Logo size={30} />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>

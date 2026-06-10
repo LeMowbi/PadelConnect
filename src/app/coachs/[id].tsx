@@ -48,7 +48,7 @@ export default function CoachDetail() {
         <Divider style={{ marginVertical: spacing.md }} />
         <Txt variant="body">{coach.bio}</Txt>
         <View style={styles.specs}>
-          <Tag label={`Niveau ${coach.levelValue.toFixed(1)}`} tone="gold" />
+          <Tag label={`Niveau ${coach.levelValue.toFixed(1)}`} tone="blue" />
           {coach.specialties.map((s) => (
             <Tag key={s} label={s} tone="neutral" />
           ))}

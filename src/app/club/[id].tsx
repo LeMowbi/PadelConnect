@@ -13,7 +13,8 @@ import { coaches } from '@/data/coaches';
 import { seedCompetitions } from '@/data/competitions';
 import { ratingFor, seedReviews } from '@/data/reviews';
 import { useApp } from '@/store/AppContext';
-import { fcfa, initials } from '@/lib/format';
+import { openWhatsApp } from '@/lib/contact';
+import { fcfa, initials, perPlayer } from '@/lib/format';
 import { openMaps } from '@/lib/maps';
 import { colors, radius, spacing } from '@/theme';
 
@@ -95,13 +96,13 @@ export default function ClubDetail() {
       ) : null}
 
       <View style={styles.tags}>
-        {boosted ? <Tag label="Sponsorisé" tone="gold" icon="megaphone" /> : null}
+        {boosted ? <Tag label="Sponsorisé" tone="amber" icon="megaphone" /> : null}
         <Tag label={club.type} tone="neutral" />
         <Tag label={`${courtCount} terrain${courtCount > 1 ? 's' : ''}`} tone="neutral" />
         {ratingCount === 0 ? (
           <Tag label="Nouveau" tone="coral" icon="sparkles" />
         ) : (
-          <Tag label={`${avgRating.toFixed(1)} ★ (${ratingCount})`} tone="gold" />
+          <Tag label={`${avgRating.toFixed(1)} ★ (${ratingCount})`} tone="amber" />
         )}
       </View>
 
@@ -130,12 +131,18 @@ export default function ClubDetail() {
           ))}
         </View>
         <Divider style={{ marginVertical: spacing.md }} />
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Txt variant="muted">Tarif indicatif</Txt>
-          <Txt variant="price">dès {fcfa(club.priceFrom)} / heure</Txt>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+          <View>
+            <Txt variant="muted">Tarif indicatif</Txt>
+            <Txt variant="small" color={colors.textFaint}>soit ~{perPlayer(club.priceFrom)} / joueur à 4</Txt>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Txt variant="price">dès {fcfa(club.priceFrom)}</Txt>
+            <Txt variant="small" color={colors.textMuted}>la session · 1h30</Txt>
+          </View>
         </View>
         <Txt variant="small" color={colors.textFaint} style={{ marginTop: 4 }}>
-          Sessions de 1h30 · tarif à confirmer auprès du club.
+          Tarif à confirmer auprès du club.
         </Txt>
       </Card>
 
@@ -183,7 +190,7 @@ export default function ClubDetail() {
                   {c.date} · {c.registered}/{c.slots} équipes{c.official ? '' : ' · amical'}
                 </Txt>
               </View>
-              {c.official ? <Tag label="Officiel" tone="gold" icon="shield-checkmark" /> : null}
+              {c.official ? <Tag label="Officiel" tone="amber" icon="shield-checkmark" /> : null}
               <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </Pressable>
           ))}
@@ -307,6 +314,19 @@ export default function ClubDetail() {
         )}
       </View>
 
+      {/* Lien discret tout en bas : question d'info seulement (la réservation passe par l'app). */}
+      <Pressable
+        onPress={() =>
+          openWhatsApp((club as { contactPhone?: string }).contactPhone ?? '', `Bonjour, j'ai une question à propos de ${club.name} 👋`)
+        }
+        style={{ alignItems: 'center', paddingVertical: spacing.xl, marginTop: spacing.sm }}
+        hitSlop={6}
+      >
+        <Txt variant="small" color={colors.textFaint}>
+          Une question ? Contacter le club
+        </Txt>
+      </Pressable>
+
       {/* Visionneuse photos plein écran (défilement horizontal) */}
       {viewer !== null ? (
         <Modal visible animationType="fade" onRequestClose={() => setViewer(null)}>
@@ -372,7 +392,7 @@ const styles = StyleSheet.create({
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   summaryTrack: { flex: 1, height: 6, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   summaryFill: { height: 6, borderRadius: radius.pill, backgroundColor: colors.gold },
-  viewer: { flex: 1, backgroundColor: '#000', justifyContent: 'center' },
+  viewer: { flex: 1, backgroundColor: colors.viewerBg, justifyContent: 'center' },
   viewerClose: {
     position: 'absolute',
     top: 48,

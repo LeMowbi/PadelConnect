@@ -43,7 +43,7 @@ function CoachRow({ coach }: { coach: Coach }) {
           </View>
         </View>
         <View style={{ alignItems: 'flex-end', gap: 4 }}>
-          <Tag label={`Niv. ${coach.levelValue.toFixed(1)}`} tone="gold" />
+          <Tag label={`Niv. ${coach.levelValue.toFixed(1)}`} tone="blue" />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <RatingStars value={coach.rating} size={12} />
             <Txt variant="small" color={colors.textMuted}>

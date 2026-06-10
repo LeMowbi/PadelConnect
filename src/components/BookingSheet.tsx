@@ -79,7 +79,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
                     {club.name}
                   </Txt>
                   <Txt variant="muted">
-                    {day.label} · {time} · 1h30 · dès {fcfa(club.priceFrom)}/h
+                    {day.label} · {time} · 1h30 · {fcfa(club.priceFrom)} la session
                   </Txt>
                 </View>
                 <Pressable onPress={onClose} hitSlop={8} style={styles.closeBtn}>

@@ -11,6 +11,7 @@ import { activeClubs, type Club } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { clubsFreeAt, freeCourts, openSlotsFor, slotGrid, type AvailCtx } from '@/lib/availability';
 import { nextDays, slotTimestamp } from '@/lib/days';
+import { fcfa } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
@@ -77,43 +78,60 @@ export default function ReserverScreen() {
           <EmptyState icon="time-outline" title="Plus de créneaux" text="Aucun horaire à venir ce jour. Choisis un autre jour." />
         ) : (
           rows.map((row) => (
-            <Card key={row.time} style={styles.slot}>
-              <View style={styles.timeCol}>
-                <Ionicons name="time" size={16} color={colors.gold} />
-                <Txt variant="h3" style={{ fontSize: 16 }}>
+            <View key={row.time} style={styles.hourBlock}>
+              <View style={styles.hourHead}>
+                <Ionicons name="time" size={15} color={colors.gold} />
+                <Txt variant="h3" style={{ fontSize: 15 }}>
                   {row.time}
                 </Txt>
+                <Txt variant="small" color={colors.textFaint}>
+                  · 1h30
+                </Txt>
               </View>
-              <View style={styles.clubsCol}>
-                {row.clubs.length === 0 ? (
-                  <Txt variant="small" color={colors.textFaint}>
-                    Aucun terrain libre
-                  </Txt>
-                ) : (
-                  row.clubs.map(({ club, free }) => (
-                    <Pressable key={club.id} onPress={() => open(club, row.time)} style={styles.clubChip}>
-                      <Txt variant="small" color={colors.text} style={{ fontWeight: '700' }}>
+              {row.clubs.length === 0 ? (
+                <Txt variant="small" color={colors.textFaint} style={{ paddingLeft: spacing.xs }}>
+                  Aucun terrain libre à cet horaire.
+                </Txt>
+              ) : (
+                row.clubs.map(({ club, free }) => (
+                  <Pressable key={club.id} onPress={() => open(club, row.time)} style={styles.clubMini}>
+                    <View style={{ flex: 1 }}>
+                      <Txt variant="body" style={{ fontWeight: '700' }} numberOfLines={1}>
                         {club.name}
                       </Txt>
+                      <Txt variant="small" color={colors.textMuted} numberOfLines={1}>
+                        {club.area}
+                      </Txt>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 3 }}>
                       <View style={styles.freeDot}>
                         <Txt variant="small" color={colors.green} style={{ fontWeight: '700' }}>
                           {free} libre{free > 1 ? 's' : ''}
                         </Txt>
                       </View>
-                    </Pressable>
-                  ))
-                )}
-              </View>
-            </Card>
+                      <Txt variant="small" color={colors.gold} style={{ fontWeight: '700' }}>
+                        dès {fcfa(club.priceFrom)}
+                      </Txt>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                  </Pressable>
+                ))
+              )}
+            </View>
           ))
         )
       ) : (
         byClub.map(({ club, slots }) => (
           <Card key={club.id} style={{ marginBottom: spacing.md }}>
             <View style={styles.clubHead}>
-              <Txt variant="h3">{club.name}</Txt>
-              <Txt variant="small" color={colors.textMuted}>
-                {club.area}
+              <View style={{ flex: 1 }}>
+                <Txt variant="h3">{club.name}</Txt>
+                <Txt variant="small" color={colors.textMuted}>
+                  {club.area}
+                </Txt>
+              </View>
+              <Txt variant="small" color={colors.gold} style={{ fontWeight: '700' }}>
+                dès {fcfa(club.priceFrom)}
               </Txt>
             </View>
             {slots.length === 0 ? (
@@ -142,19 +160,18 @@ export default function ReserverScreen() {
 
 const styles = StyleSheet.create({
   legend: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md, paddingHorizontal: spacing.xs },
-  slot: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginBottom: spacing.md },
-  timeCol: { flexDirection: 'row', alignItems: 'center', gap: 4, width: 64, paddingTop: 6 },
-  clubsCol: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  clubChip: {
+  hourBlock: { marginBottom: spacing.lg },
+  hourHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.sm, paddingLeft: spacing.xs },
+  clubMini: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+    marginBottom: spacing.sm,
   },
   freeDot: { backgroundColor: colors.greenSoft, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 2 },
   clubHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },

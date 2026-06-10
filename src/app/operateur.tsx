@@ -79,7 +79,7 @@ export default function Operateur() {
                     {r.count} réservation{r.count > 1 ? 's' : ''} · volume ≈ {fcfa(r.revenue)}
                   </Txt>
                 </View>
-                <Tag label={`Te doit ≈ ${fcfa(r.commission)}`} tone="gold" />
+                <Tag label={`Te doit ≈ ${fcfa(r.commission)}`} tone="amber" />
               </View>
               <View style={{ marginTop: spacing.md }}>
                 <Button size="sm" label="Envoyer l'historique au club" icon="paper-plane" variant="secondary" onPress={() => sendHistory(r)} full />
@@ -112,7 +112,7 @@ export default function Operateur() {
                     {c.name}
                   </Txt>
                   <Txt variant="muted">
-                    {c.area} · {c.courts} terrain{c.courts > 1 ? 's' : ''} · dès {fcfa(c.priceFrom)}/h
+                    {c.area} · {c.courts} terrain{c.courts > 1 ? 's' : ''} · dès {fcfa(c.priceFrom)}/session
                   </Txt>
                   {c.contactPhone ? (
                     <Txt variant="small" color={colors.textFaint}>

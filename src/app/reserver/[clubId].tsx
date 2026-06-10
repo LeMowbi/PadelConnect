@@ -9,7 +9,7 @@ import { activeClubs, findClub } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { courtsFor, freeCourts, hasCompetition, openSlotsFor, type AvailCtx } from '@/lib/availability';
 import { nextDays, slotTimestamp, type DayOption } from '@/lib/days';
-import { fcfa } from '@/lib/format';
+import { fcfa, perPlayer } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
@@ -81,7 +81,8 @@ export default function ReserverScreen() {
             <Row label="Durée" value="1h30" />
             <Row label="Joueurs" value={`${players}`} />
             {friendIds.length > 0 ? <Row label="Amis invités" value={`${friendIds.length}`} /> : null}
-            <Row label="Tarif indicatif" value={`dès ${fcfa(club.priceFrom)}/h`} />
+            <Row label="Tarif (session 1h30)" value={`dès ${fcfa(club.priceFrom)}`} />
+            <Row label="≈ par joueur (à 4)" value={perPlayer(club.priceFrom)} />
           </View>
           <View style={{ alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.lg }}>
             <Button label="Retour à l'accueil" onPress={() => router.push('/')} full />
@@ -158,8 +159,11 @@ export default function ReserverScreen() {
       ) : null}
 
       <Card style={styles.priceRow}>
-        <Txt variant="muted">Tarif indicatif</Txt>
-        <Txt variant="price">dès {fcfa(club.priceFrom)} / heure</Txt>
+        <View>
+          <Txt variant="muted">Tarif (session 1h30)</Txt>
+          <Txt variant="small" color={colors.textFaint}>soit ~{perPlayer(club.priceFrom)} / joueur à 4</Txt>
+        </View>
+        <Txt variant="price">dès {fcfa(club.priceFrom)}</Txt>
       </Card>
 
       <View style={{ marginTop: spacing.lg }}>

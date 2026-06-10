@@ -1,18 +1,35 @@
+import {
+  BricolageGrotesque_600SemiBold,
+  BricolageGrotesque_700Bold,
+  BricolageGrotesque_800ExtraBold,
+  useFonts,
+} from '@expo-google-fonts/bricolage-grotesque';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppProvider, useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    BricolageGrotesque_600SemiBold,
+    BricolageGrotesque_700Bold,
+    BricolageGrotesque_800ExtraBold,
+  });
+
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>
-        <AppProvider>
-          <RootNav />
-        </AppProvider>
+        {fontsLoaded ? (
+          <AppProvider>
+            <RootNav />
+          </AppProvider>
+        ) : (
+          <View style={{ flex: 1, backgroundColor: colors.bg }} />
+        )}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
