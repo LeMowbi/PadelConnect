@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ClubCard } from '@/components/ClubCard';
 import { CompetitionCard } from '@/components/CompetitionCard';
 import { Logo } from '@/components/Logo';
@@ -43,7 +43,10 @@ export default function HomeScreen() {
   // Onglets : on bascule l'onglet (navigate) ; écrans empilés : push (pour garder le retour).
   const go = (route: string) => (TAB_ROUTES.has(route) ? router.navigate(route as never) : router.push(route as never));
 
-  const nearbyClubs = clubsByName;
+  // Clubs sponsorisés en tête (badge visible), le reste en ordre alphabétique.
+  const nearbyClubs = [...clubsByName].sort(
+    (a, b) => Number(state.boostedClubIds.includes(b.id)) - Number(state.boostedClubIds.includes(a.id))
+  );
   const now = Date.now();
   const today = dayKey(new Date());
   const matches = upcomingMatches([...state.myMatches, ...seedMatches], now).slice(0, 3);
@@ -78,29 +81,32 @@ export default function HomeScreen() {
           </View>
         </LinearGradient>
 
-        {/* Rappel de match */}
+        {/* Rappel de match — touche la carte pour voir tes réservations */}
         {upcoming ? (
-          <LinearGradient colors={[colors.gold, colors.goldDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.reminder}>
-            <View style={styles.bell}>
-              <Ionicons name="notifications" size={20} color={colors.onGold} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Txt variant="label" color="rgba(255,255,255,0.85)">
-                Rappel de match
-              </Txt>
-              <Txt variant="h3" color={colors.white} style={{ marginTop: 2 }}>
-                {upcoming.clubName}
-              </Txt>
-              <Txt variant="small" color="rgba(255,255,255,0.92)">
-                {upcoming.date} à {upcoming.time} · {upcoming.court}
-              </Txt>
-            </View>
-            <View style={styles.countChip}>
-              <Txt variant="small" color={colors.onGold} style={{ fontWeight: '700' }}>
-                {countdown(upcoming.startsAt)}
-              </Txt>
-            </View>
-          </LinearGradient>
+          <Pressable onPress={() => router.navigate('/profil' as never)} style={({ pressed }) => pressed && { opacity: 0.9 }}>
+            <LinearGradient colors={[colors.gold, colors.goldDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.reminder}>
+              <View style={styles.bell}>
+                <Ionicons name="notifications" size={20} color={colors.onGold} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Txt variant="label" color="rgba(255,255,255,0.85)">
+                  Rappel de match
+                </Txt>
+                <Txt variant="h3" color={colors.white} style={{ marginTop: 2 }}>
+                  {upcoming.clubName}
+                </Txt>
+                <Txt variant="small" color="rgba(255,255,255,0.92)">
+                  {upcoming.date} à {upcoming.time} · {upcoming.court}
+                </Txt>
+              </View>
+              <View style={styles.countChip}>
+                <Txt variant="small" color={colors.onGold} style={{ fontWeight: '700' }}>
+                  {countdown(upcoming.startsAt)}
+                </Txt>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.8)" />
+            </LinearGradient>
+          </Pressable>
         ) : null}
 
         {/* Accès rapide */}

@@ -32,7 +32,6 @@ export default function ClubAdmin() {
     removeClubOffer,
     addClubCoach,
     removeClubCoach,
-    toggleBoostClub,
   } = useApp();
 
   const [url, setUrl] = useState('');
@@ -69,7 +68,9 @@ export default function ClubAdmin() {
   const boosted = state.boostedClubIds.includes(club.id);
   const shareBoost = () =>
     Share.share({ message: `Bonjour PadelConnect, je souhaite booster le profil de ${club.name} (paiement par Wave).` }).catch(() => {});
-  const reservations = state.reservations.filter((r) => r.clubId === club.id);
+  const reservations = state.reservations
+    .filter((r) => r.clubId === club.id)
+    .sort((a, b) => a.startsAt - b.startsAt);
   const comps = [
     ...state.myCompetitions.filter((c) => c.clubId === club.id),
     ...seedCompetitions.filter((c) => c.clubId === club.id),
@@ -159,19 +160,12 @@ export default function ClubAdmin() {
             <IconCircle icon="megaphone" />
             <View style={{ flex: 1 }}>
               <Txt variant="h3">Mettre {club.name} en avant</Txt>
-              <Txt variant="muted">Apparais en tête de liste avec un badge « Sponsorisé ». Paiement par Wave auprès de PadelConnect.</Txt>
+              <Txt variant="muted">Apparais en tête de liste avec un badge « Sponsorisé ». Paiement par Wave auprès de PadelConnect, qui active le boost.</Txt>
             </View>
+            {boosted ? <Tag label="Actif" tone="gold" icon="megaphone" /> : null}
           </View>
-          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
-            <View style={{ flex: 1 }}>
-              <Button size="sm" label="Contacter PadelConnect" icon="paper-plane" onPress={shareBoost} full />
-            </View>
-            <Button
-              size="sm"
-              label={boosted ? 'Boost actif (démo)' : 'Activer (démo)'}
-              variant={boosted ? 'secondary' : 'primary'}
-              onPress={() => toggleBoostClub(club.id)}
-            />
+          <View style={{ marginTop: spacing.md }}>
+            <Button size="sm" label="Contacter PadelConnect" icon="paper-plane" onPress={shareBoost} full />
           </View>
         </Card>
       </View>
@@ -326,6 +320,11 @@ export default function ClubAdmin() {
                   {r.date} · {r.time}
                 </Txt>
                 <Txt variant="muted">{r.court} · {r.players} joueurs</Txt>
+                {r.bookedBy ? (
+                  <Txt variant="small" color={colors.textMuted}>
+                    Réservé par {r.bookedBy.name}{r.bookedBy.phone ? ` · ${r.bookedBy.phone}` : ''}
+                  </Txt>
+                ) : null}
               </View>
               <Tag label="Réservé" tone="green" />
             </Card>

@@ -22,6 +22,7 @@ export type Reservation = {
   startsAt: number; // horodatage réel du créneau (rappel, anti double-réservation)
   players: number;
   invited: Invited[];
+  bookedBy?: { name: string; phone: string }; // qui a réservé — visible côté club
   result?: 'win' | 'loss';
   resultAt?: number;
   createdAt: number;
@@ -98,7 +99,7 @@ type AppContextType = {
   addCompetition: (c: Omit<Competition, 'id' | 'createdByMe'>) => void;
   registerCompetition: (id: string, partner: string) => void;
   unregisterCompetition: (id: string) => void;
-  addReservation: (r: Omit<Reservation, 'id' | 'createdAt'>) => boolean;
+  addReservation: (r: Omit<Reservation, 'id' | 'createdAt' | 'bookedBy'>) => boolean;
   setReservationResult: (id: string, result: 'win' | 'loss') => void;
   cancelReservation: (id: string) => void;
   confirmInvite: (reservationId: string, friendId: string) => void;
@@ -179,8 +180,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             level: 3.5,
             favoriteClubIds: ['padelta'],
             reservations: [
-              { id: uid(), clubId: 'district-club', clubName: 'District Club', court: 'Terrain 1', date: demain.label, dateKey: demain.key, time: '18:00', startsAt: demain.value + 18 * 3600000, players: 4, invited: [], createdAt: now },
-              { id: uid(), clubId: 'padel-zone-4', clubName: 'Padel Zone 4', court: 'Terrain 2', date: 'Sem. dernière', dateKey: dayKey(lastWeek), time: '18:00', startsAt: now - 3 * 86400000, players: 4, invited: [], result: 'win', resultAt: now - 3 * 86400000, createdAt: now - 3 * 86400000 },
+              { id: uid(), clubId: 'district-club', clubName: 'District Club', court: 'Terrain 1', date: demain.label, dateKey: demain.key, time: '18:00', startsAt: demain.value + 18 * 3600000, players: 4, invited: [], bookedBy: { name: 'Invité Démo', phone: '+225 07 00 00 00 00' }, createdAt: now },
+              { id: uid(), clubId: 'padel-zone-4', clubName: 'Padel Zone 4', court: 'Terrain 2', date: 'Sem. dernière', dateKey: dayKey(lastWeek), time: '18:00', startsAt: now - 3 * 86400000, players: 4, invited: [], bookedBy: { name: 'Invité Démo', phone: '+225 07 00 00 00 00' }, result: 'win', resultAt: now - 3 * 86400000, createdAt: now - 3 * 86400000 },
             ],
           };
         }),
@@ -227,7 +228,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // (Deux terrains différents au même horaire restent possibles.) Indexé sur dateKey.
         const taken = (x: Reservation) => x.clubId === r.clubId && x.dateKey === r.dateKey && x.time === r.time && x.court === r.court;
         if (state.reservations.some(taken)) return false;
-        setState((s) => (s.reservations.some(taken) ? s : { ...s, reservations: [{ ...r, id: uid(), createdAt: Date.now() }, ...s.reservations] }));
+        setState((s) => {
+          if (s.reservations.some(taken)) return s;
+          // Identité du réservant (nom + numéro) : c'est ce que le club reçoit.
+          const bookedBy = s.account
+            ? { name: `${s.account.firstName} ${s.account.lastName}`.trim(), phone: s.account.phone }
+            : undefined;
+          return { ...s, reservations: [{ ...r, bookedBy, id: uid(), createdAt: Date.now() }, ...s.reservations] };
+        });
         return true;
       },
       setReservationResult: (id, result) =>

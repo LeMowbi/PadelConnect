@@ -32,6 +32,11 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
         <View>
           <ClubPhoto uri={photo} accent={club.accent} initials={initials(club.name)} height={96} rounded={radius.md} />
           {heart}
+          {boosted ? (
+            <View style={styles.boostBadge}>
+              <Tag label="Sponsorisé" tone="gold" icon="megaphone" />
+            </View>
+          ) : null}
         </View>
         <Txt variant="h3" numberOfLines={1} style={{ marginTop: spacing.sm }}>
           {club.name}
@@ -100,6 +105,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  boostBadge: { position: 'absolute', top: spacing.sm, left: spacing.sm },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   areaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

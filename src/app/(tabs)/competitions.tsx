@@ -4,8 +4,9 @@ import { View } from 'react-native';
 import { CompetitionCard } from '@/components/CompetitionCard';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
-import { Button, EmptyState } from '@/components/ui';
+import { Button, EmptyState, SectionHeader } from '@/components/ui';
 import { seedCompetitions } from '@/data/competitions';
+import { dayKey } from '@/lib/days';
 import { useApp } from '@/store/AppContext';
 import { spacing } from '@/theme';
 
@@ -21,6 +22,10 @@ export default function CompetitionsScreen() {
     if (tab === 'Par les joueurs') return c.organizerType === 'joueur';
     return true;
   });
+  // À venir d'abord ; les tournois passés restent accessibles (déclaration du résultat).
+  const today = dayKey(new Date());
+  const upcoming = list.filter((c) => c.dateKey >= today);
+  const past = list.filter((c) => c.dateKey < today);
 
   return (
     <Screen title="Tournois" subtitle="Défis avec récompenses — par les clubs ou les joueurs">
@@ -30,11 +35,20 @@ export default function CompetitionsScreen() {
 
       <SegmentedControl options={TABS} value={tab} onChange={setTab} />
 
-      {list.length === 0 ? (
-        <EmptyState icon="trophy-outline" title="Aucun tournoi" text="Lance ton propre tournoi ou défi entre amis." />
+      {upcoming.length === 0 ? (
+        <EmptyState icon="trophy-outline" title="Aucun tournoi à venir" text="Lance ton propre tournoi ou défi entre amis." />
       ) : (
-        list.map((c) => <CompetitionCard key={c.id} comp={c} />)
+        upcoming.map((c) => <CompetitionCard key={c.id} comp={c} />)
       )}
+
+      {past.length > 0 ? (
+        <View style={{ marginTop: spacing.xl }}>
+          <SectionHeader title="Tournois passés" />
+          {past.map((c) => (
+            <CompetitionCard key={c.id} comp={c} />
+          ))}
+        </View>
+      ) : null}
     </Screen>
   );
 }

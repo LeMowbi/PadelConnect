@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { Card, Tag, Txt } from './ui';
 import type { Competition } from '@/data/competitions';
+import { dayKey } from '@/lib/days';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
@@ -15,6 +16,12 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
   const left = Math.max(0, comp.slots - teams);
   const full = left === 0;
   const pct = Math.min(100, Math.round((teams / comp.slots) * 100));
+  // Tournoi officiel joué mais résultat pas encore déclaré → on guide le joueur.
+  const needResult =
+    registered &&
+    !!comp.official &&
+    comp.dateKey <= dayKey(new Date()) &&
+    !state.officialResults.some((o) => o.compId === comp.id);
 
   return (
     <Card onPress={() => router.push(`/competition/${comp.id}`)} style={{ marginBottom: spacing.md }}>
@@ -45,7 +52,9 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
         <Txt variant="muted">
           {teams}/{comp.slots} équipes · {comp.fee}
         </Txt>
-        {registered ? (
+        {needResult ? (
+          <Tag label="Résultat à déclarer" tone="gold" icon="alert-circle" />
+        ) : registered ? (
           <Tag label="Inscrit ✓" tone="green" />
         ) : full ? (
           <Tag label="Complet" tone="danger" />

@@ -1,14 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Share, StyleSheet, View } from 'react-native';
+import { Chip } from '@/components/Chip';
 import { Screen } from '@/components/Screen';
 import { Button, Card, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
-import { getClub } from '@/data/clubs';
+import { clubsByName, getClub } from '@/data/clubs';
 import { COMMISSION_RATE, useApp } from '@/store/AppContext';
 import { fcfa } from '@/lib/format';
 import { colors, spacing } from '@/theme';
 
 export default function Operateur() {
-  const { state } = useApp();
+  const { state, toggleBoostClub } = useApp();
 
   // Toutes les réservations reçues, regroupées par club (base de calcul de la commission).
   const groups = new Map<string, { clubName: string; count: number; revenue: number; items: typeof state.reservations }>();
@@ -29,7 +30,9 @@ export default function Operateur() {
   const totalCommission = rows.reduce((s, r) => s + r.commission, 0);
 
   const sendHistory = (row: (typeof rows)[number]) => {
-    const lines = row.items.map((r) => `• ${r.date} ${r.time} · ${r.court} · ${r.players} j`).join('\n');
+    const lines = row.items
+      .map((r) => `• ${r.date} ${r.time} · ${r.court} · ${r.players} j${r.bookedBy ? ` · ${r.bookedBy.name}` : ''}`)
+      .join('\n');
     const message =
       `PadelConnect — Historique des réservations\n${row.clubName}\n\n` +
       `${row.count} réservation${row.count > 1 ? 's' : ''} · volume ≈ ${fcfa(row.revenue)}\n` +
@@ -89,6 +92,27 @@ export default function Operateur() {
       <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.lg, textAlign: 'center' }}>
         En fin de mois : envoie l'historique à chaque club, il te règle ta commission de {Math.round(COMMISSION_RATE * 100)}% par Wave.
       </Txt>
+
+      {/* Boosts — activés par TOI une fois le paiement Wave du club reçu. */}
+      <View style={{ marginTop: spacing.xl }}>
+        <SectionHeader title="Boosts « Sponsorisé »" />
+        <Card>
+          <Txt variant="muted">
+            Un club t'a réglé son boost par Wave ? Active son badge ici : il passe en tête de liste avec « Sponsorisé ». Touche pour activer/désactiver.
+          </Txt>
+          <View style={styles.wrap}>
+            {clubsByName.map((c) => (
+              <Chip
+                key={c.id}
+                label={c.name}
+                icon={state.boostedClubIds.includes(c.id) ? 'megaphone' : undefined}
+                active={state.boostedClubIds.includes(c.id)}
+                onPress={() => toggleBoostClub(c.id)}
+              />
+            ))}
+          </View>
+        </Card>
+      </View>
     </Screen>
   );
 }
@@ -110,4 +134,5 @@ const styles = StyleSheet.create({
   note: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
   totals: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   total: { flex: 1, alignItems: 'center' },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
 });
