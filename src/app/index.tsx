@@ -15,6 +15,7 @@ import { seedCompetitions } from '@/data/competitions';
 import { seedMatches, upcomingMatches } from '@/data/matches';
 import { dayKey } from '@/lib/days';
 import { initials } from '@/lib/format';
+import { isBirthdayToday, parseBirthDate, zodiacFor } from '@/lib/zodiac';
 import { useApp } from '@/store/AppContext';
 import { colors, gradients, radius, spacing } from '@/theme';
 
@@ -55,6 +56,10 @@ export default function HomeScreen() {
   const upcoming = [...state.reservations]
     .filter((r) => !r.result && r.startsAt > now)
     .sort((a, b) => a.startsAt - b.startsAt)[0];
+
+  // Clin d'œil anniversaire (ADN de l'app : astro + fun).
+  const bd = state.account?.birthDate ? parseBirthDate(state.account.birthDate) : null;
+  const birthday = isBirthdayToday(state.account?.birthDate);
 
   // Quelque chose attend le joueur ? (remplace les pastilles de l'ancienne barre d'onglets)
   const pendingGames = state.reservations.filter((r) => !r.result && r.startsAt <= now).length;
@@ -126,8 +131,18 @@ export default function HomeScreen() {
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </Card>
 
+        {/* Joyeux anniversaire — petit clin d'œil le jour J (ADN astro de l'app) */}
+        {birthday && bd ? (
+          <View style={[styles.alert, { backgroundColor: colors.purpleSoft }]}>
+            <Txt variant="h2">{zodiacFor(bd).emoji}</Txt>
+            <Txt variant="small" color={colors.text} style={{ flex: 1, fontWeight: '600' }}>
+              Joyeux anniversaire {state.account?.firstName} ! Un·e {zodiacFor(bd).name} en forme, ça se fête sur un terrain.
+            </Txt>
+          </View>
+        ) : null}
+
         {/* Rappel de match — touche la carte pour voir tes réservations */}
-        {upcoming ? (
+        {upcoming && state.remindersOn ? (
           <Pressable onPress={() => go('/profil')} style={({ pressed }) => pressed && { opacity: 0.9 }}>
             <LinearGradient colors={[colors.gold, colors.goldDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.reminder}>
               <View style={styles.bell}>

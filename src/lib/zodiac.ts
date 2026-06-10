@@ -39,6 +39,15 @@ export function zodiacFor(date: Date): Zodiac {
   return SIGNS[SIGNS.length - 1].sign;
 }
 
+// Vrai si la date de naissance tombe aujourd'hui (jour + mois).
+export function isBirthdayToday(birthDate?: string): boolean {
+  if (!birthDate) return false;
+  const d = parseBirthDate(birthDate);
+  if (!d) return false;
+  const now = new Date();
+  return d.getDate() === now.getDate() && d.getMonth() === now.getMonth();
+}
+
 export function ageFrom(date: Date): number {
   const now = new Date();
   let age = now.getFullYear() - date.getFullYear();

@@ -7,6 +7,7 @@ import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
 import { seedCompetitions } from '@/data/competitions';
 import { dayKey } from '@/lib/days';
+import { shareCompetition } from '@/lib/share';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
@@ -104,14 +105,17 @@ export default function CompetitionDetail() {
         </Txt>
       </Card>
 
-      {byClub && comp.clubId ? (
-        <Button
-          label={`Voir ${comp.clubName}`}
-          icon="location-outline"
-          variant="secondary"
-          onPress={() => router.push(`/club/${comp.clubId}`)}
-        />
-      ) : null}
+      <View style={{ marginTop: spacing.sm, gap: spacing.sm }}>
+        {byClub && comp.clubId ? (
+          <Button
+            label={`Voir ${comp.clubName}`}
+            icon="location-outline"
+            variant="secondary"
+            onPress={() => router.push(`/club/${comp.clubId}`)}
+          />
+        ) : null}
+        <Button label="Partager le tournoi" icon="share-social-outline" variant="ghost" onPress={() => shareCompetition(comp)} />
+      </View>
 
       {/* Inscription en équipe */}
       {registered ? (

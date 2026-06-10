@@ -15,6 +15,7 @@ import { ratingFor, seedReviews } from '@/data/reviews';
 import { useApp } from '@/store/AppContext';
 import { openWhatsApp } from '@/lib/contact';
 import { fcfa, initials, perPlayer } from '@/lib/format';
+import { shareClub } from '@/lib/share';
 import { openMaps } from '@/lib/maps';
 import { colors, radius, spacing } from '@/theme';
 
@@ -82,6 +83,9 @@ export default function ClubDetail() {
         </Pressable>
         <Pressable onPress={() => toggleFavorite(club.id)} hitSlop={8} style={styles.favBtn}>
           <Ionicons name={fav ? 'heart' : 'heart-outline'} size={22} color={fav ? colors.danger : colors.white} />
+        </Pressable>
+        <Pressable onPress={() => shareClub(club)} hitSlop={8} style={styles.shareBtn}>
+          <Ionicons name="share-social-outline" size={20} color={colors.white} />
         </Pressable>
       </View>
 
@@ -363,6 +367,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: spacing.md,
     right: spacing.md,
+    width: 42,
+    height: 42,
+    borderRadius: radius.pill,
+    backgroundColor: colors.overlay,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareBtn: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md + 50,
     width: 42,
     height: 42,
     borderRadius: radius.pill,

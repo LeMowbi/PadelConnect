@@ -2,13 +2,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { Confetti } from '@/components/Confetti';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
+import { activeClubs, findClub } from '@/data/clubs';
+import { seedCompetitions } from '@/data/competitions';
 import { levelLabel } from '@/data/matches';
-import { useApp } from '@/store/AppContext';
+import { freeCourts, openSlotsFor, type AvailCtx } from '@/lib/availability';
+import { nextDays, slotTimestamp } from '@/lib/days';
+import { useApp, type Reservation } from '@/store/AppContext';
 import { initials } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
 import { GENDERS, ageFrom, genderLabel, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
@@ -27,6 +31,8 @@ export default function ProfilScreen() {
     addFriend,
     removeFriend,
     setDefaultVisibility,
+    setRemindersOn,
+    addReservation,
     signOut,
     resetAll,
   } = useApp();
@@ -35,6 +41,7 @@ export default function ProfilScreen() {
   const [editing, setEditing] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [rebooked, setRebooked] = useState<string | null>(null);
   const [fName, setFName] = useState('');
   const [fPhone, setFPhone] = useState('');
 
@@ -42,6 +49,45 @@ export default function ProfilScreen() {
 
   const toValidate = reservations.filter((r) => !r.result);
   const history = reservations.filter((r) => r.result).sort((a, b) => (b.resultAt ?? 0) - (a.resultAt ?? 0));
+
+  // « Rejouer » : refait la même réservation au prochain créneau libre du club (même terrain si possible).
+  const rebook = (r: Reservation) => {
+    const club = findClub(r.clubId, state.customClubs);
+    if (!club) return;
+    const ctx: AvailCtx = {
+      clubs: activeClubs(state.customClubs),
+      clubSlots: state.clubSlots,
+      clubCourts: state.clubCourts,
+      reservations: state.reservations,
+      comps: [...seedCompetitions, ...state.myCompetitions],
+    };
+    for (const d of nextDays(7)) {
+      for (const t of openSlotsFor(club, state.clubSlots)) {
+        const ts = slotTimestamp(d.value, t);
+        if (ts <= Date.now()) continue;
+        const free = freeCourts(club, d.key, t, ctx);
+        if (free.length === 0) continue;
+        const court = free.includes(r.court) ? r.court : free[0];
+        const ok = addReservation({
+          clubId: club.id,
+          clubName: club.name,
+          court,
+          date: d.label,
+          dateKey: d.key,
+          time: t,
+          startsAt: ts,
+          players: r.players,
+          invited: [],
+        });
+        if (ok) {
+          setRebooked(`${club.name} — ${d.label} à ${t} · ${court} ✓`);
+          setCelebrate(true);
+          return;
+        }
+      }
+    }
+    setRebooked(`Aucun créneau libre à ${club.name} ces 7 prochains jours.`);
+  };
 
   const badges = [
     { label: 'Première partie', ok: stats.played >= 1 },
@@ -222,10 +268,25 @@ export default function ProfilScreen() {
         )}
       </View>
 
-      {/* Historique */}
+      {/* Historique — avec « Rejouer » : la même résa au prochain créneau libre, en 1 tap */}
       {history.length > 0 ? (
         <View style={{ marginTop: spacing.xl }}>
           <SectionHeader title="Historique" />
+          {rebooked ? (
+            <View style={styles.rebookBanner}>
+              <Ionicons
+                name={rebooked.endsWith('✓') ? 'checkmark-circle' : 'information-circle-outline'}
+                size={16}
+                color={rebooked.endsWith('✓') ? colors.green : colors.textMuted}
+              />
+              <Txt variant="small" color={colors.text} style={{ flex: 1, fontWeight: '600' }}>
+                {rebooked.endsWith('✓') ? `Terrain réservé : ${rebooked.slice(0, -2)}` : rebooked}
+              </Txt>
+              <Pressable onPress={() => setRebooked(null)} hitSlop={8}>
+                <Ionicons name="close" size={16} color={colors.textMuted} />
+              </Pressable>
+            </View>
+          ) : null}
           <Card>
             {history.map((r, i) => (
               <View key={r.id}>
@@ -240,12 +301,35 @@ export default function ProfilScreen() {
                     </Txt>
                   </View>
                   <Tag label={r.result === 'win' ? 'Victoire' : 'Défaite'} tone={r.result === 'win' ? 'green' : 'danger'} />
+                  <Button size="sm" label="Rejouer" icon="refresh" variant="secondary" onPress={() => rebook(r)} />
                 </View>
               </View>
             ))}
           </Card>
         </View>
       ) : null}
+
+      {/* Rappels */}
+      <View style={{ marginTop: spacing.xl }}>
+        <SectionHeader title="Rappels" />
+        <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+          <IconCircle icon="notifications" color={colors.coral} bg={colors.coralSoft} />
+          <View style={{ flex: 1 }}>
+            <Txt variant="body" style={{ fontWeight: '600' }}>
+              Rappels de match
+            </Txt>
+            <Txt variant="small" color={colors.textMuted}>
+              Carte de rappel avant chaque partie. (Les notifications téléphone arrivent avec l'app installée.)
+            </Txt>
+          </View>
+          <Switch
+            value={state.remindersOn}
+            onValueChange={setRemindersOn}
+            trackColor={{ true: colors.gold, false: colors.border }}
+            thumbColor={colors.white}
+          />
+        </Card>
+      </View>
 
       {/* Visibilité par défaut */}
       <View style={{ marginTop: spacing.xl }}>
@@ -452,6 +536,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   histRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  rebookBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.greenSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   invited: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
   inviteChip: {

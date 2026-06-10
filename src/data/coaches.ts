@@ -1,6 +1,8 @@
 // Coachs — PROFILS DE DÉMONSTRATION (fictifs). À remplacer par de vrais coachs.
 // La réservation ne se fait PAS dans l'app : on affiche le numéro du coach et son club.
 
+import { ACCENTS } from '@/theme';
+
 import { getClub } from './clubs';
 
 export type Coach = {
@@ -31,7 +33,7 @@ export const coaches: Coach[] = [
     rating: 4.8,
     specialties: ['Service', 'Placement', 'Débutants'],
     bio: "Profil de démonstration. Pédagogue, idéale pour démarrer le padel sereinement et corriger les bases.",
-    accent: '#C9A24B',
+    accent: ACCENTS[1],
   },
   {
     id: 'coach-2',
@@ -45,7 +47,7 @@ export const coaches: Coach[] = [
     rating: 4.7,
     specialties: ['Jeu au filet', 'Tactique', 'Compétition'],
     bio: "Profil de démonstration. Travaille la tactique de double et le jeu offensif au filet.",
-    accent: '#1FB57A',
+    accent: ACCENTS[0],
   },
   {
     id: 'coach-3',
@@ -59,7 +61,7 @@ export const coaches: Coach[] = [
     rating: 4.6,
     specialties: ['Sorties de mur', 'Régularité', 'Préparation physique'],
     bio: "Profil de démonstration. Spécialiste des sorties de paroi et de la régularité d'échange.",
-    accent: '#3FA7D6',
+    accent: ACCENTS[2],
   },
   {
     id: 'coach-4',
@@ -73,7 +75,7 @@ export const coaches: Coach[] = [
     rating: 4.9,
     specialties: ['Enfants', 'Initiation', 'Ludique'],
     bio: "Profil de démonstration. Séances ludiques pour enfants et grands débutants.",
-    accent: '#C9A24B',
+    accent: ACCENTS[1],
   },
 ];
 

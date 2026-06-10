@@ -44,6 +44,8 @@ type AppState = {
   account: Account | null;
   level: number; // 1.0 → 7.0
   defaultVisibility: Visibility;
+  remindersOn: boolean; // préférence : rappels de match (sur l'app installée)
+  reserverView: 'Par heure' | 'Par club'; // dernière vue utilisée sur l'écran Réserver
   userReviews: Review[];
   myMatches: Match[];
   joinedMatchIds: string[]; // matchs d'autres joueurs que j'ai rejoints
@@ -76,6 +78,8 @@ const initialState: AppState = {
   account: null,
   level: 3.0,
   defaultVisibility: 'public',
+  remindersOn: true,
+  reserverView: 'Par heure',
   userReviews: [],
   myMatches: [],
   joinedMatchIds: [],
@@ -109,6 +113,8 @@ type AppContextType = {
   setLevel: (n: number) => void;
   recordOfficialResult: (title: string, result: 'win' | 'loss', compId?: string) => void;
   setDefaultVisibility: (v: Visibility) => void;
+  setRemindersOn: (on: boolean) => void;
+  setReserverView: (v: 'Par heure' | 'Par club') => void;
   addReview: (clubId: string, rating: number, text: string) => void;
   addMatch: (m: Omit<Match, 'id' | 'createdByMe'>) => void;
   toggleJoinMatch: (id: string) => void;
@@ -221,6 +227,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           };
         }),
       setDefaultVisibility: (v) => setState((s) => ({ ...s, defaultVisibility: v })),
+      setRemindersOn: (on) => setState((s) => ({ ...s, remindersOn: on })),
+      setReserverView: (v) => setState((s) => ({ ...s, reserverView: v })),
       addReview: (clubId, rating, text) =>
         setState((s) => ({
           ...s,

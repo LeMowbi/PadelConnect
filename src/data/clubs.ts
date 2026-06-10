@@ -1,3 +1,5 @@
+import { ACCENTS } from '@/theme';
+
 // Clubs de padel d'Abidjan — noms et quartiers RÉELS (vérifiés via recherche).
 // Les photos sont des placeholders (droits d'auteur) ; les tarifs sont INDICATIFS
 // et doivent être confirmés par chaque club. Les positions ouvrent Google Maps.
@@ -44,7 +46,7 @@ export const clubs: Club[] = [
     rating: 4.6,
     reviewsCount: 38,
     mapsQuery: 'Abidjan Padel Cocody',
-    accent: '#1FB57A',
+    accent: ACCENTS[0],
   },
   {
     id: 'district-club',
@@ -60,7 +62,7 @@ export const clubs: Club[] = [
     rating: 4.7,
     reviewsCount: 52,
     mapsQuery: 'District Club Padel Abidjan',
-    accent: '#C9A24B',
+    accent: ACCENTS[1],
   },
   {
     id: 'elite-club',
@@ -76,7 +78,7 @@ export const clubs: Club[] = [
     rating: 4.4,
     reviewsCount: 21,
     mapsQuery: 'Elite Club Marcory Abidjan',
-    accent: '#3FA7D6',
+    accent: ACCENTS[2],
   },
   {
     id: 'ivoire-padel',
@@ -92,7 +94,7 @@ export const clubs: Club[] = [
     rating: 4.5,
     reviewsCount: 29,
     mapsQuery: 'Ivoire Padel Club Marcory Abidjan',
-    accent: '#1FB57A',
+    accent: ACCENTS[0],
   },
   {
     id: 'padel-magic',
@@ -108,7 +110,7 @@ export const clubs: Club[] = [
     rating: 4.6,
     reviewsCount: 47,
     mapsQuery: 'Padel Magic Hotel Ivoire Cocody Abidjan',
-    accent: '#C9A24B',
+    accent: ACCENTS[1],
   },
   {
     id: 'padel-palmeraie',
@@ -124,7 +126,7 @@ export const clubs: Club[] = [
     rating: 4.3,
     reviewsCount: 12,
     mapsQuery: 'Padel Palmeraie Faya Bingerville',
-    accent: '#7A8B5A',
+    accent: ACCENTS[5],
   },
   {
     id: 'padel-zone-4',
@@ -140,7 +142,7 @@ export const clubs: Club[] = [
     rating: 4.5,
     reviewsCount: 41,
     mapsQuery: 'Padel Zone 4 Rue du Docteur Blanchard Marcory Abidjan',
-    accent: '#3FA7D6',
+    accent: ACCENTS[2],
   },
   {
     id: 'padelta',
@@ -156,7 +158,7 @@ export const clubs: Club[] = [
     rating: 4.8,
     reviewsCount: 73,
     mapsQuery: 'Padelta Cocody Danga Abidjan',
-    accent: '#C9A24B',
+    accent: ACCENTS[1],
   },
   {
     id: 'padelhouse',
@@ -172,7 +174,7 @@ export const clubs: Club[] = [
     rating: 4.5,
     reviewsCount: 34,
     mapsQuery: 'PadelHouse Zone 3 Abidjan',
-    accent: '#1FB57A',
+    accent: ACCENTS[0],
   },
 ];
 

@@ -16,14 +16,18 @@ import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
 const VIEWS = ['Par heure', 'Par club'] as const;
+// Créneaux très demandés en sortie de bureau (indicateur « heure chargée »).
+const PRIME_TIMES = new Set(['16:30', '18:00', '19:30']);
 
 export default function ReserverScreen() {
   const router = useRouter();
-  const { state } = useApp();
+  const { state, setReserverView } = useApp();
 
   const days = useMemo(() => nextDays(7), []);
   const [day, setDay] = useState(days[0]);
-  const [view, setView] = useState<(typeof VIEWS)[number]>('Par heure');
+  // La dernière vue utilisée est mémorisée (l'écran rouvre comme tu l'avais laissé).
+  const view = state.reserverView;
+  const setView = setReserverView;
   const [sheet, setSheet] = useState<{ club: Club; time: string } | null>(null);
 
   const visibleClubs = useMemo(() => activeClubs(state.customClubs), [state.customClubs]);
@@ -87,6 +91,14 @@ export default function ReserverScreen() {
                 <Txt variant="small" color={colors.textFaint}>
                   · 1h30
                 </Txt>
+                {PRIME_TIMES.has(row.time) ? (
+                  <View style={styles.primePill}>
+                    <Ionicons name="flame" size={11} color={colors.coral} />
+                    <Txt variant="small" color={colors.coral} style={{ fontSize: 11, fontWeight: '700' }}>
+                      heure chargée
+                    </Txt>
+                  </View>
+                ) : null}
               </View>
               {row.clubs.length === 0 ? (
                 <Txt variant="small" color={colors.textFaint} style={{ paddingLeft: spacing.xs }}>
@@ -141,7 +153,7 @@ export default function ReserverScreen() {
             ) : (
               <View style={styles.slotWrap}>
                 {slots.map((s) => (
-                  <Chip key={s.time} label={s.time} onPress={() => open(club, s.time)} />
+                  <Chip key={s.time} label={s.time} icon={PRIME_TIMES.has(s.time) ? 'flame' : undefined} onPress={() => open(club, s.time)} />
                 ))}
               </View>
             )}
@@ -162,6 +174,16 @@ const styles = StyleSheet.create({
   legend: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md, paddingHorizontal: spacing.xs },
   hourBlock: { marginBottom: spacing.lg },
   hourHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.sm, paddingLeft: spacing.xs },
+  primePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.coralSoft,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    marginLeft: 4,
+  },
   clubMini: {
     flexDirection: 'row',
     alignItems: 'center',

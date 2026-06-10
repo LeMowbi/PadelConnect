@@ -1,5 +1,6 @@
 import { ScrollViewStyleReset } from 'expo-router/html';
 import { type PropsWithChildren } from 'react';
+import { colors } from '@/theme';
 
 // Document HTML racine de la version web (démo). Définit le titre, la description et le viewport.
 export default function Root({ children }: PropsWithChildren) {
@@ -14,9 +15,9 @@ export default function Root({ children }: PropsWithChildren) {
           name="description"
           content="PadelConnect — l'app qui réunit tous les clubs de padel d'Abidjan : réserve un terrain, trouve des partenaires, joue des tournois."
         />
-        <meta name="theme-color" content="#0A6B5D" />
+        <meta name="theme-color" content={colors.gold} />
         <ScrollViewStyleReset />
-        <style dangerouslySetInnerHTML={{ __html: `#root,body,html{background:#F4F1E8}` }} />
+        <style dangerouslySetInnerHTML={{ __html: `#root,body,html{background:${colors.bg}}` }} />
       </head>
       <body>{children}</body>
     </html>
