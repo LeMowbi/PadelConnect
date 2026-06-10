@@ -43,7 +43,7 @@ export default function CompetitionsScreen() {
 
       {past.length > 0 ? (
         <View style={{ marginTop: spacing.xl }}>
-          <SectionHeader title="Tournois passés" />
+          <SectionHeader title="Terminés" />
           {past.map((c) => (
             <CompetitionCard key={c.id} comp={c} />
           ))}

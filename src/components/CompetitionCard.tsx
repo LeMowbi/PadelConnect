@@ -16,12 +16,10 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
   const left = Math.max(0, comp.slots - teams);
   const full = left === 0;
   const pct = Math.min(100, Math.round((teams / comp.slots) * 100));
-  // Tournoi officiel joué mais résultat pas encore déclaré → on guide le joueur.
-  const needResult =
-    registered &&
-    !!comp.official &&
-    comp.dateKey <= dayKey(new Date()) &&
-    !state.officialResults.some((o) => o.compId === comp.id);
+  // Cycle de vie : à venir → terminé (date passée) → clôturé (vainqueur désigné).
+  const finished = comp.dateKey <= dayKey(new Date());
+  const result = state.compResults[comp.id];
+  const mine = state.officialResults.find((o) => o.compId === comp.id);
 
   return (
     <Card onPress={() => router.push(`/competition/${comp.id}`)} style={{ marginBottom: spacing.md }}>
@@ -52,8 +50,16 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
         <Txt variant="muted">
           {teams}/{comp.slots} équipes · {comp.fee}
         </Txt>
-        {needResult ? (
-          <Tag label="Résultat à déclarer" tone="amber" icon="alert-circle" />
+        {result ? (
+          mine?.result === 'win' ? (
+            <Tag label="Vainqueur !" tone="amber" icon="trophy" />
+          ) : registered ? (
+            <Tag label="Participé" tone="blue" icon="checkmark" />
+          ) : (
+            <Tag label={`Vainqueur : ${result.winner}`} tone="neutral" icon="trophy" />
+          )
+        ) : finished ? (
+          <Tag label={registered ? 'Résultats à venir' : 'Terminé'} tone="neutral" icon="hourglass-outline" />
         ) : registered ? (
           <Tag label="Inscrit ✓" tone="green" />
         ) : full ? (

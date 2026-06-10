@@ -58,10 +58,10 @@ export default function HomeScreen() {
   const bd = state.account?.birthDate ? parseBirthDate(state.account.birthDate) : null;
   const birthday = isBirthdayToday(state.account?.birthDate);
 
-  // Résultats de tournoi disponibles ? (bandeau d'accueil)
+  // Résultats de tournoi disponibles ? (un tournoi où tu étais inscrit a été clôturé récemment)
   const pendingComps = Object.keys(state.compRegistrations).filter((id) => {
-    const c = [...state.myCompetitions, ...seedCompetitions].find((x) => x.id === id);
-    return !!c?.official && c.dateKey <= today && !state.officialResults.some((o) => o.compId === id);
+    const r = state.compResults[id];
+    return !!r && now - r.closedAt < 7 * 86400000;
   }).length;
 
   return (

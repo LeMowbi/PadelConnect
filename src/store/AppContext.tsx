@@ -43,7 +43,11 @@ export function isPlayed(r: Reservation, now = Date.now()): boolean {
   return r.startsAt + SESSION_MS <= now;
 }
 
-export type OfficialResult = { id: string; compId?: string; title: string; result: 'win' | 'loss'; at: number; levelAfter: number };
+// Palmarès du joueur : une entrée par tournoi joué (vainqueur ou simple participant).
+export type OfficialResult = { id: string; compId?: string; title: string; result: 'win' | 'played'; at: number; levelAfter: number };
+
+// Résultat d'un tournoi clôturé par son ORGANISATEUR (club ou créateur du défi).
+export type CompResult = { winner: string; closedAt: number };
 
 type AppState = {
   account: Account | null;
@@ -57,6 +61,7 @@ type AppState = {
   friends: Friend[];
   officialResults: OfficialResult[];
   compRegistrations: Record<string, { partner: string; at: number }>;
+  compResults: Record<string, CompResult>; // tournoi clôturé → équipe vainqueure
   clubPhotos: Record<string, string[]>;
   clubOffers: Record<string, { id: string; kind: 'offre' | 'actu' | 'evenement'; title: string; detail: string }[]>;
   clubCoaches: Record<string, { id: string; name: string; specialty: string; phone?: string }[]>;
@@ -89,6 +94,7 @@ const initialState: AppState = {
   friends: seedFriends,
   officialResults: [],
   compRegistrations: {},
+  compResults: {},
   clubPhotos: {},
   clubOffers: {},
   clubCoaches: {},
@@ -111,7 +117,7 @@ type AppContextType = {
   loadDemo: () => void;
   signOut: () => void;
   setLevel: (n: number) => void;
-  recordOfficialResult: (title: string, result: 'win' | 'loss', compId?: string) => void;
+  closeCompetition: (comp: { id: string; title: string; official?: boolean }, winnerName: string, winnerIsMe: boolean) => void;
   setRemindersOn: (on: boolean) => void;
   setReserverView: (v: 'Par heure' | 'Par club') => void;
   addReview: (clubId: string, rating: number, text: string) => void;
@@ -205,15 +211,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }),
       signOut: () => setState((s) => ({ ...s, account: null })),
       setLevel: (n) => setState((s) => ({ ...s, level: clampLevel(n) })),
-      recordOfficialResult: (title, result, compId) =>
+      // Clôture par l'ORGANISATEUR : fige le vainqueur, et si TU étais inscrit, met
+      // à jour ton palmarès. Victoire d'un tournoi OFFICIEL : +0.25 de niveau (borné
+      // à 7.0). Participation ou tournoi amical : palmarès seulement, niveau inchangé
+      // (la baisse de niveau attendra la version serveur).
+      closeCompetition: (comp, winnerName, winnerIsMe) =>
         setState((s) => {
-          // Un même tournoi ne peut être déclaré qu'une seule fois.
-          if (compId && s.officialResults.some((o) => o.compId === compId)) return s;
-          const next = clampLevel(s.level + (result === 'win' ? LEVEL_STEP : -LEVEL_STEP));
+          if (s.compResults[comp.id]) return s; // déjà clôturé
+          const compResults = { ...s.compResults, [comp.id]: { winner: winnerName.trim(), closedAt: Date.now() } };
+          const registered = !!s.compRegistrations[comp.id];
+          const already = s.officialResults.some((o) => o.compId === comp.id);
+          if (!registered || already) return { ...s, compResults };
+          const win = winnerIsMe;
+          const next = win && comp.official ? clampLevel(s.level + LEVEL_STEP) : s.level;
           return {
             ...s,
+            compResults,
             level: next,
-            officialResults: [{ id: uid(), compId, title, result, at: Date.now(), levelAfter: next }, ...s.officialResults],
+            officialResults: [
+              { id: uid(), compId: comp.id, title: comp.title, result: win ? 'win' : 'played', at: Date.now(), levelAfter: next },
+              ...s.officialResults,
+            ],
           };
         }),
       setRemindersOn: (on) => setState((s) => ({ ...s, remindersOn: on })),

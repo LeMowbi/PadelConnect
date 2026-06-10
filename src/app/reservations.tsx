@@ -4,8 +4,10 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
+import { seedCompetitions } from '@/data/competitions';
 import { isPlayed, useApp, type Reservation } from '@/store/AppContext';
 import { openWhatsApp } from '@/lib/contact';
+import { dayKey } from '@/lib/days';
 import { colors, radius, spacing } from '@/theme';
 
 const FIVE_H = 5 * 3600000;
@@ -20,6 +22,13 @@ export default function ReservationsScreen() {
   const upcoming = state.reservations.filter((r) => !isPlayed(r, now)).sort((a, b) => a.startsAt - b.startsAt);
   const past = state.reservations.filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt);
   const pastShown = showAllPast ? past : past.slice(0, PAST_PREVIEW);
+
+  // Mes tournois : ceux où mon équipe est inscrite (à venir / résultats).
+  const today = dayKey(new Date());
+  const myComps = Object.keys(state.compRegistrations)
+    .map((id) => [...state.myCompetitions, ...seedCompetitions].find((c) => c.id === id))
+    .filter((c): c is NonNullable<typeof c> => !!c)
+    .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
 
   // Récap envoyé aux partenaires (WhatsApp s'ouvre avec le message, tu choisis le destinataire).
   const notifyPartners = (r: Reservation) => {
@@ -98,6 +107,46 @@ export default function ReservationsScreen() {
         )}
       </View>
 
+      {/* Mes tournois */}
+      {myComps.length > 0 ? (
+        <View style={{ marginTop: spacing.xl }}>
+          <SectionHeader title={`Mes tournois · ${myComps.length}`} />
+          <Card>
+            {myComps.map((c, i) => {
+              const result = state.compResults[c.id];
+              const mine = state.officialResults.find((o) => o.compId === c.id);
+              const finished = c.dateKey <= today;
+              return (
+                <View key={c.id}>
+                  {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
+                  <Card onPress={() => router.push(`/competition/${c.id}`)} style={styles.compRow}>
+                    <View style={{ flex: 1 }}>
+                      <Txt variant="body" style={{ fontWeight: '600' }} numberOfLines={1}>
+                        {c.title}
+                      </Txt>
+                      <Txt variant="small" color={colors.textMuted}>
+                        {c.date} · avec {state.compRegistrations[c.id].partner}
+                      </Txt>
+                    </View>
+                    {result ? (
+                      mine?.result === 'win' ? (
+                        <Tag label="Vainqueur !" tone="amber" icon="trophy" />
+                      ) : (
+                        <Tag label="Participé" tone="blue" />
+                      )
+                    ) : finished ? (
+                      <Tag label="Résultats à venir" tone="neutral" />
+                    ) : (
+                      <Tag label="À venir" tone="purple" />
+                    )}
+                  </Card>
+                </View>
+              );
+            })}
+          </Card>
+        </View>
+      ) : null}
+
       {/* Passées */}
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title={`Passées · ${past.length}`} />
@@ -140,6 +189,7 @@ export default function ReservationsScreen() {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  compRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: 0, borderWidth: 0, shadowOpacity: 0, elevation: 0, backgroundColor: 'transparent' },
   participants: {
     flexDirection: 'row',
     alignItems: 'center',

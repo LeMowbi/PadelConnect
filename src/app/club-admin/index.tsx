@@ -10,7 +10,7 @@ import { Button, Card, Divider, EmptyState, IconCircle, SectionHeader, Tag, Txt 
 import { SAMPLE_SLOTS, clubsByName, defaultCourts, findClub, manageableClubs, type Club } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { hasCompetition } from '@/lib/availability';
-import { nextDays } from '@/lib/days';
+import { dayKey, nextDays } from '@/lib/days';
 import { useApp } from '@/store/AppContext';
 import { openWhatsApp } from '@/lib/contact';
 import { fcfa, initials } from '@/lib/format';
@@ -42,9 +42,12 @@ export default function ClubAdmin() {
     removeClubCoach,
     confirmReservationByClub,
     requestClub,
+    closeCompetition,
   } = useApp();
 
   const [section, setSection] = useState<(typeof SECTIONS)[number]>('Réservations');
+  const [closingId, setClosingId] = useState<string | null>(null);
+  const [winnerName, setWinnerName] = useState('');
   const [selectedCell, setSelectedCell] = useState<{ dateKey: string; time: string; label: string } | null>(null);
   const [url, setUrl] = useState('');
   const [offerKind, setOfferKind] = useState<'offre' | 'actu' | 'evenement'>('offre');
@@ -103,6 +106,8 @@ export default function ClubAdmin() {
     ...state.myCompetitions.filter((c) => c.clubId === club.id),
     ...seedCompetitions.filter((c) => c.clubId === club.id),
   ];
+
+  const todayKey = dayKey(new Date());
 
   // Planning de la semaine : jours × créneaux ouverts, colorés selon l'occupation.
   const week = nextDays(7);
@@ -661,20 +666,85 @@ export default function ClubAdmin() {
             {comps.length === 0 ? (
               <EmptyState icon="trophy-outline" title="Aucun tournoi" text="Crée le premier tournoi de ton club." />
             ) : (
-              comps.map((c) => (
-                <Card key={c.id} onPress={() => router.push(`/competition/${c.id}`)} style={{ marginBottom: spacing.sm }}>
-                  <Txt variant="h3" style={{ fontSize: 15 }}>
-                    {c.title}
-                  </Txt>
-                  <Txt variant="muted">
-                    {c.date} · {c.registered}/{c.slots} inscrits
-                  </Txt>
-                </Card>
-              ))
+              comps.map((c) => {
+                const finished = c.dateKey <= todayKey;
+                const result = state.compResults[c.id];
+                const closing = closingId === c.id;
+                return (
+                  <Card key={c.id} style={{ marginBottom: spacing.sm }}>
+                    <Pressable onPress={() => router.push(`/competition/${c.id}`)}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                        <View style={{ flex: 1 }}>
+                          <Txt variant="h3" style={{ fontSize: 15 }}>
+                            {c.title}
+                          </Txt>
+                          <Txt variant="muted">
+                            {c.date} · {c.registered}/{c.slots} inscrits
+                          </Txt>
+                        </View>
+                        {result ? (
+                          <Tag label={`Vainqueur : ${result.winner}`} tone="amber" icon="trophy" />
+                        ) : finished ? (
+                          <Tag label="À clôturer" tone="coral" icon="flag" />
+                        ) : (
+                          <Tag label="À venir" tone="purple" />
+                        )}
+                      </View>
+                    </Pressable>
+                    {/* Clôture par le club organisateur : désigner l'équipe vainqueure. */}
+                    {finished && !result ? (
+                      closing ? (
+                        (() => {
+                          const reg = state.compRegistrations[c.id];
+                          const myTeam = reg ? `${state.account?.firstName ?? 'Toi'} & ${reg.partner}` : '';
+                          return (
+                            <>
+                              {reg ? (
+                                <View style={[styles.wrap, { marginTop: spacing.sm }]}>
+                                  <Chip label={myTeam} icon="trophy" active={winnerName === myTeam} onPress={() => setWinnerName(myTeam)} />
+                                </View>
+                              ) : null}
+                              <TextInput
+                                value={winnerName}
+                                onChangeText={setWinnerName}
+                                placeholder="Nom de l'équipe vainqueure"
+                                placeholderTextColor={colors.textFaint}
+                                style={styles.input}
+                              />
+                              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                                <View style={{ flex: 1 }}>
+                                  <Button
+                                    size="sm"
+                                    label="Clôturer le tournoi"
+                                    icon="flag"
+                                    onPress={() => {
+                                      closeCompetition(c, winnerName, !!reg && winnerName.trim() === myTeam);
+                                      setClosingId(null);
+                                      setWinnerName('');
+                                    }}
+                                    disabled={winnerName.trim().length < 2}
+                                    full
+                                  />
+                                </View>
+                                <Button size="sm" label="Annuler" variant="ghost" onPress={() => setClosingId(null)} />
+                              </View>
+                            </>
+                          );
+                        })()
+                      ) : (
+                        <View style={{ marginTop: spacing.sm }}>
+                          <Button size="sm" label="Clôturer & désigner le vainqueur" icon="flag" onPress={() => setClosingId(c.id)} full />
+                        </View>
+                      )
+                    ) : null}
+                  </Card>
+                );
+              })
             )}
           </View>
           <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-            Un tournoi bloque automatiquement tes terrains ce jour-là.
+            Un tournoi bloque automatiquement tes terrains ce jour-là. Une fois la date passée,
+            clôture-le en désignant l'équipe vainqueure : les joueurs inscrits sont mis à jour.
           </Txt>
         </>
       ) : null}

@@ -14,13 +14,14 @@ import { colors, radius, spacing } from '@/theme';
 export default function CompetitionDetail() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { state, registerCompetition, unregisterCompetition, recordOfficialResult } = useApp();
+  const { state, registerCompetition, unregisterCompetition, closeCompetition } = useApp();
 
   const key = Array.isArray(id) ? id[0] : id;
   const comp = [...state.myCompetitions, ...seedCompetitions].find((c) => c.id === key);
 
   const [partnerId, setPartnerId] = useState<string | null>(null);
   const [partnerName, setPartnerName] = useState('');
+  const [winnerName, setWinnerName] = useState('');
 
   if (!comp) {
     return (
@@ -32,10 +33,14 @@ export default function CompetitionDetail() {
 
   const reg = state.compRegistrations[comp.id];
   const registered = !!reg;
-  // Déclaration du résultat : tournoi OFFICIEL, inscrit, date passée (ou aujourd'hui), pas encore déclaré.
+  // Cycle de vie : à venir → terminé (date passée) → clôturé (vainqueur désigné par l'ORGANISATEUR).
   const played = comp.dateKey <= dayKey(new Date());
-  const declared = state.officialResults.find((o) => o.compId === comp.id);
-  const canDeclare = registered && !!comp.official && played && !declared;
+  const result = state.compResults[comp.id];
+  const mine = state.officialResults.find((o) => o.compId === comp.id);
+  const myTeam = registered ? `${state.account?.firstName ?? 'Toi'} & ${reg.partner}` : '';
+  // Un défi créé par un joueur se clôture ici, par son créateur. (Les tournois de
+  // club se clôturent dans l'Espace Club.)
+  const canClose = !!comp.createdByMe && played && !result;
   const teams = comp.registered + (registered ? 1 : 0);
   const left = Math.max(0, comp.slots - teams);
   const full = left === 0 && !registered;
@@ -117,6 +122,60 @@ export default function CompetitionDetail() {
         <Button label="Partager le tournoi" icon="share-social-outline" variant="ghost" onPress={() => shareCompetition(comp)} />
       </View>
 
+      {/* Résultats (tournoi clôturé) */}
+      {result ? (
+        <Card style={{ marginTop: spacing.lg, borderColor: colors.amber }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+            <Ionicons name="trophy" size={24} color={colors.amber} />
+            <View style={{ flex: 1 }}>
+              <Txt variant="label" color={colors.textFaint}>
+                Vainqueur
+              </Txt>
+              <Txt variant="h3" color={colors.amber}>
+                {result.winner}
+              </Txt>
+            </View>
+            {mine ? <Tag label={mine.result === 'win' ? 'Vainqueur !' : 'Participé'} tone={mine.result === 'win' ? 'amber' : 'blue'} icon={mine.result === 'win' ? 'trophy' : 'checkmark'} /> : null}
+          </View>
+          {mine?.result === 'win' && comp.official ? (
+            <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
+              Tournoi officiel gagné : ton niveau passe à {mine.levelAfter.toFixed(2)} (+0.25).
+            </Txt>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {/* Clôture — réservée au créateur du défi */}
+      {canClose ? (
+        <Card style={{ marginTop: spacing.lg, borderColor: colors.purple }}>
+          <Txt variant="h3">Clôturer & désigner le vainqueur</Txt>
+          <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
+            Le tournoi est terminé : indique l'équipe qui a gagné. C'est toi (l'organisateur) qui décides.
+          </Txt>
+          {registered ? (
+            <View style={[styles.wrap, { marginTop: spacing.sm }]}>
+              <Chip label={`Mon équipe (${myTeam})`} icon="trophy" active={winnerName === myTeam} onPress={() => setWinnerName(myTeam)} />
+            </View>
+          ) : null}
+          <TextInput
+            value={winnerName}
+            onChangeText={setWinnerName}
+            placeholder="Nom de l'équipe vainqueure"
+            placeholderTextColor={colors.textFaint}
+            style={styles.input}
+          />
+          <View style={{ marginTop: spacing.sm }}>
+            <Button
+              label="Clôturer le tournoi"
+              icon="flag"
+              onPress={() => closeCompetition(comp, winnerName, winnerName.trim() === myTeam && registered)}
+              disabled={winnerName.trim().length < 2}
+              full
+            />
+          </View>
+        </Card>
+      ) : null}
+
       {/* Inscription en équipe */}
       {registered ? (
         <Card style={{ marginTop: spacing.lg }}>
@@ -126,30 +185,11 @@ export default function CompetitionDetail() {
               <Txt variant="h3">Inscrit en équipe</Txt>
               <Txt variant="muted">Avec {reg.partner}</Txt>
             </View>
-            {declared ? <Tag label={declared.result === 'win' ? 'Gagné' : 'Perdu'} tone={declared.result === 'win' ? 'green' : 'danger'} /> : null}
+            {played && !result ? <Tag label="Résultats à venir" tone="neutral" icon="hourglass-outline" /> : null}
           </View>
-          {canDeclare ? (
-            <>
-              <Divider style={{ marginVertical: spacing.md }} />
-              <Txt variant="label" color={colors.textFaint}>
-                Tournoi terminé — quel a été ton résultat ?
-              </Txt>
-              <Txt variant="small" color={colors.textFaint} style={{ marginTop: 2 }}>
-                Tournoi officiel : ton niveau évolue de ±0.25.
-              </Txt>
-              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-                <View style={{ flex: 1 }}>
-                  <Button size="sm" label="Gagné" icon="trophy" onPress={() => recordOfficialResult(comp.title, 'win', comp.id)} full />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Button size="sm" label="Perdu" icon="close" variant="danger" onPress={() => recordOfficialResult(comp.title, 'loss', comp.id)} full />
-                </View>
-              </View>
-            </>
-          ) : null}
-          {declared ? (
-            <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.md }}>
-              Résultat enregistré → Niveau {declared.levelAfter.toFixed(2)}.
+          {played && !result && !comp.createdByMe ? (
+            <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+              L'organisateur désignera l'équipe vainqueure — tes stats se mettront à jour automatiquement.
             </Txt>
           ) : null}
           {!played ? (
@@ -158,7 +198,7 @@ export default function CompetitionDetail() {
             </View>
           ) : null}
         </Card>
-      ) : (
+      ) : played ? null : (
         <View style={{ marginTop: spacing.lg }}>
           <Txt variant="h3">S'inscrire en équipe</Txt>
           <Txt variant="muted" style={{ marginTop: 2 }}>
