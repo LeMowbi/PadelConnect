@@ -80,7 +80,7 @@ export default function NouvelleCompetition() {
   const ready = title.trim().length > 1 && reward.trim().length > 1 && !!day;
 
   return (
-    <Screen back title="Créer une compétition" subtitle={asClub ? `Pour ${club?.name ?? 'votre club'}` : 'En tant que joueur'}>
+    <Screen back title="Créer un tournoi" subtitle={asClub ? `Pour ${club?.name ?? 'votre club'}` : 'En tant que joueur'}>
       <Field label="Titre" value={title} onChangeText={setTitle} placeholder="Ex. Défi entre amis — Riviera" />
       <Field label="Récompense" value={reward} onChangeText={setReward} placeholder="Ex. Cagnotte 30 000 FCFA" />
       <Field label="Frais d'inscription" value={fee} onChangeText={setFee} placeholder="Gratuit / 5 000 FCFA…" />
@@ -125,7 +125,7 @@ export default function NouvelleCompetition() {
       </Txt>
 
       <View style={{ marginTop: spacing.xl }}>
-        <Button label="Publier la compétition" icon="trophy" onPress={create} disabled={!ready} full />
+        <Button label="Publier le tournoi" icon="trophy" onPress={create} disabled={!ready} full />
       </View>
     </Screen>
   );

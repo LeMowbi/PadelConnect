@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Confetti } from '@/components/Confetti';
-import { LevelStepper } from '@/components/LevelStepper';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
 import { levelLabel } from '@/data/matches';
@@ -23,7 +22,6 @@ export default function ProfilScreen() {
     setReservationResult,
     cancelReservation,
     confirmInvite,
-    recordOfficialResult,
     addFriend,
     removeFriend,
     setDefaultVisibility,
@@ -37,7 +35,6 @@ export default function ProfilScreen() {
   const [confirmReset, setConfirmReset] = useState(false);
   const [fName, setFName] = useState('');
   const [fPhone, setFPhone] = useState('');
-  const [fLevel, setFLevel] = useState(3.0);
 
   if (!account) return null;
 
@@ -85,7 +82,7 @@ export default function ProfilScreen() {
         </Card>
       )}
 
-      {/* Niveau (évolue via compétitions officielles) */}
+      {/* Niveau (évolue uniquement via les tournois officiels) */}
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Mon niveau" />
         <Card style={{ borderColor: colors.gold }}>
@@ -95,33 +92,28 @@ export default function ProfilScreen() {
               <Txt variant="h2" color={colors.gold}>
                 {level.toFixed(2)}
               </Txt>
-              <Txt variant="muted">{levelLabel(level)} · évolue selon tes compétitions officielles.</Txt>
-            </View>
-          </View>
-          <Divider style={{ marginVertical: spacing.md }} />
-          <Txt variant="label" color={colors.textFaint}>
-            Résultat d'une compétition officielle
-          </Txt>
-          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-            <View style={{ flex: 1 }}>
-              <Button size="sm" label="Gagnée (+0.25)" icon="trending-up" onPress={() => recordOfficialResult('Compétition officielle', 'win')} full />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button size="sm" label="Perdue (-0.25)" icon="trending-down" variant="danger" onPress={() => recordOfficialResult('Compétition officielle', 'loss')} full />
+              <Txt variant="muted">{levelLabel(level)} · évolue selon tes tournois officiels.</Txt>
             </View>
           </View>
           {officialResults.length > 0 ? (
-            <View style={{ marginTop: spacing.md, gap: 6 }}>
-              {officialResults.slice(0, 3).map((o) => (
-                <View key={o.id} style={styles.histRow}>
-                  <Tag label={o.result === 'win' ? 'Gagnée' : 'Perdue'} tone={o.result === 'win' ? 'green' : 'danger'} />
-                  <Txt variant="muted" style={{ flex: 1 }}>
-                    {o.title} → Niveau {o.levelAfter.toFixed(2)}
-                  </Txt>
-                </View>
-              ))}
-            </View>
-          ) : null}
+            <>
+              <Divider style={{ marginVertical: spacing.md }} />
+              <View style={{ gap: 6 }}>
+                {officialResults.slice(0, 3).map((o) => (
+                  <View key={o.id} style={styles.histRow}>
+                    <Tag label={o.result === 'win' ? 'Gagné' : 'Perdu'} tone={o.result === 'win' ? 'green' : 'danger'} />
+                    <Txt variant="muted" style={{ flex: 1 }}>
+                      {o.title} → Niveau {o.levelAfter.toFixed(2)}
+                    </Txt>
+                  </View>
+                ))}
+              </View>
+            </>
+          ) : (
+            <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+              Inscris-toi à un tournoi officiel : ton résultat fera évoluer ton niveau.
+            </Txt>
+          )}
         </Card>
       </View>
 
@@ -274,7 +266,7 @@ export default function ProfilScreen() {
                     </Txt>
                   ) : null}
                 </View>
-                <Tag label={`Niv. ${f.level.toFixed(1)}`} tone="neutral" />
+                {f.level !== undefined ? <Tag label={`Niv. ${f.level.toFixed(1)}`} tone="neutral" /> : null}
                 <Pressable onPress={() => removeFriend(f.id)} hitSlop={8}>
                   <Ionicons name="close-circle" size={20} color={colors.textFaint} />
                 </Pressable>
@@ -290,12 +282,14 @@ export default function ProfilScreen() {
           </Txt>
           <TextInput value={fName} onChangeText={setFName} placeholder="Nom de l'ami" placeholderTextColor={colors.textFaint} style={styles.input} />
           <TextInput value={fPhone} onChangeText={setFPhone} placeholder="Numéro (+225…) — optionnel" placeholderTextColor={colors.textFaint} keyboardType="phone-pad" style={styles.input} />
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md }}>
-            <Txt variant="muted">Niveau</Txt>
-            <LevelStepper value={fLevel} onChange={setFLevel} />
-          </View>
           <View style={{ marginTop: spacing.md }}>
-            <Button size="sm" label="Ajouter l'ami" icon="person-add" onPress={() => { addFriend(fName, fPhone, fLevel); setFName(''); setFPhone(''); }} />
+            <Button
+              size="sm"
+              label="Ajouter l'ami"
+              icon="person-add"
+              disabled={fName.trim().length < 2}
+              onPress={() => { addFriend(fName, fPhone); setFName(''); setFPhone(''); }}
+            />
           </View>
         </Card>
       </View>
@@ -306,7 +300,7 @@ export default function ProfilScreen() {
           <IconCircle icon="business" />
           <View style={{ flex: 1 }}>
             <Txt variant="h3">Tu gères un club ?</Txt>
-            <Txt variant="muted">Espace Club : page, photos, offres, créneaux, compétitions.</Txt>
+            <Txt variant="muted">Espace Club : page, photos, offres, créneaux, tournois.</Txt>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
         </Card>

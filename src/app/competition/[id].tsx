@@ -6,13 +6,14 @@ import { Chip } from '@/components/Chip';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
 import { seedCompetitions } from '@/data/competitions';
+import { dayKey } from '@/lib/days';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
 export default function CompetitionDetail() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { state, registerCompetition, unregisterCompetition } = useApp();
+  const { state, registerCompetition, unregisterCompetition, recordOfficialResult } = useApp();
 
   const key = Array.isArray(id) ? id[0] : id;
   const comp = [...state.myCompetitions, ...seedCompetitions].find((c) => c.id === key);
@@ -23,13 +24,17 @@ export default function CompetitionDetail() {
   if (!comp) {
     return (
       <Screen back>
-        <EmptyState icon="alert-circle-outline" title="Compétition introuvable" />
+        <EmptyState icon="alert-circle-outline" title="Tournoi introuvable" />
       </Screen>
     );
   }
 
   const reg = state.compRegistrations[comp.id];
   const registered = !!reg;
+  // Déclaration du résultat : tournoi OFFICIEL, inscrit, date passée (ou aujourd'hui), pas encore déclaré.
+  const played = comp.dateKey <= dayKey(new Date());
+  const declared = state.officialResults.find((o) => o.compId === comp.id);
+  const canDeclare = registered && !!comp.official && played && !declared;
   const teams = comp.registered + (registered ? 1 : 0);
   const left = Math.max(0, comp.slots - teams);
   const full = left === 0 && !registered;
@@ -45,7 +50,7 @@ export default function CompetitionDetail() {
   };
 
   return (
-    <Screen back title="Compétition">
+    <Screen back title="Tournoi">
       <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
         <Tag
           label={byClub ? `Organisé par ${comp.organizer}` : `Créé par ${comp.organizer} (joueur)`}
@@ -117,10 +122,37 @@ export default function CompetitionDetail() {
               <Txt variant="h3">Inscrit en équipe</Txt>
               <Txt variant="muted">Avec {reg.partner}</Txt>
             </View>
+            {declared ? <Tag label={declared.result === 'win' ? 'Gagné' : 'Perdu'} tone={declared.result === 'win' ? 'green' : 'danger'} /> : null}
           </View>
-          <View style={{ marginTop: spacing.md }}>
-            <Button label="Se désinscrire" icon="close" variant="danger" onPress={() => unregisterCompetition(comp.id)} full />
-          </View>
+          {canDeclare ? (
+            <>
+              <Divider style={{ marginVertical: spacing.md }} />
+              <Txt variant="label" color={colors.textFaint}>
+                Tournoi terminé — quel a été ton résultat ?
+              </Txt>
+              <Txt variant="small" color={colors.textFaint} style={{ marginTop: 2 }}>
+                Tournoi officiel : ton niveau évolue de ±0.25.
+              </Txt>
+              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Button size="sm" label="Gagné" icon="trophy" onPress={() => recordOfficialResult(comp.title, 'win', comp.id)} full />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button size="sm" label="Perdu" icon="close" variant="danger" onPress={() => recordOfficialResult(comp.title, 'loss', comp.id)} full />
+                </View>
+              </View>
+            </>
+          ) : null}
+          {declared ? (
+            <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+              Résultat enregistré → Niveau {declared.levelAfter.toFixed(2)}.
+            </Txt>
+          ) : null}
+          {!played ? (
+            <View style={{ marginTop: spacing.md }}>
+              <Button label="Se désinscrire" icon="close" variant="danger" onPress={() => unregisterCompetition(comp.id)} full />
+            </View>
+          ) : null}
         </Card>
       ) : (
         <View style={{ marginTop: spacing.lg }}>

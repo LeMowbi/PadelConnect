@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Card, Tag, Txt, type IconName } from './ui';
 import { lookingIcon, lookingLabel, type Match } from '@/data/matches';
 import { inviteToMatch } from '@/lib/share';
+import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
 export function MatchCard({ match }: { match: Match }) {
-  const [joined, setJoined] = useState(false);
+  const { state, toggleJoinMatch } = useApp();
+  const joined = state.joinedMatchIds.includes(match.id);
   const isPublic = match.visibility === 'public';
   const filled = Math.min(match.total, match.total - match.spotsLeft + (joined ? 1 : 0));
   const left = Math.max(0, match.total - filled);
@@ -59,7 +60,7 @@ export function MatchCard({ match }: { match: Match }) {
             size="sm"
             label={joined ? 'Inscrit ✓' : 'Rejoindre'}
             variant={joined ? 'secondary' : 'primary'}
-            onPress={() => setJoined((v) => !v)}
+            onPress={() => toggleJoinMatch(match.id)}
             disabled={left === 0 && !joined}
           />
         </View>

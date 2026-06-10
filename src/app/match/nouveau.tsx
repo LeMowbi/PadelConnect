@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { LevelStepper } from '@/components/LevelStepper';
 import { Screen } from '@/components/Screen';
@@ -28,6 +28,8 @@ export default function NouveauMatch() {
   const [places, setPlaces] = useState(1);
   const [friendIds, setFriendIds] = useState<string[]>([]);
   const [visibility, setVisibility] = useState(state.defaultVisibility);
+  // Niveau, amis et visibilité ont de bons défauts : repliés pour garder l'écran simple.
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const club = clubsByName.find((c) => c.id === clubId) ?? null;
   const ctx: AvailCtx = {
@@ -97,7 +99,7 @@ export default function NouveauMatch() {
         <View style={styles.banner}>
           <Ionicons name="trophy" size={16} color={colors.gold} />
           <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
-            Compétition ce jour à {club?.name} — terrain indisponible.
+            Tournoi ce jour à {club?.name} — terrain indisponible.
           </Txt>
         </View>
       ) : null}
@@ -131,14 +133,6 @@ export default function NouveauMatch() {
         </>
       ) : null}
 
-      <Label text="Niveau du match" />
-      <View style={{ alignItems: 'center', marginTop: spacing.sm }}>
-        <LevelStepper value={levelValue} onChange={setLevelValue} />
-        <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
-          {levelLabel(levelValue)}
-        </Txt>
-      </View>
-
       <Label text="Tu cherches" />
       <View style={styles.wrap}>
         {LOOKING_OPTIONS.map((o) => (
@@ -153,22 +147,45 @@ export default function NouveauMatch() {
         ))}
       </View>
 
-      {state.friends.length > 0 ? (
+      {/* Options avancées — bons défauts : ton niveau, match public, pas d'invitation */}
+      <Pressable onPress={() => setShowAdvanced((v) => !v)} style={styles.advancedToggle}>
+        <Ionicons name={showAdvanced ? 'chevron-down' : 'chevron-forward'} size={16} color={colors.textMuted} />
+        <Txt variant="body" color={colors.textMuted} style={{ fontWeight: '600' }}>
+          Options avancées
+        </Txt>
+        <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
+          niveau · amis · visibilité
+        </Txt>
+      </Pressable>
+
+      {showAdvanced ? (
         <>
-          <Label text="Inviter des amis (optionnel)" />
+          <Label text="Niveau du match" />
+          <View style={{ alignItems: 'center', marginTop: spacing.sm }}>
+            <LevelStepper value={levelValue} onChange={setLevelValue} />
+            <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
+              {levelLabel(levelValue)}
+            </Txt>
+          </View>
+
+          {state.friends.length > 0 ? (
+            <>
+              <Label text="Inviter des amis (optionnel)" />
+              <View style={styles.wrap}>
+                {state.friends.map((f) => (
+                  <Chip key={f.id} label={f.name} icon={friendIds.includes(f.id) ? 'checkmark' : 'person-add'} active={friendIds.includes(f.id)} onPress={() => toggleFriend(f.id)} />
+                ))}
+              </View>
+            </>
+          ) : null}
+
+          <Label text="Qui peut voir ce match ?" />
           <View style={styles.wrap}>
-            {state.friends.map((f) => (
-              <Chip key={f.id} label={f.name} icon={friendIds.includes(f.id) ? 'checkmark' : 'person-add'} active={friendIds.includes(f.id)} onPress={() => toggleFriend(f.id)} />
-            ))}
+            <Chip label="Public" icon="earth" active={visibility === 'public'} onPress={() => setVisibility('public')} size="lg" />
+            <Chip label="Amis uniquement" icon="people" active={visibility === 'amis'} onPress={() => setVisibility('amis')} size="lg" />
           </View>
         </>
       ) : null}
-
-      <Label text="Qui peut voir ce match ?" />
-      <View style={styles.wrap}>
-        <Chip label="Public" icon="earth" active={visibility === 'public'} onPress={() => setVisibility('public')} size="lg" />
-        <Chip label="Amis uniquement" icon="people" active={visibility === 'amis'} onPress={() => setVisibility('amis')} size="lg" />
-      </View>
 
       <View style={{ marginTop: spacing.xl }}>
         <Button label="Créer le match & réserver le terrain" icon="checkmark" onPress={create} disabled={!ready} full />
@@ -190,6 +207,13 @@ function Label({ text }: { text: string }) {
 
 const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  advancedToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xl,
+    paddingVertical: spacing.sm,
+  },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',

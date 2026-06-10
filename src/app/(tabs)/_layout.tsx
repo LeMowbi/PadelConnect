@@ -9,7 +9,7 @@ const META: Record<string, { on: IconName; off: IconName; label: string }> = {
   index: { on: 'home', off: 'home-outline', label: 'Accueil' },
   reserver: { on: 'calendar', off: 'calendar-outline', label: 'Réserver' },
   matchs: { on: 'tennisball', off: 'tennisball-outline', label: 'Jouer' },
-  competitions: { on: 'trophy', off: 'trophy-outline', label: 'Compét.' },
+  competitions: { on: 'trophy', off: 'trophy-outline', label: 'Tournois' },
   profil: { on: 'person', off: 'person-outline', label: 'Profil' },
 };
 

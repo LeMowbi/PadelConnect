@@ -77,7 +77,7 @@ export default function Onboarding() {
           <View style={styles.levelBox}>
             <LevelStepper value={lvl} onChange={setLvl} />
             <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
-              {levelLabel(lvl)} · évoluera selon tes compétitions officielles
+              {levelLabel(lvl)} · évoluera selon tes tournois officiels
             </Txt>
           </View>
 

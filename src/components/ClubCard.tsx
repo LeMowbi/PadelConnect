@@ -4,7 +4,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ClubPhoto } from './ClubPhoto';
 import { RatingStars } from './RatingStars';
 import { Card, Tag, Txt } from './ui';
-import { clubGallery, type Club } from '@/data/clubs';
+import { clubGallery, defaultCourts, type Club } from '@/data/clubs';
+import { ratingFor } from '@/data/reviews';
 import { useApp } from '@/store/AppContext';
 import { fcfa, initials } from '@/lib/format';
 import { colors, radius, spacing } from '@/theme';
@@ -15,6 +16,8 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
   const fav = state.favoriteClubIds.includes(club.id);
   const boosted = state.boostedClubIds.includes(club.id);
   const photo = clubGallery(club, state.clubPhotos[club.id] ?? [])[0];
+  const courtCount = (state.clubCourts[club.id] ?? defaultCourts(club)).length;
+  const { rating, count } = ratingFor(club, state.userReviews);
   const go = () => router.push(`/club/${club.id}`);
 
   const heart = (
@@ -40,9 +43,9 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
           </Txt>
         </View>
         <View style={styles.ratingRow}>
-          <RatingStars value={club.rating} size={13} />
+          <RatingStars value={rating} size={13} />
           <Txt variant="small" color={colors.textMuted}>
-            {club.rating.toFixed(1)}
+            {rating.toFixed(1)}
           </Txt>
         </View>
       </Card>
@@ -65,14 +68,14 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
         <View style={styles.areaRow}>
           <Ionicons name="location-outline" size={14} color={colors.textMuted} />
           <Txt variant="muted">
-            {club.area} · {club.courts} terrains
+            {club.area} · {courtCount} terrain{courtCount > 1 ? 's' : ''}
           </Txt>
         </View>
         <View style={styles.footer}>
           <View style={styles.ratingRow}>
-            <RatingStars value={club.rating} size={14} />
+            <RatingStars value={rating} size={14} />
             <Txt variant="small" color={colors.textMuted}>
-              {club.rating.toFixed(1)} ({club.reviewsCount})
+              {rating.toFixed(1)} ({count})
             </Txt>
           </View>
           <Txt variant="small" color={colors.textMuted}>

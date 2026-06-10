@@ -8,9 +8,9 @@ import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, IconCircle, Tag, Txt } from '@/components/ui';
 import { clubGallery, defaultCourts, getClub, offersForClub } from '@/data/clubs';
 import { coaches } from '@/data/coaches';
-import { seedReviews } from '@/data/reviews';
+import { ratingFor, seedReviews } from '@/data/reviews';
 import { useApp } from '@/store/AppContext';
-import { callNumber } from '@/lib/contact';
+import { callNumber, openWhatsApp } from '@/lib/contact';
 import { fcfa, initials } from '@/lib/format';
 import { openMaps } from '@/lib/maps';
 import { colors, radius, spacing } from '@/theme';
@@ -46,6 +46,7 @@ export default function ClubDetail() {
     ...state.userReviews.filter((r) => r.clubId === club.id),
     ...seedReviews.filter((r) => r.clubId === club.id),
   ];
+  const { rating: avgRating, count: ratingCount } = ratingFor(club, state.userReviews);
 
   const submit = () => {
     if (rating === 0) return;
@@ -85,7 +86,7 @@ export default function ClubDetail() {
         {boosted ? <Tag label="Sponsorisé" tone="gold" icon="megaphone" /> : null}
         <Tag label={club.type} tone="neutral" />
         <Tag label={`${courtCount} terrain${courtCount > 1 ? 's' : ''}`} tone="neutral" />
-        <Tag label={`${club.rating.toFixed(1)} ★ (${club.reviewsCount})`} tone="gold" />
+        <Tag label={`${avgRating.toFixed(1)} ★ (${ratingCount})`} tone="gold" />
       </View>
 
       <View style={styles.actions}>
@@ -158,10 +159,17 @@ export default function ClubDetail() {
                   <Txt variant="body" style={{ fontWeight: '600' }}>{c.name}</Txt>
                   <Txt variant="muted">{c.sub}</Txt>
                 </View>
-                {c.phone ? (
-                  <Button size="sm" label="Appeler" icon="call" variant="secondary" onPress={() => callNumber(c.phone!)} />
-                ) : null}
               </View>
+              {c.phone ? (
+                <View style={styles.contactRow}>
+                  <View style={{ flex: 1 }}>
+                    <Button size="sm" label="Appeler" icon="call" variant="secondary" onPress={() => callNumber(c.phone!)} full />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Button size="sm" label="WhatsApp" icon="logo-whatsapp" variant="secondary" onPress={() => openWhatsApp(c.phone!)} full />
+                  </View>
+                </View>
+              ) : null}
             </View>
           ))}
         </Card>
@@ -254,4 +262,5 @@ const styles = StyleSheet.create({
   },
   reviewHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   coachRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  contactRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
 });

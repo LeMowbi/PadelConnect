@@ -27,7 +27,7 @@ export type Reservation = {
   createdAt: number;
 };
 
-export type OfficialResult = { id: string; title: string; result: 'win' | 'loss'; at: number; levelAfter: number };
+export type OfficialResult = { id: string; compId?: string; title: string; result: 'win' | 'loss'; at: number; levelAfter: number };
 
 type AppState = {
   account: Account | null;
@@ -35,6 +35,7 @@ type AppState = {
   defaultVisibility: Visibility;
   userReviews: Review[];
   myMatches: Match[];
+  joinedMatchIds: string[]; // matchs d'autres joueurs que j'ai rejoints
   myCompetitions: Competition[];
   reservations: Reservation[];
   favoriteClubIds: string[];
@@ -63,6 +64,7 @@ const initialState: AppState = {
   defaultVisibility: 'public',
   userReviews: [],
   myMatches: [],
+  joinedMatchIds: [],
   myCompetitions: [],
   reservations: [],
   favoriteClubIds: [],
@@ -88,10 +90,11 @@ type AppContextType = {
   loadDemo: () => void;
   signOut: () => void;
   setLevel: (n: number) => void;
-  recordOfficialResult: (title: string, result: 'win' | 'loss') => void;
+  recordOfficialResult: (title: string, result: 'win' | 'loss', compId?: string) => void;
   setDefaultVisibility: (v: Visibility) => void;
   addReview: (clubId: string, rating: number, text: string) => void;
   addMatch: (m: Omit<Match, 'id' | 'createdByMe'>) => void;
+  toggleJoinMatch: (id: string) => void;
   addCompetition: (c: Omit<Competition, 'id' | 'createdByMe'>) => void;
   registerCompetition: (id: string, partner: string) => void;
   unregisterCompetition: (id: string) => void;
@@ -99,7 +102,7 @@ type AppContextType = {
   setReservationResult: (id: string, result: 'win' | 'loss') => void;
   cancelReservation: (id: string) => void;
   confirmInvite: (reservationId: string, friendId: string) => void;
-  addFriend: (name: string, phone: string, level: number) => void;
+  addFriend: (name: string, phone: string) => void;
   removeFriend: (id: string) => void;
   toggleFavorite: (clubId: string) => void;
   addClubPhoto: (clubId: string, uri: string) => void;
@@ -111,8 +114,6 @@ type AppContextType = {
   toggleBoostClub: (clubId: string) => void;
   setClubMode: (on: boolean) => void;
   setManagedClub: (id: string) => void;
-  addClubSlot: (clubId: string, slot: string) => void;
-  removeClubSlot: (clubId: string, slot: string) => void;
   setClubSlots: (clubId: string, slots: string[]) => void;
   setClubCourts: (clubId: string, courts: string[]) => void;
   resetAll: () => void;
@@ -185,13 +186,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }),
       signOut: () => setState((s) => ({ ...s, account: null })),
       setLevel: (n) => setState((s) => ({ ...s, level: clampLevel(n) })),
-      recordOfficialResult: (title, result) =>
+      recordOfficialResult: (title, result, compId) =>
         setState((s) => {
+          // Un même tournoi ne peut être déclaré qu'une seule fois.
+          if (compId && s.officialResults.some((o) => o.compId === compId)) return s;
           const next = clampLevel(s.level + (result === 'win' ? LEVEL_STEP : -LEVEL_STEP));
           return {
             ...s,
             level: next,
-            officialResults: [{ id: uid(), title, result, at: Date.now(), levelAfter: next }, ...s.officialResults],
+            officialResults: [{ id: uid(), compId, title, result, at: Date.now(), levelAfter: next }, ...s.officialResults],
           };
         }),
       setDefaultVisibility: (v) => setState((s) => ({ ...s, defaultVisibility: v })),
@@ -201,6 +204,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           userReviews: [{ id: uid(), clubId, author: 'Vous', rating, text: text.trim() || 'Bonne expérience.', date: "À l'instant" }, ...s.userReviews],
         })),
       addMatch: (m) => setState((s) => ({ ...s, myMatches: [{ ...m, id: uid(), createdByMe: true }, ...s.myMatches] })),
+      toggleJoinMatch: (id) =>
+        setState((s) => ({
+          ...s,
+          joinedMatchIds: s.joinedMatchIds.includes(id) ? s.joinedMatchIds.filter((x) => x !== id) : [...s.joinedMatchIds, id],
+        })),
       addCompetition: (c) => setState((s) => ({ ...s, myCompetitions: [{ ...c, id: uid(), createdByMe: true }, ...s.myCompetitions] })),
       registerCompetition: (id, partner) =>
         setState((s) =>
@@ -237,11 +245,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               : r
           ),
         })),
-      addFriend: (name, phone, level) =>
+      addFriend: (name, phone) =>
         setState((s) => {
           const n = name.trim();
           if (n.length < 2) return s;
-          return { ...s, friends: [{ id: uid(), name: n, phone: phone.trim() || undefined, level: clampLevel(level) }, ...s.friends] };
+          return { ...s, friends: [{ id: uid(), name: n, phone: phone.trim() || undefined }, ...s.friends] };
         }),
       removeFriend: (id) => setState((s) => ({ ...s, friends: s.friends.filter((f) => f.id !== id) })),
       toggleFavorite: (clubId) =>
@@ -282,14 +290,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         })),
       setClubMode: (on) => setState((s) => ({ ...s, clubMode: on })),
       setManagedClub: (id) => setState((s) => ({ ...s, managedClubId: id })),
-      addClubSlot: (clubId, slot) =>
-        setState((s) => {
-          const existing = s.clubSlots[clubId] ?? [];
-          if (existing.includes(slot)) return s;
-          return { ...s, clubSlots: { ...s.clubSlots, [clubId]: [...existing, slot].sort() } };
-        }),
-      removeClubSlot: (clubId, slot) =>
-        setState((s) => ({ ...s, clubSlots: { ...s.clubSlots, [clubId]: (s.clubSlots[clubId] ?? []).filter((x) => x !== slot) } })),
       setClubSlots: (clubId, slots) =>
         setState((s) => ({ ...s, clubSlots: { ...s.clubSlots, [clubId]: [...slots].sort() } })),
       setClubCourts: (clubId, courts) =>

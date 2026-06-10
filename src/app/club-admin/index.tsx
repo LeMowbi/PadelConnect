@@ -112,11 +112,23 @@ export default function ClubAdmin() {
         <IconCircle icon="business" />
         <View style={{ flex: 1 }}>
           <Txt variant="h3">Compte club (démo)</Txt>
-          <Txt variant="muted">Active le mode gérant sur cet appareil.</Txt>
+          <Txt variant="muted">Active le mode gérant pour gérer ton club.</Txt>
         </View>
         <Switch value={state.clubMode} onValueChange={setClubMode} trackColor={{ true: colors.gold, false: colors.border }} thumbColor={colors.white} />
       </Card>
 
+      {!state.clubMode ? (
+        <Card style={{ marginTop: spacing.md, alignItems: 'center', paddingVertical: spacing.xl }}>
+          <Ionicons name="lock-closed-outline" size={28} color={colors.textFaint} />
+          <Txt variant="h3" style={{ marginTop: spacing.sm }}>
+            Espace réservé au gérant
+          </Txt>
+          <Txt variant="muted" style={{ marginTop: 4, textAlign: 'center' }}>
+            Active le mode gérant ci-dessus pour gérer photos, offres, coachs, terrains, créneaux et tournois de ton club.
+          </Txt>
+        </Card>
+      ) : (
+      <>
       {/* Club géré */}
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Club géré" />
@@ -309,18 +321,18 @@ export default function ClubAdmin() {
         )}
       </View>
 
-      {/* Compétitions du club */}
+      {/* Tournois du club */}
       <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title="Compétitions du club" />
+        <SectionHeader title="Tournois du club" />
         <Button
-          label="Créer une compétition (club)"
+          label="Créer un tournoi (club)"
           icon="trophy"
           onPress={() => router.push(`/competition/nouvelle?as=club&clubId=${club.id}`)}
           full
         />
         <View style={{ marginTop: spacing.md }}>
           {comps.length === 0 ? (
-            <EmptyState icon="trophy-outline" title="Aucune compétition" text="Crée le premier tournoi de ton club." />
+            <EmptyState icon="trophy-outline" title="Aucun tournoi" text="Crée le premier tournoi de ton club." />
           ) : (
             comps.map((c) => (
               <Card key={c.id} onPress={() => router.push(`/competition/${c.id}`)} style={{ marginBottom: spacing.sm }}>
@@ -335,6 +347,8 @@ export default function ClubAdmin() {
           )}
         </View>
       </View>
+      </>
+      )}
     </Screen>
   );
 }
@@ -342,15 +356,6 @@ export default function ClubAdmin() {
 const styles = StyleSheet.create({
   note: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
-  openSlot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    backgroundColor: colors.greenSoft,
-  },
   removeBadge: {
     position: 'absolute',
     top: 4,

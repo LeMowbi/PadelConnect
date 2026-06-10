@@ -18,3 +18,16 @@ export const seedReviews: Review[] = [
   { id: 'r5', clubId: 'abidjan-padel', author: 'Marina', rating: 5, text: "L'appli du club rend la résa très rapide.", date: 'Avr. 2026' },
   { id: 'r6', clubId: 'padel-magic', author: 'Yann', rating: 4, text: 'Sympa de jouer près de l’Hôtel Ivoire, beau cadre.', date: 'Mars 2026' },
 ];
+
+// Note moyenne d'un club EN INCLUANT les avis publiés par l'utilisateur :
+// moyenne pondérée entre la note de base (rating × reviewsCount) et les nouveaux avis.
+export function ratingFor(
+  club: { id: string; rating: number; reviewsCount: number },
+  userReviews: Review[]
+): { rating: number; count: number } {
+  const mine = userReviews.filter((r) => r.clubId === club.id);
+  const count = club.reviewsCount + mine.length;
+  if (mine.length === 0 || count === 0) return { rating: club.rating, count };
+  const sum = club.rating * club.reviewsCount + mine.reduce((s, r) => s + r.rating, 0);
+  return { rating: Math.round((sum / count) * 10) / 10, count };
+}

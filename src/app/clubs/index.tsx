@@ -48,10 +48,6 @@ export default function ClubsScreen() {
         ))}
       </ScrollView>
 
-      <Txt variant="small" color={colors.textFaint} style={{ marginBottom: spacing.md }}>
-        Ordre alphabétique — aucun classement entre clubs.
-      </Txt>
-
       {list.length === 0 ? (
         <EmptyState icon="heart-outline" title="Aucun favori" text="Touche le cœur sur un club pour l’ajouter ici." />
       ) : (

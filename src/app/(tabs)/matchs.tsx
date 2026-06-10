@@ -21,6 +21,7 @@ export default function MatchsScreen() {
   const [myLevel, setMyLevel] = useState(false);
 
   const list = [...state.myMatches, ...seedMatches].filter((m) => {
+    if (m.startsAt <= Date.now()) return false; // matchs passés masqués
     if (tab === 'Publics' && m.visibility !== 'public') return false;
     if (tab === 'Amis' && m.visibility !== 'amis') return false;
     if (look === 'Partenaire' && !(m.looking === 'partenaire' || m.looking === 'les deux')) return false;

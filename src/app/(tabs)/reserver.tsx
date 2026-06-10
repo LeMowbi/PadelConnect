@@ -50,7 +50,7 @@ export default function ReserverScreen() {
       <View style={styles.legend}>
         <Ionicons name="hand-left-outline" size={15} color={colors.textFaint} />
         <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
-          Touche un club libre pour choisir ton terrain et réserver. Tous les clubs sont à égalité.
+          Touche un club libre pour choisir ton terrain et réserver.
         </Txt>
       </View>
 

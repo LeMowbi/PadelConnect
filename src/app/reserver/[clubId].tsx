@@ -103,7 +103,7 @@ export default function ReserverScreen() {
         <View style={styles.banner}>
           <Ionicons name="trophy" size={16} color={colors.gold} />
           <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
-            Une compétition a lieu ce jour à {club.name} — le terrain n'est pas réservable.
+            Un tournoi a lieu ce jour à {club.name} — le terrain n'est pas réservable.
           </Txt>
         </View>
       ) : null}

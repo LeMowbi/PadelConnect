@@ -9,7 +9,7 @@ import { Button, Card, IconCircle, SectionHeader, Tag, Txt } from '@/components/
 import { getClub } from '@/data/clubs';
 import { coachClubName, coaches, type Coach } from '@/data/coaches';
 import { useApp } from '@/store/AppContext';
-import { callNumber } from '@/lib/contact';
+import { callNumber, openWhatsApp } from '@/lib/contact';
 import { fcfa, initials } from '@/lib/format';
 import { colors, radius, spacing } from '@/theme';
 
@@ -57,8 +57,13 @@ function CoachRow({ coach }: { coach: Coach }) {
           <Tag key={s} label={s} tone="neutral" />
         ))}
       </View>
-      <View style={{ marginTop: spacing.md }}>
-        <Button size="sm" label={`Appeler · ${coach.phone}`} icon="call" onPress={() => callNumber(coach.phone)} full />
+      <View style={styles.contactRow}>
+        <View style={{ flex: 1 }}>
+          <Button size="sm" label="Appeler" icon="call" onPress={() => callNumber(coach.phone)} full />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button size="sm" label="WhatsApp" icon="logo-whatsapp" variant="secondary" onPress={() => openWhatsApp(coach.phone)} full />
+        </View>
       </View>
     </Card>
   );
@@ -108,8 +113,13 @@ export default function CoachsScreen() {
                 <Tag label="Club" tone="neutral" />
               </View>
               {c.phone ? (
-                <View style={{ marginTop: spacing.md }}>
-                  <Button size="sm" label={`Appeler · ${c.phone}`} icon="call" variant="secondary" onPress={() => callNumber(c.phone!)} full />
+                <View style={styles.contactRow}>
+                  <View style={{ flex: 1 }}>
+                    <Button size="sm" label="Appeler" icon="call" variant="secondary" onPress={() => callNumber(c.phone!)} full />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Button size="sm" label="WhatsApp" icon="logo-whatsapp" variant="secondary" onPress={() => openWhatsApp(c.phone!)} full />
+                  </View>
                 </View>
               ) : null}
             </Card>
@@ -136,4 +146,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   specs: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  contactRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
 });

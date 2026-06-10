@@ -18,8 +18,8 @@ import { colors, radius, spacing } from '@/theme';
 type Action = { icon: keyof typeof Ionicons.glyphMap; label: string; route: string; tint: string; bg: string };
 
 const ACTIONS: Action[] = [
-  { icon: 'tennisball', label: 'Trouver un match', route: '/matchs', tint: colors.gold, bg: colors.goldSoft },
-  { icon: 'trophy', label: 'Compétitions', route: '/competitions', tint: colors.green, bg: colors.greenSoft },
+  { icon: 'tennisball', label: 'Jouer un match', route: '/matchs', tint: colors.gold, bg: colors.goldSoft },
+  { icon: 'trophy', label: 'Tournois', route: '/competitions', tint: colors.green, bg: colors.greenSoft },
   { icon: 'school', label: 'Trouver un coach', route: '/coachs', tint: colors.blue, bg: colors.blueSoft },
   { icon: 'book', label: 'Découvrir le padel', route: '/decouvrir', tint: colors.gold, bg: colors.goldSoft },
 ];
@@ -43,11 +43,9 @@ export default function HomeScreen() {
   const go = (route: string) => (TAB_ROUTES.has(route) ? router.navigate(route as never) : router.push(route as never));
 
   const nearbyClubs = clubsByName;
-  const matches = [...state.myMatches, ...seedMatches]
-    .filter((m) => m.visibility === 'public' || m.visibility === 'amis')
-    .slice(0, 3);
-  const competitions = [...state.myCompetitions, ...seedCompetitions].slice(0, 2);
   const now = Date.now();
+  const matches = [...state.myMatches, ...seedMatches].filter((m) => m.startsAt > now).slice(0, 3);
+  const competitions = [...state.myCompetitions, ...seedCompetitions].slice(0, 2);
   const upcoming = [...state.reservations]
     .filter((r) => !r.result && r.startsAt > now)
     .sort((a, b) => a.startsAt - b.startsAt)[0];
@@ -132,20 +130,12 @@ export default function HomeScreen() {
           ))}
         </View>
 
-        {/* Compétitions */}
+        {/* Tournois */}
         <View style={styles.section}>
-          <SectionHeader title="Compétitions à venir" actionLabel="Voir tout" onAction={() => go('/competitions')} />
+          <SectionHeader title="Tournois à venir" actionLabel="Voir tout" onAction={() => go('/competitions')} />
           {competitions.map((c) => (
             <CompetitionCard key={c.id} comp={c} />
           ))}
-        </View>
-
-        {/* Note d'égalité (pas de classement) */}
-        <View style={styles.note}>
-          <Ionicons name="heart-outline" size={15} color={colors.textFaint} />
-          <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
-            Tous les clubs sont présentés à égalité, sans classement ni hiérarchie.
-          </Txt>
         </View>
       </Reveal>
     </Screen>
@@ -198,11 +188,4 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   section: { marginTop: spacing.xl },
-  note: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.xl,
-    paddingHorizontal: spacing.xs,
-  },
 });
