@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { LevelStepper } from '@/components/LevelStepper';
@@ -10,9 +10,11 @@ import { Logo } from '@/components/Logo';
 import { Button, Txt } from '@/components/ui';
 import { levelLabel } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
-import { GENDERS, ageFrom, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
+import { GENDERS, ageFrom, maskBirthDate, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
 import { useApp } from '@/store/AppContext';
 import { colors, gradients, radius, spacing } from '@/theme';
+
+type FieldKey = 'firstName' | 'lastName' | 'phone' | 'birth' | 'gender';
 
 export default function Onboarding() {
   const router = useRouter();
@@ -24,23 +26,38 @@ export default function Onboarding() {
   const [gender, setGender] = useState<Gender | null>(null);
   const [photoUri, setPhotoUri] = useState<string | undefined>(undefined);
   const [lvl, setLvl] = useState(3.0);
+  // Erreurs par champ — affichées au tap sur « Créer mon profil » (aucun tap silencieux).
+  const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
+  const scrollRef = useRef<ScrollView>(null);
+  const positions = useRef<Partial<Record<FieldKey, number>>>({});
 
   const birthDate = parseBirthDate(birth);
   const zodiac = birthDate ? zodiacFor(birthDate) : null;
-  const ready =
-    firstName.trim().length >= 2 &&
-    lastName.trim().length >= 1 &&
-    phone.replace(/\D/g, '').length >= 8 &&
-    !!birthDate &&
-    !!gender;
 
   const choosePhoto = async () => {
     const uri = await pickImage();
     if (uri) setPhotoUri(uri);
   };
 
+  const validate = (): Partial<Record<FieldKey, string>> => {
+    const e: Partial<Record<FieldKey, string>> = {};
+    if (firstName.trim().length < 2) e.firstName = 'Indique ton prénom (2 lettres minimum).';
+    if (lastName.trim().length < 1) e.lastName = 'Indique ton nom.';
+    if (phone.replace(/\D/g, '').length < 8) e.phone = 'Numéro invalide — au moins 8 chiffres.';
+    if (!birthDate) e.birth = birth.trim().length > 0 ? 'Date invalide — vérifie le jour, le mois et l’année.' : 'Indique ta date de naissance.';
+    if (!gender) e.gender = 'Choisis une option.';
+    return e;
+  };
+
   const create = () => {
-    if (!ready) return;
+    const e = validate();
+    setErrors(e);
+    const first = (['firstName', 'lastName', 'phone', 'birth', 'gender'] as FieldKey[]).find((k) => e[k]);
+    if (first) {
+      // Scroll automatique vers le premier champ en erreur.
+      scrollRef.current?.scrollTo({ y: Math.max(0, (positions.current[first] ?? 0) - 24), animated: true });
+      return;
+    }
     setAccount({ firstName: firstName.trim(), lastName: lastName.trim(), phone: phone.trim(), photoUri, birthDate: birth.trim(), gender: gender! });
     setLevel(lvl);
     router.replace('/');
@@ -51,9 +68,11 @@ export default function Onboarding() {
     router.replace('/');
   };
 
+  const clearError = (k: FieldKey) => setErrors((cur) => (cur[k] ? { ...cur, [k]: undefined } : cur));
+
   return (
     <View style={styles.root}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xxxl }}>
+      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xxxl }}>
         <LinearGradient colors={gradients.heroSoft} style={styles.hero}>
           <Logo size={40} />
           <Txt variant="display" style={{ fontSize: 30, marginTop: spacing.xl }}>
@@ -78,10 +97,41 @@ export default function Onboarding() {
             </Txt>
           </View>
 
-          <Field label="Prénom" value={firstName} onChangeText={setFirstName} placeholder="Ex. Moustapha" />
-          <Field label="Nom" value={lastName} onChangeText={setLastName} placeholder="Ex. Bitar" />
-          <Field label="Numéro de téléphone" value={phone} onChangeText={setPhone} placeholder="+225 07 00 00 00 00" keyboardType="phone-pad" />
-          <Field label="Date de naissance" value={birth} onChangeText={setBirth} placeholder="JJ/MM/AAAA" keyboardType="phone-pad" />
+          <Field
+            label="Prénom"
+            value={firstName}
+            onChangeText={(t) => { setFirstName(t); clearError('firstName'); }}
+            placeholder="Ex. Moustapha"
+            error={errors.firstName}
+            onLayout={(y) => { positions.current.firstName = y; }}
+          />
+          <Field
+            label="Nom"
+            value={lastName}
+            onChangeText={(t) => { setLastName(t); clearError('lastName'); }}
+            placeholder="Ex. Bitar"
+            error={errors.lastName}
+            onLayout={(y) => { positions.current.lastName = y; }}
+          />
+          <Field
+            label="Numéro de téléphone"
+            value={phone}
+            onChangeText={(t) => { setPhone(t); clearError('phone'); }}
+            placeholder="+225 07 00 00 00 00"
+            keyboardType="phone-pad"
+            error={errors.phone}
+            onLayout={(y) => { positions.current.phone = y; }}
+          />
+          <Field
+            label="Date de naissance"
+            value={birth}
+            onChangeText={(t) => { setBirth(maskBirthDate(t, birth)); clearError('birth'); }}
+            placeholder="JJ/MM/AAAA"
+            keyboardType="phone-pad"
+            maxLength={10}
+            error={errors.birth}
+            onLayout={(y) => { positions.current.birth = y; }}
+          />
 
           {/* Petit clin d'œil astro dès que la date est valide ✨ */}
           {zodiac && birthDate ? (
@@ -96,19 +146,26 @@ export default function Onboarding() {
                 </Txt>
               </View>
             </View>
-          ) : birth.trim().length > 0 ? (
-            <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-              Format attendu : JJ/MM/AAAA (ex. 14/02/1998)
+          ) : birth.length === 10 ? (
+            <Txt variant="small" color={colors.danger} style={{ marginTop: spacing.sm }}>
+              Cette date n'existe pas — vérifie le jour et le mois.
             </Txt>
           ) : null}
 
-          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
-            Sexe
-          </Txt>
-          <View style={styles.genderRow}>
-            {GENDERS.map((g) => (
-              <Chip key={g.id} label={g.label} active={gender === g.id} onPress={() => setGender(g.id)} size="lg" />
-            ))}
+          <View onLayout={(e) => { positions.current.gender = e.nativeEvent.layout.y; }}>
+            <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+              Sexe
+            </Txt>
+            <View style={styles.genderRow}>
+              {GENDERS.map((g) => (
+                <Chip key={g.id} label={g.label} active={gender === g.id} onPress={() => { setGender(g.id); clearError('gender'); }} size="lg" />
+              ))}
+            </View>
+            {errors.gender ? (
+              <Txt variant="small" color={colors.danger} style={{ marginTop: 4 }}>
+                {errors.gender}
+              </Txt>
+            ) : null}
           </View>
 
           <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
@@ -122,7 +179,7 @@ export default function Onboarding() {
           </View>
 
           <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
-            <Button label="Créer mon profil" icon="checkmark" onPress={create} disabled={!ready} full />
+            <Button label="Créer mon profil" icon="checkmark" onPress={create} full />
             <Button label="Découvrir en démo" icon="play" variant="secondary" onPress={demo} full />
           </View>
 
@@ -143,15 +200,21 @@ function Field({
   onChangeText,
   placeholder,
   keyboardType,
+  maxLength,
+  error,
+  onLayout,
 }: {
   label: string;
   value: string;
   onChangeText: (t: string) => void;
   placeholder: string;
   keyboardType?: 'default' | 'phone-pad';
+  maxLength?: number;
+  error?: string;
+  onLayout?: (y: number) => void;
 }) {
   return (
-    <>
+    <View onLayout={(e) => onLayout?.(e.nativeEvent.layout.y)}>
       <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
         {label}
       </Txt>
@@ -161,9 +224,15 @@ function Field({
         placeholder={placeholder}
         placeholderTextColor={colors.textFaint}
         keyboardType={keyboardType ?? 'default'}
-        style={styles.input}
+        maxLength={maxLength}
+        style={[styles.input, error ? { borderColor: colors.danger } : null]}
       />
-    </>
+      {error ? (
+        <Txt variant="small" color={colors.danger} style={{ marginTop: 4 }}>
+          {error}
+        </Txt>
+      ) : null}
+    </View>
   );
 }
 

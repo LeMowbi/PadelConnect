@@ -9,7 +9,7 @@ import { Button, Card, Divider, IconCircle, SectionHeader, Tag, Txt } from '@/co
 import { useApp } from '@/store/AppContext';
 import { initials, levelLabel } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
-import { GENDERS, ageFrom, genderLabel, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
+import { GENDERS, ageFrom, genderLabel, maskBirthDate, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
 import { colors, radius, spacing } from '@/theme';
 
 export default function ProfilScreen() {
@@ -265,7 +265,7 @@ function EditAccount({ onDone }: { onDone: () => void }) {
       <TextInput value={firstName} onChangeText={setFirstName} placeholder="Prénom" placeholderTextColor={colors.textFaint} style={styles.input} />
       <TextInput value={lastName} onChangeText={setLastName} placeholder="Nom" placeholderTextColor={colors.textFaint} style={styles.input} />
       <TextInput value={phone} onChangeText={setPhone} placeholder="Téléphone" placeholderTextColor={colors.textFaint} keyboardType="phone-pad" style={styles.input} />
-      <TextInput value={birth} onChangeText={setBirth} placeholder="Date de naissance (JJ/MM/AAAA)" placeholderTextColor={colors.textFaint} keyboardType="phone-pad" style={styles.input} />
+      <TextInput value={birth} onChangeText={(t) => setBirth(maskBirthDate(t, birth))} placeholder="Date de naissance (JJ/MM/AAAA)" placeholderTextColor={colors.textFaint} keyboardType="phone-pad" maxLength={10} style={styles.input} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md }}>
         {GENDERS.map((gd) => (
           <Chip key={gd.id} label={gd.label} active={gender === gd.id} onPress={() => setGender(gd.id)} />

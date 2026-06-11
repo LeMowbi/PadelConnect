@@ -127,3 +127,27 @@ comptes synchronisés / SMS, validation des inscrits d'un tournoi côté serveur
 - **Nouvel écran « Pourquoi rejoindre PadelConnect »** (lié depuis l'Espace Club) avec les
   arguments : contrôle total du planning (blocages jamais facturés) et règlement hebdomadaire.
 
+
+---
+
+## Patch v4.3 (clôture en bottom sheet, déblocage, masque de date, dates absolues)
+- **Clôture de tournoi (récidive)** : la désignation se fait désormais SANS quitter l'Espace
+  Club — « Clôturer & désigner le vainqueur » ouvre un **bottom sheet** : équipes inscrites en
+  liste radio (« Ton équipe » signalée), « Valider le vainqueur » actif après sélection, puis
+  **confirmation** ; effets +0.25 / trophée / palmarès / bandeau accueil inchangés. Le parcours
+  d'acceptation (profil 3.50 → clôture Padelta → « Invité & Karim » → 3.75 + trophée +
+  Tournois gagnés 1 + vainqueur sur la fiche) est câblé de bout en bout.
+- **Déblocage** : tap sur une case du planning → **bottom sheet** « détail du créneau » avec
+  l'état précis de chaque terrain (Libre + Bloquer / Réservé via PadelConnect — prénom,
+  non modifiable / Bloqué — motif + **Débloquer**) ; le formulaire « Bloquer un créneau »
+  distingue `réservé (Invité)` / `bloqué (motif)` et un tap sur un terrain bloqué propose
+  « Débloquer ? » avec confirmation ; un jour de tournoi affiche « Jour de tournoi — terrains
+  indisponibles » au lieu de proposer des blocages.
+- **Inscription mobile réparée** : masque automatique JJ/MM/AAAA (chiffres seuls, « / »
+  auto-insérés, backspace naturel, collage de 8 chiffres formaté — vérifié par simulation de
+  frappe) ; **une erreur visible par champ** (prénom, nom, téléphone, date, sexe « Choisis une
+  option ») au tap sur « Créer mon profil », avec scroll vers le premier champ en erreur —
+  plus aucun tap silencieux. Masque aussi appliqué à « Modifier le profil ».
+- **Décompte Wave en dates absolues** : chaque ligne = « Lun 8 juin · 18:00 · Terrain 2 ·
+  Invité Démo » (dérivé de dateKey, jamais du libellé relatif).
+- Âge minimum : décision du porteur appliquée (voir code / message de refus le cas échéant).

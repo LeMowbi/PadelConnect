@@ -32,6 +32,15 @@ export function slotTimestamp(dayValue: number, slot: string): number {
 }
 
 const MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+const DAYS_SHORT = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+
+// Libellé ABSOLU d'un jour à partir de sa clé AAAA-MM-JJ : « Lun 8 juin ».
+// (Jamais relatif — pour les documents de facturation.)
+export function dateKeyLabel(key: string): string {
+  const [y, m, d] = key.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  return `${DAYS_SHORT[date.getDay()]} ${d} ${MONTHS[m - 1]}`;
+}
 
 // ——— Semaine calendaire (lundi → dimanche) — base de la facturation hebdomadaire ———
 

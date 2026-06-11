@@ -6,7 +6,7 @@ import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { COMMISSION_RATE, isPlayed, useApp } from '@/store/AppContext';
-import { addWeeks, weekKeyOf, weekLabel } from '@/lib/days';
+import { addWeeks, dateKeyLabel, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
 import { colors, radius, spacing } from '@/theme';
@@ -72,7 +72,8 @@ export default function Operateur() {
   const sendHistory = (row: (typeof rows)[number]) => {
     const lines = row.items
       .sort((a, b) => a.startsAt - b.startsAt)
-      .map((r) => `• ${r.date} ${r.time} · ${r.court}${r.bookedBy ? ` · ${r.bookedBy.name}` : ''}`)
+      // Date ABSOLUE dérivée de dateKey (jamais le libellé relatif « Sem. dernière »).
+      .map((r) => `• ${dateKeyLabel(r.dateKey)} · ${r.time} · ${r.court}${r.bookedBy ? ` · ${r.bookedBy.name}` : ''}`)
       .join('\n');
     const message =
       `*PadelConnect — Décompte semaine ${weekLabel(week)}*\n${row.clubName}\n\n` +

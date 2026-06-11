@@ -19,6 +19,20 @@ const SIGNS: { until: [number, number]; sign: Zodiac }[] = [
   { until: [12, 31], sign: { name: 'Capricorne', emoji: '🐐', message: 'Discipliné — le lob parfait se travaille.' } },
 ];
 
+// Masque de saisie JJ/MM/AAAA : seuls les chiffres comptent, les « / » s'insèrent
+// automatiquement (0 → 0, 01 → 01/, 0101 → 01/01/, 01011999 → 01/01/1999).
+// Au backspace, on n'impose pas de slash final (le chiffre s'efface naturellement).
+export function maskBirthDate(next: string, prev: string): string {
+  const digits = next.replace(/\D/g, '').slice(0, 8);
+  const deleting = next.length < prev.length;
+  let out = '';
+  for (let i = 0; i < digits.length; i++) {
+    out += digits[i];
+    if ((i === 1 || i === 3) && (i < digits.length - 1 || !deleting)) out += '/';
+  }
+  return out;
+}
+
 // « JJ/MM/AAAA » → Date, ou null si invalide.
 export function parseBirthDate(s: string): Date | null {
   const m = s.trim().match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
