@@ -50,6 +50,10 @@ export type OfficialResult = { id: string; compId?: string; title: string; resul
 // Résultat d'un tournoi clôturé par son ORGANISATEUR (club ou créateur du défi).
 export type CompResult = { winner: string; closedAt: number };
 
+// Créneau fermé PAR LE CLUB (résa téléphone/WhatsApp, entretien…). Ce n'est PAS une
+// réservation PadelConnect : jamais compté dans l'historique, la commission ou les stats.
+export type BlockedSlot = { clubId: string; dateKey: string; time: string; court: string; reason: string };
+
 // Infos d'un club modifiables par son gérant (s'appliquent par-dessus les données de base).
 export type ClubInfo = {
   name?: string;
@@ -88,6 +92,7 @@ type AppState = {
   managedClubId: string;
   clubSlots: Record<string, string[]>; // horaires ouverts par club
   clubCourts: Record<string, string[]>; // terrains (courts) gérés par club
+  blockedSlots: BlockedSlot[]; // créneaux fermés hors app par les clubs
 };
 
 // 3 chiffres, pas plus : parties jouées (auto), tournois joués, tournois gagnés.
@@ -126,6 +131,7 @@ const initialState: AppState = {
   managedClubId: 'padelta',
   clubSlots: {},
   clubCourts: {},
+  blockedSlots: [],
 };
 
 type AppContextType = {
@@ -170,6 +176,8 @@ type AppContextType = {
   setManagedClub: (id: string) => void;
   setClubSlots: (clubId: string, slots: string[]) => void;
   setClubCourts: (clubId: string, courts: string[]) => void;
+  blockSlot: (b: BlockedSlot, startsAt: number) => boolean;
+  unblockSlot: (clubId: string, dateKey: string, time: string, court: string) => void;
   resetAll: () => void;
 };
 
@@ -441,6 +449,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setState((s) => ({ ...s, clubSlots: { ...s.clubSlots, [clubId]: [...slots].sort() } })),
       setClubCourts: (clubId, courts) =>
         setState((s) => ({ ...s, clubCourts: { ...s.clubCourts, [clubId]: courts } })),
+      // Fermer un créneau hors app. Garde-fous : jamais dans le passé, jamais par-dessus
+      // une réservation PadelConnect, jamais en double.
+      blockSlot: (b, startsAt) => {
+        if (startsAt <= Date.now()) return false;
+        const sameSlot = (x: { clubId: string; dateKey: string; time: string; court: string }) =>
+          x.clubId === b.clubId && x.dateKey === b.dateKey && x.time === b.time && x.court === b.court;
+        if (state.reservations.some(sameSlot)) return false;
+        if (state.blockedSlots.some(sameSlot)) return false;
+        setState((s) => ({ ...s, blockedSlots: [...s.blockedSlots, b] }));
+        return true;
+      },
+      unblockSlot: (clubId, dateKey, time, court) =>
+        setState((s) => ({
+          ...s,
+          blockedSlots: s.blockedSlots.filter(
+            (x) => !(x.clubId === clubId && x.dateKey === dateKey && x.time === time && x.court === court)
+          ),
+        })),
       resetAll: () => setState(initialState),
     }),
     [state, hydrated, stats]

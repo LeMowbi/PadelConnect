@@ -11,10 +11,16 @@ export default function AmisScreen() {
   const { state, addFriend, removeFriend } = useApp();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [tapError, setTapError] = useState(false);
 
   const ready = name.trim().length >= 2;
+  // Le bouton reste tapable : un tap sans nom affiche l'erreur (au lieu d'un silence).
   const submit = () => {
-    if (!ready) return;
+    if (!ready) {
+      setTapError(true);
+      return;
+    }
+    setTapError(false);
     addFriend(name, phone);
     setName('');
     setPhone('');
@@ -65,7 +71,7 @@ export default function AmisScreen() {
             Par numéro : il devient ton ami dès qu'il installe PadelConnect.
           </Txt>
           <TextInput value={name} onChangeText={setName} placeholder="Nom de l'ami" placeholderTextColor={colors.textFaint} style={styles.input} />
-          {name.length > 0 && !ready ? (
+          {tapError || (name.length > 0 && !ready) ? (
             <Txt variant="small" color={colors.danger} style={{ marginTop: 4 }}>
               Indique au moins le nom (2 caractères).
             </Txt>
@@ -78,8 +84,8 @@ export default function AmisScreen() {
             keyboardType="phone-pad"
             style={styles.input}
           />
-          <View style={{ marginTop: spacing.md }}>
-            <Button size="sm" label="Ajouter l'ami" icon="person-add" disabled={!ready} onPress={submit} />
+          <View style={{ marginTop: spacing.md, opacity: ready ? 1 : 0.5 }}>
+            <Button size="sm" label="Ajouter l'ami" icon="person-add" onPress={submit} />
           </View>
           {!ready ? (
             <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>

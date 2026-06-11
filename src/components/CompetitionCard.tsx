@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { Card, Tag, Txt } from './ui';
-import type { Competition } from '@/data/competitions';
+import { teamCount, type Competition } from '@/data/competitions';
 import { dayKey } from '@/lib/days';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
@@ -12,7 +12,7 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
   const { state } = useApp();
   const byClub = comp.organizerType === 'club';
   const registered = !!state.compRegistrations[comp.id];
-  const teams = comp.registered + (registered ? 1 : 0);
+  const teams = teamCount(comp, registered);
   const left = Math.max(0, comp.slots - teams);
   const full = left === 0;
   const pct = Math.min(100, Math.round((teams / comp.slots) * 100));

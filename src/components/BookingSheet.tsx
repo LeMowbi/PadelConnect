@@ -25,6 +25,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
     clubCourts: state.clubCourts,
     reservations: state.reservations,
     comps: [...seedCompetitions, ...state.myCompetitions],
+    blocked: state.blockedSlots,
   };
   const free = useMemo(
     () => freeCourts(club, day.key, time, ctx),

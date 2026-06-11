@@ -100,3 +100,30 @@ comptes synchronisés / SMS, validation des inscrits d'un tournoi côté serveur
   l'activation par l'opérateur, demandé à l'entrée de l'Espace Club (mémorisé sur l'appareil),
   codes visibles dans l'Espace opérateur en mode démo. Vrais comptes gérants → version serveur.
 
+---
+
+## Patch v4.2 (créneaux hors app + clôture réparée + facturation hebdo)
+- **Blocage des créneaux hors app** : le gérant ferme un terrain en deux taps (motifs :
+  Résa téléphone/WhatsApp · Entretien · Privatisé · Autre) depuis le **détail d'une case du
+  planning** (état de chaque terrain : Libre/Réservé via PadelConnect avec nom/Bloqué + motif,
+  Bloquer/Débloquer) ou via « **+ Bloquer un créneau** » (date → heure → terrain → motif).
+  Un blocage n'est **jamais** facturé/compté (ni historique, ni stats, ni décompte) ; côté
+  joueur le terrain disparaît des « X libres » et du sheet (`freeCourts` l'exclut). Garde-fous :
+  pas de blocage passé, pas par-dessus une résa app (« Déjà réservé par [prénom] »), débloquer
+  libère immédiatement. Planning : couleur dédiée + légende « **Hors app** ».
+- **Clôture de tournoi réparée** : « Clôturer & désigner le vainqueur » ouvre désormais un vrai
+  panneau de désignation — **liste des équipes inscrites** (sélection radio, « Ton équipe »
+  signalée), « Valider le vainqueur » puis **confirmation** ; effets +0.25/trophée/palmarès
+  inchangés. Les **équipes inscrites s'affichent sur la fiche tournoi** (joueurs et gérant) ;
+  **compteurs cohérents partout** via `teamCount` (plafonné à la capacité, seed 9/8 corrigé).
+- **Ajout d'ami** : bouton estompé quand le nom est vide ET message « Indique au moins le
+  nom » si on tape quand même.
+- **Facturation HEBDOMADAIRE** (décision porteur) : sélecteur de semaine ‹ Semaine du 8 au
+  14 juin › dans l'Espace opérateur, totaux/Reste à encaisser/Marquer payé **par club et par
+  semaine**, message Wave « Décompte semaine du X au Y », **bandeau de relance** quand la
+  semaine précédente contient des parties jouées non payées ; historique club **groupé par
+  semaine** ; zéro mention « fin de mois » (grep vérifié) ; semaines à cheval : la semaine
+  prime (logique lundi→dimanche vérifiée, y compris 30/06 → semaine du 29/06).
+- **Nouvel écran « Pourquoi rejoindre PadelConnect »** (lié depuis l'Espace Club) avec les
+  arguments : contrôle total du planning (blocages jamais facturés) et règlement hebdomadaire.
+

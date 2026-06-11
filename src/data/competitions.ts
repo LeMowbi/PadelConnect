@@ -113,10 +113,32 @@ export const seedCompetitions: Competition[] = [
     reward: 'Trophée + équipement',
     fee: '5 000 FCFA / joueur',
     slots: 8,
-    registered: 8,
+    registered: 7,
     official: true,
   },
 ];
+
+// Nombre d'équipes affiché : ne dépasse JAMAIS la capacité (l'inscription locale
+// s'ajoute aux inscrits de démo, plafonnée).
+export function teamCount(comp: Competition, isRegistered: boolean): number {
+  return Math.min(comp.slots, comp.registered + (isRegistered ? 1 : 0));
+}
+
+// Équipes de DÉMONSTRATION d'un tournoi (noms stables par tournoi). Si l'utilisateur
+// est inscrit, son équipe est en tête de liste.
+const TEAM_POOL = [
+  'Awa & Yann', 'Aïcha & David', 'Fatou & Karim', 'Marina & Ali', 'Nadia & Serge',
+  'Aminata & Paul', 'Chantal & Idriss', 'Léa & Moussa', 'Sarah & Franck', 'Mariam & Hervé',
+  'Clara & Bakary', 'Eva & Junior',
+];
+export function demoTeams(comp: Competition, myTeam?: string): string[] {
+  const seed = comp.id.split('').reduce((s, ch) => s + ch.charCodeAt(0), 0);
+  const total = teamCount(comp, !!myTeam);
+  const others = total - (myTeam ? 1 : 0);
+  const list: string[] = [];
+  for (let i = 0; i < others; i++) list.push(TEAM_POOL[(seed + i) % TEAM_POOL.length]);
+  return myTeam ? [myTeam, ...list] : list;
+}
 
 export const COMP_FORMATS = [
   'Poules + tableau final',

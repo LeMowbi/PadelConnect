@@ -4,7 +4,7 @@
 
 import { SAMPLE_SLOTS, defaultCourts, type Club } from '@/data/clubs';
 import type { Competition } from '@/data/competitions';
-import type { Reservation } from '@/store/AppContext';
+import type { BlockedSlot, Reservation } from '@/store/AppContext';
 
 export type AvailCtx = {
   clubs: Club[]; // clubs visibles (de base + inscrits activés)
@@ -12,6 +12,7 @@ export type AvailCtx = {
   clubCourts: Record<string, string[]>;
   reservations: Reservation[];
   comps: Competition[];
+  blocked: BlockedSlot[]; // créneaux fermés hors app par les clubs
 };
 
 // Horaires ouverts par un club (sinon créneaux standards).
@@ -29,13 +30,16 @@ export function hasCompetition(clubId: string, dateKey: string, comps: Competiti
   return comps.some((c) => c.clubId === clubId && c.dateKey === dateKey);
 }
 
-// Terrains encore libres d'un club à (jour, heure).
+// Terrains encore libres d'un club à (jour, heure) — réservés ET bloqués hors app exclus.
 export function freeCourts(club: Club, dateKey: string, time: string, ctx: AvailCtx): string[] {
   if (hasCompetition(club.id, dateKey, ctx.comps)) return [];
   const taken = ctx.reservations
     .filter((r) => r.clubId === club.id && r.dateKey === dateKey && r.time === time)
     .map((r) => r.court);
-  return courtsFor(club, ctx.clubCourts).filter((c) => !taken.includes(c));
+  const blocked = ctx.blocked
+    .filter((b) => b.clubId === club.id && b.dateKey === dateKey && b.time === time)
+    .map((b) => b.court);
+  return courtsFor(club, ctx.clubCourts).filter((c) => !taken.includes(c) && !blocked.includes(c));
 }
 
 // Grille des horaires = union des créneaux ouverts par les clubs (triée).

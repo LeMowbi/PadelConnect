@@ -43,6 +43,7 @@ export default function ReserverScreen() {
     clubCourts: state.clubCourts,
     reservations: state.reservations,
     comps: [...seedCompetitions, ...state.myCompetitions],
+    blocked: state.blockedSlots,
   };
   const openSlots = openSlotsFor(club, state.clubSlots);
   const allCourts = courtsFor(club, state.clubCourts);

@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
-import { seedCompetitions } from '@/data/competitions';
+import { demoTeams, seedCompetitions, teamCount } from '@/data/competitions';
 import { dayKey } from '@/lib/days';
 import { shareCompetition } from '@/lib/share';
 import { useApp } from '@/store/AppContext';
@@ -41,7 +41,8 @@ export default function CompetitionDetail() {
   // Un défi créé par un joueur se clôture ici, par son créateur. (Les tournois de
   // club se clôturent dans l'Espace Club.)
   const canClose = !!comp.createdByMe && played && !result;
-  const teams = comp.registered + (registered ? 1 : 0);
+  const teams = teamCount(comp, registered);
+  const teamList = demoTeams(comp, registered ? myTeam : undefined);
   const left = Math.max(0, comp.slots - teams);
   const full = left === 0 && !registered;
   const pct = Math.min(100, Math.round((teams / comp.slots) * 100));
@@ -108,6 +109,16 @@ export default function CompetitionDetail() {
               ? 'Complet — toutes les places sont prises.'
               : `Il reste ${left} place${left > 1 ? 's' : ''}.`}
         </Txt>
+        {teamList.length > 0 ? (
+          <>
+            <Divider style={{ marginVertical: spacing.md }} />
+            <View style={styles.teamsWrap}>
+              {teamList.map((t) => (
+                <Tag key={t} label={t} tone={t === myTeam && registered ? 'blue' : 'neutral'} icon="people" />
+              ))}
+            </View>
+          </>
+        ) : null}
       </Card>
 
       <View style={{ marginTop: spacing.sm, gap: spacing.sm }}>
@@ -145,31 +156,33 @@ export default function CompetitionDetail() {
         </Card>
       ) : null}
 
-      {/* Clôture — réservée au créateur du défi */}
+      {/* Clôture — réservée au créateur du défi : choisir l'équipe vainqueure dans la liste */}
       {canClose ? (
         <Card style={{ marginTop: spacing.lg, borderColor: colors.purple }}>
           <Txt variant="h3">Clôturer & désigner le vainqueur</Txt>
           <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
-            Le tournoi est terminé : indique l'équipe qui a gagné. C'est toi (l'organisateur) qui décides.
+            Le tournoi est terminé : sélectionne l'équipe qui a gagné. C'est toi (l'organisateur) qui décides.
           </Txt>
-          {registered ? (
-            <View style={[styles.wrap, { marginTop: spacing.sm }]}>
-              <Chip label={`Mon équipe (${myTeam})`} icon="trophy" active={winnerName === myTeam} onPress={() => setWinnerName(myTeam)} />
-            </View>
-          ) : null}
-          <TextInput
-            value={winnerName}
-            onChangeText={setWinnerName}
-            placeholder="Nom de l'équipe vainqueure"
-            placeholderTextColor={colors.textFaint}
-            style={styles.input}
-          />
-          <View style={{ marginTop: spacing.sm }}>
+          <View style={{ marginTop: spacing.sm, gap: 6 }}>
+            {teamList.map((t) => {
+              const sel = winnerName === t;
+              return (
+                <Pressable key={t} onPress={() => setWinnerName(t)} style={[styles.teamRow, sel && styles.teamRowSel]}>
+                  <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.gold : colors.textMuted} />
+                  <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
+                    {t}
+                  </Txt>
+                  {registered && t === myTeam ? <Tag label="Ton équipe" tone="blue" /> : null}
+                </Pressable>
+              );
+            })}
+          </View>
+          <View style={{ marginTop: spacing.md }}>
             <Button
-              label="Clôturer le tournoi"
+              label={winnerName ? `Valider : ${winnerName}` : 'Valider le vainqueur'}
               icon="flag"
-              onPress={() => closeCompetition(comp, winnerName, winnerName.trim() === myTeam && registered)}
-              disabled={winnerName.trim().length < 2}
+              onPress={() => closeCompetition(comp, winnerName, winnerName === myTeam && registered)}
+              disabled={!winnerName}
               full
             />
           </View>
@@ -282,6 +295,16 @@ const styles = StyleSheet.create({
   barTrack: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, marginTop: spacing.sm, overflow: 'hidden' },
   barFill: { height: 8, borderRadius: radius.pill, backgroundColor: colors.gold },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  teamsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  teamRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceAlt,
+  },
+  teamRowSel: { backgroundColor: colors.goldSoft, borderWidth: 1, borderColor: colors.gold },
   input: {
     backgroundColor: colors.bg,
     borderWidth: 1,

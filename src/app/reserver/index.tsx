@@ -42,6 +42,7 @@ export default function ReserverScreen() {
     clubCourts: state.clubCourts,
     reservations: state.reservations,
     comps: [...seedCompetitions, ...state.myCompetitions],
+    blocked: state.blockedSlots,
   };
 
   const grid = useMemo(() => slotGrid({ clubs: visibleClubs, clubSlots: state.clubSlots }), [visibleClubs, state.clubSlots]);

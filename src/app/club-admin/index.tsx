@@ -9,9 +9,9 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { Button, Card, Divider, EmptyState, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
 import { SAMPLE_SLOTS, clubsByName, defaultCourts, findClub, manageableClubs, type Club } from '@/data/clubs';
 import { coaches as allCoaches } from '@/data/coaches';
-import { seedCompetitions } from '@/data/competitions';
+import { demoTeams, seedCompetitions, teamCount, type Competition } from '@/data/competitions';
 import { hasCompetition } from '@/lib/availability';
-import { dayKey, monthKeyOf, monthLabel, nextDays } from '@/lib/days';
+import { dayKey, nextDays, slotTimestamp, weekKeyOf, weekLabel } from '@/lib/days';
 import { isPlayed, useApp, type ClubInfo } from '@/store/AppContext';
 import { openWhatsApp } from '@/lib/contact';
 import { fcfa, initials } from '@/lib/format';
@@ -25,6 +25,8 @@ const ALL_TIMES = [
 ];
 
 const SECTIONS = ['Réservations', 'Mon club', 'Tournois'] as const;
+// Motifs de blocage d'un créneau hors app.
+const BLOCK_REASONS = ['Résa téléphone/WhatsApp', 'Entretien', 'Privatisé', 'Autre'];
 const CLUB_TYPES: Club['type'][] = ['Couvert', 'Extérieur', 'Mixte'];
 
 export default function ClubAdmin() {
@@ -47,12 +49,14 @@ export default function ClubAdmin() {
     setClubInfo,
     toggleHideCoach,
     unlockClub,
+    blockSlot,
+    unblockSlot,
   } = useApp();
 
   const [section, setSection] = useState<(typeof SECTIONS)[number]>('Réservations');
   const [closingId, setClosingId] = useState<string | null>(null);
-  const [winnerName, setWinnerName] = useState('');
-  const [selectedCell, setSelectedCell] = useState<{ dateKey: string; time: string; label: string } | null>(null);
+  const [selectedCell, setSelectedCell] = useState<{ dateKey: string; time: string; label: string; value: number } | null>(null);
+  const [blockingCourt, setBlockingCourt] = useState<string | null>(null);
   const [url, setUrl] = useState('');
   const [offerKind, setOfferKind] = useState<'offre' | 'actu' | 'evenement'>('offre');
   const [offerTitle, setOfferTitle] = useState('');
@@ -64,6 +68,7 @@ export default function ClubAdmin() {
 
   // Inscription d'un nouveau club (validée ensuite par l'opérateur PadelConnect).
   const [showSignup, setShowSignup] = useState(false);
+  const [showBlockForm, setShowBlockForm] = useState(false);
   const [ncName, setNcName] = useState('');
   const [ncArea, setNcArea] = useState('');
   const [ncType, setNcType] = useState<Club['type']>('Extérieur');
@@ -109,7 +114,16 @@ export default function ClubAdmin() {
   // « Jouée » = heure de fin passée (la même règle que côté joueur — base de la commission).
   const upcomingRes = clubRes.filter((r) => !isPlayed(r, now)).sort((a, b) => a.startsAt - b.startsAt);
   const pastRes = clubRes.filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt);
-  const monthPlayed = pastRes.filter((r) => monthKeyOf(r.startsAt) === monthKeyOf(now)).length;
+  // Historique regroupé PAR SEMAINE (le décompte de la commission est hebdomadaire).
+  const pastByWeek: { week: string; items: typeof pastRes }[] = [];
+  for (const r of pastRes) {
+    const wk = weekKeyOf(r.startsAt);
+    const g = pastByWeek.find((x) => x.week === wk);
+    if (g) g.items.push(r);
+    else pastByWeek.push({ week: wk, items: [r] });
+  }
+  // Blocages hors app de ce club.
+  const clubBlocked = state.blockedSlots.filter((b) => b.clubId === club.id);
 
   const comps = [
     ...state.myCompetitions.filter((c) => c.clubId === club.id),
@@ -121,11 +135,20 @@ export default function ClubAdmin() {
   // Planning de la semaine : jours × créneaux ouverts, colorés selon l'occupation.
   const week = nextDays(7);
   const planTimes = [...openSlots].sort();
-  const cellState = (dKey: string, time: string): 'tournoi' | 'complet' | 'partiel' | 'libre' => {
-    if (hasCompetition(club.id, dKey, comps)) return 'tournoi';
+  const cellInfo = (dKey: string, time: string) => {
     const booked = clubRes.filter((r) => r.dateKey === dKey && r.time === time).length;
-    if (booked === 0) return 'libre';
-    return booked >= courts.length ? 'complet' : 'partiel';
+    const blocked = clubBlocked.filter((b) => b.dateKey === dKey && b.time === time).length;
+    const occupied = booked + blocked;
+    const kind: 'tournoi' | 'complet' | 'horsapp' | 'partiel' | 'libre' = hasCompetition(club.id, dKey, comps)
+      ? 'tournoi'
+      : occupied === 0
+        ? 'libre'
+        : occupied >= courts.length
+          ? 'complet'
+          : booked === 0
+            ? 'horsapp'
+            : 'partiel';
+    return { booked, blocked, occupied, kind };
   };
 
   // Mini-stats de la semaine : taux d'occupation + créneau le plus demandé.
@@ -243,6 +266,12 @@ export default function ClubAdmin() {
             Ton club n'est pas dans la liste ? Inscris-le
           </Txt>
         </Pressable>
+        <Pressable onPress={() => router.push('/pourquoi')} style={styles.signupLink}>
+          <Ionicons name="sparkles-outline" size={15} color={colors.textMuted} />
+          <Txt variant="small" color={colors.textMuted} style={{ fontWeight: '600' }}>
+            Pourquoi rejoindre PadelConnect ?
+          </Txt>
+        </Pressable>
 
         {showSignup ? (
           <Card style={{ marginTop: spacing.sm, borderColor: colors.blue }}>
@@ -303,6 +332,35 @@ export default function ClubAdmin() {
             <StatTile value={clubRes.length} label="Total" color={colors.green} bg={colors.greenSoft} />
           </View>
 
+          {/* Bloquer un créneau réservé hors app (téléphone, WhatsApp, sur place) */}
+          <View style={{ marginTop: spacing.md }}>
+            <Button
+              size="sm"
+              label={showBlockForm ? 'Fermer' : '+ Bloquer un créneau (résa hors app)'}
+              icon={showBlockForm ? 'chevron-up' : 'lock-closed'}
+              variant="secondary"
+              onPress={() => setShowBlockForm((v) => !v)}
+              full
+            />
+          </View>
+          {showBlockForm ? (
+            <QuickBlock
+              days={week}
+              times={openSlots}
+              courts={courts}
+              isBlockedOrTaken={(dKey, time, court) =>
+                clubRes.some((r) => r.dateKey === dKey && r.time === time && r.court === court) ||
+                clubBlocked.some((b) => b.dateKey === dKey && b.time === time && b.court === court)
+              }
+              takenBy={(dKey, time, court) => clubRes.find((r) => r.dateKey === dKey && r.time === time && r.court === court)?.bookedBy?.name}
+              onBlock={(dKey, time, court, reason, ts) => {
+                const ok = blockSlot({ clubId: club.id, dateKey: dKey, time, court, reason }, ts);
+                if (ok) setShowBlockForm(false);
+                return ok;
+              }}
+            />
+          ) : null}
+
           {/* Planning de la semaine */}
           <View style={{ marginTop: spacing.xl }}>
             <SectionHeader title="Planning de la semaine" />
@@ -332,25 +390,32 @@ export default function ClubAdmin() {
                     </Txt>
                   </View>
                   {week.map((d) => {
-                    const s = cellState(d.key, t);
-                    const booked = clubRes.filter((r) => r.dateKey === d.key && r.time === t).length;
+                    const info = cellInfo(d.key, t);
                     const bg =
-                      s === 'tournoi' ? colors.purple : s === 'complet' ? colors.gold : s === 'partiel' ? colors.goldSoft : colors.surfaceAlt;
+                      info.kind === 'tournoi'
+                        ? colors.purple
+                        : info.kind === 'complet'
+                          ? colors.gold
+                          : info.kind === 'horsapp'
+                            ? colors.coralSoft
+                            : info.kind === 'partiel'
+                              ? colors.goldSoft
+                              : colors.surfaceAlt;
                     const sel = selectedCell?.dateKey === d.key && selectedCell?.time === t;
-                    const dd = new Date(d.value);
                     return (
                       <Pressable
                         key={d.key}
-                        onPress={() => setSelectedCell({ dateKey: d.key, time: t, label: `${d.label} · ${t}` })}
+                        onPress={() => setSelectedCell({ dateKey: d.key, time: t, label: `${d.label} · ${t}`, value: d.value })}
                         style={[styles.planCell, { backgroundColor: bg }, sel && styles.planCellSel]}
                       >
-                        {s === 'partiel' ? (
+                        {info.kind === 'partiel' ? (
                           <Txt variant="small" color={colors.gold} style={{ fontSize: 10, fontWeight: '800' }}>
-                            {booked}/{courts.length}
+                            {info.occupied}/{courts.length}
                           </Txt>
                         ) : null}
-                        {s === 'complet' ? <Ionicons name="checkmark" size={11} color={colors.onGold} /> : null}
-                        {s === 'tournoi' ? <Ionicons name="trophy" size={10} color={colors.white} /> : null}
+                        {info.kind === 'complet' ? <Ionicons name="checkmark" size={11} color={colors.onGold} /> : null}
+                        {info.kind === 'horsapp' ? <Ionicons name="lock-closed" size={10} color={colors.coral} /> : null}
+                        {info.kind === 'tournoi' ? <Ionicons name="trophy" size={10} color={colors.white} /> : null}
                       </Pressable>
                     );
                   })}
@@ -360,35 +425,83 @@ export default function ClubAdmin() {
                 <LegendDot color={colors.surfaceAlt} label="Libre" />
                 <LegendDot color={colors.goldSoft} label="Partiel" />
                 <LegendDot color={colors.gold} label="Complet" />
+                <LegendDot color={colors.coralSoft} label="Hors app" />
                 <LegendDot color={colors.purple} label="Tournoi" />
               </View>
             </Card>
 
-            {/* Détail du créneau sélectionné */}
+            {/* Détail du créneau : état de CHAQUE terrain + Bloquer / Débloquer */}
             {selectedCell ? (
               <Card style={{ marginTop: spacing.sm, borderColor: colors.gold }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <Txt variant="h3" style={{ fontSize: 15 }}>{selectedCell.label}</Txt>
-                  <Pressable onPress={() => setSelectedCell(null)} hitSlop={8}>
+                  <Pressable onPress={() => { setSelectedCell(null); setBlockingCourt(null); }} hitSlop={8}>
                     <Ionicons name="close" size={18} color={colors.textMuted} />
                   </Pressable>
                 </View>
-                {cellRes.length === 0 ? (
-                  <Txt variant="muted" style={{ marginTop: spacing.sm }}>Aucune réservation sur ce créneau — {courts.length} terrain{courts.length > 1 ? 's' : ''} libre{courts.length > 1 ? 's' : ''}.</Txt>
-                ) : (
-                  cellRes.map((r, i) => (
-                    <View key={r.id} style={{ marginTop: spacing.sm }}>
-                      {i > 0 ? <Divider style={{ marginBottom: spacing.sm }} /> : null}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                        <Tag label={r.court} tone="neutral" />
-                        <Txt variant="small" color={colors.text} style={{ flex: 1, fontWeight: '600' }}>
-                          {r.bookedBy?.name ?? 'Joueur'}
-                        </Txt>
-                        {r.clubConfirmed ? <Tag label="Confirmée ✓" tone="green" /> : <Tag label="À confirmer" tone="coral" />}
+                {(() => {
+                  const cellTs = slotTimestamp(selectedCell.value, selectedCell.time);
+                  const isPast = cellTs <= now;
+                  return courts.map((c, i) => {
+                    const resa = cellRes.find((r) => r.court === c);
+                    const blk = clubBlocked.find((b) => b.dateKey === selectedCell.dateKey && b.time === selectedCell.time && b.court === c);
+                    const isBlocking = blockingCourt === c;
+                    return (
+                      <View key={c} style={{ marginTop: spacing.sm }}>
+                        {i > 0 ? <Divider style={{ marginBottom: spacing.sm }} /> : null}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                          <Tag label={c} tone="neutral" />
+                          {resa ? (
+                            <>
+                              <Txt variant="small" color={colors.text} style={{ flex: 1, fontWeight: '600' }} numberOfLines={1}>
+                                Réservé via PadelConnect · {resa.bookedBy?.name ?? 'Joueur'}
+                              </Txt>
+                              {resa.clubConfirmed ? <Tag label="Confirmée ✓" tone="green" /> : <Tag label="À confirmer" tone="coral" />}
+                            </>
+                          ) : blk ? (
+                            <>
+                              <Txt variant="small" color={colors.coral} style={{ flex: 1, fontWeight: '600' }} numberOfLines={1}>
+                                Bloqué · {blk.reason}
+                              </Txt>
+                              <Button
+                                size="sm"
+                                label="Débloquer"
+                                variant="secondary"
+                                onPress={() => unblockSlot(club.id, selectedCell.dateKey, selectedCell.time, c)}
+                              />
+                            </>
+                          ) : (
+                            <>
+                              <Txt variant="small" color={colors.green} style={{ flex: 1, fontWeight: '600' }}>
+                                Libre
+                              </Txt>
+                              {!isPast ? (
+                                <Button size="sm" label="Bloquer" icon="lock-closed" variant="ghost" onPress={() => setBlockingCourt(isBlocking ? null : c)} />
+                              ) : null}
+                            </>
+                          )}
+                        </View>
+                        {isBlocking && !resa && !blk && !isPast ? (
+                          <View style={[styles.wrap, { marginTop: spacing.sm }]}>
+                            {BLOCK_REASONS.map((reason) => (
+                              <Chip
+                                key={reason}
+                                label={reason}
+                                onPress={() => {
+                                  blockSlot({ clubId: club.id, dateKey: selectedCell.dateKey, time: selectedCell.time, court: c, reason }, cellTs);
+                                  setBlockingCourt(null);
+                                }}
+                              />
+                            ))}
+                          </View>
+                        ) : null}
                       </View>
-                    </View>
-                  ))
-                )}
+                    );
+                  });
+                })()}
+                <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+                  Une résa prise au téléphone ? Bloque le terrain en deux taps — jamais facturé, jamais compté.
+                </Txt>
               </Card>
             ) : null}
 
@@ -458,40 +571,45 @@ export default function ClubAdmin() {
             )}
           </View>
 
-          {/* Historique du club — base de la commission PadelConnect */}
+          {/* Historique du club — regroupé par semaine, base de la commission PadelConnect */}
           <View style={{ marginTop: spacing.xl }}>
             <SectionHeader title={`Historique · ${pastRes.length}`} />
-            <Txt variant="small" color={colors.textMuted} style={{ marginBottom: spacing.sm }}>
-              {monthPlayed} partie{monthPlayed > 1 ? 's' : ''} jouée{monthPlayed > 1 ? 's' : ''} en {monthLabel(monthKeyOf(now))}.
-            </Txt>
             {pastRes.length === 0 ? (
               <Card>
-                <Txt variant="muted">Les réservations déjà jouées s'afficheront ici.</Txt>
+                <Txt variant="muted">Les réservations déjà jouées s'afficheront ici, semaine par semaine.</Txt>
               </Card>
             ) : (
-              <Card>
-                {pastRes.map((r, i) => (
-                  <View key={r.id}>
-                    {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                      <View style={{ flex: 1 }}>
-                        <Txt variant="body" style={{ fontWeight: '600' }}>
-                          {r.date} · {r.time} · {r.court}
-                        </Txt>
-                        {r.bookedBy ? (
-                          <Txt variant="small" color={colors.textFaint}>
-                            {r.bookedBy.name}
-                          </Txt>
-                        ) : null}
-                      </View>
-                      <Tag label="Jouée" tone="blue" />
-                    </View>
+              pastByWeek.map((g) => (
+                <Card key={g.week} style={{ marginBottom: spacing.sm }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm }}>
+                    <Txt variant="label" color={colors.textFaint}>
+                      Semaine {weekLabel(g.week)}
+                    </Txt>
+                    <Tag label={`${g.items.length} jouée${g.items.length > 1 ? 's' : ''}`} tone="blue" />
                   </View>
-                ))}
-              </Card>
+                  {g.items.map((r, i) => (
+                    <View key={r.id}>
+                      {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                        <View style={{ flex: 1 }}>
+                          <Txt variant="body" style={{ fontWeight: '600' }}>
+                            {r.date} · {r.time} · {r.court}
+                          </Txt>
+                          {r.bookedBy ? (
+                            <Txt variant="small" color={colors.textFaint}>
+                              {r.bookedBy.name}
+                            </Txt>
+                          ) : null}
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </Card>
+              ))
             )}
             <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-              La commission PadelConnect se calcule sur cet historique (transmis en fin de mois, règlement par Wave).
+              La commission PadelConnect se calcule sur cet historique — décompte transmis chaque fin de
+              semaine, règlement par Wave.
             </Txt>
           </View>
         </>
@@ -720,7 +838,7 @@ export default function ClubAdmin() {
                             {c.title}
                           </Txt>
                           <Txt variant="muted">
-                            {c.date} · {c.registered}/{c.slots} inscrits
+                            {c.date} · {teamCount(c, !!state.compRegistrations[c.id])}/{c.slots} équipes
                           </Txt>
                         </View>
                         {result ? (
@@ -732,46 +850,18 @@ export default function ClubAdmin() {
                         )}
                       </View>
                     </Pressable>
-                    {/* Clôture par le club organisateur : désigner l'équipe vainqueure. */}
+                    {/* Clôture par le club organisateur : choisir l'équipe vainqueure dans la liste. */}
                     {finished && !result ? (
                       closing ? (
-                        (() => {
-                          const reg = state.compRegistrations[c.id];
-                          const myTeam = reg ? `${state.account?.firstName ?? 'Toi'} & ${reg.partner}` : '';
-                          return (
-                            <>
-                              {reg ? (
-                                <View style={[styles.wrap, { marginTop: spacing.sm }]}>
-                                  <Chip label={myTeam} icon="trophy" active={winnerName === myTeam} onPress={() => setWinnerName(myTeam)} />
-                                </View>
-                              ) : null}
-                              <TextInput
-                                value={winnerName}
-                                onChangeText={setWinnerName}
-                                placeholder="Nom de l'équipe vainqueure"
-                                placeholderTextColor={colors.textFaint}
-                                style={styles.input}
-                              />
-                              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-                                <View style={{ flex: 1 }}>
-                                  <Button
-                                    size="sm"
-                                    label="Clôturer le tournoi"
-                                    icon="flag"
-                                    onPress={() => {
-                                      closeCompetition(c, winnerName, !!reg && winnerName.trim() === myTeam);
-                                      setClosingId(null);
-                                      setWinnerName('');
-                                    }}
-                                    disabled={winnerName.trim().length < 2}
-                                    full
-                                  />
-                                </View>
-                                <Button size="sm" label="Annuler" variant="ghost" onPress={() => setClosingId(null)} />
-                              </View>
-                            </>
-                          );
-                        })()
+                        <ClosePanel
+                          comp={c}
+                          myTeam={state.compRegistrations[c.id] ? `${state.account?.firstName ?? 'Toi'} & ${state.compRegistrations[c.id].partner}` : undefined}
+                          onClose={(winner, isMe) => {
+                            closeCompetition(c, winner, isMe);
+                            setClosingId(null);
+                          }}
+                          onCancel={() => setClosingId(null)}
+                        />
                       ) : (
                         <View style={{ marginTop: spacing.sm }}>
                           <Button size="sm" label="Clôturer & désigner le vainqueur" icon="flag" onPress={() => setClosingId(c.id)} full />
@@ -864,6 +954,162 @@ function ClubInfoCard({ club, onSave }: { club: Club & { contactPhone?: string }
       </View>
       <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
         Ces infos s'appliquent immédiatement sur ta page et dans les listes.
+      </Txt>
+    </Card>
+  );
+}
+
+// Panneau de clôture (organisateur) : liste des équipes inscrites → sélection →
+// « Valider le vainqueur » → confirmation. Tournoi officiel : l'équipe gagnante prend +0.25.
+function ClosePanel({
+  comp,
+  myTeam,
+  onClose,
+  onCancel,
+}: {
+  comp: Competition;
+  myTeam?: string;
+  onClose: (winner: string, winnerIsMe: boolean) => void;
+  onCancel: () => void;
+}) {
+  const teams = demoTeams(comp, myTeam);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <View style={{ marginTop: spacing.sm }}>
+      {comp.official ? (
+        <Txt variant="small" color={colors.amber} style={{ fontWeight: '600' }}>
+          Tournoi officiel — l'équipe vainqueure gagne +0.25 de niveau.
+        </Txt>
+      ) : null}
+      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+        Équipes inscrites · {teams.length}
+      </Txt>
+      <View style={{ marginTop: spacing.sm, gap: 6 }}>
+        {teams.map((t) => {
+          const sel = selected === t;
+          return (
+            <Pressable
+              key={t}
+              onPress={() => {
+                setSelected(t);
+                setConfirming(false);
+              }}
+              style={[styles.teamRow, sel && styles.teamRowSel]}
+            >
+              <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.gold : colors.textMuted} />
+              <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
+                {t}
+              </Txt>
+              {myTeam === t ? <Tag label="Ton équipe" tone="blue" /> : null}
+            </Pressable>
+          );
+        })}
+      </View>
+      {confirming && selected ? (
+        <View style={styles.confirmBox}>
+          <Txt variant="small" color={colors.text} style={{ fontWeight: '600', textAlign: 'center' }}>
+            Confirmer : « {selected} » remporte le tournoi ?
+          </Txt>
+          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+            <View style={{ flex: 1 }}>
+              <Button size="sm" label="Confirmer le vainqueur" icon="trophy" onPress={() => onClose(selected, selected === myTeam)} full />
+            </View>
+            <Button size="sm" label="Non" variant="ghost" onPress={() => setConfirming(false)} />
+          </View>
+        </View>
+      ) : (
+        <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+          <View style={{ flex: 1 }}>
+            <Button size="sm" label="Valider le vainqueur" icon="flag" onPress={() => setConfirming(true)} disabled={!selected} full />
+          </View>
+          <Button size="sm" label="Annuler" variant="ghost" onPress={onCancel} />
+        </View>
+      )}
+    </View>
+  );
+}
+
+// Mini-formulaire « Bloquer un créneau » : date → heure → terrain → motif.
+function QuickBlock({
+  days,
+  times,
+  courts,
+  isBlockedOrTaken,
+  takenBy,
+  onBlock,
+}: {
+  days: { key: string; label: string; value: number }[];
+  times: string[];
+  courts: string[];
+  isBlockedOrTaken: (dateKey: string, time: string, court: string) => boolean;
+  takenBy: (dateKey: string, time: string, court: string) => string | undefined;
+  onBlock: (dateKey: string, time: string, court: string, reason: string, ts: number) => boolean;
+}) {
+  const [day, setDay] = useState(days[0]);
+  const [time, setTime] = useState<string | null>(null);
+  const [court, setCourt] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const tsOf = (t: string) => slotTimestamp(day.value, t);
+
+  return (
+    <Card style={{ marginTop: spacing.sm, borderColor: colors.coral }}>
+      <Txt variant="label" color={colors.textFaint}>Jour</Txt>
+      <View style={styles.wrap}>
+        {days.map((d) => (
+          <Chip key={d.key} label={d.label} active={d.key === day.key} onPress={() => { setDay(d); setTime(null); setCourt(null); setError(null); }} />
+        ))}
+      </View>
+      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>Heure</Txt>
+      <View style={styles.wrap}>
+        {[...times].sort().map((t) => {
+          const past = tsOf(t) <= Date.now();
+          return <Chip key={t} label={past ? `${t} · passé` : t} active={t === time} disabled={past} onPress={() => { setTime(t); setCourt(null); setError(null); }} />;
+        })}
+      </View>
+      {time ? (
+        <>
+          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>Terrain</Txt>
+          <View style={styles.wrap}>
+            {courts.map((c) => {
+              const taken = isBlockedOrTaken(day.key, time, c);
+              return <Chip key={c} label={taken ? `${c} · pris` : c} active={c === court} disabled={taken} onPress={() => { setCourt(c); setError(null); }} />;
+            })}
+          </View>
+        </>
+      ) : null}
+      {time && court ? (
+        <>
+          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>Motif</Txt>
+          <View style={styles.wrap}>
+            {BLOCK_REASONS.map((reason) => (
+              <Chip
+                key={reason}
+                label={reason}
+                onPress={() => {
+                  const who = takenBy(day.key, time, court);
+                  if (who) {
+                    setError(`Déjà réservé par ${who} — vois avec le joueur.`);
+                    return;
+                  }
+                  if (!onBlock(day.key, time, court, reason, tsOf(time))) {
+                    setError('Impossible de bloquer ce créneau.');
+                  }
+                }}
+              />
+            ))}
+          </View>
+        </>
+      ) : null}
+      {error ? (
+        <Txt variant="small" color={colors.danger} style={{ marginTop: spacing.sm }}>
+          {error}
+        </Txt>
+      ) : null}
+      <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+        Un créneau bloqué n'est jamais facturé ni compté — c'est une simple indisponibilité.
       </Txt>
     </Card>
   );
@@ -966,6 +1212,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   planCellSel: { borderWidth: 2, borderColor: colors.text },
+  teamRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceAlt,
+  },
+  teamRowSel: { backgroundColor: colors.goldSoft, borderWidth: 1, borderColor: colors.gold },
+  confirmBox: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.amberSoft,
+  },
   codeInput: {
     backgroundColor: colors.bg,
     borderWidth: 1,

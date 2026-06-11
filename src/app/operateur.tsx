@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
-import { Share, StyleSheet, View } from 'react-native';
+import { Pressable, Share, StyleSheet, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { COMMISSION_RATE, isPlayed, useApp } from '@/store/AppContext';
-import { monthKeyOf, monthLabel } from '@/lib/days';
+import { addWeeks, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
 import { colors, radius, spacing } from '@/theme';
@@ -16,22 +16,17 @@ const PAY_PCT = Math.round(COMMISSION_RATE * 100);
 export default function Operateur() {
   const { state, setBoost, approveClub, rejectClub, setPaymentStatus } = useApp();
 
-  // Mois disponibles (d'après les réservations) + mois courant en tête.
-  const months = useMemo(() => {
-    const set = new Set<string>([monthKeyOf(Date.now())]);
-    for (const r of state.reservations) set.add(monthKeyOf(r.startsAt));
-    return [...set].sort().reverse();
-  }, [state.reservations]);
-  const [month, setMonth] = useState(months[0]);
-  const activeMonth = months.includes(month) ? month : months[0];
+  // Le décompte est HEBDOMADAIRE (semaine calendaire lundi → dimanche).
+  const thisWeek = weekKeyOf(Date.now());
+  const [week, setWeek] = useState(thisWeek);
 
-  // La commission se calcule UNIQUEMENT sur les parties JOUÉES du mois
+  // La commission se calcule UNIQUEMENT sur les parties JOUÉES de la semaine
   // (une résa à venir peut encore être annulée — le club contesterait).
-  const monthAll = state.reservations.filter((r) => monthKeyOf(r.startsAt) === activeMonth);
-  const monthRes = monthAll.filter((r) => isPlayed(r));
-  const monthUpcoming = monthAll.length - monthRes.length;
+  const weekAll = state.reservations.filter((r) => weekKeyOf(r.startsAt) === week);
+  const weekPlayed = weekAll.filter((r) => isPlayed(r));
+  const weekUpcoming = weekAll.length - weekPlayed.length;
   const groups = new Map<string, { clubName: string; count: number; revenue: number; items: typeof state.reservations }>();
-  for (const r of monthRes) {
+  for (const r of weekPlayed) {
     const price = findClub(r.clubId, state.customClubs, state.clubInfo)?.priceFrom ?? 0;
     const g = groups.get(r.clubId) ?? { clubName: r.clubName, count: 0, revenue: 0, items: [] };
     g.count += 1;
@@ -47,8 +42,20 @@ export default function Operateur() {
   const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
   const totalCommission = rows.reduce((s, r) => s + r.commission, 0);
   const totalDue = rows
-    .filter((r) => state.operatorPayments[`${r.clubId}:${activeMonth}`] !== 'paid')
+    .filter((r) => state.operatorPayments[`${r.clubId}:${week}`] !== 'paid')
     .reduce((s, r) => s + r.commission, 0);
+
+  // Relance : la SEMAINE PRÉCÉDENTE contient-elle des parties jouées non payées ?
+  const prevWeek = addWeeks(thisWeek, -1);
+  const prevUnpaidClubs = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of state.reservations) {
+      if (weekKeyOf(r.startsAt) === prevWeek && isPlayed(r) && state.operatorPayments[`${r.clubId}:${prevWeek}`] !== 'paid') {
+        ids.add(r.clubId);
+      }
+    }
+    return ids.size;
+  }, [state.reservations, state.operatorPayments, prevWeek]);
 
   // Santé plateforme (3 chiffres).
   const now = Date.now();
@@ -59,7 +66,7 @@ export default function Operateur() {
   const activeClubsCount = activeClubs(state.customClubs, state.clubInfo).length;
 
   const statusOf = (clubId: string): 'tofacture' | 'sent' | 'paid' =>
-    state.operatorPayments[`${clubId}:${activeMonth}`] ?? 'tofacture';
+    state.operatorPayments[`${clubId}:${week}`] ?? 'tofacture';
 
   // Message Wave formaté, prêt à envoyer au club.
   const sendHistory = (row: (typeof rows)[number]) => {
@@ -68,7 +75,7 @@ export default function Operateur() {
       .map((r) => `• ${r.date} ${r.time} · ${r.court}${r.bookedBy ? ` · ${r.bookedBy.name}` : ''}`)
       .join('\n');
     const message =
-      `*PadelConnect — Décompte ${monthLabel(activeMonth)}*\n${row.clubName}\n\n` +
+      `*PadelConnect — Décompte semaine ${weekLabel(week)}*\n${row.clubName}\n\n` +
       `Parties jouées : ${row.count}\n` +
       `Volume estimé : ${fcfa(row.revenue)}\n` +
       `Commission PadelConnect (${PAY_PCT}%) : *${fcfa(row.commission)}*\n` +
@@ -76,7 +83,7 @@ export default function Operateur() {
       `Détail :\n${lines}`;
     const phone = (findClub(row.clubId, state.customClubs, state.clubInfo) as { contactPhone?: string } | undefined)?.contactPhone ?? '';
     openWhatsApp(phone, message);
-    setPaymentStatus(row.clubId, activeMonth, 'sent');
+    setPaymentStatus(row.clubId, week, 'sent');
   };
 
   return (
@@ -84,36 +91,65 @@ export default function Operateur() {
       <View style={styles.note}>
         <Ionicons name="information-circle-outline" size={15} color={colors.textFaint} />
         <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
-          Chaque mois : envoie le décompte à chaque club par WhatsApp, il te règle par Wave, tu marques « Payé ».
+          Chaque fin de semaine : envoie le décompte à chaque club par WhatsApp, il te règle par Wave, tu marques « Payé ».
         </Txt>
       </View>
+
+      {/* Relance : semaine précédente prête à facturer */}
+      {prevUnpaidClubs > 0 ? (
+        <Pressable onPress={() => setWeek(prevWeek)} style={styles.reminder}>
+          <Ionicons name="alarm-outline" size={16} color={colors.coral} />
+          <Txt variant="small" color={colors.text} style={{ flex: 1, fontWeight: '600' }}>
+            La semaine {weekLabel(prevWeek)} est prête à facturer — {prevUnpaidClubs} club{prevUnpaidClubs > 1 ? 's' : ''}.
+          </Txt>
+          <Ionicons name="chevron-forward" size={15} color={colors.coral} />
+        </Pressable>
+      ) : null}
 
       {/* Santé plateforme */}
       <View style={styles.health}>
         <Mini value={`${activeClubsCount}`} label="Clubs actifs" color={colors.blue} />
         <Mini value={`${resThisWeek}`} label="Résas / 7 j" color={colors.green} sub={resThisWeek >= resPrevWeek ? '▲' : '▼'} />
-        <Mini value={fcfa(totalCommission)} label={`Commission ${monthLabel(activeMonth).split(' ')[0]}`} color={colors.amber} />
+        <Mini value={fcfa(totalCommission)} label="Commission semaine" color={colors.amber} />
       </View>
 
-      {/* Sélecteur de mois */}
-      <View style={styles.monthRow}>
-        {months.map((m) => (
-          <Chip key={m} label={monthLabel(m)} active={m === activeMonth} onPress={() => setMonth(m)} />
-        ))}
+      {/* Sélecteur de semaine ‹ › */}
+      <View style={styles.weekNav}>
+        <Pressable onPress={() => setWeek(addWeeks(week, -1))} hitSlop={8} style={styles.weekArrow}>
+          <Ionicons name="chevron-back" size={18} color={colors.text} />
+        </Pressable>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Txt variant="h3" style={{ fontSize: 15 }}>
+            Semaine {weekLabel(week)}
+          </Txt>
+          {week === thisWeek ? (
+            <Txt variant="small" color={colors.textFaint}>
+              cette semaine
+            </Txt>
+          ) : null}
+        </View>
+        <Pressable
+          onPress={() => setWeek(addWeeks(week, 1))}
+          hitSlop={8}
+          style={[styles.weekArrow, week === thisWeek && { opacity: 0.3 }]}
+          disabled={week === thisWeek}
+        >
+          <Ionicons name="chevron-forward" size={18} color={colors.text} />
+        </Pressable>
       </View>
 
       <Card>
         <Txt variant="label" color={colors.textFaint}>
-          {monthLabel(activeMonth)}
+          Semaine {weekLabel(week)}
         </Txt>
         <View style={styles.totals}>
           <Total value={`${totalCount}`} label="Parties jouées" color={colors.blue} bg={colors.blueSoft} />
           <Total value={fcfa(totalRevenue)} label="Volume" color={colors.green} bg={colors.greenSoft} />
           <Total value={fcfa(totalDue)} label="Reste à encaisser" color={colors.amber} bg={colors.amberSoft} />
         </View>
-        {monthUpcoming > 0 ? (
+        {weekUpcoming > 0 ? (
           <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-            + {monthUpcoming} réservation{monthUpcoming > 1 ? 's' : ''} à venir ce mois (à titre indicatif — facturée{monthUpcoming > 1 ? 's' : ''} une fois jouée{monthUpcoming > 1 ? 's' : ''}).
+            + {weekUpcoming} réservation{weekUpcoming > 1 ? 's' : ''} à venir cette semaine (à titre indicatif — facturée{weekUpcoming > 1 ? 's' : ''} une fois jouée{weekUpcoming > 1 ? 's' : ''}).
           </Txt>
         ) : null}
       </Card>
@@ -122,7 +158,7 @@ export default function Operateur() {
         <SectionHeader title="Par club" />
         {rows.length === 0 ? (
           <Card>
-            <Txt variant="muted">Aucune partie jouée sur {monthLabel(activeMonth)} pour l'instant.</Txt>
+            <Txt variant="muted">Aucune partie jouée sur la semaine {weekLabel(week)}.</Txt>
           </Card>
         ) : (
           rows.map((r) => {
@@ -153,9 +189,9 @@ export default function Operateur() {
                     <Button size="sm" label="Envoyer le décompte" icon="logo-whatsapp" variant="secondary" onPress={() => sendHistory(r)} full />
                   </View>
                   {st === 'paid' ? (
-                    <Button size="sm" label="Annuler" icon="arrow-undo" variant="ghost" onPress={() => setPaymentStatus(r.clubId, activeMonth, 'sent')} />
+                    <Button size="sm" label="Annuler" icon="arrow-undo" variant="ghost" onPress={() => setPaymentStatus(r.clubId, week, 'sent')} />
                   ) : (
-                    <Button size="sm" label="Marquer payé" icon="checkmark-circle" onPress={() => setPaymentStatus(r.clubId, activeMonth, 'paid')} />
+                    <Button size="sm" label="Marquer payé" icon="checkmark-circle" onPress={() => setPaymentStatus(r.clubId, week, 'paid')} />
                   )}
                 </View>
               </Card>
@@ -300,7 +336,34 @@ const styles = StyleSheet.create({
   note: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
   health: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   mini: { flex: 1, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md },
-  monthRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
+  weekNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  weekArrow: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reminder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.coralSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
   totals: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   total: { flex: 1, alignItems: 'center', borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: spacing.xs },
 });

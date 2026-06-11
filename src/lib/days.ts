@@ -33,14 +33,34 @@ export function slotTimestamp(dayValue: number, slot: string): number {
 
 const MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 
-// Clé de mois stable (AAAA-MM) à partir d'un horodatage — base du suivi de facturation.
-export function monthKeyOf(ts: number): string {
+// ——— Semaine calendaire (lundi → dimanche) — base de la facturation hebdomadaire ———
+
+// Clé stable d'une semaine = la date de son LUNDI (AAAA-MM-JJ).
+export function weekKeyOf(ts: number): string {
   const d = new Date(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  d.setHours(0, 0, 0, 0);
+  const dow = (d.getDay() + 6) % 7; // lundi = 0
+  d.setDate(d.getDate() - dow);
+  return dayKey(d);
 }
 
-// Libellé lisible d'une clé de mois (ex. « juin 2026 »).
-export function monthLabel(key: string): string {
-  const [y, m] = key.split('-').map(Number);
-  return `${MONTHS[m - 1]} ${y}`;
+function weekStart(key: string): Date {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+// Libellé lisible : « du 8 au 14 juin » (ou « du 29 juin au 5 juil. » à cheval).
+export function weekLabel(key: string): string {
+  const start = weekStart(key);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  if (start.getMonth() === end.getMonth()) return `du ${start.getDate()} au ${end.getDate()} ${MONTHS[end.getMonth()]}`;
+  return `du ${start.getDate()} ${MONTHS[start.getMonth()]} au ${end.getDate()} ${MONTHS[end.getMonth()]}`;
+}
+
+// Semaine précédente / suivante.
+export function addWeeks(key: string, n: number): string {
+  const d = weekStart(key);
+  d.setDate(d.getDate() + 7 * n);
+  return dayKey(d);
 }
