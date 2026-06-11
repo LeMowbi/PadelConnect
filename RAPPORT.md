@@ -150,4 +150,4 @@ comptes synchronisés / SMS, validation des inscrits d'un tournoi côté serveur
   plus aucun tap silencieux. Masque aussi appliqué à « Modifier le profil ».
 - **Décompte Wave en dates absolues** : chaque ligne = « Lun 8 juin · 18:00 · Terrain 2 ·
   Invité Démo » (dérivé de dateKey, jamais du libellé relatif).
-- Âge minimum : décision du porteur appliquée (voir code / message de refus le cas échéant).
+- Âge minimum : **aucun** (décision du porteur du 11/06) — pas de garde-fou d'âge à l'inscription.
