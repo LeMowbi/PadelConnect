@@ -9,6 +9,7 @@ import { seedCompetitions } from '@/data/competitions';
 import { isPlayed, useApp, type Reservation } from '@/store/AppContext';
 import { openWhatsApp } from '@/lib/contact';
 import { dayKey } from '@/lib/days';
+import { fcfa, perPlayer } from '@/lib/format';
 import { colors, radius, spacing } from '@/theme';
 
 const FIVE_H = 5 * 3600000;
@@ -33,11 +34,13 @@ export default function ReservationsScreen() {
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
 
   // Récap envoyé aux partenaires (WhatsApp s'ouvre avec le message, tu choisis le destinataire).
+  // La part par joueur se calcule sur le PRIX RÉEL du créneau (terrain à 4).
   const notifyPartners = (r: Reservation) => {
     const who = r.invited.length ? `\nÉquipe : ${r.invited.map((i) => i.name).join(', ')}` : '';
+    const share = r.price ? `\nPrévois ${perPlayer(r.price)} chacun.` : '';
     openWhatsApp(
       '',
-      `On joue au padel ! 🎾\n${r.clubName} — ${r.date} à ${r.time} (session 1h30)\n${r.court}${who}\nRéservé via PadelConnect.`
+      `On joue au padel ! 🎾\n${r.clubName} — ${r.date} à ${r.time} (session 1h30)\n${r.court}${who}${share}\nRéservé via PadelConnect.`
     );
   };
 
@@ -65,6 +68,11 @@ export default function ReservationsScreen() {
                     <Txt variant="muted">
                       {r.date} · {r.time} · {r.court} · 1h30
                     </Txt>
+                    {r.price ? (
+                      <Txt variant="small" color={colors.gold} style={{ fontWeight: '700' }}>
+                        {fcfa(r.price)} · ~{perPlayer(r.price)}/joueur
+                      </Txt>
+                    ) : null}
                   </View>
                   {r.clubConfirmed ? (
                     <Tag label="Confirmée ✓" tone="green" icon="checkmark-circle" />
@@ -133,6 +141,8 @@ export default function ReservationsScreen() {
                     {result ? (
                       mine?.result === 'win' ? (
                         <Tag label="Vainqueur !" tone="amber" icon="trophy" />
+                      ) : mine?.result === 'last' ? (
+                        <Tag label="Dernière place" tone="coral" icon="arrow-down" />
                       ) : (
                         <Tag label="Participé" tone="blue" />
                       )

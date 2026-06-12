@@ -43,7 +43,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test:logic": "node --experimental-strip-types tests/days.test.ts && node tests/reset.test.mjs"
+    "test:logic": "node --experimental-strip-types tests/days.test.ts && node --experimental-strip-types tests/pricing.test.ts && node tests/reset.test.mjs"
   },
   "private": true
 }

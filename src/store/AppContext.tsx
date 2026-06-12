@@ -2,12 +2,13 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { clubs, type Club, type CustomClub } from '@/data/clubs';
+import { clubs, type Club, type CustomClub, type PriceTier } from '@/data/clubs';
 import type { Competition } from '@/data/competitions';
 import { DEMO_CLOSED_COMP, DEMO_FINISHED_COMP } from '@/data/competitions';
 import type { Review } from '@/data/reviews';
 import { seedFriends, type Friend } from '@/data/user';
 import { dayKey, nextDays } from '@/lib/days';
+import { priceForSlot } from '@/lib/pricing';
 import { ACCENTS } from '@/theme';
 
 export type Account = {
@@ -29,6 +30,7 @@ export type Reservation = {
   dateKey: string; // identité stable du jour (AAAA-MM-JJ) — base des calculs
   time: string;
   startsAt: number; // horodatage réel du créneau (rappel, anti double-réservation)
+  price: number; // prix RÉEL du créneau (figé à la réservation — base commission & partage)
   players: number;
   invited: Invited[];
   bookedBy?: { name: string; phone: string }; // qui a réservé — visible côté club
@@ -44,11 +46,15 @@ export function isPlayed(r: Reservation, now = Date.now()): boolean {
   return r.startsAt + SESSION_MS <= now;
 }
 
-// Palmarès du joueur : une entrée par tournoi joué (vainqueur ou simple participant).
-export type OfficialResult = { id: string; compId?: string; title: string; result: 'win' | 'played'; at: number; levelAfter: number };
+// Palmarès du joueur : une entrée par tournoi joué (vainqueur, dernière place, ou participant).
+export type OfficialResult = { id: string; compId?: string; title: string; result: 'win' | 'played' | 'last'; at: number; levelAfter: number };
 
 // Résultat d'un tournoi clôturé par son ORGANISATEUR (club ou créateur du défi).
-export type CompResult = { winner: string; closedAt: number };
+// `loser` = équipe classée dernière (désignation facultative → malus de niveau).
+export type CompResult = { winner: string; loser?: string; closedAt: number };
+
+// Actualité éditorialisée par l'opérateur, affichée en bandeau sur l'accueil joueur.
+export type OperatorNews = { id: string; title: string; subtitle?: string; link?: string };
 
 // Créneau fermé PAR LE CLUB (résa téléphone/WhatsApp, entretien…). Ce n'est PAS une
 // réservation PadelConnect : jamais compté dans l'historique, la commission ou les stats.
@@ -61,6 +67,7 @@ export type ClubInfo = {
   blurb?: string;
   type?: Club['type'];
   priceFrom?: number;
+  priceTiers?: PriceTier[]; // tarifs par plage horaire définis par le gérant
   contactPhone?: string; // numéro WhatsApp du club — alimente le lien discret de la fiche
 };
 
@@ -93,13 +100,17 @@ type AppState = {
   clubSlots: Record<string, string[]>; // horaires ouverts par club
   clubCourts: Record<string, string[]>; // terrains (courts) gérés par club
   blockedSlots: BlockedSlot[]; // créneaux fermés hors app par les clubs
+  operatorNews: OperatorNews | null; // actu d'accueil publiée par l'opérateur
+  dismissedNewsId: string | null; // id de l'actu fermée par le joueur (réapparaît si nouvelle)
+  followed: Record<string, { name: string; level?: number; favoriteClub?: string }>; // joueurs suivis
 };
 
 // 3 chiffres, pas plus : parties jouées (auto), tournois joués, tournois gagnés.
 export type Stats = { played: number; tournamentsPlayed: number; tournamentsWon: number };
 
 export const COMMISSION_RATE = 0.1; // commission opérateur (10 %)
-const LEVEL_STEP = 0.25; // évolution du niveau par compétition officielle
+const LEVEL_STEP = 0.5; // bonus de niveau pour l'équipe vainqueure d'un tournoi officiel
+const LEVEL_PENALTY = 0.25; // malus de niveau pour l'équipe classée dernière (facultatif)
 const STORAGE_KEY = 'padelco_state_v4'; // v4 : modèle sans matchs ni victoires/défaites
 
 const initialState: AppState = {
@@ -132,6 +143,15 @@ const initialState: AppState = {
   clubSlots: {},
   clubCourts: {},
   blockedSlots: [],
+  // Actu d'accueil de démo (modifiable dans l'Espace opérateur).
+  operatorNews: {
+    id: 'news-fipgold',
+    title: '🎾 FIP Gold Abidjan',
+    subtitle: "1ᵉʳ tournoi Gold d'Afrique, 23–28 juin chez Padelta",
+    link: 'https://www.padelfip.com',
+  },
+  dismissedNewsId: null,
+  followed: {},
 };
 
 type AppContextType = {
@@ -143,7 +163,13 @@ type AppContextType = {
   loadDemo: () => void;
   signOut: () => void;
   setLevel: (n: number) => void;
-  closeCompetition: (comp: { id: string; title: string; official?: boolean }, winnerName: string, winnerIsMe: boolean) => void;
+  closeCompetition: (
+    comp: { id: string; title: string; official?: boolean },
+    winnerName: string,
+    winnerIsMe: boolean,
+    loserName?: string,
+    loserIsMe?: boolean
+  ) => void;
   setRemindersOn: (on: boolean) => void;
   setReserverView: (v: 'Par heure' | 'Par club') => void;
   addReview: (clubId: string, rating: number, text: string) => void;
@@ -179,6 +205,9 @@ type AppContextType = {
   setClubCourts: (clubId: string, courts: string[]) => void;
   blockSlot: (b: BlockedSlot, startsAt: number) => boolean;
   unblockSlot: (clubId: string, dateKey: string, time: string, court: string) => void;
+  setOperatorNews: (news: { title: string; subtitle?: string; link?: string }) => void;
+  dismissNews: (id: string) => void;
+  toggleFollow: (id: string, info: { name: string; level?: number; favoriteClub?: string }) => void;
   resetAll: () => void;
 };
 
@@ -248,14 +277,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const now = Date.now();
           const demain = nextDays(2)[1]; // jour « Demain » stable
           const lastWeek = new Date(now - 3 * 86400000);
+          const findSeed = (id: string) => clubs.find((c) => c.id === id)!;
           return {
             ...initialState,
             account: { firstName: 'Invité', lastName: 'Démo', phone: '+225 07 00 00 00 00', birthDate: '12/08/1998', gender: 'nd' },
             level: 3.5,
             favoriteClubIds: ['padelta'],
             reservations: [
-              { id: uid(), clubId: 'district-club', clubName: 'District Club', court: 'Terrain 1', date: demain.label, dateKey: demain.key, time: '18:00', startsAt: demain.value + 18 * 3600000, players: 4, invited: [], bookedBy: { name: 'Invité Démo', phone: '+225 07 00 00 00 00' }, createdAt: now },
-              { id: uid(), clubId: 'padel-zone-4', clubName: 'Padel Zone 4', court: 'Terrain 2', date: 'Sem. dernière', dateKey: dayKey(lastWeek), time: '18:00', startsAt: now - 3 * 86400000, players: 4, invited: [], bookedBy: { name: 'Invité Démo', phone: '+225 07 00 00 00 00' }, clubConfirmed: true, createdAt: now - 3 * 86400000 },
+              { id: uid(), clubId: 'district-club', clubName: 'District Club', court: 'Terrain 1', date: demain.label, dateKey: demain.key, time: '18:00', startsAt: demain.value + 18 * 3600000, price: priceForSlot(findSeed('district-club'), '18:00'), players: 4, invited: [], bookedBy: { name: 'Invité Démo', phone: '+225 07 00 00 00 00' }, createdAt: now },
+              { id: uid(), clubId: 'padel-zone-4', clubName: 'Padel Zone 4', court: 'Terrain 2', date: 'Sem. dernière', dateKey: dayKey(lastWeek), time: '18:00', startsAt: now - 3 * 86400000, price: priceForSlot(findSeed('padel-zone-4'), '18:00'), players: 4, invited: [], bookedBy: { name: 'Invité Démo', phone: '+225 07 00 00 00 00' }, clubConfirmed: true, createdAt: now - 3 * 86400000 },
             ],
             // L'utilisateur démo est inscrit aux 2 tournois terminés : un à clôturer (le
             // gérant désignera le vainqueur) + un déjà clôturé (il a participé, pas gagné).
@@ -271,25 +301,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }),
       signOut: () => setState((s) => ({ ...s, account: null })),
       setLevel: (n) => setState((s) => ({ ...s, level: clampLevel(n) })),
-      // Clôture par l'ORGANISATEUR : fige le vainqueur, et si TU étais inscrit, met
-      // à jour ton palmarès. Victoire d'un tournoi OFFICIEL : +0.25 de niveau (borné
-      // à 7.0). Participation ou tournoi amical : palmarès seulement, niveau inchangé
-      // (la baisse de niveau attendra la version serveur).
-      closeCompetition: (comp, winnerName, winnerIsMe) =>
+      // Clôture par l'ORGANISATEUR : fige le vainqueur (et, en option, l'équipe classée
+      // dernière), et si TU étais inscrit met à jour ton palmarès. Tournoi OFFICIEL :
+      // équipe vainqueure +0.50 / équipe dernière −0.25 (bornés 1.0–7.0). Participation,
+      // tournoi amical, ou place intermédiaire : palmarès seulement, niveau inchangé.
+      closeCompetition: (comp, winnerName, winnerIsMe, loserName, loserIsMe) =>
         setState((s) => {
           if (s.compResults[comp.id]) return s; // déjà clôturé
-          const compResults = { ...s.compResults, [comp.id]: { winner: winnerName.trim(), closedAt: Date.now() } };
+          const compResults = {
+            ...s.compResults,
+            [comp.id]: { winner: winnerName.trim(), loser: loserName?.trim() || undefined, closedAt: Date.now() },
+          };
           const registered = !!s.compRegistrations[comp.id];
           const already = s.officialResults.some((o) => o.compId === comp.id);
           if (!registered || already) return { ...s, compResults };
-          const win = winnerIsMe;
-          const next = win && comp.official ? clampLevel(s.level + LEVEL_STEP) : s.level;
+          let level = s.level;
+          let result: 'win' | 'played' | 'last' = 'played';
+          if (winnerIsMe && comp.official) {
+            level = clampLevel(level + LEVEL_STEP);
+            result = 'win';
+          } else if (loserIsMe && comp.official) {
+            level = clampLevel(level - LEVEL_PENALTY);
+            result = 'last';
+          }
           return {
             ...s,
             compResults,
-            level: next,
+            level,
             officialResults: [
-              { id: uid(), compId: comp.id, title: comp.title, result: win ? 'win' : 'played', at: Date.now(), levelAfter: next },
+              { id: uid(), compId: comp.id, title: comp.title, result, at: Date.now(), levelAfter: level },
               ...s.officialResults,
             ],
           };
@@ -491,6 +531,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             (x) => !(x.clubId === clubId && x.dateKey === dateKey && x.time === time && x.court === court)
           ),
         })),
+      // L'opérateur publie/met à jour l'actu d'accueil (nouvel id → réapparaît même si fermée).
+      setOperatorNews: (news) =>
+        setState((s) => ({ ...s, operatorNews: { id: uid(), title: news.title.trim(), subtitle: news.subtitle?.trim() || undefined, link: news.link?.trim() || undefined } })),
+      dismissNews: (id) => setState((s) => ({ ...s, dismissedNewsId: id })),
+      toggleFollow: (id, info) =>
+        setState((s) => {
+          const followed = { ...s.followed };
+          if (followed[id]) delete followed[id];
+          else followed[id] = info;
+          return { ...s, followed };
+        }),
       resetAll: () => {
         // Réinitialisation TOTALE de la démo : on efface AUSSI la clé persistée pour
         // qu'aucune donnée (niveau, palmarès, blocages, amis retirés…) ne survive à

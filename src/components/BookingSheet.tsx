@@ -10,6 +10,7 @@ import { seedCompetitions } from '@/data/competitions';
 import { freeCourts, type AvailCtx } from '@/lib/availability';
 import { slotTimestamp, type DayOption } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
+import { priceForSlot } from '@/lib/pricing';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
@@ -33,6 +34,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
     [club.id, day.key, time, state.reservations, state.clubCourts]
   );
 
+  const price = priceForSlot(club, time);
   const [court, setCourt] = useState<string | null>(free[0] ?? null);
   // Participants : toi + jusqu'à 3 invités (amis ou nom libre).
   const [friendIds, setFriendIds] = useState<string[]>([]);
@@ -64,6 +66,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
       dateKey: day.key,
       time,
       startsAt: slotTimestamp(day.value, time),
+      price,
       players: 1 + invited.length,
       invited,
     });
@@ -107,7 +110,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
                     {club.name}
                   </Txt>
                   <Txt variant="muted">
-                    {day.label} · {time} · 1h30 · {fcfa(club.priceFrom)} la session
+                    {day.label} · {time} · 1h30 · {fcfa(price)} la session
                   </Txt>
                 </View>
                 <Pressable onPress={onClose} hitSlop={8} style={styles.closeBtn}>
@@ -157,7 +160,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
 
               <View style={styles.priceLine}>
                 <Txt variant="small" color={colors.textMuted}>
-                  {fcfa(club.priceFrom)} la session · soit ~{perPlayer(club.priceFrom)}/joueur à 4
+                  {fcfa(price)} la session · soit ~{perPlayer(price)}/joueur à 4
                 </Txt>
               </View>
 

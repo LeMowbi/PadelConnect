@@ -11,7 +11,8 @@ import { SAMPLE_SLOTS, activeClubs, type Club } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { clubsFreeAt, freeCourts, openSlotsFor, slotGrid, type AvailCtx } from '@/lib/availability';
 import { nextDays, slotTimestamp } from '@/lib/days';
-import { fcfa } from '@/lib/format';
+import { fcfa, perPlayer } from '@/lib/format';
+import { minPrice, priceForSlot } from '@/lib/pricing';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
@@ -147,8 +148,12 @@ export default function ReserverScreen() {
                           {free} libre{free > 1 ? 's' : ''}
                         </Txt>
                       </View>
+                      {/* Prix RÉEL de ce créneau (selon la plage horaire du club). */}
                       <Txt variant="small" color={colors.gold} style={{ fontWeight: '700' }}>
-                        dès {fcfa(club.priceFrom)}
+                        {fcfa(priceForSlot(club, row.time))}
+                      </Txt>
+                      <Txt variant="small" color={colors.textFaint} style={{ fontSize: 11 }}>
+                        ~{perPlayer(priceForSlot(club, row.time))}/joueur
                       </Txt>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -180,12 +185,12 @@ export default function ReserverScreen() {
                 </Txt>
               </View>
               <Txt variant="small" color={colors.gold} style={{ fontWeight: '700' }}>
-                dès {fcfa(club.priceFrom)}
+                dès {fcfa(minPrice(club))}
               </Txt>
             </View>
             <View style={styles.slotWrap}>
               {slots.map((s) => (
-                <Chip key={s.time} label={s.time} icon={PRIME_TIMES.has(s.time) ? 'flame' : undefined} onPress={() => open(club, s.time)} />
+                <Chip key={s.time} label={`${s.time} · ${fcfa(priceForSlot(club, s.time))}`} icon={PRIME_TIMES.has(s.time) ? 'flame' : undefined} onPress={() => open(club, s.time)} />
               ))}
             </View>
           </Card>

@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
+import { PlayerSheet, type PlayerLike } from '@/components/PlayerSheet';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
 import { demoTeams, formatFee, seedCompetitions, teamCount } from '@/data/competitions';
@@ -22,8 +23,11 @@ export default function CompetitionDetail() {
   const [partnerId, setPartnerId] = useState<string | null>(null);
   const [partnerName, setPartnerName] = useState('');
   const [winnerName, setWinnerName] = useState('');
+  const [loserName, setLoserName] = useState(''); // équipe classée dernière (facultatif)
+  const [pickingLoser, setPickingLoser] = useState(false); // 2ᵉ étape de clôture
   const [confirmCancel, setConfirmCancel] = useState(false); // annulation d'un tournoi sans inscrit
   const [toast, setToast] = useState<string | null>(null);
+  const [openPlayer, setOpenPlayer] = useState<PlayerLike | null>(null);
 
   if (!comp) {
     return (
@@ -57,6 +61,10 @@ export default function CompetitionDetail() {
     setPartnerId((cur) => (cur === fid ? null : fid));
     setPartnerName('');
   };
+
+  // Clôture effective : vainqueur + (option) dernière équipe.
+  const doClose = (loser?: string) =>
+    closeCompetition(comp, winnerName, winnerName === myTeam && registered, loser, !!loser && loser === myTeam && registered);
 
   return (
     <Screen
@@ -134,7 +142,9 @@ export default function CompetitionDetail() {
             <Divider style={{ marginVertical: spacing.md }} />
             <View style={styles.teamsWrap}>
               {teamList.map((t) => (
-                <Tag key={t} label={t} tone={t === myTeam && registered ? 'blue' : 'neutral'} icon="people" />
+                <Pressable key={t} onPress={() => setOpenPlayer({ id: `team:${comp.id}:${t}`, name: t, isTeam: true })}>
+                  <Tag label={t} tone={t === myTeam && registered ? 'blue' : 'neutral'} icon="people" />
+                </Pressable>
               ))}
             </View>
           </>
@@ -177,11 +187,27 @@ export default function CompetitionDetail() {
                 {result.winner}
               </Txt>
             </View>
-            {mine ? <Tag label={mine.result === 'win' ? 'Vainqueur !' : 'Participé'} tone={mine.result === 'win' ? 'amber' : 'blue'} icon={mine.result === 'win' ? 'trophy' : 'checkmark'} /> : null}
+            {mine ? (
+              <Tag
+                label={mine.result === 'win' ? 'Vainqueur !' : mine.result === 'last' ? 'Dernière place' : 'Participé'}
+                tone={mine.result === 'win' ? 'amber' : mine.result === 'last' ? 'coral' : 'blue'}
+                icon={mine.result === 'win' ? 'trophy' : mine.result === 'last' ? 'arrow-down' : 'checkmark'}
+              />
+            ) : null}
           </View>
+          {result.loser ? (
+            <Txt variant="small" color={colors.textFaint} style={{ marginTop: 4 }}>
+              Dernière place : {result.loser}
+            </Txt>
+          ) : null}
           {mine?.result === 'win' && comp.official ? (
             <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
-              Tournoi officiel gagné : ton niveau passe à {mine.levelAfter.toFixed(2)} (+0.25).
+              Tournoi officiel gagné : ton niveau passe à {mine.levelAfter.toFixed(2)} (+0.50).
+            </Txt>
+          ) : null}
+          {mine?.result === 'last' && comp.official ? (
+            <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
+              Dernière place : ton niveau passe à {mine.levelAfter.toFixed(2)} (−0.25).
             </Txt>
           ) : null}
         </Card>
@@ -219,36 +245,70 @@ export default function CompetitionDetail() {
         </Card>
       ) : null}
 
-      {/* Clôture — réservée au créateur du défi : choisir l'équipe vainqueure dans la liste */}
+      {/* Clôture — réservée au créateur du défi : vainqueur (puis, en option, dernière place) */}
       {canClose && teamList.length > 0 ? (
         <Card style={{ marginTop: spacing.lg, borderColor: colors.purple }}>
-          <Txt variant="h3">Clôturer & désigner le vainqueur</Txt>
-          <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
-            Le tournoi est terminé : sélectionne l'équipe qui a gagné. C'est toi (l'organisateur) qui décides.
-          </Txt>
-          <View style={{ marginTop: spacing.sm, gap: 6 }}>
-            {teamList.map((t) => {
-              const sel = winnerName === t;
-              return (
-                <Pressable key={t} onPress={() => setWinnerName(t)} style={[styles.teamRow, sel && styles.teamRowSel]}>
-                  <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.gold : colors.textMuted} />
-                  <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
-                    {t}
-                  </Txt>
-                  {registered && t === myTeam ? <Tag label="Ton équipe" tone="blue" /> : null}
-                </Pressable>
-              );
-            })}
-          </View>
-          <View style={{ marginTop: spacing.md }}>
-            <Button
-              label={winnerName ? `Valider : ${winnerName}` : 'Valider le vainqueur'}
-              icon="flag"
-              onPress={() => closeCompetition(comp, winnerName, winnerName === myTeam && registered)}
-              disabled={!winnerName}
-              full
-            />
-          </View>
+          {!pickingLoser ? (
+            <>
+              <Txt variant="h3">Clôturer & désigner le vainqueur</Txt>
+              <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
+                Le tournoi est terminé : sélectionne l'équipe qui a gagné. C'est toi (l'organisateur) qui décides.
+              </Txt>
+              <View style={{ marginTop: spacing.sm, gap: 6 }}>
+                {teamList.map((t) => {
+                  const sel = winnerName === t;
+                  return (
+                    <Pressable key={t} onPress={() => setWinnerName(t)} style={[styles.teamRow, sel && styles.teamRowSel]}>
+                      <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.gold : colors.textMuted} />
+                      <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
+                        {t}
+                      </Txt>
+                      {registered && t === myTeam ? <Tag label="Ton équipe" tone="blue" /> : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={{ marginTop: spacing.md }}>
+                <Button
+                  label={winnerName ? `Vainqueur : ${winnerName}` : 'Valider le vainqueur'}
+                  icon="flag"
+                  onPress={() => setPickingLoser(true)}
+                  disabled={!winnerName}
+                  full
+                />
+              </View>
+              {comp.official ? (
+                <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                  Tournoi officiel : l'équipe vainqueure gagne +0.50 de niveau.
+                </Txt>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Txt variant="h3">Équipe classée dernière ?</Txt>
+              <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
+                Facultatif. {comp.official ? 'L’équipe désignée perd −0.25 de niveau. ' : ''}Tu peux passer.
+              </Txt>
+              <View style={{ marginTop: spacing.sm, gap: 6 }}>
+                {teamList.filter((t) => t !== winnerName).map((t) => {
+                  const sel = loserName === t;
+                  return (
+                    <Pressable key={t} onPress={() => setLoserName(t)} style={[styles.teamRow, sel && styles.teamRowSel]}>
+                      <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.coral : colors.textMuted} />
+                      <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
+                        {t}
+                      </Txt>
+                      {registered && t === myTeam ? <Tag label="Ton équipe" tone="blue" /> : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
+                <Button label={loserName ? `Clôturer (dernière : ${loserName})` : 'Clôturer'} icon="flag" onPress={() => doClose(loserName || undefined)} disabled={!loserName} full />
+                <Button label="Passer (pas de dernière place)" variant="ghost" onPress={() => doClose(undefined)} full />
+              </View>
+            </>
+          )}
         </Card>
       ) : null}
 
@@ -339,6 +399,8 @@ export default function CompetitionDetail() {
           </Txt>
         </View>
       )}
+
+      <PlayerSheet player={openPlayer} onClose={() => setOpenPlayer(null)} />
     </Screen>
   );
 }

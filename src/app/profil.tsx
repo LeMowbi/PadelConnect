@@ -95,7 +95,10 @@ export default function ProfilScreen() {
               <View style={{ gap: 6 }}>
                 {officialResults.slice(0, 3).map((o) => (
                   <View key={o.id} style={styles.row}>
-                    <Tag label={o.result === 'win' ? 'Vainqueur' : 'Participant'} tone={o.result === 'win' ? 'amber' : 'blue'} />
+                    <Tag
+                      label={o.result === 'win' ? 'Vainqueur' : o.result === 'last' ? 'Dernière place' : 'Participant'}
+                      tone={o.result === 'win' ? 'amber' : o.result === 'last' ? 'coral' : 'blue'}
+                    />
                     <Txt variant="muted" style={{ flex: 1 }}>
                       {o.title} → Niveau {o.levelAfter.toFixed(2)}
                     </Txt>
@@ -105,7 +108,7 @@ export default function ProfilScreen() {
             </>
           ) : (
             <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-              Inscris-toi à un tournoi officiel : une victoire fait gagner +0.25.
+              Inscris-toi à un tournoi officiel : une victoire fait gagner +0.50.
             </Txt>
           )}
         </Card>

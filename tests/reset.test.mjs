@@ -14,7 +14,8 @@ const seedFriends = [
   { id: 'f4', name: 'Ines', level: 3.5 },
 ];
 const clampLevel = (n) => Math.min(7, Math.max(1, Math.round(n * 100) / 100));
-const LEVEL_STEP = 0.25;
+const LEVEL_STEP = 0.5; // v4.5 : vainqueur officiel +0.50
+const LEVEL_PENALTY = 0.25; // v4.5 : dernière place officielle −0.25 (plancher 1.0)
 const DEMO_FINISHED_COMP = 'c-fin';
 const DEMO_CLOSED_COMP = 'c-clos';
 
@@ -29,19 +30,27 @@ const makeInitial = () => ({
   blockedSlots: [],
 });
 
-// Reducers (miroir exact d'AppContext).
-const closeCompetition = (s, comp, winnerIsMe) => {
+// Reducers (miroir exact d'AppContext) — clôture v4.5 : vainqueur + (option) dernière équipe.
+const closeCompetition = (s, comp, winnerIsMe, loserIsMe = false) => {
   if (s.compResults[comp.id]) return s;
   const compResults = { ...s.compResults, [comp.id]: { winner: 'X', closedAt: 1 } };
   const registered = !!s.compRegistrations[comp.id];
   const already = s.officialResults.some((o) => o.compId === comp.id);
   if (!registered || already) return { ...s, compResults };
-  const next = winnerIsMe && comp.official ? clampLevel(s.level + LEVEL_STEP) : s.level;
+  let level = s.level;
+  let result = 'played';
+  if (winnerIsMe && comp.official) {
+    level = clampLevel(level + LEVEL_STEP);
+    result = 'win';
+  } else if (loserIsMe && comp.official) {
+    level = clampLevel(level - LEVEL_PENALTY);
+    result = 'last';
+  }
   return {
     ...s,
     compResults,
-    level: next,
-    officialResults: [{ id: 'o', compId: comp.id, result: winnerIsMe ? 'win' : 'played', levelAfter: next }, ...s.officialResults],
+    level,
+    officialResults: [{ id: 'o', compId: comp.id, result, levelAfter: level }, ...s.officialResults],
   };
 };
 const blockSlot = (s, b) => ({ ...s, blockedSlots: [...s.blockedSlots, b] });
@@ -64,7 +73,25 @@ let s = {
   officialResults: [{ id: 'o0', compId: DEMO_CLOSED_COMP, result: 'played', levelAfter: 3.5 }],
 };
 s = closeCompetition(s, { id: DEMO_FINISHED_COMP, official: true }, true);
-check(s.level === 3.75, 'Clôture officielle gagnée : niveau 3.50 → 3.75');
+check(s.level === 4.0, 'Clôture officielle gagnée : niveau 3.50 → 4.00 (+0.50)');
+
+// Malus « dernière place » : −0.25, avec plancher 1.0.
+let sLast = {
+  ...makeInitial(),
+  account: { firstName: 'Invité' },
+  level: 3.5,
+  compRegistrations: { [DEMO_FINISHED_COMP]: { partner: 'Karim' } },
+};
+sLast = closeCompetition(sLast, { id: DEMO_FINISHED_COMP, official: true }, false, true);
+check(sLast.level === 3.25, 'Dernière place officielle : 3.50 → 3.25 (−0.25)');
+check(sLast.officialResults[0].result === 'last', "Palmarès : entrée « Dernière place »");
+let sFloor = { ...makeInitial(), account: { firstName: 'Invité' }, level: 1.0, compRegistrations: { [DEMO_FINISHED_COMP]: { partner: 'K' } } };
+sFloor = closeCompetition(sFloor, { id: DEMO_FINISHED_COMP, official: true }, false, true);
+check(sFloor.level === 1.0, 'Plancher : un niveau 1.0 ne descend pas sous 1.0');
+// Tournoi AMICAL : ni bonus ni malus, palmarès seulement.
+let sAmical = { ...makeInitial(), account: { firstName: 'Invité' }, level: 3.5, compRegistrations: { d1: { partner: 'K' } } };
+sAmical = closeCompetition(sAmical, { id: 'd1', official: false }, true);
+check(sAmical.level === 3.5, 'Tournoi amical gagné : niveau inchangé');
 s = blockSlot(s, { clubId: 'padelta', dateKey: '2026-06-13', time: '18:00', court: 'Terrain 1', reason: 'Entretien' });
 s = removeFriend(s, 'f4');
 check(s.blockedSlots.length === 1 && s.friends.length === 3, 'État pollué avant reset (1 blocage, 3 amis)');

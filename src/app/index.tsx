@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ClubCard } from '@/components/ClubCard';
 import { CompetitionCard } from '@/components/CompetitionCard';
 import { Logo } from '@/components/Logo';
@@ -22,6 +22,7 @@ type Action = { icon: keyof typeof Ionicons.glyphMap; label: string; route: stri
 const ACTIONS: Action[] = [
   { icon: 'calendar', label: 'Mes réservations', route: '/reservations', tint: colors.green, bg: colors.greenSoft },
   { icon: 'trophy', label: 'Tournois', route: '/competitions', tint: colors.purple, bg: colors.purpleSoft },
+  { icon: 'podium', label: 'Classement', route: '/classement', tint: colors.amber, bg: colors.amberSoft },
   { icon: 'school', label: 'Trouver un coach', route: '/coachs', tint: colors.blue, bg: colors.blueSoft },
   { icon: 'book', label: 'Découvrir le padel', route: '/decouvrir', tint: colors.coral, bg: colors.coralSoft },
 ];
@@ -38,7 +39,7 @@ function countdown(ts: number): string {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { state } = useApp();
+  const { state, dismissNews } = useApp();
   // L'accueil est le hub : tout s'ouvre par-dessus, le retour ramène toujours ici.
   const go = (route: string) => router.push(route as never);
 
@@ -58,15 +59,49 @@ export default function HomeScreen() {
   const bd = state.account?.birthDate ? parseBirthDate(state.account.birthDate) : null;
   const birthday = isBirthdayToday(state.account?.birthDate);
 
-  // Résultats de tournoi disponibles ? (un tournoi où tu étais inscrit a été clôturé récemment)
-  const pendingComps = Object.keys(state.compRegistrations).filter((id) => {
-    const r = state.compResults[id];
-    return !!r && now - r.closedAt < 7 * 86400000;
-  }).length;
+  // Résultats de tournoi disponibles ? Le plus récent (closedAt max) parmi les tournois
+  // où tu étais inscrit, clôturé il y a moins de 7 jours → on pointe vers SA fiche.
+  const pendingResult = Object.keys(state.compRegistrations)
+    .map((id) => ({ id, res: state.compResults[id] }))
+    .filter((x) => !!x.res && now - x.res.closedAt < 7 * 86400000)
+    .sort((a, b) => b.res!.closedAt - a.res!.closedAt)[0];
+
+  // Actu d'accueil (opérateur) — masquée si le joueur l'a fermée (réapparaît si nouvelle).
+  const news = state.operatorNews;
+  const showNews = !!news && state.dismissedNewsId !== news.id;
 
   return (
     <Screen>
       <Reveal>
+        {/* Actualité de l'accueil (publiée par l'opérateur) — fermable */}
+        {showNews && news ? (
+          <View style={styles.newsBanner}>
+            <Ionicons name="megaphone" size={18} color={colors.purple} />
+            <Pressable
+              style={{ flex: 1 }}
+              disabled={!news.link}
+              onPress={() => news.link && Linking.openURL(news.link)}
+            >
+              <Txt variant="body" style={{ fontWeight: '700' }} numberOfLines={2}>
+                {news.title}
+              </Txt>
+              {news.subtitle ? (
+                <Txt variant="small" color={colors.textMuted} numberOfLines={2}>
+                  {news.subtitle}
+                </Txt>
+              ) : null}
+              {news.link ? (
+                <Txt variant="small" color={colors.purple} style={{ fontWeight: '600', marginTop: 2 }}>
+                  En savoir plus →
+                </Txt>
+              ) : null}
+            </Pressable>
+            <Pressable onPress={() => dismissNews(news.id)} hitSlop={8} style={styles.newsClose}>
+              <Ionicons name="close" size={16} color={colors.textMuted} />
+            </Pressable>
+          </View>
+        ) : null}
+
         {/* Hero */}
         <LinearGradient colors={gradients.heroSoft} start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 1 }} style={styles.hero}>
           <View style={styles.brandRow}>
@@ -166,9 +201,9 @@ export default function HomeScreen() {
           </Pressable>
         ) : null}
 
-        {/* Résultats de tournoi disponibles */}
-        {pendingComps > 0 ? (
-          <Pressable onPress={() => go('/competitions')} style={[styles.alert, { backgroundColor: colors.purpleSoft }]}>
+        {/* Résultats de tournoi disponibles — mène directement à la fiche du tournoi concerné */}
+        {pendingResult ? (
+          <Pressable onPress={() => go(`/competition/${pendingResult.id}`)} style={[styles.alert, { backgroundColor: colors.purpleSoft }]}>
             <Ionicons name="medal-outline" size={16} color={colors.purple} />
             <Txt variant="small" color={colors.text} style={{ flex: 1, fontWeight: '600' }}>
               Résultats du tournoi disponibles
@@ -240,6 +275,23 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.md,
     marginTop: spacing.md,
+  },
+  newsBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: colors.purpleSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+  },
+  newsClose: {
+    width: 26,
+    height: 26,
+    borderRadius: radius.pill,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   profileCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
   profileAvatar: {

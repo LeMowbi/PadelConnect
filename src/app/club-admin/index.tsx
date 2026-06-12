@@ -8,9 +8,10 @@ import { Screen } from '@/components/Screen';
 import { BottomSheet } from '@/components/BottomSheet';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Button, Card, Divider, EmptyState, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
-import { SAMPLE_SLOTS, clubsByName, defaultCourts, findClub, manageableClubs, type Club } from '@/data/clubs';
+import { SAMPLE_SLOTS, clubsByName, defaultCourts, findClub, manageableClubs, type Club, type PriceTier } from '@/data/clubs';
 import { coaches as allCoaches } from '@/data/coaches';
 import { demoTeams, seedCompetitions, teamCount, type Competition } from '@/data/competitions';
+import { canAccessClub } from '@/lib/access';
 import { hasCompetition } from '@/lib/availability';
 import { dayKey, nextDays, slotTimestamp, weekKeyOf, weekLabel } from '@/lib/days';
 import { isPlayed, useApp, type ClubInfo } from '@/store/AppContext';
@@ -82,7 +83,9 @@ export default function ClubAdmin() {
   const club = findClub(state.managedClubId, state.customClubs, state.clubInfo) ?? clubsByName[0];
   const pendingOwn = state.customClubs.find((c) => c.id === club.id)?.status === 'pending';
   // Espace verrouillé par un code à 4 chiffres tant que ce club n'a pas été déverrouillé ici.
-  const locked = !state.unlockedClubIds.includes(club.id);
+  // Décision d'accès déléguée au module central (src/lib/access.ts) — point de
+  // branchement unique pour la vérification serveur de l'app finale.
+  const locked = !canAccessClub(club.id, state.unlockedClubIds);
 
   const openSlots = state.clubSlots[club.id] ?? SAMPLE_SLOTS;
   const toggleSlot = (t: string) => {
@@ -901,8 +904,8 @@ export default function ClubAdmin() {
           <ClosePanel
             comp={closingComp}
             myTeam={state.compRegistrations[closingComp.id] ? `${state.account?.firstName ?? 'Toi'} & ${state.compRegistrations[closingComp.id].partner}` : undefined}
-            onClose={(winner, isMe) => {
-              closeCompetition(closingComp, winner, isMe);
+            onClose={(winner, isMe, loser, loserIsMe) => {
+              closeCompetition(closingComp, winner, isMe, loser, loserIsMe);
               setClosingId(null);
             }}
             onCancel={() => setClosingId(null)}
@@ -921,25 +924,43 @@ export default function ClubAdmin() {
   );
 }
 
-// Infos éditables du club (nom, quartier, description, type, tarif session, WhatsApp).
+// 3 lignes de plages tarifaires éditables (heure début, fin, prix). Vide = ignorée.
+type TierRow = { start: string; end: string; price: string };
+function emptyTiers(club: Club): TierRow[] {
+  const seed = (club.priceTiers ?? []).map((t) => ({ start: t.start, end: t.end, price: String(t.price) }));
+  const rows = [...seed];
+  while (rows.length < 3) rows.push({ start: '', end: '', price: '' });
+  return rows.slice(0, 3);
+}
+
+// Infos éditables du club (nom, quartier, description, type, tarifs par plage, WhatsApp).
 function ClubInfoCard({ club, onSave }: { club: Club & { contactPhone?: string }; onSave: (patch: ClubInfo) => void }) {
   const [name, setName] = useState(club.name);
   const [area, setArea] = useState(club.area);
   const [blurb, setBlurb] = useState(club.blurb);
   const [type, setType] = useState<Club['type']>(club.type);
   const [price, setPrice] = useState(String(club.priceFrom));
+  const [tiers, setTiers] = useState<TierRow[]>(emptyTiers(club));
   const [phone, setPhone] = useState(club.contactPhone ?? '');
   const [saved, setSaved] = useState(false);
+
+  const setTier = (i: number, patch: Partial<TierRow>) =>
+    setTiers((cur) => cur.map((t, k) => (k === i ? { ...t, ...patch } : t)));
 
   const ready = name.trim().length >= 2 && area.trim().length >= 2 && Number(price) > 0;
   const save = () => {
     if (!ready) return;
+    // On ne garde que les plages complètes (début, fin, prix > 0). Aucune → tarif unique.
+    const built: PriceTier[] = tiers
+      .filter((t) => t.start.trim() && t.end.trim() && Number(t.price) > 0)
+      .map((t) => ({ start: t.start.trim(), end: t.end.trim(), price: Number(t.price) }));
     onSave({
       name: name.trim(),
       area: area.trim(),
       blurb: blurb.trim(),
       type,
       priceFrom: Number(price),
+      priceTiers: built.length ? built : undefined,
       contactPhone: phone.trim() || undefined,
     });
     setSaved(true);
@@ -966,11 +987,25 @@ function ClubInfoCard({ club, onSave }: { club: Club & { contactPhone?: string }
       <TextInput
         value={price}
         onChangeText={setPrice}
-        placeholder="Tarif de la session 1h30 (FCFA)"
+        placeholder="Tarif unique de la session 1h30 (FCFA)"
         placeholderTextColor={colors.textFaint}
         keyboardType="numeric"
         style={styles.input}
       />
+
+      {/* Tarifs par plage horaire — définis librement (heures creuses / prime time / soirée). */}
+      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+        TARIFS PAR PLAGE (OPTIONNEL — SINON LE TARIF UNIQUE S'APPLIQUE)
+      </Txt>
+      {tiers.map((t, i) => (
+        <View key={i} style={styles.tierRow}>
+          <TextInput value={t.start} onChangeText={(v) => setTier(i, { start: v })} placeholder="07:00" placeholderTextColor={colors.textFaint} style={[styles.input, styles.tierCell, { marginTop: 0 }]} />
+          <Txt variant="muted">→</Txt>
+          <TextInput value={t.end} onChangeText={(v) => setTier(i, { end: v })} placeholder="16:00" placeholderTextColor={colors.textFaint} style={[styles.input, styles.tierCell, { marginTop: 0 }]} />
+          <TextInput value={t.price} onChangeText={(v) => setTier(i, { price: v })} placeholder="FCFA" placeholderTextColor={colors.textFaint} keyboardType="numeric" style={[styles.input, styles.tierPrice, { marginTop: 0 }]} />
+        </View>
+      ))}
+
       <TextInput
         value={phone}
         onChangeText={setPhone}
@@ -997,8 +1032,8 @@ function ClubInfoCard({ club, onSave }: { club: Club & { contactPhone?: string }
   );
 }
 
-// Panneau de clôture (organisateur) : liste des équipes inscrites → sélection →
-// « Valider le vainqueur » → confirmation. Tournoi officiel : l'équipe gagnante prend +0.25.
+// Panneau de clôture (organisateur) : équipes inscrites → vainqueur → (option) équipe
+// classée dernière. Tournoi officiel : vainqueur +0.50, dernière place −0.25.
 function ClosePanel({
   comp,
   myTeam,
@@ -1008,13 +1043,14 @@ function ClosePanel({
 }: {
   comp: Competition;
   myTeam?: string;
-  onClose: (winner: string, winnerIsMe: boolean) => void;
+  onClose: (winner: string, winnerIsMe: boolean, loser?: string, loserIsMe?: boolean) => void;
   onCancel: () => void;
   onDelete?: () => void;
 }) {
   const teams = demoTeams(comp, myTeam);
   const [selected, setSelected] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
+  const [loser, setLoser] = useState<string | null>(null);
+  const [step, setStep] = useState<'winner' | 'loser'>('winner');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Aucun inscrit : rien à clôturer — on propose d'annuler le tournoi (avec confirmation).
@@ -1047,52 +1083,67 @@ function ClosePanel({
     <View style={{ marginTop: spacing.sm }}>
       {comp.official ? (
         <Txt variant="small" color={colors.amber} style={{ fontWeight: '600' }}>
-          Tournoi officiel — l'équipe vainqueure gagne +0.25 de niveau.
+          Tournoi officiel — vainqueur +0.50, dernière place −0.25 de niveau.
         </Txt>
       ) : null}
-      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-        Équipes inscrites · {teams.length}
-      </Txt>
-      <View style={{ marginTop: spacing.sm, gap: 6 }}>
-        {teams.map((t) => {
-          const sel = selected === t;
-          return (
-            <Pressable
-              key={t}
-              onPress={() => {
-                setSelected(t);
-                setConfirming(false);
-              }}
-              style={[styles.teamRow, sel && styles.teamRowSel]}
-            >
-              <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.gold : colors.textMuted} />
-              <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
-                {t}
-              </Txt>
-              {myTeam === t ? <Tag label="Ton équipe" tone="blue" /> : null}
-            </Pressable>
-          );
-        })}
-      </View>
-      {confirming && selected ? (
-        <View style={styles.confirmBox}>
-          <Txt variant="small" color={colors.text} style={{ fontWeight: '600', textAlign: 'center' }}>
-            Confirmer : « {selected} » remporte le tournoi ?
+
+      {step === 'winner' ? (
+        <>
+          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+            Équipe vainqueure · {teams.length} inscrite{teams.length > 1 ? 's' : ''}
           </Txt>
-          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+          <View style={{ marginTop: spacing.sm, gap: 6 }}>
+            {teams.map((t) => {
+              const sel = selected === t;
+              return (
+                <Pressable key={t} onPress={() => setSelected(t)} style={[styles.teamRow, sel && styles.teamRowSel]}>
+                  <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.gold : colors.textMuted} />
+                  <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
+                    {t}
+                  </Txt>
+                  {myTeam === t ? <Tag label="Ton équipe" tone="blue" /> : null}
+                </Pressable>
+              );
+            })}
+          </View>
+          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
             <View style={{ flex: 1 }}>
-              <Button size="sm" label="Confirmer le vainqueur" icon="trophy" onPress={() => onClose(selected, selected === myTeam)} full />
+              <Button size="sm" label="Valider le vainqueur" icon="flag" onPress={() => setStep('loser')} disabled={!selected} full />
             </View>
-            <Button size="sm" label="Non" variant="ghost" onPress={() => setConfirming(false)} />
+            <Button size="sm" label="Annuler" variant="ghost" onPress={onCancel} />
           </View>
-        </View>
+        </>
       ) : (
-        <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
-          <View style={{ flex: 1 }}>
-            <Button size="sm" label="Valider le vainqueur" icon="flag" onPress={() => setConfirming(true)} disabled={!selected} full />
+        <>
+          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+            Équipe classée dernière ? (facultatif)
+          </Txt>
+          <View style={{ marginTop: spacing.sm, gap: 6 }}>
+            {teams.filter((t) => t !== selected).map((t) => {
+              const sel = loser === t;
+              return (
+                <Pressable key={t} onPress={() => setLoser(t)} style={[styles.teamRow, sel && styles.teamRowSel]}>
+                  <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.coral : colors.textMuted} />
+                  <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
+                    {t}
+                  </Txt>
+                  {myTeam === t ? <Tag label="Ton équipe" tone="blue" /> : null}
+                </Pressable>
+              );
+            })}
           </View>
-          <Button size="sm" label="Annuler" variant="ghost" onPress={onCancel} />
-        </View>
+          <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
+            <Button
+              size="sm"
+              label={loser ? `Clôturer (dernière : ${loser})` : 'Clôturer'}
+              icon="trophy"
+              onPress={() => onClose(selected!, selected === myTeam, loser ?? undefined, !!loser && loser === myTeam)}
+              disabled={!loser}
+              full
+            />
+            <Button size="sm" label="Passer (pas de dernière place)" variant="ghost" onPress={() => onClose(selected!, selected === myTeam)} full />
+          </View>
+        </>
       )}
     </View>
   );
@@ -1427,4 +1478,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     flex: 1,
   },
+  tierRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
+  tierCell: { flex: 1, textAlign: 'center' },
+  tierPrice: { flex: 1.3 },
 });

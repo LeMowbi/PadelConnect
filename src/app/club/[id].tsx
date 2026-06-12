@@ -15,6 +15,7 @@ import { ratingFor, reviewsFor } from '@/data/reviews';
 import { useApp } from '@/store/AppContext';
 import { openWhatsApp } from '@/lib/contact';
 import { fcfa, initials, perPlayer } from '@/lib/format';
+import { minPrice, priceTiersFor } from '@/lib/pricing';
 import { shareClub } from '@/lib/share';
 import { openMaps } from '@/lib/maps';
 import { colors, radius, spacing } from '@/theme';
@@ -59,6 +60,8 @@ export default function ClubDetail() {
   // Une seule source de vérité : la liste (avis utilisateur en tête + avis générés).
   const reviews = reviewsFor(club, state.userReviews);
   const { rating: avgRating, count: ratingCount } = ratingFor(club, state.userReviews);
+  // Plages tarifaires définies par le gérant (vide → tarif unique).
+  const tiers = priceTiersFor(club);
 
   const submit = () => {
     if (rating === 0) {
@@ -167,13 +170,24 @@ export default function ClubDetail() {
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
           <View>
             <Txt variant="muted">Tarif indicatif</Txt>
-            <Txt variant="small" color={colors.textFaint}>soit ~{perPlayer(club.priceFrom)} / joueur à 4</Txt>
+            <Txt variant="small" color={colors.textFaint}>soit ~{perPlayer(minPrice(club))} / joueur à 4</Txt>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Txt variant="price">dès {fcfa(club.priceFrom)}</Txt>
+            <Txt variant="price">dès {fcfa(minPrice(club))}</Txt>
             <Txt variant="small" color={colors.textMuted}>la session · 1h30</Txt>
           </View>
         </View>
+        {/* Détail des plages tarifaires (si le club en a défini). */}
+        {tiers.length > 0 ? (
+          <View style={{ marginTop: spacing.sm, gap: 4 }}>
+            {tiers.map((t) => (
+              <View key={`${t.start}-${t.end}`} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Txt variant="small" color={colors.textMuted}>{t.start} – {t.end}</Txt>
+                <Txt variant="small" color={colors.text} style={{ fontWeight: '600' }}>{fcfa(t.price)}</Txt>
+              </View>
+            ))}
+          </View>
+        ) : null}
         <Txt variant="small" color={colors.textFaint} style={{ marginTop: 4 }}>
           Tarif à confirmer auprès du club.
         </Txt>

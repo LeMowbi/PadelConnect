@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
-import { Pressable, Share, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
+import { canAccessOperator } from '@/lib/access';
 import { COMMISSION_RATE, isPlayed, useApp } from '@/store/AppContext';
 import { addWeeks, dateKeyLabel, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa } from '@/lib/format';
@@ -14,7 +15,7 @@ import { colors, radius, spacing } from '@/theme';
 const PAY_PCT = Math.round(COMMISSION_RATE * 100);
 
 export default function Operateur() {
-  const { state, setBoost, approveClub, rejectClub, setPaymentStatus } = useApp();
+  const { state, setBoost, approveClub, rejectClub, setPaymentStatus, setOperatorNews } = useApp();
 
   // Le décompte est HEBDOMADAIRE (semaine calendaire lundi → dimanche).
   const thisWeek = weekKeyOf(Date.now());
@@ -27,7 +28,8 @@ export default function Operateur() {
   const weekUpcoming = weekAll.length - weekPlayed.length;
   const groups = new Map<string, { clubName: string; count: number; revenue: number; items: typeof state.reservations }>();
   for (const r of weekPlayed) {
-    const price = findClub(r.clubId, state.customClubs, state.clubInfo)?.priceFrom ?? 0;
+    // Volume = somme des PRIX RÉELS des créneaux réservés (figés à la réservation).
+    const price = r.price ?? findClub(r.clubId, state.customClubs, state.clubInfo)?.priceFrom ?? 0;
     const g = groups.get(r.clubId) ?? { clubName: r.clubName, count: 0, revenue: 0, items: [] };
     g.count += 1;
     g.revenue += price;
@@ -73,7 +75,7 @@ export default function Operateur() {
     const lines = row.items
       .sort((a, b) => a.startsAt - b.startsAt)
       // Date ABSOLUE dérivée de dateKey (jamais le libellé relatif « Sem. dernière »).
-      .map((r) => `• ${dateKeyLabel(r.dateKey)} · ${r.time} · ${r.court}${r.bookedBy ? ` · ${r.bookedBy.name}` : ''}`)
+      .map((r) => `• ${dateKeyLabel(r.dateKey)} · ${r.time} · ${r.court}${r.bookedBy ? ` · ${r.bookedBy.name}` : ''} · ${fcfa(r.price ?? 0)}`)
       .join('\n');
     const message =
       `*PadelConnect — Décompte semaine ${weekLabel(week)}*\n${row.clubName}\n\n` +
@@ -87,6 +89,11 @@ export default function Operateur() {
     setPaymentStatus(row.clubId, week, 'sent');
   };
 
+  // Garde d'accès centralisée (src/lib/access.ts). PROTOTYPE : toujours vrai — la
+  // navigation ne change pas. App finale : rendu seulement si le serveur confirme
+  // role === 'operator' (le branchement se fera dans access.ts, pas ici).
+  if (!canAccessOperator()) return null;
+
   return (
     <Screen back title="Espace opérateur" subtitle="PadelConnect — suivi & commissions">
       <View style={styles.note}>
@@ -94,6 +101,12 @@ export default function Operateur() {
         <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
           Chaque fin de semaine : envoie le décompte à chaque club par WhatsApp, il te règle par Wave, tu marques « Payé ».
         </Txt>
+      </View>
+
+      {/* Actualité de l'accueil — éditorialisée par l'opérateur, visible par tous les joueurs */}
+      <View style={{ marginBottom: spacing.md }}>
+        <SectionHeader title="Actualité de l'accueil" />
+        <NewsEditor news={state.operatorNews} onPublish={setOperatorNews} />
       </View>
 
       {/* Relance : semaine précédente prête à facturer */}
@@ -307,6 +320,41 @@ export default function Operateur() {
   );
 }
 
+// Petit éditeur d'actu d'accueil : titre (obligatoire), sous-titre + lien (optionnels).
+function NewsEditor({
+  news,
+  onPublish,
+}: {
+  news: { title: string; subtitle?: string; link?: string } | null;
+  onPublish: (n: { title: string; subtitle?: string; link?: string }) => void;
+}) {
+  const [title, setTitle] = useState(news?.title ?? '');
+  const [subtitle, setSubtitle] = useState(news?.subtitle ?? '');
+  const [link, setLink] = useState(news?.link ?? '');
+  const [saved, setSaved] = useState(false);
+
+  const publish = () => {
+    if (title.trim().length < 3) return;
+    onPublish({ title, subtitle, link });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  return (
+    <Card>
+      <Txt variant="muted" style={{ marginBottom: spacing.sm }}>
+        S'affiche en bandeau en haut de l'accueil joueur. Publier une nouvelle actu la fait réapparaître même chez ceux qui l'avaient fermée.
+      </Txt>
+      <TextInput value={title} onChangeText={setTitle} placeholder="Titre (obligatoire)" placeholderTextColor={colors.textFaint} style={styles.newsInput} />
+      <TextInput value={subtitle} onChangeText={setSubtitle} placeholder="Sous-titre (optionnel)" placeholderTextColor={colors.textFaint} style={styles.newsInput} />
+      <TextInput value={link} onChangeText={setLink} placeholder="Lien (optionnel — https://…)" placeholderTextColor={colors.textFaint} autoCapitalize="none" keyboardType="url" style={styles.newsInput} />
+      <View style={{ marginTop: spacing.md }}>
+        <Button size="sm" label={saved ? 'Publiée ✓' : 'Publier l’actu'} icon={saved ? 'checkmark' : 'megaphone'} onPress={publish} disabled={title.trim().length < 3} full />
+      </View>
+    </Card>
+  );
+}
+
 function Total({ value, label, color, bg }: { value: string; label: string; color: string; bg: string }) {
   return (
     <View style={[styles.total, { backgroundColor: bg }]}>
@@ -367,4 +415,14 @@ const styles = StyleSheet.create({
   },
   totals: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   total: { flex: 1, alignItems: 'center', borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: spacing.xs },
+  newsInput: {
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    color: colors.text,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+    fontSize: 15,
+  },
 });

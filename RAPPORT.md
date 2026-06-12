@@ -290,3 +290,70 @@ dans l'environnement — vérifs par tsc + build + tests node sur la source rée
 | 2. Niveau 3.75 → trophée « Niveau 3.75/4 » | ✓ (`toFixed(2)`) |
 | 3. Salir → Réinitialiser → accueil démo direct, état = première ouverture stricte | ✓ (resetAll efface la clé + loadDemo seed ; test reset 11/11) |
 | 4. Non-régression : clôture 3.50 → 3.75, état seed jamais pollué, tsc, build | ✓ (24/24 tests logique · TypeScript 0 erreur · export OK ; Playwright indisponible ici) |
+
+---
+
+## Patch v4.5 (1 fix + évolutions validées — ⚠ la règle du niveau change)
+
+> Décision en cours de patch (Moustapha) : la **fidélité « 10ᵉ session » (§6) n'est PAS
+> implémentée** — gardée pour plus tard. Tout le reste du périmètre est livré.
+
+### 1. FIX — Bandeau « Résultats du tournoi disponibles »
+Navigue désormais vers **la fiche du tournoi concerné** (`/competition/{id}`, vainqueur
+visible) — l'id est le résultat le plus récent (`closedAt` max) parmi tes inscriptions.
+
+### 2. Tarifs par plage horaire (définis librement par chaque gérant)
+- **Gérant** : « Mon club » → jusqu'à **3 plages** (début, fin, prix) ; ligne vide ignorée ;
+  aucun club sans plages ne change (tarif unique conservé — rétro-compatible).
+- **Joueur** : chaque créneau affiche **le prix de sa plage** (listes Réserver « Par heure »
+  avec ~prix/joueur, « Par club », sheet, écran Réserver, Mes réservations) ; fiche club :
+  « dès {min des plages} » + **détail des plages** dans le bloc Tarif.
+- **Opérateur** : le prix RÉEL est **figé sur la réservation à sa création**
+  (`Reservation.price`) — volume, commission 10 % et message Wave l'utilisent (détail par
+  ligne inclus). Anciennes réservations sans prix : repli sur le tarif du club.
+- **Seeds** : Padelta = 10 000 (7h–16h) / 30 000 (16h–20h30) / 15 000 (20h30–24h),
+  `priceFrom` aligné à 10 000.
+
+### 3. Bandeau actu éditorialisable (opérateur)
+Bloc « Actualité de l'accueil » dans l'Espace opérateur (titre obligatoire, sous-titre,
+lien) → bandeau fermable en haut de l'accueil joueur ; fermeture mémorisée **par contenu**
+(nouvelle actu = nouvel id → réapparaît). Seed : « 🎾 FIP Gold Abidjan … » + padelfip.com.
+
+### 4. ⚠ Nouvelle règle de niveau + Classement
+- Vainqueur officiel : **+0.50** (borné 7.0) ; textes mis à jour partout (grep ci-dessous).
+- **Malus facultatif** : à la clôture, étape 2 « Équipe classée dernière ? » avec
+  « Passer » — l'équipe désignée perd **−0.25** (plancher 1.0) ; palmarès « Dernière
+  place · {tournoi} → Niveau X » (profil, fiche tournoi, cartes).
+- **Écran `/classement`** (tuile accueil) : seeds + toi triés par niveau, ton rang
+  surligné « Toi », tap sur un joueur → mini-fiche + Suivre.
+
+### 5. « Prévenir mes partenaires »
+Le message WhatsApp inclut « Prévois **{prix réel/4} FCFA** chacun. » (30 000 → 7 500).
+
+### 7. Mini-fiches joueurs + Suivre
+Tap sur un ami (Amis) ou une équipe inscrite (fiche tournoi) → **bottom sheet** (niveau,
+tournois joués/gagnés, club favori, **Suivre**). Section « Suivis » dans Amis, retirable.
+
+### 8. Sécurité (préparation app finale — zéro changement de comportement)
+Nouveau module **`src/lib/access.ts`** : point d'entrée UNIQUE des décisions d'accès
+(`canAccessOperator`, `canAccessClub`), branché dans l'Espace opérateur et l'Espace Club
+(le CodeGate passe par lui). TODO structurés : opérateur rendu si `role === 'operator'`
+côté serveur ; gérants = compte par club (téléphone + OTP, Supabase Auth + RLS). La
+migration sera un branchement dans ce module, pas une réécriture. **Navigation inchangée.**
+
+### Tests (Playwright indisponible ici — tsc + build + 41 tests node, dont la vraie source pour jours/tarifs)
+| Test mission | Résultat |
+|---|---|
+| 1. Bandeau → `/competition/c-fin`, vainqueur visible | ✓ (cible = id du résultat le plus récent) |
+| 2. Plages Padelta : 10:30 → 10 000 (~2 500/j) · 18:00 → 30 000 (~7 500/j) · fiche « dès 10 000 » + détail · résa 18:00 → 30 000 partout, commission 3 000 | ✓ (tests sur la vraie `priceForSlot`/`minPrice`/`perPlayer` : 13/13) |
+| 3. Actu publiée → bandeau ; croix → disparaît ; nouvelle actu → réapparaît | ✓ (id par publication, fermeture mémorisée par id) |
+| 4. +0.50 (3.50 → 4.00) · dernière −0.25 · plancher 1.0 (seed Idriss 1.0) · « Passer » · grep « +0.25 » = 0 · classement réordonné, rang surligné | ✓ (tests reducers 5/5 + grep vide) |
+| 5. Message partenaires à 30 000 → « 7 500 FCFA chacun » | ✓ |
+| 6. Fidélité 10ᵉ session | — non implémentée (décision Moustapha : pour plus tard) |
+| 7. Karim (Amis) → mini-fiche + Suivre → « Suivis » → retirable | ✓ |
+| 8. Espace opérateur accessible comme avant ; guard centralisé + TODO | ✓ (`src/lib/access.ts`) |
+| 9. Non-régression (résa+ami, annulation sheet, anti-double, blocage J+2, Wave hebdo prix réels, reset strict, routes) | ✓ (41/41 tests · tsc 0 erreur · export OK, 15 routes dont /classement) |
+
+**Greps clés** : `grep -rn '+0.25' src/` → **0 occurrence** (seul le malus « −0.25 » et la
+constante `LEVEL_PENALTY` existent) · `Reservation.price` écrit dans `addReservation`
+(écran Réserver + sheet + seeds démo) et lu par l'opérateur (`r.price ?? priceFrom`).

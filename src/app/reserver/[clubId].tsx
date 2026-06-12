@@ -10,6 +10,7 @@ import { seedCompetitions } from '@/data/competitions';
 import { courtsFor, freeCourts, hasCompetition, openSlotsFor, type AvailCtx } from '@/lib/availability';
 import { nextDays, slotTimestamp, type DayOption } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
+import { minPrice, priceForSlot, priceTiersFor } from '@/lib/pricing';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
@@ -61,6 +62,8 @@ export default function ReserverScreen() {
   };
 
   const ready = !!day && !!slot && !!court && !compToday;
+  const hasTiers = priceTiersFor(club).length > 0;
+  const slotPrice = slot ? priceForSlot(club, slot) : minPrice(club);
 
   const confirm = () => {
     if (!day || !slot || !court) return;
@@ -70,7 +73,7 @@ export default function ReserverScreen() {
       ...state.friends.filter((f) => friendIds.includes(f.id)).map((f) => ({ id: f.id, name: f.name, confirmed: false })),
       ...extraNames.map((n, i) => ({ id: `x-${Date.now()}-${i}`, name: n, confirmed: false })),
     ];
-    const ok = addReservation({ clubId: club.id, clubName: club.name, court, date: day.label, dateKey: day.key, time: slot, startsAt, players: 1 + invited.length, invited });
+    const ok = addReservation({ clubId: club.id, clubName: club.name, court, date: day.label, dateKey: day.key, time: slot, startsAt, price: priceForSlot(club, slot), players: 1 + invited.length, invited });
     if (ok) setDone(true);
     else setCourt(null); // terrain pris entre-temps
   };
@@ -93,8 +96,8 @@ export default function ReserverScreen() {
             <Row label="Heure" value={slot!} />
             <Row label="Durée" value="1h30" />
             <Row label="Participants" value={`Toi${participantCount > 0 ? ` + ${participantCount}` : ''}`} />
-            <Row label="Tarif (session 1h30)" value={`dès ${fcfa(club.priceFrom)}`} />
-            <Row label="≈ par joueur (à 4)" value={perPlayer(club.priceFrom)} />
+            <Row label="Tarif (session 1h30)" value={fcfa(slotPrice)} />
+            <Row label="≈ par joueur (à 4)" value={perPlayer(slotPrice)} />
           </View>
           <View style={{ alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.lg }}>
             <Button label="Voir mes réservations" icon="calendar" onPress={() => router.push('/reservations')} full />
@@ -130,7 +133,8 @@ export default function ReserverScreen() {
           const isPast = !!day && slotTs <= Date.now();
           const noCourt = !!day && freeCourts(club, day.key, s, ctx).length === 0;
           const blocked = !day || compToday || isPast || noCourt;
-          const label = isPast ? `${s} · passé` : noCourt ? `${s} · complet` : s;
+          // Avec des plages tarifaires, on montre le prix de chaque créneau.
+          const label = isPast ? `${s} · passé` : noCourt ? `${s} · complet` : hasTiers ? `${s} · ${fcfa(priceForSlot(club, s))}` : s;
           return <Chip key={s} label={label} active={s === slot} disabled={blocked} onPress={() => { setSlot(s); setCourt(null); }} size="lg" />;
         })}
         {openSlots.length === 0 ? (
@@ -178,9 +182,9 @@ export default function ReserverScreen() {
       <Card style={styles.priceRow}>
         <View>
           <Txt variant="muted">Tarif (session 1h30)</Txt>
-          <Txt variant="small" color={colors.textFaint}>soit ~{perPlayer(club.priceFrom)} / joueur à 4</Txt>
+          <Txt variant="small" color={colors.textFaint}>soit ~{perPlayer(slotPrice)} / joueur à 4</Txt>
         </View>
-        <Txt variant="price">dès {fcfa(club.priceFrom)}</Txt>
+        <Txt variant="price">{slot ? fcfa(slotPrice) : `dès ${fcfa(slotPrice)}`}</Txt>
       </Card>
 
       <View style={{ marginTop: spacing.lg }}>

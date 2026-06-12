@@ -14,6 +14,7 @@ export type Club = {
   blurb: string;
   amenities: string[];
   priceFrom: number; // FCFA / session (1h30) — INDICATIF, « dès » (heures creuses)
+  priceTiers?: PriceTier[]; // tarifs par plage horaire (prioritaires sur priceFrom si présents)
   rating: number; // moyenne communautaire (démo)
   reviewsCount: number; // démo
   mapsQuery: string; // requête Google Maps
@@ -22,6 +23,10 @@ export type Club = {
   photos?: string[]; // photos officielles (sinon photos illustratives par défaut)
   offers?: { title: string; detail: string }[];
 };
+
+// Tarif d'une plage horaire défini librement par le gérant : [start, end[ → prix FCFA.
+// Heures « HH:MM » comparées en chaînes (format fixe). Une plage vide (prix 0) est ignorée.
+export type PriceTier = { start: string; end: string; price: number };
 
 export const CITY = 'Abidjan';
 
@@ -158,7 +163,13 @@ export const clubs: Club[] = [
     blurb:
       "Club indoor à Cocody Danga avec terrains couverts homologués FIP, salle de sport et café. À 5 min du Plateau et de la Riviera.",
     amenities: ['Terrains couverts', 'Café La Pausa', 'Salle de sport', 'Vestiaires'],
-    priceFrom: 22000,
+    priceFrom: 10000,
+    // Tarifs réels Padelta : heures creuses, prime time, fin de soirée.
+    priceTiers: [
+      { start: '07:00', end: '16:00', price: 10000 },
+      { start: '16:00', end: '20:30', price: 30000 },
+      { start: '20:30', end: '23:59', price: 15000 },
+    ],
     rating: 4.8,
     reviewsCount: 73,
     mapsQuery: 'Padelta Cocody Danga Abidjan',
@@ -199,8 +210,8 @@ export type CustomClub = Club & {
   createdAt: number;
 };
 
-// Surcharges du gérant (nom, quartier, description, type, tarif, WhatsApp).
-export type ClubOverrides = Record<string, Partial<Pick<Club, 'name' | 'area' | 'blurb' | 'type' | 'priceFrom'>> & { contactPhone?: string }>;
+// Surcharges du gérant (nom, quartier, description, type, tarif, plages, WhatsApp).
+export type ClubOverrides = Record<string, Partial<Pick<Club, 'name' | 'area' | 'blurb' | 'type' | 'priceFrom' | 'priceTiers'>> & { contactPhone?: string }>;
 
 function applyInfo(club: Club, overrides?: ClubOverrides): Club & { contactPhone?: string } {
   const patch = overrides?.[club.id];
