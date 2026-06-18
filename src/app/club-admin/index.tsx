@@ -19,7 +19,7 @@ import { isPlayed, useApp, type ClubInfo } from '@/store/AppContext';
 import { openWhatsApp } from '@/lib/contact';
 import { fcfa, initials } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, shadows, spacing } from '@/theme';
 
 // Sessions de 1h30 — la grille complète que le club peut ouvrir/fermer.
 const ALL_TIMES = [
@@ -398,22 +398,27 @@ export default function ClubAdmin() {
                   </View>
                   {week.map((d) => {
                     const info = cellInfo(d.key, t);
-                    const bg =
-                      info.kind === 'tournoi'
-                        ? colors.purple
+                    // Restyle « maquette » : RÉSERVÉ (via l'app) = signature plein + ombre ;
+                    // LIBRE = surface + bordure ; BLOQUÉ (hors app) = surfaceAlt + cadenas.
+                    // On réutilise tel quel les statuts calculés par cellInfo (aucune logique modifiée).
+                    const blockedOnly = info.kind === 'horsapp';
+                    const tournoi = info.kind === 'tournoi';
+                    const cellStyle =
+                      tournoi
+                        ? styles.planCellTournoi
                         : info.kind === 'complet'
-                          ? colors.signature
-                          : info.kind === 'horsapp'
-                            ? colors.coralSoft
-                            : info.kind === 'partiel'
-                              ? colors.signatureSoft
-                              : colors.surfaceAlt;
+                          ? styles.planCellReserved
+                          : info.kind === 'partiel'
+                            ? styles.planCellPartial
+                            : blockedOnly
+                              ? styles.planCellBlocked
+                              : styles.planCellFree;
                     const sel = selectedCell?.dateKey === d.key && selectedCell?.time === t;
                     return (
                       <Pressable
                         key={d.key}
                         onPress={() => setSelectedCell({ dateKey: d.key, time: t, label: `${d.label} · ${t}`, value: d.value })}
-                        style={[styles.planCell, { backgroundColor: bg }, sel && styles.planCellSel]}
+                        style={[styles.planCell, cellStyle, sel && styles.planCellSel]}
                       >
                         {info.kind === 'partiel' ? (
                           <Txt variant="small" color={colors.signature} style={{ fontSize: 10, fontWeight: '800' }}>
@@ -421,18 +426,18 @@ export default function ClubAdmin() {
                           </Txt>
                         ) : null}
                         {info.kind === 'complet' ? <Ionicons name="checkmark" size={11} color={colors.onSignature} /> : null}
-                        {info.kind === 'horsapp' ? <Ionicons name="lock-closed" size={10} color={colors.coral} /> : null}
-                        {info.kind === 'tournoi' ? <Ionicons name="trophy" size={10} color={colors.white} /> : null}
+                        {blockedOnly ? <Ionicons name="lock-closed" size={10} color={colors.textFaint} /> : null}
+                        {tournoi ? <Ionicons name="trophy" size={10} color={colors.onSignature} /> : null}
                       </Pressable>
                     );
                   })}
                 </View>
               ))}
               <View style={styles.planLegend}>
-                <LegendDot color={colors.surfaceAlt} label="Libre" />
+                <LegendDot color={colors.signature} label="Réservé" />
+                <LegendDot color={colors.surface} label="Libre" />
+                <LegendDot color={colors.surfaceAlt} label="Bloqué" />
                 <LegendDot color={colors.signatureSoft} label="Partiel" />
-                <LegendDot color={colors.signature} label="Complet" />
-                <LegendDot color={colors.coralSoft} label="Hors app" />
                 <LegendDot color={colors.purple} label="Tournoi" />
               </View>
             </Card>
@@ -1404,17 +1409,27 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   stats: { flexDirection: 'row', gap: spacing.sm },
-  planRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 3 },
+  planRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   planTime: { width: 44, alignItems: 'flex-start' },
   planHead: { flex: 1, alignItems: 'center', paddingBottom: 2 },
   planCell: {
     flex: 1,
-    height: 30,
-    borderRadius: 6,
-    marginHorizontal: 1.5,
+    height: 38,
+    borderRadius: radius.sm,
+    marginHorizontal: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // RÉSERVÉ via l'app (créneau complet) — fond signature, contenu blanc, légère ombre.
+  planCellReserved: { backgroundColor: colors.signature, ...shadows.e1 },
+  // Partiellement réservé via l'app — teinte signature douce.
+  planCellPartial: { backgroundColor: colors.signatureSoft, borderWidth: 1, borderColor: colors.border },
+  // LIBRE — surface claire + bordure discrète.
+  planCellFree: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  // BLOQUÉ hors app — fond sourd + cadenas (l'effet hachuré n'est pas faisable simplement en RN).
+  planCellBlocked: { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
+  // Jour de tournoi — accent violet de l'univers Tournois.
+  planCellTournoi: { backgroundColor: colors.purple, ...shadows.e1 },
   planCellSel: { borderWidth: 2, borderColor: colors.text },
   teamRow: {
     flexDirection: 'row',
