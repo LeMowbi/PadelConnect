@@ -10,13 +10,14 @@ import { Button, Card, EmptyState, Txt } from '@/components/ui';
 import { SAMPLE_SLOTS, activeClubs, type Club } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { clubsFreeAt, freeCourts, openSlotsFor, slotGrid, type AvailCtx } from '@/lib/availability';
-import { nextDays, slotTimestamp } from '@/lib/days';
+import { nextDays, slotTimestamp, type DayOption } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
 import { minPrice, priceForSlot } from '@/lib/pricing';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, shadows, spacing } from '@/theme';
 
 const VIEWS = ['Par heure', 'Par club'] as const;
+const DOW = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
 // Créneaux très demandés en sortie de bureau (indicateur « heure chargée »).
 const PRIME_TIMES = new Set(['16:30', '18:00', '19:30']);
 
@@ -31,10 +32,12 @@ export default function ReserverScreen() {
     [days]
   );
   const [day, setDay] = useState(todayOver ? days[1] : days[0]);
+  const [slot, setSlot] = useState<string | null>(null); // créneau choisi (vue « Par heure » guidée)
   // La dernière vue utilisée est mémorisée (l'écran rouvre comme tu l'avais laissé).
   const view = state.reserverView;
   const setView = setReserverView;
   const [sheet, setSheet] = useState<{ club: Club; time: string } | null>(null);
+  const pickDay = (d: DayOption) => { setDay(d); setSlot(null); };
 
   const visibleClubs = useMemo(() => activeClubs(state.customClubs, state.clubInfo), [state.customClubs, state.clubInfo]);
   const ctx: AvailCtx = {
@@ -53,6 +56,7 @@ export default function ReserverScreen() {
       return { time, ts, clubs: clubsFreeAt(day.key, time, ts, ctx) };
     })
     .filter((r) => r.ts > Date.now()); // on masque les heures déjà passées
+  const selectedRow = rows.find((r) => r.time === slot) ?? null;
 
   // Vue « Par club » : pour chaque club, ses créneaux encore libres ce jour.
   const byClub = visibleClubs.map((club) => ({
@@ -70,11 +74,22 @@ export default function ReserverScreen() {
 
   return (
     <Screen back title="Réserver" subtitle="Sessions de 1h30 — on te montre les terrains libres">
-      {/* Jour */}
+      {/* Jour — pastilles (maquette) : jour abrégé + numéro, signature si actif */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingVertical: spacing.sm }}>
-        {days.map((d) => (
-          <Chip key={d.label} label={d.label} active={d.label === day.label} onPress={() => setDay(d)} size="lg" />
-        ))}
+        {days.map((d, i) => {
+          const dd = new Date(d.value);
+          const active = d.key === day.key;
+          return (
+            <Pressable key={d.key} onPress={() => pickDay(d)} style={[styles.dayPill, active && styles.dayPillActive]}>
+              <Txt variant="small" color={active ? colors.onSignature : colors.textFaint} style={{ fontSize: 10, fontWeight: '700' }}>
+                {i === 0 ? 'AUJ.' : DOW[dd.getDay()]}
+              </Txt>
+              <Txt variant="h3" color={active ? colors.onSignature : colors.text} style={{ fontSize: 18 }}>
+                {dd.getDate()}
+              </Txt>
+            </Pressable>
+          );
+        })}
       </ScrollView>
 
       {todayOver && day.key === days[1].key ? (
@@ -92,7 +107,7 @@ export default function ReserverScreen() {
         <Ionicons name="hand-left-outline" size={15} color={colors.textFaint} />
         <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
           {view === 'Par heure'
-            ? 'Touche un club libre pour choisir ton terrain et réserver.'
+            ? 'Choisis un créneau, puis le club où réserver.'
             : 'Touche une heure libre pour réserver dans ce club.'}
         </Txt>
       </View>
@@ -108,32 +123,47 @@ export default function ReserverScreen() {
             {isToday ? <Button label="Voir demain" icon="arrow-forward" onPress={goTomorrow} /> : null}
           </View>
         ) : (
-          rows.map((row) => (
-            <View key={row.time} style={styles.hourBlock}>
-              <View style={styles.hourHead}>
-                <Ionicons name="time" size={15} color={colors.signature} />
-                <Txt variant="h3" style={{ fontSize: 15 }}>
-                  {row.time}
-                </Txt>
-                <Txt variant="small" color={colors.textFaint}>
-                  · 1h30
-                </Txt>
-                {PRIME_TIMES.has(row.time) ? (
-                  <View style={styles.primePill}>
-                    <Ionicons name="flame" size={11} color={colors.coral} />
-                    <Txt variant="small" color={colors.coral} style={{ fontSize: 11, fontWeight: '700' }}>
-                      heure chargée
+          <>
+            {/* Grille de créneaux (maquette) : on choisit d'abord l'heure */}
+            <Txt variant="label" color={colors.textFaint} style={{ marginBottom: spacing.sm }}>
+              Choisis un créneau · 1h30
+            </Txt>
+            <View style={styles.slotGrid}>
+              {rows.map((row) => {
+                const sel = slot === row.time;
+                const none = row.clubs.length === 0;
+                return (
+                  <Pressable
+                    key={row.time}
+                    disabled={none}
+                    onPress={() => setSlot(row.time)}
+                    style={[styles.slotTile, sel ? styles.slotTileSel : none ? styles.slotTileOff : styles.slotTileFree]}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Txt variant="h3" color={sel ? colors.onSignature : colors.text} style={{ fontSize: 18 }}>
+                        {row.time}
+                      </Txt>
+                      {PRIME_TIMES.has(row.time) && !sel ? <Ionicons name="flame" size={12} color={colors.coral} /> : null}
+                    </View>
+                    <Txt variant="small" color={sel ? colors.onSignature : none ? colors.textFaint : colors.green} style={{ fontWeight: '700', fontSize: 11 }}>
+                      {none ? 'Complet' : `${row.clubs.length} club${row.clubs.length > 1 ? 's' : ''} libre${row.clubs.length > 1 ? 's' : ''}`}
                     </Txt>
-                  </View>
-                ) : null}
-              </View>
-              {row.clubs.length === 0 ? (
-                <Txt variant="small" color={colors.textFaint} style={{ paddingLeft: spacing.xs }}>
-                  Aucun terrain libre à cet horaire.
-                </Txt>
-              ) : (
-                row.clubs.map(({ club, free }) => (
-                  <Pressable key={club.id} onPress={() => open(club, row.time)} style={styles.clubMini}>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Clubs disponibles pour le créneau choisi */}
+            {selectedRow ? (
+              <View style={{ marginTop: spacing.lg }}>
+                <View style={styles.infoPill}>
+                  <Ionicons name="business-outline" size={15} color={colors.blue} />
+                  <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
+                    {selectedRow.clubs.length} club{selectedRow.clubs.length > 1 ? 's ont' : ' a'} ce créneau libre · {slot}
+                  </Txt>
+                </View>
+                {selectedRow.clubs.map(({ club, free }) => (
+                  <Pressable key={club.id} onPress={() => open(club, selectedRow.time)} style={styles.clubMini}>
                     <View style={{ flex: 1 }}>
                       <Txt variant="body" style={{ fontWeight: '700' }} numberOfLines={1}>
                         {club.name}
@@ -148,20 +178,26 @@ export default function ReserverScreen() {
                           {free} libre{free > 1 ? 's' : ''}
                         </Txt>
                       </View>
-                      {/* Prix RÉEL de ce créneau (selon la plage horaire du club). */}
                       <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
-                        {fcfa(priceForSlot(club, row.time))}
+                        {fcfa(priceForSlot(club, selectedRow.time))}
                       </Txt>
                       <Txt variant="small" color={colors.textFaint} style={{ fontSize: 11 }}>
-                        ~{perPlayer(priceForSlot(club, row.time))}/joueur
+                        ~{perPlayer(priceForSlot(club, selectedRow.time))}/joueur
                       </Txt>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
                   </Pressable>
-                ))
-              )}
-            </View>
-          ))
+                ))}
+              </View>
+            ) : (
+              <View style={[styles.infoPill, { marginTop: spacing.lg }]}>
+                <Ionicons name="hand-left-outline" size={15} color={colors.textFaint} />
+                <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
+                  Choisis un créneau ci-dessus pour voir les clubs libres.
+                </Txt>
+              </View>
+            )}
+          </>
         )
       ) : noSlotsByClub ? (
         <View>
@@ -207,6 +243,31 @@ export default function ReserverScreen() {
 }
 
 const styles = StyleSheet.create({
+  dayPill: {
+    minWidth: 54,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  dayPillActive: { backgroundColor: colors.signature, borderColor: colors.signature, ...shadows.e1 },
+  slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  slotTile: { width: '47.5%', flexGrow: 1, borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: spacing.md, gap: 4 },
+  slotTileFree: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  slotTileSel: { backgroundColor: colors.signature, ...shadows.e2 },
+  slotTileOff: { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border, opacity: 0.6 },
+  infoPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.blueSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
   legend: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md, paddingHorizontal: spacing.xs },
   autoHint: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.xs },
   hourBlock: { marginBottom: spacing.lg },
