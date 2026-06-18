@@ -211,6 +211,18 @@ export default function ProfilScreen() {
         </Card>
       </View>
 
+      {/* La suite — fonctions qui arrivent avec la version connectée (serveur) */}
+      <View style={{ marginTop: spacing.xl }}>
+        <Card onPress={() => router.push('/a-venir')} style={styles.cta}>
+          <IconCircle icon="rocket-outline" color={colors.signature} bg={colors.signatureSoft} />
+          <View style={{ flex: 1 }}>
+            <Txt variant="h3">La suite</Txt>
+            <Txt variant="muted">Ce qui arrive avec la version connectée.</Txt>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+        </Card>
+      </View>
+
       <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
         <Button label="Mentions légales & CGU" icon="document-text-outline" variant="ghost" onPress={() => router.push('/legal')} />
         <Button label="Se déconnecter" icon="log-out-outline" variant="secondary" onPress={signOut} />

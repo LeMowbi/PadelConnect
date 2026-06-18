@@ -539,3 +539,18 @@ de la base visuelle ; cette tranche leur applique la même finition premium que 
 
 > Rappel : la **logique** de ces espaces (multi-comptes, droits par club, accès opérateur
 > sécurisé) relève de la version serveur (§B). En prototype, ils sont pleinement démontrables.
+
+---
+
+## Patch v4.6.2 — Page « La suite » (présentation honnête du §B)
+
+Pour présenter ce qui n'est pas encore fait **sans faux boutons** : nouvel écran **`/a-venir`
+« La suite »**, accessible depuis une carte discrète du Profil. Il liste les fonctions §B
+(serveur) par thème — Confiance & qualité, Rester connecté, Pour les clubs, Compte & sécurité —
+chacune avec une étiquette **« Bientôt »**, et un rappel que le prototype montre déjà tout le
+reste. Les écrans qui marchent restent propres ; rien n'est facturé au joueur. tsc 0 · lint 0/0
+· 107 tests · export OK (route `/a-venir`).
+
+> **Note déploiement** : la démo (`gh-pages`) est bien republiée à chaque patch (hash du bundle
+> JS différent à chaque fois). Si « rien ne change » à l'écran, c'est le **cache du navigateur** :
+> ouvrir en navigation privée, ou ajouter `?v=462` à l'URL pour forcer le rechargement.
