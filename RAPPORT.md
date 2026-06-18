@@ -522,3 +522,20 @@ avec interdiction explicite de réintroduire Victoire/Défaite. J'ai fait tout *
 **§B (serveur) non câblé**, comme convenu : notifications, fiabilité, avis vérifiés, anti
 no-show, parrainage, heures creuses, stats club, hors-ligne, accès opérateur PIN — pour la
 vraie version Supabase.
+
+---
+
+## Patch v4.6.1 — Espace Club & Opérateur « présentables » (finition, design pur)
+
+Les deux espaces pro étaient déjà **fonctionnels** (prototype mono-appareil) et avaient hérité
+de la base visuelle ; cette tranche leur applique la même finition premium que les écrans joueur.
+- **Opérateur** : nouveau **hero « Commission cumulée »** (grand chiffre or + nb de parties
+  jouées depuis le lancement) — chiffre vitrine pour le pitch. Les compteurs (santé plateforme +
+  totaux semaine) passent sur le **`StatTile` partagé** (grands chiffres Bricolage, cohérents
+  avec le Profil). Composants locaux `Total`/`Mini` supprimés.
+- **Espace Club** : `StatTile` **local dédupliqué** → on utilise le composant partagé du kit
+  (mêmes gros chiffres partout : à venir / jouées / occupation / heure phare…).
+- Aucune logique touchée ; **tsc 0 · lint 0/0 · 107 tests verts · export OK**.
+
+> Rappel : la **logique** de ces espaces (multi-comptes, droits par club, accès opérateur
+> sécurisé) relève de la version serveur (§B). En prototype, ils sont pleinement démontrables.

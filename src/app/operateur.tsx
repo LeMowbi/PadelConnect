@@ -2,14 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Screen } from '@/components/Screen';
-import { Button, Card, Divider, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
+import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { canAccessOperator } from '@/lib/access';
 import { COMMISSION_RATE, isPlayed, useApp } from '@/store/AppContext';
 import { addWeeks, dateKeyLabel, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
-import { colors, radius, spacing } from '@/theme';
+import { colors, font, radius, shadows, spacing } from '@/theme';
 
 const PAY_PCT = Math.round(COMMISSION_RATE * 100);
 
@@ -38,6 +38,11 @@ export default function Operateur() {
   const rows = [...groups.entries()]
     .map(([clubId, g]) => ({ clubId, ...g, commission: Math.round(g.revenue * COMMISSION_RATE) }))
     .sort((a, b) => b.revenue - a.revenue);
+
+  // Commission cumulée DEPUIS LE LANCEMENT (toutes semaines) — chiffre vitrine.
+  const allTimePlayedRes = state.reservations.filter((r) => isPlayed(r));
+  const allTimePlayed = allTimePlayedRes.length;
+  const allTimeCommission = Math.round(allTimePlayedRes.reduce((s, r) => s + (r.price ?? 0), 0) * COMMISSION_RATE);
 
   const totalCount = rows.reduce((s, r) => s + r.count, 0);
   const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
@@ -119,11 +124,20 @@ export default function Operateur() {
         </Pressable>
       ) : null}
 
+      {/* Hero — commission cumulée depuis le lancement (chiffre vitrine) */}
+      <Card style={styles.hero}>
+        <Txt variant="label" color={colors.textFaint}>Commission PadelConnect — cumulée</Txt>
+        <Txt style={styles.heroValue}>{fcfa(allTimeCommission)}</Txt>
+        <Txt variant="small" color={colors.textMuted}>
+          {allTimePlayed} partie{allTimePlayed > 1 ? 's' : ''} jouée{allTimePlayed > 1 ? 's' : ''} · 10 % réglés par Wave (hors app)
+        </Txt>
+      </Card>
+
       {/* Santé plateforme */}
       <View style={styles.health}>
-        <Mini value={`${activeClubsCount}`} label="Clubs actifs" color={colors.blue} />
-        <Mini value={`${resThisWeek}`} label="Résas / 7 j" color={colors.green} sub={resThisWeek >= resPrevWeek ? '▲' : '▼'} />
-        <Mini value={fcfa(totalCommission)} label="Commission semaine" color={colors.amber} />
+        <StatTile value={`${activeClubsCount}`} label="Clubs actifs" color={colors.blue} bg={colors.blueSoft} />
+        <StatTile value={`${resThisWeek} ${resThisWeek >= resPrevWeek ? '▲' : '▼'}`} label="Résas / 7 j" color={colors.green} bg={colors.greenSoft} />
+        <StatTile value={fcfa(totalCommission)} label="Commission semaine" color={colors.amber} bg={colors.amberSoft} />
       </View>
 
       {/* Sélecteur de semaine ‹ › */}
@@ -156,9 +170,9 @@ export default function Operateur() {
           Semaine {weekLabel(week)}
         </Txt>
         <View style={styles.totals}>
-          <Total value={`${totalCount}`} label="Parties jouées" color={colors.blue} bg={colors.blueSoft} />
-          <Total value={fcfa(totalRevenue)} label="Volume" color={colors.green} bg={colors.greenSoft} />
-          <Total value={fcfa(totalDue)} label="Reste à encaisser" color={colors.amber} bg={colors.amberSoft} />
+          <StatTile value={`${totalCount}`} label="Parties jouées" color={colors.blue} bg={colors.blueSoft} />
+          <StatTile value={fcfa(totalRevenue)} label="Volume" color={colors.green} bg={colors.greenSoft} />
+          <StatTile value={fcfa(totalDue)} label="Reste à encaisser" color={colors.amber} bg={colors.amberSoft} />
         </View>
         {weekUpcoming > 0 ? (
           <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
@@ -354,36 +368,11 @@ function NewsEditor({
   );
 }
 
-function Total({ value, label, color, bg }: { value: string; label: string; color: string; bg: string }) {
-  return (
-    <View style={[styles.total, { backgroundColor: bg }]}>
-      <Txt variant="h3" color={color} style={{ fontSize: 16 }}>
-        {value}
-      </Txt>
-      <Txt variant="small" color={colors.textMuted} style={{ textAlign: 'center' }}>
-        {label}
-      </Txt>
-    </View>
-  );
-}
-
-function Mini({ value, label, color, sub }: { value: string; label: string; color: string; sub?: string }) {
-  return (
-    <View style={styles.mini}>
-      <Txt variant="h3" color={color} style={{ fontSize: 15 }}>
-        {value} {sub ? <Txt variant="small" color={color}>{sub}</Txt> : null}
-      </Txt>
-      <Txt variant="small" color={colors.textMuted} numberOfLines={1}>
-        {label}
-      </Txt>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   note: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
+  hero: { ...shadows.e2, marginBottom: spacing.md, alignItems: 'flex-start', gap: 2 },
+  heroValue: { fontSize: font.size.display, fontFamily: font.family.heavy, fontWeight: font.weight.heavy, color: colors.amber, letterSpacing: -0.5 },
   health: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  mini: { flex: 1, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md },
   weekNav: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -413,7 +402,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   totals: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  total: { flex: 1, alignItems: 'center', borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: spacing.xs },
   newsInput: {
     backgroundColor: colors.bg,
     borderWidth: 1,

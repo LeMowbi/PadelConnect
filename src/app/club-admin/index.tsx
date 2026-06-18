@@ -7,7 +7,7 @@ import { ClubPhoto } from '@/components/ClubPhoto';
 import { Screen } from '@/components/Screen';
 import { BottomSheet } from '@/components/BottomSheet';
 import { SegmentedControl } from '@/components/SegmentedControl';
-import { Button, Card, Divider, EmptyState, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
+import { Button, Card, Divider, EmptyState, IconCircle, SectionHeader, StatTile, Tag, Txt } from '@/components/ui';
 import { SAMPLE_SLOTS, clubsByName, defaultCourts, findClub, manageableClubs, type Club, type PriceTier } from '@/data/clubs';
 import { coaches as allCoaches } from '@/data/coaches';
 import { demoTeams, seedCompetitions, teamCount, type Competition } from '@/data/competitions';
@@ -1379,19 +1379,6 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   );
 }
 
-function StatTile({ value, label, color, bg }: { value: number | string; label: string; color: string; bg: string }) {
-  return (
-    <View style={[styles.stat, { backgroundColor: bg }]}>
-      <Txt variant="h2" color={color}>
-        {value}
-      </Txt>
-      <Txt variant="small" color={colors.textMuted}>
-        {label}
-      </Txt>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   note: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
   banner: {
@@ -1460,12 +1447,6 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   planLegend: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.md },
-  stat: {
-    flex: 1,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
   removeBadge: {
     position: 'absolute',
     top: 4,
