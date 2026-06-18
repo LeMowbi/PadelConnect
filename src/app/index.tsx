@@ -8,32 +8,26 @@ import { CompetitionCard } from '@/components/CompetitionCard';
 import { Logo } from '@/components/Logo';
 import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
-import { Button, Card, IconCircle, SectionHeader, Txt } from '@/components/ui';
+import { Card, SectionHeader, Txt } from '@/components/ui';
 import { activeClubs } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { dayKey } from '@/lib/days';
+import { initials } from '@/lib/format';
 import { isBirthdayToday, parseBirthDate, zodiacFor } from '@/lib/zodiac';
 import { useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
+// Accès rapide — 4 univers, un accent chacun (maquette Accueil).
 type Action = { icon: keyof typeof Ionicons.glyphMap; label: string; route: string; tint: string; bg: string };
-
 const ACTIONS: Action[] = [
-  { icon: 'calendar', label: 'Mes réservations', route: '/reservations', tint: colors.green, bg: colors.greenSoft },
+  { icon: 'calendar', label: 'Réserver', route: '/reserver', tint: colors.signature, bg: colors.signatureSoft },
   { icon: 'trophy', label: 'Tournois', route: '/competitions', tint: colors.purple, bg: colors.purpleSoft },
-  { icon: 'school', label: 'Trouver un coach', route: '/coachs', tint: colors.blue, bg: colors.blueSoft },
-  { icon: 'book', label: 'Découvrir le padel', route: '/decouvrir', tint: colors.coral, bg: colors.coralSoft },
+  { icon: 'school', label: 'Coachs', route: '/coachs', tint: colors.blue, bg: colors.blueSoft },
+  { icon: 'people', label: 'Amis', route: '/amis', tint: colors.coral, bg: colors.coralSoft },
 ];
 
-function countdown(ts: number): string {
-  const diff = ts - Date.now();
-  if (diff <= 0) return 'maintenant';
-  const h = Math.floor(diff / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  if (h >= 24) return `dans ${Math.round(h / 24)} j`;
-  if (h >= 1) return `dans ${h} h`;
-  return `dans ${m} min`;
-}
+const MONTHS_SHORT = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+const AVATAR_TONES = [colors.signature, colors.blue, colors.purple, colors.coral];
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -41,24 +35,23 @@ export default function HomeScreen() {
   // L'accueil est le hub : tout s'ouvre par-dessus, le retour ramène toujours ici.
   const go = (route: string) => router.push(route as never);
 
+  const fullName = `${state.account?.firstName ?? ''} ${state.account?.lastName ?? ''}`.trim();
+  const greeting = new Date().getHours() < 18 ? 'Bonjour' : 'Bonsoir';
+
   // Clubs sponsorisés en tête (badge visible), le reste en ordre alphabétique.
   const nearbyClubs = activeClubs(state.customClubs, state.clubInfo).sort(
     (a, b) => Number(state.boostedClubIds.includes(b.id)) - Number(state.boostedClubIds.includes(a.id))
   );
   const now = Date.now();
   const today = dayKey(new Date());
-  // « À venir » : les tournois déjà passés ne s'affichent plus sur l'accueil.
   const competitions = [...state.myCompetitions, ...seedCompetitions].filter((c) => c.dateKey >= today).slice(0, 2);
-  const upcoming = [...state.reservations]
-    .filter((r) => r.startsAt > now)
-    .sort((a, b) => a.startsAt - b.startsAt)[0];
+  const upcoming = [...state.reservations].filter((r) => r.startsAt > now).sort((a, b) => a.startsAt - b.startsAt)[0];
 
   // Clin d'œil anniversaire (ADN de l'app : astro + fun).
   const bd = state.account?.birthDate ? parseBirthDate(state.account.birthDate) : null;
   const birthday = isBirthdayToday(state.account?.birthDate);
 
-  // Résultats de tournoi disponibles ? Le plus récent (closedAt max) parmi les tournois
-  // où tu étais inscrit, clôturé il y a moins de 7 jours → on pointe vers SA fiche.
+  // Résultats de tournoi disponibles ? Le plus récent (closedAt max), clôturé < 7 j.
   const pendingResult = Object.keys(state.compRegistrations)
     .map((id) => ({ id, res: state.compResults[id] }))
     .filter((x) => !!x.res && now - x.res.closedAt < 7 * 86400000)
@@ -68,31 +61,36 @@ export default function HomeScreen() {
   const news = state.operatorNews;
   const showNews = !!news && state.dismissedNewsId !== news.id;
 
+  // Équipe du prochain match (toi + invités) pour la pile d'avatars.
+  const matchPlayers = upcoming ? [fullName || 'Toi', ...upcoming.invited.map((i) => i.name)].slice(0, 4) : [];
+  const [, mm, dd] = upcoming ? upcoming.dateKey.split('-') : ['', '', ''];
+
   return (
     <Screen>
       <Reveal>
-        {/* Actualité de l'accueil (publiée par l'opérateur) — fermable */}
+        {/* En-tête : salutation + avatar (→ profil) */}
+        <View style={styles.header}>
+          <View style={{ flex: 1 }}>
+            <Txt variant="label" color={colors.textFaint}>{greeting}</Txt>
+            <Txt variant="h1" numberOfLines={1} style={{ marginTop: 2 }}>{fullName || 'Bienvenue'}</Txt>
+          </View>
+          <View style={styles.cityChip}>
+            <Ionicons name="location-outline" size={13} color={colors.textMuted} />
+            <Txt variant="small" color={colors.textMuted}>Abidjan</Txt>
+          </View>
+          <Pressable onPress={() => go('/profil')} hitSlop={6}>
+            <Avatar uri={state.account?.photoUri} name={fullName} size={46} />
+          </Pressable>
+        </View>
+
+        {/* Actu opérateur — fermable */}
         {showNews && news ? (
           <View style={styles.newsBanner}>
             <Ionicons name="megaphone" size={18} color={colors.purple} />
-            <Pressable
-              style={{ flex: 1 }}
-              disabled={!news.link}
-              onPress={() => news.link && Linking.openURL(news.link)}
-            >
-              <Txt variant="body" style={{ fontWeight: '700' }} numberOfLines={2}>
-                {news.title}
-              </Txt>
-              {news.subtitle ? (
-                <Txt variant="small" color={colors.textMuted} numberOfLines={2}>
-                  {news.subtitle}
-                </Txt>
-              ) : null}
-              {news.link ? (
-                <Txt variant="small" color={colors.purple} style={{ fontWeight: '600', marginTop: 2 }}>
-                  En savoir plus →
-                </Txt>
-              ) : null}
+            <Pressable style={{ flex: 1 }} disabled={!news.link} onPress={() => news.link && Linking.openURL(news.link)}>
+              <Txt variant="body" style={{ fontWeight: '700' }} numberOfLines={2}>{news.title}</Txt>
+              {news.subtitle ? <Txt variant="small" color={colors.textMuted} numberOfLines={2}>{news.subtitle}</Txt> : null}
+              {news.link ? <Txt variant="small" color={colors.purple} style={{ fontWeight: '600', marginTop: 2 }}>En savoir plus →</Txt> : null}
             </Pressable>
             <Pressable onPress={() => dismissNews(news.id)} hitSlop={8} style={styles.newsClose}>
               <Ionicons name="close" size={16} color={colors.textMuted} />
@@ -100,49 +98,43 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {/* Hero */}
-        <LinearGradient colors={gradients.heroSoft} start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 1 }} style={styles.hero}>
-          <View style={styles.brandRow}>
-            <Logo size={30} />
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-              <View style={styles.cityChip}>
-                <Ionicons name="location-outline" size={13} color={colors.textMuted} />
-                <Txt variant="small" color={colors.textMuted}>
-                  Abidjan
-                </Txt>
-              </View>
-              {/* Avatar → raccourci vers le Profil */}
-              <Pressable onPress={() => go('/profil')} hitSlop={6}>
-                <Avatar uri={state.account?.photoUri} name={`${state.account?.firstName ?? ''} ${state.account?.lastName ?? ''}`} size={34} />
-              </Pressable>
+        {/* HERO */}
+        <Pressable onPress={() => go('/reserver')}>
+          <LinearGradient colors={gradients.heroSoft} start={{ x: 0, y: 0 }} end={{ x: 0.7, y: 1 }} style={styles.hero}>
+            <View style={styles.brandRow}>
+              <Logo size={26} />
             </View>
-          </View>
-          <Txt variant="display" style={{ marginTop: spacing.md }}>
-            Bonjour, {state.account?.firstName ?? ''}
-          </Txt>
-          <Txt variant="muted" style={{ marginTop: 4 }}>
-            Un terrain libre près de toi — sessions de 1h30.
-          </Txt>
-          <View style={{ marginTop: spacing.lg }}>
-            <Button label="Réserver un terrain" icon="calendar" onPress={() => go('/reserver')} full />
-          </View>
-        </LinearGradient>
-
-        {/* Mon profil — accès direct, bien visible */}
-        <Card onPress={() => go('/profil')} style={styles.profileCard}>
-          <Avatar uri={state.account?.photoUri} name={`${state.account?.firstName ?? ''} ${state.account?.lastName ?? ''}`} size={46} />
-          <View style={{ flex: 1 }}>
-            <Txt variant="h3">
-              {state.account?.firstName} {state.account?.lastName}
+            <View style={styles.livePill}>
+              <View style={styles.liveDot} />
+              <Txt variant="small" color={colors.signatureDark} style={styles.liveText}>
+                {nearbyClubs.length} clubs près de toi
+              </Txt>
+            </View>
+            <Txt variant="display" style={{ fontSize: 26, marginTop: spacing.sm, maxWidth: 240 }}>
+              Réserve ton prochain match
             </Txt>
-            <Txt variant="small" color={colors.textMuted}>
-              Niveau {state.level.toFixed(2)} · mon profil, mes réservations, mes stats
-            </Txt>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-        </Card>
+            <View style={styles.heroCta}>
+              <Txt variant="body" color={colors.onSignature} style={{ fontWeight: '700' }}>
+                Trouver un créneau
+              </Txt>
+              <Ionicons name="arrow-forward" size={16} color={colors.onSignature} />
+            </View>
+          </LinearGradient>
+        </Pressable>
 
-        {/* Joyeux anniversaire — petit clin d'œil le jour J (ADN astro de l'app) */}
+        {/* Accès rapide — 4 univers */}
+        <View style={styles.quickRow}>
+          {ACTIONS.map((a) => (
+            <Pressable key={a.label} onPress={() => go(a.route)} style={styles.quickItem}>
+              <View style={[styles.quickIcon, { backgroundColor: a.bg }]}>
+                <Ionicons name={a.icon} size={24} color={a.tint} />
+              </View>
+              <Txt variant="small" style={{ fontWeight: '600' }}>{a.label}</Txt>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Anniversaire */}
         {birthday && bd ? (
           <View style={[styles.alert, { backgroundColor: colors.purpleSoft }]}>
             <Txt variant="h2">{zodiacFor(bd).emoji}</Txt>
@@ -152,63 +144,59 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {/* Rappel de match — touche la carte pour voir tes réservations */}
-        {upcoming && state.remindersOn ? (
-          <Pressable onPress={() => go('/reservations')} style={({ pressed }) => pressed && { opacity: 0.9 }}>
-            <LinearGradient colors={[colors.signature, colors.signatureDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.reminder}>
-              <View style={styles.bell}>
-                <Ionicons name="notifications" size={20} color={colors.onSignature} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Txt variant="label" color="rgba(255,255,255,0.85)">
-                  Rappel de match
-                </Txt>
-                <Txt variant="h3" color={colors.white} style={{ marginTop: 2 }}>
-                  {upcoming.clubName}
-                </Txt>
-                <Txt variant="small" color="rgba(255,255,255,0.92)">
-                  {upcoming.date} à {upcoming.time} · {upcoming.court}
-                </Txt>
-                <Txt variant="small" color="rgba(255,255,255,0.85)" style={{ fontWeight: '600' }}>
-                  {upcoming.clubConfirmed ? '✓ Confirmée par le club' : 'En attente de confirmation'}
-                </Txt>
-              </View>
-              <View style={styles.countChip}>
-                <Txt variant="small" color={colors.onSignature} style={{ fontWeight: '700' }}>
-                  {countdown(upcoming.startsAt)}
-                </Txt>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.8)" />
-            </LinearGradient>
-          </Pressable>
-        ) : null}
-
-        {/* Résultats de tournoi disponibles — mène directement à la fiche du tournoi concerné */}
+        {/* Résultats de tournoi disponibles */}
         {pendingResult ? (
           <Pressable onPress={() => go(`/competition/${pendingResult.id}`)} style={[styles.alert, { backgroundColor: colors.purpleSoft }]}>
             <Ionicons name="medal-outline" size={16} color={colors.purple} />
-            <Txt variant="small" color={colors.text} style={{ flex: 1, fontWeight: '600' }}>
-              Résultats du tournoi disponibles
-            </Txt>
+            <Txt variant="small" color={colors.text} style={{ flex: 1, fontWeight: '600' }}>Résultats du tournoi disponibles</Txt>
             <Ionicons name="chevron-forward" size={15} color={colors.purple} />
           </Pressable>
         ) : null}
 
-        {/* Accès rapide */}
-        <View style={[styles.grid, { marginTop: spacing.lg }]}>
-          {ACTIONS.map((a) => (
-            <Card key={a.label} onPress={() => go(a.route)} style={[styles.tile, { backgroundColor: a.bg, borderColor: 'transparent' }]}>
-              <IconCircle icon={a.icon} color={a.tint} bg={colors.white} />
-              <Txt variant="h3" style={{ marginTop: spacing.sm, fontSize: 15 }} numberOfLines={2}>
-                {a.label}
-              </Txt>
+        {/* Prochain match */}
+        {upcoming && state.remindersOn ? (
+          <View style={styles.section}>
+            <SectionHeader title="Ton prochain match" />
+            <Card onPress={() => go('/reservations')}>
+              <View style={styles.matchHead}>
+                <View style={styles.dateChip}>
+                  <Txt variant="h2" color={colors.onSignature} style={{ fontSize: 18, lineHeight: 20 }}>{dd}</Txt>
+                  <Txt variant="small" color="rgba(255,255,255,0.85)" style={{ fontSize: 9, fontWeight: '700', letterSpacing: 0.5 }}>
+                    {(MONTHS_SHORT[Number(mm) - 1] ?? '').toUpperCase()}
+                  </Txt>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>{upcoming.clubName}</Txt>
+                  <Txt variant="muted">{upcoming.time} · {upcoming.court} · 1h30</Txt>
+                </View>
+                <View style={[styles.statusPill, { backgroundColor: upcoming.clubConfirmed ? colors.greenSoft : colors.amberSoft }]}>
+                  <Txt variant="small" color={upcoming.clubConfirmed ? colors.green : colors.amber} style={{ fontWeight: '700', fontSize: 11 }}>
+                    {upcoming.clubConfirmed ? 'Confirmé' : 'En attente'}
+                  </Txt>
+                </View>
+              </View>
+              <View style={{ height: 1, backgroundColor: colors.hairline, marginVertical: spacing.md }} />
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ flexDirection: 'row' }}>
+                  {matchPlayers.map((n, i) => (
+                    <View key={`${n}-${i}`} style={[styles.miniAvatar, { backgroundColor: AVATAR_TONES[i % AVATAR_TONES.length], marginLeft: i === 0 ? 0 : -9 }]}>
+                      <Txt variant="small" color={colors.white} style={{ fontWeight: '700', fontSize: 11 }}>{initials(n)}</Txt>
+                    </View>
+                  ))}
+                  <Txt variant="small" color={colors.textMuted} style={{ marginLeft: spacing.sm, alignSelf: 'center' }}>
+                    {upcoming.players} joueur{upcoming.players > 1 ? 's' : ''}
+                  </Txt>
+                </View>
+                <View style={{ flex: 1 }} />
+                <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>Voir</Txt>
+              </View>
             </Card>
-          ))}
-        </View>
+          </View>
+        ) : null}
 
-        {/* Terrains */}
+        {/* Clubs près de vous */}
         <View style={styles.section}>
-          <SectionHeader title="Terrains près de toi" actionLabel="Voir tout" onAction={() => router.push('/clubs')} />
+          <SectionHeader title="Clubs près de toi" actionLabel="Tout voir" onAction={() => go('/clubs')} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md, paddingRight: spacing.lg }}>
             {nearbyClubs.map((c) => (
               <ClubCard key={c.id} club={c} compact />
@@ -218,7 +206,7 @@ export default function HomeScreen() {
 
         {/* Tournois */}
         <View style={styles.section}>
-          <SectionHeader title="Tournois à venir" actionLabel="Voir tout" onAction={() => go('/competitions')} />
+          <SectionHeader title="Tournois à venir" actionLabel="Tout voir" onAction={() => go('/competitions')} />
           {competitions.map((c) => (
             <CompetitionCard key={c.id} comp={c} />
           ))}
@@ -229,42 +217,7 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  hero: {
-    ...shadows.e2,
-    marginTop: spacing.sm,
-    marginBottom: spacing.sm,
-    padding: spacing.lg,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  alert: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginTop: spacing.md,
-  },
-  newsBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    backgroundColor: colors.purpleSoft,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginTop: spacing.sm,
-  },
-  newsClose: {
-    width: 26,
-    height: 26,
-    borderRadius: radius.pill,
-    backgroundColor: colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  profileCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.md },
   cityChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -276,29 +229,47 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radius.pill,
   },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  tile: { width: '47%', flexGrow: 1, minHeight: 104, justifyContent: 'space-between' },
-  reminder: {
+  hero: {
+    ...shadows.e2,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  livePill: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: spacing.md },
+  liveDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: colors.lime, borderWidth: 4, borderColor: 'rgba(198,242,74,0.35)' },
+  liveText: { fontWeight: '700', fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase' },
+  heroCta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    marginTop: spacing.md,
-    padding: spacing.lg,
-    borderRadius: radius.lg,
-  },
-  bell: {
-    width: 40,
-    height: 40,
+    alignSelf: 'flex-start',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+    backgroundColor: colors.signature,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderRadius: radius.pill,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    ...shadows.e2,
   },
-  countChip: {
-    backgroundColor: colors.white,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
+  quickRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.xl },
+  quickItem: { alignItems: 'center', gap: spacing.sm, width: '23%' },
+  quickIcon: { width: 56, height: 56, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
+  alert: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.md },
+  newsBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: colors.purpleSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
+  newsClose: { width: 26, height: 26, borderRadius: radius.pill, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' },
   section: { marginTop: spacing.xl },
+  matchHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  dateChip: { width: 46, height: 46, borderRadius: radius.md, backgroundColor: colors.signature, alignItems: 'center', justifyContent: 'center' },
+  statusPill: { paddingHorizontal: spacing.sm, paddingVertical: 5, borderRadius: radius.pill },
+  miniAvatar: { width: 30, height: 30, borderRadius: radius.pill, borderWidth: 2, borderColor: colors.white, alignItems: 'center', justifyContent: 'center' },
 });

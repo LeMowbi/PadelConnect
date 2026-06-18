@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
@@ -12,7 +13,7 @@ import { useApp } from '@/store/AppContext';
 import { levelLabel } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
 import { GENDERS, ageFrom, genderLabel, maskBirthDate, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
-import { colors, radius, spacing } from '@/theme';
+import { colors, gradients, radius, spacing } from '@/theme';
 
 export default function ProfilScreen() {
   const router = useRouter();
@@ -47,50 +48,67 @@ export default function ProfilScreen() {
   // « Non défini » ne s'affiche pas — on ne montre le sexe que s'il est renseigné.
   const g = account.gender && account.gender !== 'nd' ? genderLabel(account.gender) : null;
 
+  // Jauge de niveau : progression dans la tranche entière en cours (bornes basse/haute).
+  const lvlLow = Math.floor(level);
+  const lvlHigh = Math.min(7, lvlLow + 1);
+  const lvlPct = `${Math.round(Math.max(0, Math.min(1, level - lvlLow)) * 100)}%` as `${number}%`;
+
   return (
-    <Screen back title="Profil">
+    <Screen back>
       {editing ? (
         <EditAccount onDone={() => setEditing(false)} />
       ) : (
-        <Card style={{ marginTop: spacing.sm }}>
-          <View style={styles.head}>
-            <Pressable onPress={() => setPhotoSheet(true)} hitSlop={6} accessibilityLabel="Photo de profil">
-              <Avatar uri={account.photoUri} name={`${account.firstName} ${account.lastName}`} size={76} />
-            </Pressable>
-            <View style={{ flex: 1 }}>
-              <Txt variant="h2">
-                {account.firstName} {account.lastName}
-              </Txt>
-              <Txt variant="muted">{account.phone}</Txt>
-              {bd && zod ? (
-                <Txt variant="small" color={colors.purple} style={{ marginTop: 2, fontWeight: '600' }}>
-                  {zod.emoji} {zod.name} · {ageFrom(bd)} ans{g ? ` · ${g}` : ''}
+        <>
+          {/* Bandeau signature — avatar (anneau dégradé) + identité (maquette Profil) */}
+          <LinearGradient colors={gradients.deepGreen} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.band}>
+            <View style={styles.head}>
+              <Pressable onPress={() => setPhotoSheet(true)} hitSlop={6} accessibilityLabel="Photo de profil">
+                <Avatar uri={account.photoUri} name={`${account.firstName} ${account.lastName}`} size={76} />
+              </Pressable>
+              <View style={{ flex: 1 }}>
+                <Txt variant="h2" color={colors.white}>
+                  {account.firstName} {account.lastName}
                 </Txt>
-              ) : g ? (
-                <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
-                  {g}
-                </Txt>
-              ) : null}
+                {bd && zod ? (
+                  <Txt variant="small" color="rgba(255,255,255,0.85)" style={{ marginTop: 2, fontWeight: '600' }}>
+                    {zod.emoji} {zod.name} · {ageFrom(bd)} ans{g ? ` · ${g}` : ''}
+                  </Txt>
+                ) : (
+                  <Txt variant="small" color="rgba(255,255,255,0.85)" style={{ marginTop: 2 }}>
+                    {g ? `${g} · ` : ''}{account.phone}
+                  </Txt>
+                )}
+              </View>
+              <Pressable onPress={() => setEditing(true)} hitSlop={8} style={styles.editBtn} accessibilityLabel="Modifier le profil">
+                <Ionicons name="create-outline" size={18} color={colors.white} />
+              </Pressable>
             </View>
-          </View>
-          <View style={{ marginTop: spacing.md }}>
-            <Button size="sm" label="Modifier le profil" icon="create-outline" variant="secondary" onPress={() => setEditing(true)} />
-          </View>
-        </Card>
+          </LinearGradient>
+        </>
       )}
 
       {/* Mon niveau — n'évolue que par les tournois officiels */}
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Mon niveau" />
-        <Card style={{ borderColor: colors.signature }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-            <IconCircle icon="ribbon" />
-            <View style={{ flex: 1 }}>
-              <Txt variant="h2" color={colors.signature}>
-                {level.toFixed(2)}
-              </Txt>
-              <Txt variant="muted">{levelLabel(level)} · évolue via les tournois officiels (+0.50 victoire / −0.25 sinon).</Txt>
-            </View>
+        <Card>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }}>
+            <Txt variant="label" color={colors.textFaint}>Niveau de jeu</Txt>
+            <Txt variant="display" color={colors.signature} style={{ fontSize: 28 }}>
+              {level.toFixed(2)}
+            </Txt>
+          </View>
+          <View style={styles.gaugeTrack}>
+            <View style={[styles.gaugeFill, { width: lvlPct }]} />
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+            <Txt variant="small" color={colors.textFaint}>{lvlLow.toFixed(1)}</Txt>
+            <Txt variant="small" color={colors.textFaint}>{lvlHigh.toFixed(1)}</Txt>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm }}>
+            <Ionicons name="swap-vertical" size={14} color={colors.textMuted} />
+            <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
+              {levelLabel(level)} · monte ou descend selon tes résultats en tournoi officiel (+0.50 / −0.25).
+            </Txt>
           </View>
           {officialResults.length > 0 ? (
             <>
@@ -325,7 +343,11 @@ function EditAccount({ onDone }: { onDone: () => void }) {
 }
 
 const styles = StyleSheet.create({
+  band: { borderRadius: radius.xl, padding: spacing.lg, marginTop: spacing.sm },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  editBtn: { width: 38, height: 38, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  gaugeTrack: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
+  gaugeFill: { height: 8, borderRadius: radius.pill, backgroundColor: colors.signature },
   avatar: {
     width: 72,
     height: 72,
