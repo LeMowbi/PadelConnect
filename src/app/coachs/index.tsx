@@ -2,14 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { Avatar } from '@/components/Avatar';
 import { ContactButtons } from '@/components/ContactButtons';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
-import { Card, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
+import { Card, Divider, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
 import { findClub } from '@/data/clubs';
 import { coachClubName, coaches, type Coach } from '@/data/coaches';
 import { useApp } from '@/store/AppContext';
-import { initials } from '@/lib/format';
 import { colors, radius, spacing } from '@/theme';
 
 const TABS = ['Tous', 'Débutant', 'Intermédiaire', 'Avancé'] as const;
@@ -26,28 +26,31 @@ function CoachRow({ coach }: { coach: Coach }) {
   return (
     <Card onPress={() => router.push(`/coachs/${coach.id}`)} style={{ marginBottom: spacing.md }}>
       <View style={styles.row}>
-        <View style={[styles.avatar, { backgroundColor: coach.accent + '22', borderColor: coach.accent + '55' }]}>
-          <Txt variant="h2" color={coach.accent}>
-            {initials(coach.name)}
-          </Txt>
-        </View>
+        <Avatar name={coach.name} size={60} />
         <View style={{ flex: 1 }}>
-          <Txt variant="h3">{coach.name}</Txt>
-          <Txt variant="muted">{coach.level}</Txt>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+          <Txt variant="h3" numberOfLines={1}>
+            {coach.name}
+          </Txt>
+          <View style={styles.metaRow}>
             <Ionicons name="business-outline" size={13} color={colors.textMuted} />
-            <Txt variant="small" color={colors.textMuted}>
-              {coachClubName(coach)}
+            <Txt variant="small" color={colors.textMuted} numberOfLines={1} style={{ flex: 1 }}>
+              {coachClubName(coach)} · {coach.area}
             </Txt>
           </View>
+          <View style={{ marginTop: spacing.sm }}>
+            <Tag label={`Niveau ${coach.levelValue.toFixed(1)}`} tone="blue" icon="ribbon" />
+          </View>
         </View>
-        <Tag label={`Niv. ${coach.levelValue.toFixed(1)}`} tone="blue" />
       </View>
+
+      <Divider style={{ marginVertical: spacing.md }} />
+
       <View style={styles.specs}>
         {coach.specialties.map((s) => (
           <Tag key={s} label={s} tone="neutral" />
         ))}
       </View>
+
       <ContactButtons phone={coach.phone} primaryCall style={{ marginTop: spacing.md }} />
     </Card>
   );
@@ -68,15 +71,13 @@ export default function CoachsScreen() {
   return (
     <Screen back title="Coachs" subtitle="Classés par niveau — contacte-les directement">
       <View style={styles.note}>
-        <Ionicons name="information-circle-outline" size={15} color={colors.textFaint} />
-        <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
+        <IconCircle icon="information-circle" color={colors.blue} bg={colors.blueSoft} size={34} />
+        <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
           La réservation se fait directement avec le coach, par téléphone. Tu trouves ici son numéro et son club.
         </Txt>
       </View>
 
-      <View style={{ marginTop: spacing.xs }}>
-        <SegmentedControl options={TABS} value={tab} onChange={setTab} />
-      </View>
+      <SegmentedControl options={TABS} value={tab} onChange={setTab} />
 
       {list.map((c) => (
         <CoachRow key={c.id} coach={c} />
@@ -87,15 +88,18 @@ export default function CoachsScreen() {
           <SectionHeader title="Coachs ajoutés par les clubs" />
           {clubCoaches.map((c) => (
             <Card key={c.id} style={{ marginBottom: spacing.sm }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                <IconCircle icon="person" color={colors.signature} bg={colors.signatureSoft} size={40} />
+              <View style={styles.row}>
+                <IconCircle icon="person" color={colors.blue} bg={colors.blueSoft} size={44} />
                 <View style={{ flex: 1 }}>
-                  <Txt variant="h3" style={{ fontSize: 15 }}>
+                  <Txt variant="h3" numberOfLines={1}>
                     {c.name}
                   </Txt>
-                  <Txt variant="muted">
-                    {c.specialty} · {c.clubName}
-                  </Txt>
+                  <View style={styles.metaRow}>
+                    <Ionicons name="business-outline" size={13} color={colors.textMuted} />
+                    <Txt variant="small" color={colors.textMuted} numberOfLines={1} style={{ flex: 1 }}>
+                      {c.specialty} · {c.clubName}
+                    </Txt>
+                  </View>
                 </View>
                 <Tag label="Club" tone="blue" />
               </View>
@@ -104,21 +108,23 @@ export default function CoachsScreen() {
           ))}
         </View>
       ) : null}
-
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  note: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: radius.md,
-    borderWidth: 1,
+  note: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
-  specs: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  specs: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

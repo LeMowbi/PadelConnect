@@ -12,7 +12,7 @@ import { levelLabel } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
 import { GENDERS, ageFrom, maskBirthDate, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
 import { useApp } from '@/store/AppContext';
-import { colors, gradients, radius, spacing } from '@/theme';
+import { colors, font, gradients, radius, shadows, spacing } from '@/theme';
 
 type FieldKey = 'firstName' | 'lastName' | 'phone' | 'birth' | 'gender';
 
@@ -73,13 +73,15 @@ export default function Onboarding() {
   return (
     <View style={styles.root}>
       <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xxxl }}>
-        <LinearGradient colors={gradients.heroSoft} style={styles.hero}>
+        <LinearGradient
+          colors={gradients.deepGreen}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.hero}
+        >
           <Logo size={40} />
-          <Txt variant="display" style={{ fontSize: 30, marginTop: spacing.xl }}>
-            Bienvenue 👋
-          </Txt>
-          <Txt variant="muted" style={{ marginTop: 4 }}>
-            Crée ton profil pour réserver, jouer et progresser.
+          <Txt variant="display" color={colors.onSignature} style={styles.heroTitle}>
+            Réserve ton terrain à Abidjan
           </Txt>
         </LinearGradient>
 
@@ -153,7 +155,7 @@ export default function Onboarding() {
           ) : null}
 
           <View onLayout={(e) => { positions.current.gender = e.nativeEvent.layout.y; }}>
-            <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+            <Txt variant="label" style={styles.fieldLabel}>
               Sexe
             </Txt>
             <View style={styles.genderRow}>
@@ -168,7 +170,7 @@ export default function Onboarding() {
             ) : null}
           </View>
 
-          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+          <Txt variant="label" style={styles.fieldLabel}>
             Ton niveau de jeu
           </Txt>
           <View style={styles.levelBox}>
@@ -215,7 +217,7 @@ function Field({
 }) {
   return (
     <View onLayout={(e) => onLayout?.(e.nativeEvent.layout.y)}>
-      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+      <Txt variant="label" style={styles.fieldLabel}>
         {label}
       </Txt>
       <TextInput
@@ -238,7 +240,16 @@ function Field({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  hero: { paddingHorizontal: spacing.lg, paddingTop: spacing.xxxl, paddingBottom: spacing.xl },
+  hero: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xxxl,
+    paddingBottom: spacing.xxl,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
+    ...shadows.e2,
+  },
+  heroTitle: { marginTop: spacing.xl, lineHeight: 38 },
+  fieldLabel: { marginTop: spacing.lg },
   body: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   avatar: {
     width: 96,
@@ -279,6 +290,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     padding: spacing.md,
     marginTop: spacing.sm,
-    fontSize: 15,
+    fontSize: font.size.md,
   },
 });
