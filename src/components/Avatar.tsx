@@ -17,7 +17,7 @@ export function Avatar({ uri, name, size = 46 }: { uri?: string | null; name: st
   const inner = mid - 2 * GAP;
   return (
     <LinearGradient
-      colors={[colors.gold, colors.amber]}
+      colors={[colors.signature, colors.amber]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={[styles.ring, { width: size, height: size, borderRadius: size / 2 }]}
@@ -34,7 +34,7 @@ export function Avatar({ uri, name, size = 46 }: { uri?: string | null; name: st
           <View style={[styles.fallback, { width: inner, height: inner, borderRadius: inner / 2 }]}>
             <Txt
               variant="h3"
-              color={colors.gold}
+              color={colors.signature}
               style={{ fontSize: Math.max(10, Math.round(inner * 0.34)), lineHeight: Math.round(inner * 0.46) }}
             >
               {initials(name)}
@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
   },
   gap: { backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
   fallback: {
-    backgroundColor: colors.goldSoft,
+    backgroundColor: colors.signatureSoft,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',

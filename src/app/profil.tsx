@@ -7,7 +7,7 @@ import { Avatar } from '@/components/Avatar';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Chip } from '@/components/Chip';
 import { Screen } from '@/components/Screen';
-import { Button, Card, Divider, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
+import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { levelLabel } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
@@ -82,14 +82,14 @@ export default function ProfilScreen() {
       {/* Mon niveau — n'évolue que par les tournois officiels */}
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Mon niveau" />
-        <Card style={{ borderColor: colors.gold }}>
+        <Card style={{ borderColor: colors.signature }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
             <IconCircle icon="ribbon" />
             <View style={{ flex: 1 }}>
-              <Txt variant="h2" color={colors.gold}>
+              <Txt variant="h2" color={colors.signature}>
                 {level.toFixed(2)}
               </Txt>
-              <Txt variant="muted">{levelLabel(level)} · évolue selon tes tournois officiels.</Txt>
+              <Txt variant="muted">{levelLabel(level)} · évolue via les tournois officiels (+0.50 victoire / −0.25 sinon).</Txt>
             </View>
           </View>
           {officialResults.length > 0 ? (
@@ -121,9 +121,9 @@ export default function ProfilScreen() {
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Mes statistiques" />
         <View style={styles.stats}>
-          <Stat value={stats.played} label="Parties jouées" color={colors.green} bg={colors.greenSoft} />
-          <Stat value={stats.tournamentsPlayed} label="Tournois joués" color={colors.purple} bg={colors.purpleSoft} />
-          <Stat value={stats.tournamentsWon} label="Tournois gagnés" color={colors.amber} bg={colors.amberSoft} />
+          <StatTile value={stats.played} label="Parties jouées" color={colors.green} bg={colors.greenSoft} />
+          <StatTile value={stats.tournamentsPlayed} label="Tournois joués" color={colors.purple} bg={colors.purpleSoft} />
+          <StatTile value={stats.tournamentsWon} label="Tournois gagnés" color={colors.amber} bg={colors.amberSoft} />
         </View>
         <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
           Les parties jouées se comptent toutes seules : une réservation passée = une partie.
@@ -185,7 +185,7 @@ export default function ProfilScreen() {
           <Switch
             value={state.remindersOn}
             onValueChange={setRemindersOn}
-            trackColor={{ true: colors.gold, false: colors.border }}
+            trackColor={{ true: colors.signature, false: colors.border }}
             thumbColor={colors.white}
           />
         </Card>
@@ -312,39 +312,19 @@ function EditAccount({ onDone }: { onDone: () => void }) {
   );
 }
 
-function Stat({ value, label, color, bg }: { value: number | string; label: string; color: string; bg: string }) {
-  return (
-    <View style={[styles.stat, { backgroundColor: bg }]}>
-      <Txt variant="h2" color={color}>
-        {value}
-      </Txt>
-      <Txt variant="small" color={colors.textMuted} style={{ textAlign: 'center' }}>
-        {label}
-      </Txt>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   avatar: {
     width: 72,
     height: 72,
     borderRadius: radius.pill,
-    backgroundColor: colors.goldSoft,
+    backgroundColor: colors.signatureSoft,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   avatarImg: { width: '100%', height: '100%' },
   stats: { flexDirection: 'row', gap: spacing.sm },
-  stat: {
-    flex: 1,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xs,
-    alignItems: 'center',
-  },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   cta: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

@@ -51,8 +51,13 @@ export default function ReservationsScreen() {
         <SectionHeader title={`À venir · ${upcoming.length}`} />
         {upcoming.length === 0 ? (
           <Card>
-            <EmptyState icon="calendar-outline" title="Aucune réservation à venir" text="Réserve un terrain : il apparaîtra ici avec son statut." />
-            <Button label="Réserver un terrain" icon="calendar" onPress={() => router.push('/reserver')} full />
+            <EmptyState
+              icon="calendar-outline"
+              title="Aucune réservation à venir"
+              text="Réserve un terrain : il apparaîtra ici avec son statut."
+              actionLabel="Réserver un terrain"
+              onAction={() => router.push('/reserver')}
+            />
           </Card>
         ) : (
           upcoming.map((r) => {
@@ -69,7 +74,7 @@ export default function ReservationsScreen() {
                       {r.date} · {r.time} · {r.court} · 1h30
                     </Txt>
                     {r.price ? (
-                      <Txt variant="small" color={colors.gold} style={{ fontWeight: '700' }}>
+                      <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
                         {fcfa(r.price)} · ~{perPlayer(r.price)}/joueur
                       </Txt>
                     ) : null}

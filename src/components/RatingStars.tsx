@@ -23,7 +23,7 @@ export function RatingStars({ value, size = 16, onChange }: Props) {
           else name = 'star-outline';
         }
         const icon = (
-          <Ionicons name={name} size={size} color={colors.gold} />
+          <Ionicons name={name} size={size} color={colors.signature} />
         );
         return onChange ? (
           <Pressable key={i} onPress={() => onChange(i)} hitSlop={6}>

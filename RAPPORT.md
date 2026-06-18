@@ -493,3 +493,32 @@ propagée partout par les tokens. Aucune logique métier touchée.
 des écrans cœur P2 (PhotoHeader, sticky bar, Stepper) ; et surtout les **fonctionnalités**
 P3–P5 dont plusieurs **ne sont pas du design** et l'une **réintroduit le système Victoire/
 Défaite supprimé en v4** (niveau bidirectionnel par validation de match) — à arbitrer.
+
+---
+
+## Patch v4.6 (§A) — Refonte visuelle des écrans cœur (handoff aligné, design pur)
+
+Handoff révisé par Claude Design, désormais rangé par nature (§A maintenant / §B serveur),
+avec interdiction explicite de réintroduire Victoire/Défaite. J'ai fait tout **§A** :
+
+- **Lot 1 terminé** : renommage `gold` → **`signature`** (clés du thème + ton `Tag` + tous
+  les appels, ~24 fichiers) — la dette de confusion design↔dev est supprimée ; `goldChampagne`
+  reste `amber`. Couleur en dur retirée de `ClubPhoto` (passe par les tokens `scrim`/`scrimStrong`).
+- **Nouveaux composants du kit** : `StickyBar` (CTA collant bas d'écran, prix à gauche + bouton
+  pill), `Stepper` (progression du parcours), `StatTile` (grand chiffre + libellé) ; `EmptyState`
+  évolué (illustration + 1 CTA).
+- **Écrans cœur** :
+  - **Fiche club** : en-tête photo + dégradé scrim renforcé + **barre « Réserver » collante**
+    (« dès {min} · 1h30 » → bouton pill). L'action carte passe en secondaire.
+  - **Réserver (guidé)** : `Stepper` Jour → Créneau → Terrain → Confirmer (les onglets
+    Par heure/Par club restent en amont, inchangés).
+  - **Profil** : 3 `StatTile` partagés ; carte Niveau reformulée « évolue via les tournois
+    officiels (+0.50 / −0.25) ».
+  - **Mes réservations** : état vide chaleureux avec CTA intégré.
+- **⛔ Respecté** : aucun écran Victoire/Défaite, aucune « partie à valider », niveau
+  uniquement via tournois officiels.
+- Vérifs : **tsc 0 · lint 0/0 · 107 tests verts · export OK**.
+
+**§B (serveur) non câblé**, comme convenu : notifications, fiabilité, avis vérifiés, anti
+no-show, parrainage, heures creuses, stats club, hors-ligne, accès opérateur PIN — pour la
+vraie version Supabase.

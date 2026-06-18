@@ -259,7 +259,7 @@ export default function CompetitionDetail() {
                   const sel = winnerName === t;
                   return (
                     <Pressable key={t} onPress={() => setWinnerName(t)} style={[styles.teamRow, sel && styles.teamRowSel]}>
-                      <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.gold : colors.textMuted} />
+                      <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.signature : colors.textMuted} />
                       <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
                         {t}
                       </Txt>
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
   info: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 6 },
   placesHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   barTrack: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, marginTop: spacing.sm, overflow: 'hidden' },
-  barFill: { height: 8, borderRadius: radius.pill, backgroundColor: colors.gold },
+  barFill: { height: 8, borderRadius: radius.pill, backgroundColor: colors.signature },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
   teamsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
   teamRow: {
@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     backgroundColor: colors.surfaceAlt,
   },
-  teamRowSel: { backgroundColor: colors.goldSoft, borderWidth: 1, borderColor: colors.gold },
+  teamRowSel: { backgroundColor: colors.signatureSoft, borderWidth: 1, borderColor: colors.signature },
   input: {
     backgroundColor: colors.bg,
     borderWidth: 1,
@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.gold,
+    backgroundColor: colors.signature,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: radius.pill,

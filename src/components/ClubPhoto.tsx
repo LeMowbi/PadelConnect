@@ -43,7 +43,7 @@ export function ClubPhoto({
       )}
 
       {overlay ? (
-        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.85)']} style={StyleSheet.absoluteFill} pointerEvents="none" />
+        <LinearGradient colors={['transparent', colors.scrim, colors.scrimStrong]} style={StyleSheet.absoluteFill} pointerEvents="none" />
       ) : null}
 
       {caption ? (

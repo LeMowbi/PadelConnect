@@ -20,7 +20,7 @@ export function SegmentedControl<T extends string>({
           <Pressable key={opt} onPress={() => onChange(opt)} style={[styles.btn, active && styles.active]}>
             <Txt
               variant="small"
-              color={active ? colors.onGold : colors.textMuted}
+              color={active ? colors.onSignature : colors.textMuted}
               numberOfLines={1}
               style={{ fontWeight: '600' }}
             >
@@ -45,5 +45,5 @@ const styles = StyleSheet.create({
     marginVertical: spacing.lg,
   },
   btn: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, borderRadius: radius.sm },
-  active: { backgroundColor: colors.gold, ...shadows.e1 },
+  active: { backgroundColor: colors.signature, ...shadows.e1 },
 });

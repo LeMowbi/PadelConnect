@@ -111,7 +111,7 @@ export default function ReserverScreen() {
           rows.map((row) => (
             <View key={row.time} style={styles.hourBlock}>
               <View style={styles.hourHead}>
-                <Ionicons name="time" size={15} color={colors.gold} />
+                <Ionicons name="time" size={15} color={colors.signature} />
                 <Txt variant="h3" style={{ fontSize: 15 }}>
                   {row.time}
                 </Txt>
@@ -149,7 +149,7 @@ export default function ReserverScreen() {
                         </Txt>
                       </View>
                       {/* Prix RÉEL de ce créneau (selon la plage horaire du club). */}
-                      <Txt variant="small" color={colors.gold} style={{ fontWeight: '700' }}>
+                      <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
                         {fcfa(priceForSlot(club, row.time))}
                       </Txt>
                       <Txt variant="small" color={colors.textFaint} style={{ fontSize: 11 }}>
@@ -184,7 +184,7 @@ export default function ReserverScreen() {
                   {club.area}
                 </Txt>
               </View>
-              <Txt variant="small" color={colors.gold} style={{ fontWeight: '700' }}>
+              <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
                 dès {fcfa(minPrice(club))}
               </Txt>
             </View>

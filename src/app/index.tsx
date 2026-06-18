@@ -155,9 +155,9 @@ export default function HomeScreen() {
         {/* Rappel de match — touche la carte pour voir tes réservations */}
         {upcoming && state.remindersOn ? (
           <Pressable onPress={() => go('/reservations')} style={({ pressed }) => pressed && { opacity: 0.9 }}>
-            <LinearGradient colors={[colors.gold, colors.goldDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.reminder}>
+            <LinearGradient colors={[colors.signature, colors.signatureDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.reminder}>
               <View style={styles.bell}>
-                <Ionicons name="notifications" size={20} color={colors.onGold} />
+                <Ionicons name="notifications" size={20} color={colors.onSignature} />
               </View>
               <View style={{ flex: 1 }}>
                 <Txt variant="label" color="rgba(255,255,255,0.85)">
@@ -174,7 +174,7 @@ export default function HomeScreen() {
                 </Txt>
               </View>
               <View style={styles.countChip}>
-                <Txt variant="small" color={colors.onGold} style={{ fontWeight: '700' }}>
+                <Txt variant="small" color={colors.onSignature} style={{ fontWeight: '700' }}>
                   {countdown(upcoming.startsAt)}
                 </Txt>
               </View>

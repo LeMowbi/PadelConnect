@@ -15,7 +15,7 @@ export default function Root({ children }: PropsWithChildren) {
           name="description"
           content="PadelConnect — l'app qui réunit tous les clubs de padel d'Abidjan : réserve un terrain, trouve des partenaires, joue des tournois."
         />
-        <meta name="theme-color" content={colors.gold} />
+        <meta name="theme-color" content={colors.signature} />
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: `#root,body,html{background:${colors.bg}}` }} />
       </head>

@@ -71,7 +71,7 @@ const txt = StyleSheet.create({
     letterSpacing: 1.1,
     textTransform: 'uppercase',
   },
-  price: { fontSize: font.size.lg, fontFamily: font.family.bold, fontWeight: font.weight.bold, color: colors.gold },
+  price: { fontSize: font.size.lg, fontFamily: font.family.bold, fontWeight: font.weight.bold, color: colors.signature },
 });
 
 /* ---------------------------------- Carte --------------------------------- */
@@ -161,7 +161,7 @@ export function Button({
         ]}
       >
         <LinearGradient
-          colors={[colors.gold, colors.goldDark]}
+          colors={[colors.signature, colors.signatureDark]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[btn.base, size === 'sm' && btn.sm, { borderColor: 'transparent', borderRadius: br }]}
@@ -191,9 +191,9 @@ export function Button({
 }
 
 const btnTones: Record<BtnVariant, { bg: string; fg: string; border: string }> = {
-  primary: { bg: colors.gold, fg: colors.onGold, border: colors.gold },
+  primary: { bg: colors.signature, fg: colors.onSignature, border: colors.signature },
   secondary: { bg: colors.surfaceAlt, fg: colors.text, border: colors.border },
-  ghost: { bg: 'transparent', fg: colors.gold, border: 'transparent' },
+  ghost: { bg: 'transparent', fg: colors.signature, border: 'transparent' },
   danger: { bg: colors.dangerSoft, fg: colors.danger, border: 'transparent' },
 };
 
@@ -214,7 +214,7 @@ const btn = StyleSheet.create({
 
 /* ---------------------------------- Tag ----------------------------------- */
 
-type TagTone = 'gold' | 'green' | 'neutral' | 'danger' | 'blue' | 'coral' | 'purple' | 'amber';
+type TagTone = 'signature' | 'green' | 'neutral' | 'danger' | 'blue' | 'coral' | 'purple' | 'amber';
 
 export function Tag({
   label,
@@ -235,7 +235,7 @@ export function Tag({
 }
 
 const tagTones: Record<TagTone, { bg: string; fg: string }> = {
-  gold: { bg: colors.goldSoft, fg: colors.gold },
+  signature: { bg: colors.signatureSoft, fg: colors.signature },
   green: { bg: colors.greenSoft, fg: colors.green },
   neutral: { bg: colors.surfaceAlt, fg: colors.text },
   danger: { bg: colors.dangerSoft, fg: colors.danger },
@@ -288,7 +288,7 @@ const sh = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.md,
   },
-  action: { color: colors.gold, fontSize: font.size.sm, fontWeight: font.weight.semibold },
+  action: { color: colors.signature, fontSize: font.size.sm, fontWeight: font.weight.semibold },
 });
 
 export function Divider({ style }: { style?: ViewStyle }) {
@@ -298,8 +298,8 @@ export function Divider({ style }: { style?: ViewStyle }) {
 
 export function IconCircle({
   icon,
-  color = colors.gold,
-  bg = colors.goldSoft,
+  color = colors.signature,
+  bg = colors.signatureSoft,
   size = 44,
 }: {
   icon: IconName;
@@ -327,10 +327,14 @@ export function EmptyState({
   icon,
   title,
   text,
+  actionLabel,
+  onAction,
 }: {
   icon: IconName;
   title: string;
   text?: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }) {
   return (
     <View style={empty.box}>
@@ -343,9 +347,41 @@ export function EmptyState({
           {text}
         </Txt>
       ) : null}
+      {actionLabel && onAction ? (
+        <View style={{ marginTop: spacing.lg }}>
+          <Button label={actionLabel} onPress={onAction} />
+        </View>
+      ) : null}
     </View>
   );
 }
+
+// Tuile statistique : grand chiffre (Bricolage 800) + libellé discret.
+export function StatTile({
+  value,
+  label,
+  color = colors.signature,
+  bg = colors.surfaceAlt,
+}: {
+  value: number | string;
+  label: string;
+  color?: string;
+  bg?: string;
+}) {
+  return (
+    <View style={[stat.box, { backgroundColor: bg }]}>
+      <Text style={[stat.value, { color }]}>{value}</Text>
+      <Txt variant="small" color={colors.textMuted} style={{ textAlign: 'center' }}>
+        {label}
+      </Txt>
+    </View>
+  );
+}
+
+const stat = StyleSheet.create({
+  box: { flex: 1, borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: spacing.xs, alignItems: 'center', gap: 2 },
+  value: { fontSize: font.size.xxl, fontFamily: font.family.heavy, fontWeight: font.weight.heavy, letterSpacing: -0.5 },
+});
 
 const empty = StyleSheet.create({
   box: { alignItems: 'center', paddingVertical: spacing.xxl, paddingHorizontal: spacing.lg },

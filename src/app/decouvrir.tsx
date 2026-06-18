@@ -18,7 +18,7 @@ export default function DecouvrirScreen() {
 
       {padelSections.map((s, idx) => {
         // Une couleur par thème pour rythmer la lecture.
-        const tint = [colors.gold, colors.blue, colors.purple, colors.coral, colors.green][idx % 5];
+        const tint = [colors.signature, colors.blue, colors.purple, colors.coral, colors.green][idx % 5];
         return (
           <Card key={s.title} style={{ marginTop: spacing.md }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}>
@@ -61,5 +61,5 @@ export default function DecouvrirScreen() {
 
 const styles = StyleSheet.create({
   bullet: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginTop: spacing.sm },
-  dot: { width: 6, height: 6, borderRadius: radius.pill, backgroundColor: colors.gold, marginTop: 8 },
+  dot: { width: 6, height: 6, borderRadius: radius.pill, backgroundColor: colors.signature, marginTop: 8 },
 });

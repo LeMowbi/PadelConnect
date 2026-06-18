@@ -12,7 +12,7 @@ export function LevelStepper({ value, onChange }: { value: number; onChange: (n:
         <Ionicons name="remove" size={20} color={colors.text} />
       </Pressable>
       <View style={styles.value}>
-        <Txt variant="h2" color={colors.gold}>{value.toFixed(1)}</Txt>
+        <Txt variant="h2" color={colors.signature}>{value.toFixed(1)}</Txt>
       </View>
       <Pressable onPress={() => onChange(Math.min(7, round(value + 0.5)))} style={styles.btn} hitSlop={8}>
         <Ionicons name="add" size={20} color={colors.text} />

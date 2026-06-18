@@ -185,7 +185,7 @@ export default function Onboarding() {
 
           <Pressable onPress={() => router.push('/legal')} style={{ marginTop: spacing.lg }}>
             <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center' }}>
-              En continuant, tu acceptes nos <Txt variant="small" color={colors.gold}>CGU & confidentialité</Txt>.
+              En continuant, tu acceptes nos <Txt variant="small" color={colors.signature}>CGU & confidentialité</Txt>.
             </Txt>
           </Pressable>
         </View>

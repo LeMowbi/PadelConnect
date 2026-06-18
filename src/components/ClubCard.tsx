@@ -58,7 +58,7 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
               </Txt>
             </View>
           )}
-          <Txt variant="small" color={colors.gold} style={{ fontWeight: '700' }}>
+          <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
             dès {fcfa(club.priceFrom)} · session
           </Txt>
         </View>
@@ -96,7 +96,7 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
               </Txt>
             </View>
           )}
-          <Txt variant="small" color={colors.gold} style={{ fontWeight: '700' }}>
+          <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
             dès {fcfa(club.priceFrom)} · session
           </Txt>
         </View>

@@ -10,11 +10,11 @@ export const colors = {
   border: '#D8D2C4',
   borderSoft: 'rgba(0,0,0,0.06)',
 
-  // Couleur SIGNATURE = vert profond du terrain (CTA, héros, niveau). Texte blanc dessus.
-  // (Clé historiquement nommée « gold » — conservée pour ne rien casser ; c'est le vert profond.)
-  gold: '#0A6B5D',
-  goldDark: '#00544D',
-  goldSoft: 'rgba(10,107,93,0.12)',
+  // Couleur SIGNATURE = vert profond du terrain (CTA, héros, sélection, prix, niveau).
+  // Texte blanc dessus (onSignature).
+  signature: '#0A6B5D',
+  signatureDark: '#00544D',
+  signatureSoft: 'rgba(10,107,93,0.12)',
   // Vert vif — disponibilité, succès, victoire, « X libres ».
   green: '#1E9E73',
   greenDark: '#167A58',
@@ -40,6 +40,7 @@ export const colors = {
 
   hairline: '#ECE7DB', // séparateurs INTERNES (lignes de listes/tarifs) ≠ border de carte
   scrim: 'rgba(12,26,22,0.55)', // overlay bas de photo + fond des bottom sheets
+  scrimStrong: 'rgba(12,26,22,0.85)', // bas d'un en-tête photo, pour garantir le contraste du texte blanc
 
   danger: '#E5484D',
   dangerSoft: 'rgba(229,72,77,0.16)',
@@ -47,7 +48,7 @@ export const colors = {
   warningSoft: 'rgba(224,151,58,0.16)',
   white: '#FFFFFF',
   black: '#000000',
-  onGold: '#FFFFFF', // texte / icône posés sur la couleur signature (vert profond)
+  onSignature: '#FFFFFF', // texte / icône posés sur la couleur signature (vert profond)
   overlay: 'rgba(0,0,0,0.45)',
   viewerBg: '#000000', // visionneuse photos plein écran
 } as const;
@@ -55,7 +56,7 @@ export const colors = {
 // Dégradés réutilisables (tokens — pas de hex en dur dans les écrans).
 export const gradients = {
   heroSoft: ['#CBE7DB', '#EFE9DA', colors.bg] as const, // accueil / onboarding (un cran plus profond en haut)
-  deepGreen: [colors.gold, colors.goldDark] as const, // rappels, boutons signature
+  deepGreen: [colors.signature, colors.signatureDark] as const, // rappels, boutons signature
 } as const;
 
 // Palette d'accents pour les visuels de club (placeholders) — tokens, pas de hex épars.

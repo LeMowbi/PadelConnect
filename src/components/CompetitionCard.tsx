@@ -90,6 +90,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   barTrack: { height: 6, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, marginTop: spacing.md, overflow: 'hidden' },
-  barFill: { height: 6, borderRadius: radius.pill, backgroundColor: colors.gold },
+  barFill: { height: 6, borderRadius: radius.pill, backgroundColor: colors.signature },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md },
 });

@@ -222,7 +222,7 @@ export default function ClubAdmin() {
           <Txt variant="h3">Compte club (démo)</Txt>
           <Txt variant="muted">Active le mode gérant pour gérer ton club.</Txt>
         </View>
-        <Switch value={state.clubMode} onValueChange={setClubMode} trackColor={{ true: colors.gold, false: colors.border }} thumbColor={colors.white} />
+        <Switch value={state.clubMode} onValueChange={setClubMode} trackColor={{ true: colors.signature, false: colors.border }} thumbColor={colors.white} />
       </Card>
     </>
   );
@@ -334,7 +334,7 @@ export default function ClubAdmin() {
         <>
           {/* Vue d'ensemble */}
           <View style={styles.stats}>
-            <StatTile value={upcomingRes.length} label="À venir" color={colors.gold} bg={colors.goldSoft} />
+            <StatTile value={upcomingRes.length} label="À venir" color={colors.signature} bg={colors.signatureSoft} />
             <StatTile value={pastRes.length} label="Jouées" color={colors.blue} bg={colors.blueSoft} />
             <StatTile value={clubRes.length} label="Total" color={colors.green} bg={colors.greenSoft} />
           </View>
@@ -402,11 +402,11 @@ export default function ClubAdmin() {
                       info.kind === 'tournoi'
                         ? colors.purple
                         : info.kind === 'complet'
-                          ? colors.gold
+                          ? colors.signature
                           : info.kind === 'horsapp'
                             ? colors.coralSoft
                             : info.kind === 'partiel'
-                              ? colors.goldSoft
+                              ? colors.signatureSoft
                               : colors.surfaceAlt;
                     const sel = selectedCell?.dateKey === d.key && selectedCell?.time === t;
                     return (
@@ -416,11 +416,11 @@ export default function ClubAdmin() {
                         style={[styles.planCell, { backgroundColor: bg }, sel && styles.planCellSel]}
                       >
                         {info.kind === 'partiel' ? (
-                          <Txt variant="small" color={colors.gold} style={{ fontSize: 10, fontWeight: '800' }}>
+                          <Txt variant="small" color={colors.signature} style={{ fontSize: 10, fontWeight: '800' }}>
                             {info.occupied}/{courts.length}
                           </Txt>
                         ) : null}
-                        {info.kind === 'complet' ? <Ionicons name="checkmark" size={11} color={colors.onGold} /> : null}
+                        {info.kind === 'complet' ? <Ionicons name="checkmark" size={11} color={colors.onSignature} /> : null}
                         {info.kind === 'horsapp' ? <Ionicons name="lock-closed" size={10} color={colors.coral} /> : null}
                         {info.kind === 'tournoi' ? <Ionicons name="trophy" size={10} color={colors.white} /> : null}
                       </Pressable>
@@ -430,8 +430,8 @@ export default function ClubAdmin() {
               ))}
               <View style={styles.planLegend}>
                 <LegendDot color={colors.surfaceAlt} label="Libre" />
-                <LegendDot color={colors.goldSoft} label="Partiel" />
-                <LegendDot color={colors.gold} label="Complet" />
+                <LegendDot color={colors.signatureSoft} label="Partiel" />
+                <LegendDot color={colors.signature} label="Complet" />
                 <LegendDot color={colors.coralSoft} label="Hors app" />
                 <LegendDot color={colors.purple} label="Tournoi" />
               </View>
@@ -458,7 +458,7 @@ export default function ClubAdmin() {
               upcomingRes.map((r) => (
                 <Card key={r.id} style={{ marginBottom: spacing.sm }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                    <IconCircle icon="time" color={colors.gold} bg={colors.goldSoft} size={40} />
+                    <IconCircle icon="time" color={colors.signature} bg={colors.signatureSoft} size={40} />
                     <View style={{ flex: 1 }}>
                       <Txt variant="h3" style={{ fontSize: 15 }}>
                         {r.date} · {r.time}
@@ -586,8 +586,8 @@ export default function ClubAdmin() {
                   </View>
                 ))}
                 <Pressable onPress={addPhotoFromDevice} style={styles.addTile}>
-                  <Ionicons name="camera-outline" size={22} color={colors.gold} />
-                  <Txt variant="small" color={colors.gold} style={{ marginTop: 4 }}>
+                  <Ionicons name="camera-outline" size={22} color={colors.signature} />
+                  <Txt variant="small" color={colors.signature} style={{ marginTop: 4 }}>
                     Ajouter
                   </Txt>
                 </Pressable>
@@ -631,7 +631,7 @@ export default function ClubAdmin() {
                     <View key={o.id} style={styles.listRow}>
                       <Tag
                         label={o.kind === 'actu' ? 'Actu' : o.kind === 'evenement' ? 'Événement' : 'Offre'}
-                        tone={o.kind === 'actu' ? 'green' : o.kind === 'evenement' ? 'purple' : 'gold'}
+                        tone={o.kind === 'actu' ? 'green' : o.kind === 'evenement' ? 'purple' : 'signature'}
                       />
                       <View style={{ flex: 1 }}>
                         <Txt variant="body" style={{ fontWeight: '600' }}>{o.title}</Txt>
@@ -1120,7 +1120,7 @@ function ClosePanel({
               const sel = selected === t;
               return (
                 <Pressable key={t} onPress={() => setSelected(t)} style={[styles.teamRow, sel && styles.teamRowSel]}>
-                  <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.gold : colors.textMuted} />
+                  <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.signature : colors.textMuted} />
                   <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
                     {t}
                   </Txt>
@@ -1328,7 +1328,7 @@ function CodeGate({ club, onUnlock }: { club: Club; onUnlock: (code: string) => 
   const [code, setCode] = useState('');
   const [error, setError] = useState(false);
   return (
-    <Card style={{ marginTop: spacing.md, alignItems: 'center', borderColor: colors.gold }}>
+    <Card style={{ marginTop: spacing.md, alignItems: 'center', borderColor: colors.signature }}>
       <IconCircle icon="lock-closed" />
       <Txt variant="h3" style={{ marginTop: spacing.sm }}>
         Accès gérant — {club.name}
@@ -1437,9 +1437,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     backgroundColor: colors.surfaceAlt,
   },
-  teamRowSel: { backgroundColor: colors.goldSoft, borderWidth: 1, borderColor: colors.gold },
+  teamRowSel: { backgroundColor: colors.signatureSoft, borderWidth: 1, borderColor: colors.signature },
   courtRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: radius.sm, backgroundColor: colors.surfaceAlt },
-  courtRowSel: { backgroundColor: colors.goldSoft, borderWidth: 1, borderColor: colors.gold },
+  courtRowSel: { backgroundColor: colors.signatureSoft, borderWidth: 1, borderColor: colors.signature },
   confirmBox: {
     marginTop: spacing.md,
     padding: spacing.md,

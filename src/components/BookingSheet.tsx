@@ -93,8 +93,8 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
                 {club.name} · {day.label} à {time}
               </Txt>
               <View style={styles.badge}>
-                <Ionicons name="tennisball" size={15} color={colors.gold} />
-                <Txt variant="small" color={colors.gold} style={{ fontWeight: '700' }}>
+                <Ionicons name="tennisball" size={15} color={colors.signature} />
+                <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
                   {court} · toi{participantCount > 0 ? ` + ${participantCount}` : ''}
                 </Txt>
               </View>
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.goldSoft,
+    backgroundColor: colors.signatureSoft,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: 6,

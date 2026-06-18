@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { Screen } from '@/components/Screen';
+import { Stepper } from '@/components/Stepper';
 import { Button, Card, EmptyState, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
@@ -109,8 +110,12 @@ export default function ReserverScreen() {
     );
   }
 
+  // Progression du parcours guidé (après le choix Par heure/Par club, fait en amont).
+  const step = !day ? 0 : !slot ? 1 : !court ? 2 : 3;
+
   return (
     <Screen back title="Réserver" subtitle={club.name}>
+      <Stepper steps={['Jour', 'Créneau', 'Terrain', 'Confirmer']} current={step} />
       <Label text="Jour" />
       <View style={styles.wrap}>
         {dates.map((d) => (
@@ -120,7 +125,7 @@ export default function ReserverScreen() {
 
       {compToday ? (
         <View style={styles.banner}>
-          <Ionicons name="trophy" size={16} color={colors.gold} />
+          <Ionicons name="trophy" size={16} color={colors.signature} />
           <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
             Un tournoi a lieu ce jour à {club.name} — le terrain n'est pas réservable.
           </Txt>
@@ -235,9 +240,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.goldSoft,
+    backgroundColor: colors.signatureSoft,
     borderWidth: 1,
-    borderColor: colors.gold,
+    borderColor: colors.signature,
     borderRadius: radius.md,
     padding: spacing.md,
     marginTop: spacing.md,

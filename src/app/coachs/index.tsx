@@ -88,7 +88,7 @@ export default function CoachsScreen() {
           {clubCoaches.map((c) => (
             <Card key={c.id} style={{ marginBottom: spacing.sm }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                <IconCircle icon="person" color={colors.gold} bg={colors.goldSoft} size={40} />
+                <IconCircle icon="person" color={colors.signature} bg={colors.signatureSoft} size={40} />
                 <View style={{ flex: 1 }}>
                   <Txt variant="h3" style={{ fontSize: 15 }}>
                     {c.name}

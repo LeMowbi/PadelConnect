@@ -8,6 +8,7 @@ import { ContactButtons } from '@/components/ContactButtons';
 import { RatingStars } from '@/components/RatingStars';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, IconCircle, Tag, Txt } from '@/components/ui';
+import { StickyBar } from '@/components/StickyBar';
 import { clubGallery, defaultCourts, findClub, offersForClub } from '@/data/clubs';
 import { coaches } from '@/data/coaches';
 import { seedCompetitions } from '@/data/competitions';
@@ -78,16 +79,26 @@ export default function ClubDetail() {
   return (
     <Screen
       back
+      contentStyle={{ paddingBottom: 96 }}
       overlay={
-        toast ? (
-          // Toast léger (ex. « Lien copié ! » après partage sur ordinateur)
-          <View style={styles.toast} pointerEvents="none">
-            <Ionicons name="checkmark-circle" size={16} color={colors.white} />
-            <Txt variant="small" color={colors.white}>
-              {toast}
-            </Txt>
-          </View>
-        ) : null
+        <>
+          {/* CTA collant : prix « dès » à gauche, Réserver (pill) à droite */}
+          <StickyBar
+            label={`dès ${fcfa(minPrice(club))}`}
+            hint="la session · 1h30"
+            cta="Réserver"
+            onPress={() => router.push(`/reserver/${club.id}`)}
+          />
+          {toast ? (
+            // Toast léger (ex. « Lien copié ! » après partage sur ordinateur)
+            <View style={styles.toast} pointerEvents="none">
+              <Ionicons name="checkmark-circle" size={16} color={colors.white} />
+              <Txt variant="small" color={colors.white}>
+                {toast}
+              </Txt>
+            </View>
+          ) : null}
+        </>
       }
     >
       {/* Photo héros — touche pour ouvrir en plein écran */}
@@ -143,10 +154,7 @@ export default function ClubDetail() {
       </View>
 
       <View style={styles.actions}>
-        <View style={{ flex: 1 }}>
-          <Button label="Réserver un créneau" icon="calendar" onPress={() => router.push(`/reserver/${club.id}`)} full />
-        </View>
-        <Button label="Carte" icon="map-outline" variant="secondary" onPress={() => openMaps(club)} />
+        <Button label="Voir sur la carte" icon="map-outline" variant="secondary" onPress={() => openMaps(club)} full />
       </View>
 
       <Card style={{ marginTop: spacing.lg }}>
@@ -196,12 +204,12 @@ export default function ClubDetail() {
       {/* Offres & actus (gérées par le club) */}
       <Card style={{ marginTop: spacing.lg }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}>
-          <Ionicons name="megaphone-outline" size={18} color={colors.gold} />
+          <Ionicons name="megaphone-outline" size={18} color={colors.signature} />
           <Txt variant="h3">Offres & actus</Txt>
         </View>
         {offers.map((o, i) => (
           <View key={o.id ?? o.title} style={{ marginTop: i === 0 ? 0 : spacing.md }}>
-            <Tag label={o.kind === 'actu' ? 'Actu' : 'Offre'} tone={o.kind === 'actu' ? 'green' : 'gold'} />
+            <Tag label={o.kind === 'actu' ? 'Actu' : 'Offre'} tone={o.kind === 'actu' ? 'green' : 'signature'} />
             <Txt variant="body" style={{ fontWeight: '700', marginTop: 4 }}>
               {o.title}
             </Txt>
@@ -248,7 +256,7 @@ export default function ClubDetail() {
       {clubCoaches.length > 0 ? (
         <Card style={{ marginTop: spacing.lg }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}>
-            <Ionicons name="school-outline" size={18} color={colors.gold} />
+            <Ionicons name="school-outline" size={18} color={colors.signature} />
             <Txt variant="h3">Coachs du club</Txt>
           </View>
           <Txt variant="small" color={colors.textFaint}>
@@ -258,7 +266,7 @@ export default function ClubDetail() {
             <View key={c.id}>
               {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
               <View style={[styles.coachRow, { marginTop: i === 0 ? spacing.md : 0 }]}>
-                <IconCircle icon="person" color={colors.gold} bg={colors.goldSoft} size={38} />
+                <IconCircle icon="person" color={colors.signature} bg={colors.signatureSoft} size={38} />
                 <View style={{ flex: 1 }}>
                   <Txt variant="body" style={{ fontWeight: '600' }}>{c.name}</Txt>
                   <Txt variant="muted">{c.sub}</Txt>
@@ -279,7 +287,7 @@ export default function ClubDetail() {
         <Card style={{ marginTop: spacing.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.lg }}>
             <View style={{ alignItems: 'center' }}>
-              <Txt variant="display" color={colors.gold}>
+              <Txt variant="display" color={colors.signature}>
                 {avgRating.toFixed(1)}
               </Txt>
               <RatingStars value={avgRating} size={13} />
@@ -296,7 +304,7 @@ export default function ClubDetail() {
                     <Txt variant="small" color={colors.textMuted} style={{ width: 10, textAlign: 'center' }}>
                       {s}
                     </Txt>
-                    <Ionicons name="star" size={10} color={colors.gold} />
+                    <Ionicons name="star" size={10} color={colors.signature} />
                     <View style={styles.summaryTrack}>
                       <View style={[styles.summaryFill, { width: (`${pct}%` as `${number}%`) }]} />
                     </View>
@@ -462,7 +470,7 @@ const styles = StyleSheet.create({
   eventRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xs },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   summaryTrack: { flex: 1, height: 6, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
-  summaryFill: { height: 6, borderRadius: radius.pill, backgroundColor: colors.gold },
+  summaryFill: { height: 6, borderRadius: radius.pill, backgroundColor: colors.signature },
   viewer: { flex: 1, backgroundColor: colors.viewerBg, justifyContent: 'center' },
   viewerClose: {
     position: 'absolute',
@@ -478,12 +486,12 @@ const styles = StyleSheet.create({
   viewerHint: { position: 'absolute', bottom: 40, alignSelf: 'center' },
   toast: {
     position: 'absolute',
-    bottom: 28,
+    bottom: 112, // au-dessus de la barre collante « Réserver »
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.gold,
+    backgroundColor: colors.signature,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: radius.pill,

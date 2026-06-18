@@ -12,7 +12,7 @@ export function Logo({ size = 30, tagline }: { size?: number; tagline?: string }
       />
       <View>
         <Text style={styles.word}>
-          Padel<Text style={{ color: colors.gold }}>Connect</Text>
+          Padel<Text style={{ color: colors.signature }}>Connect</Text>
         </Text>
         {tagline ? <Text style={styles.tagline}>{tagline}</Text> : null}
       </View>
