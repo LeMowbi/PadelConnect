@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { BookingSheet } from '@/components/BookingSheet';
 import { Chip } from '@/components/Chip';
+import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Button, Card, EmptyState, Txt } from '@/components/ui';
@@ -74,6 +75,7 @@ export default function ReserverScreen() {
 
   return (
     <Screen back title="Réserver" subtitle="Sessions de 1h30 — on te montre les terrains libres">
+      <Reveal>
       {/* Jour — pastilles (maquette) : jour abrégé + numéro, signature si actif */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingVertical: spacing.sm }}>
         {days.map((d, i) => {
@@ -238,6 +240,7 @@ export default function ReserverScreen() {
       </View>
 
       {sheet ? <BookingSheet club={sheet.club} day={day} time={sheet.time} onClose={() => setSheet(null)} /> : null}
+      </Reveal>
     </Screen>
   );
 }

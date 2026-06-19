@@ -3,7 +3,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
+import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
+import { StickyBar } from '@/components/StickyBar';
 import { Stepper } from '@/components/Stepper';
 import { Button, Card, EmptyState, Txt, type IconName } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
@@ -114,7 +116,22 @@ export default function ReserverScreen() {
   const step = !day ? 0 : !slot ? 1 : !court ? 2 : 3;
 
   return (
-    <Screen back title="Réserver" subtitle={club.name}>
+    <Screen
+      back
+      title="Réserver"
+      subtitle={club.name}
+      contentStyle={{ paddingBottom: 96 }}
+      overlay={
+        <StickyBar
+          label={slot ? fcfa(slotPrice) : `dès ${fcfa(slotPrice)}`}
+          hint="session · 1h30"
+          cta="Réserver le terrain"
+          onPress={confirm}
+          disabled={!ready}
+        />
+      }
+    >
+      <Reveal>
       <Stepper steps={['Jour', 'Créneau', 'Terrain', 'Confirmer']} current={step} />
       <Label text="Jour" />
       <View style={styles.wrap}>
@@ -209,11 +226,11 @@ export default function ReserverScreen() {
       </Card>
 
       <View style={{ marginTop: spacing.lg }}>
-        <Button label="Réserver le terrain" icon="checkmark" onPress={confirm} disabled={!ready} full />
         <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
           Session de 1h30, sans paiement en ligne. Le tarif se règle directement au club. Annulation jusqu'à 5h avant.
         </Txt>
       </View>
+      </Reveal>
     </Screen>
   );
 }
