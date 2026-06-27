@@ -3,7 +3,7 @@
 //   node --experimental-strip-types tests/pricing.test.ts
 // (les imports de types de pricing.ts sont effacés à l'exécution — aucun double).
 
-import { minPrice, priceForSlot, priceTiersFor, validateTiers } from '../src/lib/pricing.ts';
+import { groupTiersByLabel, minPrice, priceForSlot, priceTiersFor, validateTiers } from '../src/lib/pricing.ts';
 import { perPlayer } from '../src/lib/format.ts';
 
 let failed = 0;
@@ -97,6 +97,30 @@ fakeSave([tier('07:00', '16:00'), tier('17:00', '24:00')]); // trou
 check(savedPatch === null, 'Validation en échec → onSave NON appelé (état du club intact)');
 fakeSave([tier('07:00', '24:00')]); // valide
 check(savedPatch !== null, 'Validation OK → onSave appelé');
+
+// ——— groupTiersByLabel : regroupement d'affichage par plage nommée (fiche club) ———
+type Tier = Parameters<typeof groupTiersByLabel>[0][number];
+const lt = (start: string, end: string, label?: string): Tier => ({ start, end, price: 10000, label });
+
+// Toutes nommées, 3 noms distincts → 3 onglets dans l'ordre d'origine.
+const named = groupTiersByLabel([lt('07:00', '16:00', 'Journée'), lt('16:00', '20:30', 'Soirée'), lt('20:30', '24:00', 'Fin de soirée')]);
+check(named.length === 3, 'Plages nommées (3 noms distincts) → 3 onglets');
+check(named.map((g) => g.label).join('|') === 'Journée|Soirée|Fin de soirée', 'Onglets dans l’ordre d’origine');
+check(named[1].items.length === 1 && named[1].items[0].start === '16:00', 'Onglet « Soirée » contient la bonne plage');
+
+// Une plage sans nom → pas d'onglets (liste à plat, rétro-compatible).
+check(groupTiersByLabel([lt('07:00', '16:00', 'Journée'), lt('16:00', '24:00')]).length === 0, 'Une plage sans nom → pas d’onglets (liste à plat)');
+
+// Toutes le même nom → un seul onglet inutile → liste à plat.
+check(groupTiersByLabel([lt('07:00', '16:00', 'Tarif'), lt('16:00', '24:00', 'Tarif')]).length === 0, 'Un seul nom distinct → pas d’onglets');
+
+// Deux plages partageant un nom + une troisième distincte → 2 onglets, le 1er a 2 lignes.
+const shared = groupTiersByLabel([lt('07:00', '12:00', 'Journée'), lt('12:00', '16:00', 'Journée'), lt('16:00', '24:00', 'Soirée')]);
+check(shared.length === 2, 'Deux plages même nom + une autre → 2 onglets');
+check(shared[0].label === 'Journée' && shared[0].items.length === 2, 'Onglet « Journée » regroupe ses 2 plages');
+
+// Aucune plage → aucun onglet.
+check(groupTiersByLabel([]).length === 0, 'Aucune plage → aucun onglet');
 
 console.log(failed === 0 ? '\nTOUS LES TESTS TARIFS PASSENT.' : `\n${failed} test(s) tarifs en échec.`);
 if (failed > 0) process.exitCode = 1;

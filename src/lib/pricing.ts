@@ -30,6 +30,29 @@ export function priceForSlot(club: Club, time: string): number {
   return club.priceFrom;
 }
 
+// ——— Regroupement d'affichage par plage nommée (fiche club, purement visuel) ———
+// Si le gérant a NOMMÉ ses plages, la fiche club les présente en onglets
+// (SegmentedControl). On ne regroupe que lorsque TOUTES les plages ont un nom et
+// qu'il y a au moins 2 noms distincts ; sinon on rend la liste à plat (rétro-compat).
+// Plusieurs plages partageant un même nom sont rangées sous le même onglet, dans
+// l'ordre d'origine. Aucune incidence sur le prix : c'est de la présentation.
+export function groupTiersByLabel(tiers: PriceTier[]): { label: string; items: PriceTier[] }[] {
+  if (tiers.length === 0) return [];
+  if (!tiers.every((t) => (t.label ?? '').trim())) return []; // une plage sans nom → pas d'onglets
+  const order: string[] = [];
+  const byLabel = new Map<string, PriceTier[]>();
+  for (const t of tiers) {
+    const key = (t.label ?? '').trim();
+    if (!byLabel.has(key)) {
+      byLabel.set(key, []);
+      order.push(key);
+    }
+    byLabel.get(key)!.push(t);
+  }
+  if (order.length < 2) return []; // un seul nom → l'onglet n'apporte rien, liste à plat
+  return order.map((label) => ({ label, items: byLabel.get(label)! }));
+}
+
 // ——— Validation des plages tarifaires (à l'enregistrement, Espace Club) ———
 // Fonction PURE et testable. Reçoit les plages COMPLÈTES (les plages incomplètes
 // sont déjà ignorées par l'appelant). Règle : soit aucune plage (→ tarif unique,

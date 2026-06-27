@@ -577,3 +577,30 @@ fichier, logique préservée) :
 - Vérifs : **tsc 0 · lint 0/0 · 107 tests verts · export OK**. Tokens uniquement, logique intacte.
 - **Déploiement confirmé côté GitHub** : Pages build #40 `success` — si l'écran ne change pas,
   c'est le cache (ouvrir avec `?v=…` neuf en navigation privée).
+
+---
+
+## Patch v4.18 — Tarifs de la fiche club en onglets (T3 du plan, plages nommées)
+
+Dernière tâche de la micro-vague `docs/PLAN.md` (T1 `Reveal` + T2 `StickyBar` déjà livrées en
+v4.17). La maquette « Fiche club » montre les tarifs **regroupés en onglets** ; l'app les listait
+à plat. **Décision porteur (Moustapha)** : de **vraies plages éditables**, version sûre = le gérant
+**nomme ses plages horaires** existantes (pas de tarif week-end pour l'instant — réservé au §B
+serveur car il toucherait au calcul du prix réel et à la commission opérateur). **Aucune incidence
+sur la caisse** : le nom est purement de l'affichage.
+
+- **Modèle** : `PriceTier` gagne un champ **`label?` optionnel** (`src/data/clubs.ts`). Le seed
+  Padelta nomme ses 3 plages : **Journée** (07:00–16:00), **Soirée** (16:00–20:30),
+  **Fin de soirée** (20:30–24:00). Rien d'autre changé ; `validateTiers`, `priceForSlot`,
+  `minPrice` **inchangés** (le label n'entre pas dans le calcul).
+- **Helper pur** `groupTiersByLabel` (`src/lib/pricing.ts`) : regroupe par nom **uniquement si
+  TOUTES les plages sont nommées ET ≥ 2 noms distincts** ; sinon liste à plat (rétro-compatible).
+  Plusieurs plages d'un même nom sont rangées sous le même onglet, dans l'ordre d'origine.
+- **Fiche club** (`src/app/club/[id].tsx`) : `SegmentedControl` (composant existant) au-dessus des
+  tarifs quand des plages nommées existent ; basculer d'onglet change la liste. Tarif unique et
+  plages non nommées : rendu **identique à avant**.
+- **Espace Club** (`src/app/club-admin/index.tsx`) : un champ **« Nom de la plage » optionnel** par
+  ligne tarifaire, persisté via `priceTiers[].label`. Texte d'aide mis à jour.
+- Vérifs : **tsc 0 · lint 0/0 · tests verts (+8 cas `groupTiersByLabel`) · export OK (18 routes)**.
+  Garde-fous respectés : zéro couleur en dur, kit maison, prix FCFA, sessions 1h30, aucune
+  auto-déclaration, pas de tabbar. Cache : ouvrir la démo avec `?v=418` en navigation privée.

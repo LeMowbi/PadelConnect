@@ -7,6 +7,7 @@ import { ClubPhoto } from '@/components/ClubPhoto';
 import { ContactButtons } from '@/components/ContactButtons';
 import { RatingStars } from '@/components/RatingStars';
 import { Screen } from '@/components/Screen';
+import { SegmentedControl } from '@/components/SegmentedControl';
 import { Button, Card, Divider, EmptyState, IconCircle, Tag, Txt } from '@/components/ui';
 import { StickyBar } from '@/components/StickyBar';
 import { clubGallery, defaultCourts, findClub, offersForClub } from '@/data/clubs';
@@ -16,7 +17,7 @@ import { ratingFor, reviewsFor } from '@/data/reviews';
 import { useApp } from '@/store/AppContext';
 import { openWhatsApp } from '@/lib/contact';
 import { fcfa, initials } from '@/lib/format';
-import { minPrice, priceTiersFor } from '@/lib/pricing';
+import { groupTiersByLabel, minPrice, priceTiersFor } from '@/lib/pricing';
 import { shareClub } from '@/lib/share';
 import { openMaps } from '@/lib/maps';
 import { colors, radius, spacing } from '@/theme';
@@ -33,6 +34,7 @@ export default function ClubDetail() {
   const [noteError, setNoteError] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [viewer, setViewer] = useState<number | null>(null); // photo ouverte en plein écran
+  const [tierTab, setTierTab] = useState(0); // onglet de tarifs actif (plages nommées)
   const { width: winW } = useWindowDimensions();
 
   if (!club) {
@@ -64,6 +66,9 @@ export default function ClubDetail() {
   const { rating: avgRating, count: ratingCount } = ratingFor(club, state.userReviews);
   // Plages tarifaires définies par le gérant (vide → tarif unique).
   const tiers = priceTiersFor(club);
+  // Plages NOMMÉES → onglets (sinon liste à plat). Purement présentation.
+  const tierGroups = groupTiersByLabel(tiers);
+  const activeTier = tierGroups.length ? tierGroups[Math.min(tierTab, tierGroups.length - 1)] : null;
 
   const submit = () => {
     if (rating === 0) {
@@ -206,40 +211,68 @@ export default function ClubDetail() {
         </View>
       </Card>
 
-      {/* Tarifs par créneau — lignes horaires (ou tarif unique si aucune plage). */}
+      {/* Tarifs par créneau — onglets si plages nommées, sinon lignes (ou tarif unique). */}
       <Txt variant="h3" style={{ marginTop: spacing.lg, marginBottom: spacing.sm }}>
         Tarifs par créneau
       </Txt>
-      <Card>
-        {tiers.length > 0 ? (
-          tiers.map((t, i) => (
-            <View key={`${t.start}-${t.end}`}>
-              {i > 0 ? <Divider /> : null}
-              <View style={styles.tierRow}>
-                <View style={styles.tierLeft}>
-                  <Ionicons name="time-outline" size={16} color={colors.textMuted} />
-                  <Txt variant="body">
-                    {t.start} – {t.end}
+      {activeTier ? (
+        <>
+          <SegmentedControl
+            options={tierGroups.map((g) => g.label)}
+            value={activeTier.label}
+            onChange={(label) => setTierTab(tierGroups.findIndex((g) => g.label === label))}
+          />
+          <Card>
+            {activeTier.items.map((t, i) => (
+              <View key={`${t.start}-${t.end}`}>
+                {i > 0 ? <Divider /> : null}
+                <View style={styles.tierRow}>
+                  <View style={styles.tierLeft}>
+                    <Ionicons name="time-outline" size={16} color={colors.textMuted} />
+                    <Txt variant="body">
+                      {t.start} – {t.end}
+                    </Txt>
+                  </View>
+                  <Txt variant="body" style={{ fontWeight: '700' }}>
+                    {fcfa(t.price)}
                   </Txt>
                 </View>
-                <Txt variant="body" style={{ fontWeight: '700' }}>
-                  {fcfa(t.price)}
-                </Txt>
               </View>
+            ))}
+          </Card>
+        </>
+      ) : (
+        <Card>
+          {tiers.length > 0 ? (
+            tiers.map((t, i) => (
+              <View key={`${t.start}-${t.end}`}>
+                {i > 0 ? <Divider /> : null}
+                <View style={styles.tierRow}>
+                  <View style={styles.tierLeft}>
+                    <Ionicons name="time-outline" size={16} color={colors.textMuted} />
+                    <Txt variant="body">
+                      {t.start} – {t.end}
+                    </Txt>
+                  </View>
+                  <Txt variant="body" style={{ fontWeight: '700' }}>
+                    {fcfa(t.price)}
+                  </Txt>
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.tierRow}>
+              <View style={styles.tierLeft}>
+                <Ionicons name="time-outline" size={16} color={colors.textMuted} />
+                <Txt variant="body">Session · 1h30</Txt>
+              </View>
+              <Txt variant="body" style={{ fontWeight: '700' }}>
+                dès {fcfa(minPrice(club))}
+              </Txt>
             </View>
-          ))
-        ) : (
-          <View style={styles.tierRow}>
-            <View style={styles.tierLeft}>
-              <Ionicons name="time-outline" size={16} color={colors.textMuted} />
-              <Txt variant="body">Session · 1h30</Txt>
-            </View>
-            <Txt variant="body" style={{ fontWeight: '700' }}>
-              dès {fcfa(minPrice(club))}
-            </Txt>
-          </View>
-        )}
-      </Card>
+          )}
+        </Card>
+      )}
       <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
         Tarif à confirmer auprès du club.
       </Txt>

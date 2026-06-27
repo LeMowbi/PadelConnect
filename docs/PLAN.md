@@ -5,6 +5,11 @@
 > Décisions porteur respectées : accès opérateur = carte dans le Profil (pas de PIN) · Espace Club = code 4 chiffres.
 > DIFFÉRÉS (vraie version) : gating serveur, notifications réelles, avis vérifiés, fiabilité, hors-ligne. Non touchés ici.
 
+> **MISE À JOUR 2026-06-27 — micro-vague TERMINÉE.** T1 `Reveal` + T2 `StickyBar` livrées en v4.17 ;
+> T3 (tarifs en onglets) livrée en **v4.18** dans sa version « plages nommées » (décision porteur :
+> de vraies plages éditables par le gérant, sans tarif week-end — ce dernier resterait du §B serveur
+> car il toucherait au prix réel/commission). Plus rien d'ouvert dans cette vague.
+
 Cette vague ne contient que des finitions **chirurgicales, à faible risque, sans serveur**, pour aligner
 les 2 derniers écarts visibles vs maquette. Aucune logique métier modifiée.
 

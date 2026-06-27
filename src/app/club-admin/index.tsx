@@ -974,12 +974,12 @@ export default function ClubAdmin() {
   );
 }
 
-// 3 lignes de plages tarifaires éditables (heure début, fin, prix). Vide = ignorée.
-type TierRow = { start: string; end: string; price: string };
+// 3 lignes de plages tarifaires éditables (nom optionnel, heure début, fin, prix). Vide = ignorée.
+type TierRow = { start: string; end: string; price: string; label: string };
 function emptyTiers(club: Club): TierRow[] {
-  const seed = (club.priceTiers ?? []).map((t) => ({ start: t.start, end: t.end, price: String(t.price) }));
+  const seed = (club.priceTiers ?? []).map((t) => ({ start: t.start, end: t.end, price: String(t.price), label: t.label ?? '' }));
   const rows = [...seed];
-  while (rows.length < 3) rows.push({ start: '', end: '', price: '' });
+  while (rows.length < 3) rows.push({ start: '', end: '', price: '', label: '' });
   return rows.slice(0, 3);
 }
 
@@ -1006,7 +1006,7 @@ function ClubInfoCard({ club, onSave }: { club: Club & { contactPhone?: string }
     // On ne garde que les plages complètes (début, fin, prix > 0). Aucune → tarif unique.
     const built: PriceTier[] = tiers
       .filter((t) => t.start.trim() && t.end.trim() && Number(t.price) > 0)
-      .map((t) => ({ start: t.start.trim(), end: t.end.trim(), price: Number(t.price) }));
+      .map((t) => ({ start: t.start.trim(), end: t.end.trim(), price: Number(t.price), label: t.label.trim() || undefined }));
     // Validation À LA SOURCE : des plages doivent couvrir 07:00→24:00 sans trou ni
     // chevauchement. Échec → on N'ENREGISTRE RIEN (l'état du club reste intact).
     const v = validateTiers(built);
@@ -1054,20 +1054,23 @@ function ClubInfoCard({ club, onSave }: { club: Club & { contactPhone?: string }
         style={styles.input}
       />
 
-      {/* Tarifs par plage horaire — définis librement (heures creuses / prime time / soirée). */}
+      {/* Tarifs par plage horaire — définis librement (nom optionnel + heures creuses / prime time / soirée). */}
       <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
         TARIFS PAR PLAGE (OPTIONNEL — SINON LE TARIF UNIQUE S'APPLIQUE)
       </Txt>
       {tiers.map((t, i) => (
-        <View key={i} style={styles.tierRow}>
-          <TextInput value={t.start} onChangeText={(v) => setTier(i, { start: v })} placeholder="07:00" placeholderTextColor={colors.textFaint} style={[styles.input, styles.tierCell, { marginTop: 0 }]} />
-          <Txt variant="muted">→</Txt>
-          <TextInput value={t.end} onChangeText={(v) => setTier(i, { end: v })} placeholder="16:00" placeholderTextColor={colors.textFaint} style={[styles.input, styles.tierCell, { marginTop: 0 }]} />
-          <TextInput value={t.price} onChangeText={(v) => setTier(i, { price: v })} placeholder="FCFA" placeholderTextColor={colors.textFaint} keyboardType="numeric" style={[styles.input, styles.tierPrice, { marginTop: 0 }]} />
+        <View key={i} style={{ marginTop: spacing.sm }}>
+          <TextInput value={t.label} onChangeText={(v) => setTier(i, { label: v })} placeholder="Nom de la plage (ex. Journée — optionnel)" placeholderTextColor={colors.textFaint} style={[styles.input, { marginTop: 0 }]} />
+          <View style={[styles.tierRow, { marginTop: spacing.xs }]}>
+            <TextInput value={t.start} onChangeText={(v) => setTier(i, { start: v })} placeholder="07:00" placeholderTextColor={colors.textFaint} style={[styles.input, styles.tierCell, { marginTop: 0 }]} />
+            <Txt variant="muted">→</Txt>
+            <TextInput value={t.end} onChangeText={(v) => setTier(i, { end: v })} placeholder="16:00" placeholderTextColor={colors.textFaint} style={[styles.input, styles.tierCell, { marginTop: 0 }]} />
+            <TextInput value={t.price} onChangeText={(v) => setTier(i, { price: v })} placeholder="FCFA" placeholderTextColor={colors.textFaint} keyboardType="numeric" style={[styles.input, styles.tierPrice, { marginTop: 0 }]} />
+          </View>
         </View>
       ))}
       <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
-        Si tu définis des plages, elles doivent couvrir 07:00 → 24:00 sans trou.
+        Si tu définis des plages, elles doivent couvrir 07:00 → 24:00 sans trou. Nomme-les (Journée, Soirée…) pour les afficher en onglets sur ta page.
       </Txt>
       {tierError ? (
         <View style={styles.tierErrorBox}>

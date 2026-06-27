@@ -26,7 +26,7 @@ export type Club = {
 
 // Tarif d'une plage horaire défini librement par le gérant : [start, end[ → prix FCFA.
 // Heures « HH:MM » comparées en chaînes (format fixe). Une plage vide (prix 0) est ignorée.
-export type PriceTier = { start: string; end: string; price: number };
+export type PriceTier = { start: string; end: string; price: number; label?: string };
 
 export const CITY = 'Abidjan';
 
@@ -167,9 +167,9 @@ export const clubs: Club[] = [
     // Tarifs réels Padelta : heures creuses, prime time, fin de soirée.
     // La fin de plage est EXCLUSIVE → « 24:00 » couvre la soirée jusqu'à minuit inclus.
     priceTiers: [
-      { start: '07:00', end: '16:00', price: 10000 },
-      { start: '16:00', end: '20:30', price: 30000 },
-      { start: '20:30', end: '24:00', price: 15000 },
+      { start: '07:00', end: '16:00', price: 10000, label: 'Journée' },
+      { start: '16:00', end: '20:30', price: 30000, label: 'Soirée' },
+      { start: '20:30', end: '24:00', price: 15000, label: 'Fin de soirée' },
     ],
     rating: 4.8,
     reviewsCount: 73,
