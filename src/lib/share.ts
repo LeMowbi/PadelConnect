@@ -1,7 +1,7 @@
 import { Platform, Share } from 'react-native';
 import { formatFee, type Competition } from '@/data/competitions';
 
-const APP_URL = 'https://lemowbi.github.io/Test-1/';
+const APP_URL = 'https://lemowbi.github.io/PadelConnect/';
 
 export type ShareResult = 'shared' | 'copied' | 'none';
 

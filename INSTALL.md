@@ -2,7 +2,7 @@
 
 Trois façons, de la plus simple à la plus « pro ». **Recommandé : le lien web.**
 
-> Déjà en ligne : **https://lemowbi.github.io/Test-1/** (tu peux partager ce lien directement).
+> Déjà en ligne : **https://lemowbi.github.io/PadelConnect/** (tu peux partager ce lien directement).
 
 ---
 

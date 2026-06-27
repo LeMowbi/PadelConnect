@@ -7,7 +7,7 @@ import { Button, Card, IconCircle, StatTile, Txt } from '@/components/ui';
 import { openWhatsApp } from '@/lib/contact';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
-const APP_URL = 'https://lemowbi.github.io/Test-1/';
+const APP_URL = 'https://lemowbi.github.io/PadelConnect/';
 
 // Parrainage : l'invitation WhatsApp FONCTIONNE déjà (partage client). Le compteur
 // d'amis ayant rejoint, lui, se synchronisera avec la version connectée (§B serveur).

@@ -2,7 +2,7 @@
 
 > Mission : corriger la logique après l'audit du 10/06 (retours porteur + tests sur la démo).
 > Règle d'or appliquée : **on a supprimé plus qu'on n'a ajouté.**
-> Démo : https://lemowbi.github.io/Test-1/ · Stockage local passé en **v4** (repart propre).
+> Démo : https://lemowbi.github.io/PadelConnect/ · Stockage local passé en **v4** (repart propre).
 
 ## Phase A — Suppressions
 - **Section « Jouer » / matchs ouverts : supprimée en entier** (2 écrans, MatchCard,

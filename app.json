@@ -49,7 +49,7 @@
     "experiments": {
       "typedRoutes": false,
       "reactCompiler": false,
-      "baseUrl": "/Test-1"
+      "baseUrl": "/PadelConnect"
     },
     "extra": {
       "eas": {

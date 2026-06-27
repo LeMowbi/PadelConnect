@@ -2,7 +2,7 @@
 
 > Audit complet avant la refonte visuelle premium. **Aucun code modifié dans cette phase.**
 > Chiffres mesurés sur le code au commit courant. Référence visuelle : la démo en ligne
-> (https://lemowbi.github.io/Test-1/) — les captures 390×844 automatiques ne sont pas
+> (https://lemowbi.github.io/PadelConnect/) — les captures 390×844 automatiques ne sont pas
 > générables dans l'environnement de travail (pas de navigateur headless) ; à capturer sur
 > téléphone pour le comparatif avant/après.
 

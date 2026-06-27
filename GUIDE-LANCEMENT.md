@@ -16,7 +16,7 @@
 3. Cette maquette est **exactement ce qu'il faut pour convaincre les clubs**. La « vraie » app
    (reliée, sécurisée) se construit **après** avoir convaincu 1 ou 2 clubs.
 
-👉 Démo en ligne, déjà prête à montrer : **https://lemowbi.github.io/Test-1/**
+👉 Démo en ligne, déjà prête à montrer : **https://lemowbi.github.io/PadelConnect/**
 
 ---
 
@@ -80,7 +80,7 @@ en sachant que ça répond à un vrai besoin — et tu peux même t'appuyer sur 
 ## 3. Comment les gens « installent » l'app
 
 ### Maintenant (pour la démo) — **rien à installer**
-- Tu partages simplement le **lien web** : **https://lemowbi.github.io/Test-1/**
+- Tu partages simplement le **lien web** : **https://lemowbi.github.io/PadelConnect/**
   (ou tu héberges le fichier `PadelConnect-web.zip` sur Netlify — voir `INSTALL.md`).
 - Le club/joueur **ouvre le lien**. Sur téléphone, il peut même faire
   **« Ajouter à l'écran d'accueil »** : une icône apparaît, ça s'ouvre comme une appli.
@@ -214,7 +214,7 @@ sans paiement**. Les voici, sans rien te cacher :
 
 ## 9. Ta checklist des 30 prochains jours
 
-- [ ] Mettre la démo en ligne sur un lien stable (déjà fait : https://lemowbi.github.io/Test-1/) et
+- [ ] Mettre la démo en ligne sur un lien stable (déjà fait : https://lemowbi.github.io/PadelConnect/) et
       générer un **QR code**.
 - [ ] Lister **5 clubs** à contacter en premier (les plus actifs/ouverts).
 - [ ] Préparer ton téléphone avec la démo + imprimer la **page de présentation** du kit.
