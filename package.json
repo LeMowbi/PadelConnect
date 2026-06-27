@@ -34,15 +34,17 @@
     "esbuild": "^0.28.1",
     "eslint": "^9.39.4",
     "eslint-config-expo": "^56.0.4",
+    "prettier": "^3.9.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "eslint src tests",
+    "format": "prettier --write src tests",
+    "format:check": "prettier --check src tests",
     "test:logic": "node --experimental-strip-types tests/days.test.ts && node --experimental-strip-types tests/pricing.test.ts && node --experimental-strip-types tests/audit.test.ts && node tests/reset.test.mjs && node tests/seeds.test.mjs"
   },
   "private": true

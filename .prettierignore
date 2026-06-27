@@ -1,0 +1,17 @@
+# Dépendances et sorties de build
+node_modules
+dist
+.expo
+web-build
+
+# Verrou et générés
+package-lock.json
+expo-env.d.ts
+
+# Natif (généré par prebuild, non versionné habituellement)
+ios
+android
+
+# Assets binaires et maquettes HTML volumineuses
+assets
+*.html
