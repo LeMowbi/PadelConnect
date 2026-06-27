@@ -491,7 +491,7 @@ export default function ClubDetail() {
               <Ionicons name="close" size={24} color={colors.white} />
             </Pressable>
             <View style={styles.viewerHint}>
-              <Txt variant="small" color="rgba(255,255,255,0.85)">
+              <Txt variant="small" color={colors.onPhoto}>
                 {gallery.length} photo{gallery.length > 1 ? 's — fais défiler' : ''}
               </Txt>
             </View>
@@ -569,7 +569,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.pill,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: colors.onPhotoSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },

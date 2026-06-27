@@ -28,7 +28,7 @@ export default function ParrainageScreen() {
           <Txt variant="display" color={colors.onSignature} style={{ fontSize: 24, marginTop: spacing.md }}>
             Joue à plusieurs
           </Txt>
-          <Txt variant="small" color="rgba(255,255,255,0.85)" style={{ marginTop: 4 }}>
+          <Txt variant="small" color={colors.onPhoto} style={{ marginTop: 4 }}>
             Le padel, c'est mieux entre amis. Invite-les — tu les retrouves direct sur tes réservations.
           </Txt>
         </LinearGradient>
@@ -59,7 +59,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: radius.md,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: colors.onPhotoSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },

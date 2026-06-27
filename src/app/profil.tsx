@@ -83,11 +83,11 @@ export default function ProfilScreen() {
                   {account.firstName} {account.lastName}
                 </Txt>
                 {bd && zod ? (
-                  <Txt variant="small" color="rgba(255,255,255,0.85)" style={{ marginTop: 2, fontWeight: '600' }}>
+                  <Txt variant="small" color={colors.onPhoto} style={{ marginTop: 2, fontWeight: '600' }}>
                     {zod.emoji} {zod.name} · {ageFrom(bd)} ans{g ? ` · ${g}` : ''}
                   </Txt>
                 ) : (
-                  <Txt variant="small" color="rgba(255,255,255,0.85)" style={{ marginTop: 2 }}>
+                  <Txt variant="small" color={colors.onPhoto} style={{ marginTop: 2 }}>
                     {g ? `${g} · ` : ''}{account.phone}
                   </Txt>
                 )}
@@ -366,7 +366,7 @@ function EditAccount({ onDone }: { onDone: () => void }) {
 const styles = StyleSheet.create({
   band: { borderRadius: radius.xl, padding: spacing.lg, marginTop: spacing.sm },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  editBtn: { width: 38, height: 38, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  editBtn: { width: 38, height: 38, borderRadius: radius.pill, backgroundColor: colors.onPhotoSoft, alignItems: 'center', justifyContent: 'center' },
   gaugeTrack: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   gaugeFill: { height: 8, borderRadius: radius.pill, backgroundColor: colors.signature },
   avatar: {

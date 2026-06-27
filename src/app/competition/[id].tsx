@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -10,7 +11,7 @@ import { demoTeams, formatFee, seedCompetitions, teamCount } from '@/data/compet
 import { dayKey } from '@/lib/days';
 import { shareCompetition } from '@/lib/share';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, shadows, spacing } from '@/theme';
+import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
 export default function CompetitionDetail() {
   const { id } = useLocalSearchParams();
@@ -82,8 +83,8 @@ export default function CompetitionDetail() {
         ) : null
       }
     >
-      {/* En-tête héros violet (univers Tournois) */}
-      <View style={styles.hero}>
+      {/* En-tête héros violet (univers Tournois) — dégradé deepPurple */}
+      <LinearGradient colors={gradients.deepPurple} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
         <View style={styles.heroTopRow}>
           <View style={styles.heroPill}>
             <Txt variant="label" color={colors.purple} style={styles.heroPillText}>
@@ -109,7 +110,7 @@ export default function CompetitionDetail() {
             icon={byClub ? 'business' : 'person'}
           />
         </View>
-      </View>
+      </LinearGradient>
 
       {/* Chips d'info sous le héros */}
       <View style={styles.chipsRow}>

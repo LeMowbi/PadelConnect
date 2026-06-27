@@ -164,7 +164,7 @@ export default function HomeScreen() {
               <View style={styles.matchHead}>
                 <View style={styles.dateChip}>
                   <Txt variant="h2" color={colors.onSignature} style={{ fontSize: 18, lineHeight: 20 }}>{dd}</Txt>
-                  <Txt variant="small" color="rgba(255,255,255,0.85)" style={{ fontSize: 9, fontWeight: '700', letterSpacing: 0.5 }}>
+                  <Txt variant="small" color={colors.onPhoto} style={{ fontSize: 9, fontWeight: '700', letterSpacing: 0.5 }}>
                     {(MONTHS_SHORT[Number(mm) - 1] ?? '').toUpperCase()}
                   </Txt>
                 </View>
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
   },
   brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   livePill: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: spacing.md },
-  liveDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: colors.lime, borderWidth: 4, borderColor: 'rgba(198,242,74,0.35)' },
+  liveDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: colors.lime, borderWidth: 4, borderColor: colors.limeGlow },
   liveText: { fontWeight: '700', fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase' },
   heroCta: {
     flexDirection: 'row',

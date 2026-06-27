@@ -52,7 +52,7 @@ export function ClubPhoto({
             {caption}
           </Txt>
           {subtitle ? (
-            <Txt variant="small" color="rgba(255,255,255,0.9)">
+            <Txt variant="small" color={colors.onPhoto}>
               {subtitle}
             </Txt>
           ) : null}

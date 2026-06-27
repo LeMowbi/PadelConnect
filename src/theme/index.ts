@@ -27,6 +27,7 @@ export const colors = {
   coralSoft: 'rgba(224,101,58,0.14)',
   // Violet — univers Tournois & récompenses.
   purple: '#7C5CD6',
+  purpleDark: '#5B3FB0', // bas du dégradé héros Tournois
   purpleSoft: 'rgba(124,92,214,0.14)',
   // OR réel (champagne) — Sponsorisé, trophées, victoires.
   amber: '#C2922B',
@@ -49,6 +50,9 @@ export const colors = {
   white: '#FFFFFF',
   black: '#000000',
   onSignature: '#FFFFFF', // texte / icône posés sur la couleur signature (vert profond)
+  onPhoto: 'rgba(255,255,255,0.85)', // texte blanc sur photo / dégradé (légèrement adouci)
+  onPhotoSoft: 'rgba(255,255,255,0.16)', // pastille / bouton translucide blanc sur fond sombre
+  limeGlow: 'rgba(198,242,74,0.35)', // halo autour du point « live » (= lime à 35 %)
   overlay: 'rgba(0,0,0,0.45)',
   viewerBg: '#000000', // visionneuse photos plein écran
 } as const;
@@ -57,6 +61,7 @@ export const colors = {
 export const gradients = {
   heroSoft: ['#CBE7DB', '#EFE9DA', colors.bg] as const, // accueil / onboarding (un cran plus profond en haut)
   deepGreen: [colors.signature, colors.signatureDark] as const, // rappels, boutons signature
+  deepPurple: [colors.purple, colors.purpleDark] as const, // héros univers Tournois (fiche tournoi)
 } as const;
 
 // Palette d'accents pour les visuels de club (placeholders) — tokens, pas de hex épars.

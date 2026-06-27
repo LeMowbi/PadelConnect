@@ -12,7 +12,7 @@ import { slotTimestamp, type DayOption } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
 import { priceForSlot } from '@/lib/pricing';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, shadows, spacing } from '@/theme';
 
 // Réservation rapide « en place » : une fiche qui monte du bas, sans changer de page.
 // 2 gestes suffisent : ouvrir → Réserver (le 1ᵉʳ terrain libre est présélectionné).
@@ -189,6 +189,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     paddingBottom: spacing.xxl,
+    ...shadows.e3,
   },
   handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: radius.pill, backgroundColor: colors.border, marginBottom: spacing.md },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
