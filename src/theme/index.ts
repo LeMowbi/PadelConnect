@@ -1,77 +1,76 @@
-// Système de design PadelConnect — « luxe sportif » (brief 28/06/2026).
-// PALETTE DISCIPLINÉE : le VERT structure, le LIME ne sert qu'à 1 action clé par écran,
-// l'OR est réservé au prestige (tournois, trophées, premium), la TERRE aux erreurs/urgences.
-// Violet / corail / bleu / orange ont été retirés : leurs tokens sont remappés sur cette
-// échelle (les noms restent pour compat, mais rendent en vert/or/terre).
+// Système de design PadelConnect — REFONTE (handoff Claude Design).
+// Couleurs PAR RÔLE : VERT = navigation/réservation/validation · OR = notes/avis,
+// trophées, jauges de progression · VIOLET = tournois & récompenses · CORAIL = urgence
+// (places limitées). Fond beige chaud, cartes blanches.
 
 export const colors = {
-  // Fonds — crème chaud (plus premium qu'un blanc froid), cartes blanches.
-  bg: '#F4F1E8',
+  // Fonds
+  bg: '#EFEADF', // beige chaud app
   bgElevated: '#FFFFFF',
-  surface: '#FFFFFF',
-  surfaceAlt: '#ECE8DC',
-  border: '#E6E0D2', // filets (brief)
-  borderSoft: 'rgba(0,0,0,0.06)',
+  surface: '#FFFFFF', // surface carte
+  surfaceAlt: '#F5F2EA', // champs / surfaces secondaires
+  surfaceBeige: '#E4DFD2', // puce / track segmenté (beige foncé)
+  border: '#E7E1D4', // bordure / ligne
+  borderSoft: 'rgba(21,33,28,0.06)',
 
-  // Couleur SIGNATURE = vert profond du terrain (CTA, héros, sélection, prix, niveau).
-  // Texte blanc dessus (onSignature).
-  signature: '#0A6B5D',
-  signatureDark: '#00544D',
-  signatureSoft: 'rgba(10,107,93,0.12)',
-  // Vert vif — disponibilité, succès, victoire, « X libres ».
-  green: '#1E9E73',
-  greenDark: '#167A58',
-  greenSoft: 'rgba(30,158,115,0.14)',
-  // « Bleu » (univers Coachs/info) → remappé sur le vert signature.
-  blue: '#0A6B5D',
-  blueSoft: 'rgba(10,107,93,0.12)',
-  // « Corail » (univers Découvrir) → remappé sur le vert vif.
-  coral: '#1E9E73',
-  coralSoft: 'rgba(30,158,115,0.14)',
-  // « Violet » (univers Tournois/récompenses) → remappé sur l'OR (prestige).
-  purple: '#C2922B',
-  purpleDark: '#9A7322', // bas du dégradé héros Tournois (or profond)
-  purpleSoft: 'rgba(194,146,43,0.16)',
-  // OR réel (champagne) — prestige : tournois, trophées, Sponsorisé.
-  amber: '#C2922B',
-  amberSoft: 'rgba(194,146,43,0.16)',
-  // Balle de padel (vert lime/fluo) — réservé à 1 action clé par écran (brief).
+  // VERT primaire (actions, réservation, sélection). Texte blanc dessus.
+  signature: '#0C6A57',
+  signatureDark: '#084C3F',
+  signatureSoft: 'rgba(12,106,87,0.12)',
+  // Vert (disponibilité, succès, jauges) + tints clairs de la refonte.
+  green: '#0E7A64',
+  greenDark: '#0C6A57',
+  greenSoft: '#DCEBE4', // vert tint (fond doux)
+  greenOnDark: '#BFEAD9', // vert clair sur fond vert (texte/accents)
+  // « Bleu » (legacy) → vert signature (pas de bleu dans la refonte).
+  blue: '#0C6A57',
+  blueSoft: 'rgba(12,106,87,0.12)',
+  // CORAIL — urgence (« + que X places »).
+  coral: '#C0492F',
+  coralSoft: '#FBE7DF',
+  // VIOLET — tournois & récompenses.
+  purple: '#7B6CE8',
+  purpleDark: '#5B4FC9',
+  purpleSoft: '#E7E3FA',
+  // OR — notes/avis, trophées, jauges de trophée.
+  amber: '#C29A3A',
+  amberDark: '#8A6A14', // texte or foncé (sur tint or)
+  amberSoft: '#F3E7CC',
+  // Balle de padel (touche d'énergie / point « live »).
   lime: '#C6F24A',
 
-  text: '#0C1A16',
-  textMuted: '#5C6B62',
-  textFaint: '#7C857B', // assombri (handoff v4.6) → ~4,6:1 sur le crème, passe WCAG AA
+  text: '#15211C', // encre principale (quasi-noir vert)
+  textMuted: '#6B7A70', // texte secondaire
+  textFaint: '#9AA097', // tertiaire / placeholder
 
-  hairline: '#ECE7DB', // séparateurs INTERNES (lignes de listes/tarifs) ≠ border de carte
+  hairline: '#E7E1D4', // séparateurs internes
   scrim: 'rgba(12,26,22,0.55)', // overlay bas de photo + fond des bottom sheets
-  scrimStrong: 'rgba(12,26,22,0.85)', // bas d'un en-tête photo, pour garantir le contraste du texte blanc
+  scrimStrong: 'rgba(12,26,22,0.85)',
 
-  // TERRE — erreurs et urgences (brief #C0492F).
+  // CORAIL réutilisé pour erreurs (cohérent avec l'urgence).
   danger: '#C0492F',
-  dangerSoft: 'rgba(192,73,47,0.16)',
-  // « Warning » (orange retiré) → remappé sur l'or.
-  warning: '#C2922B',
-  warningSoft: 'rgba(194,146,43,0.16)',
+  dangerSoft: '#FBE7DF',
+  warning: '#C29A3A',
+  warningSoft: '#F3E7CC',
   white: '#FFFFFF',
   black: '#000000',
-  onSignature: '#FFFFFF', // texte / icône posés sur la couleur signature (vert profond)
-  onPhoto: 'rgba(255,255,255,0.85)', // texte blanc sur photo / dégradé (légèrement adouci)
-  onPhotoSoft: 'rgba(255,255,255,0.16)', // pastille / bouton translucide blanc sur fond sombre
-  limeGlow: 'rgba(198,242,74,0.35)', // halo autour du point « live » (= lime à 35 %)
-  overlay: 'rgba(0,0,0,0.45)',
-  viewerBg: '#000000', // visionneuse photos plein écran
+  onSignature: '#FFFFFF',
+  onPhoto: 'rgba(255,255,255,0.85)',
+  onPhotoSoft: 'rgba(255,255,255,0.16)',
+  limeGlow: 'rgba(198,242,74,0.35)',
+  overlay: 'rgba(12,26,22,0.5)', // backdrop des sheets (refonte)
+  viewerBg: '#000000',
 } as const;
 
 // Dégradés réutilisables (tokens — pas de hex en dur dans les écrans).
 export const gradients = {
-  heroSoft: ['#CBE7DB', '#EFE9DA', colors.bg] as const, // accueil / onboarding (un cran plus profond en haut)
-  deepGreen: [colors.signature, colors.signatureDark] as const, // rappels, boutons signature
-  deepPurple: [colors.purple, colors.purpleDark] as const, // héros univers Tournois (fiche tournoi)
+  heroSoft: ['#DCEBE4', '#EFE9DA', colors.bg] as const, // accueil / onboarding
+  deepGreen: ['#0E7A64', '#0C6A57', '#084C3F'] as const, // héros vert (refonte, 3 paliers)
+  deepPurple: ['#7B6CE8', '#5B4FC9'] as const, // bandeau univers Tournois (violet)
 } as const;
 
-// Palette d'accents pour les visuels de club (placeholders) — référence les tokens
-// (zéro couleur en dur), pas de hex épars.
-export const ACCENTS = [colors.green, colors.amber, colors.blue, colors.coral, colors.purple, colors.signature] as const;
+// Palette d'accents pour les visuels de club (placeholders) — référence les tokens.
+export const ACCENTS = [colors.green, colors.amber, colors.purple, colors.coral, colors.signature] as const;
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, xxxl: 48 } as const;
 

@@ -129,7 +129,7 @@ export const clubs: Club[] = [
     rating: 4.3,
     reviewsCount: 12,
     mapsQuery: 'Padel Palmeraie Faya Bingerville',
-    accent: ACCENTS[5],
+    accent: ACCENTS[4],
   },
   {
     id: 'padel-zone-4',
