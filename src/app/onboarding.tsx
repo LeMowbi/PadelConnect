@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { BottomSheet } from '@/components/BottomSheet';
 import { Chip } from '@/components/Chip';
 import { LevelStepper } from '@/components/LevelStepper';
 import { Logo } from '@/components/Logo';
@@ -14,20 +15,29 @@ import { GENDERS, ageFrom, maskBirthDate, parseBirthDate, zodiacFor, type Gender
 import { useApp } from '@/store/AppContext';
 import { colors, font, gradients, radius, shadows, spacing } from '@/theme';
 
-type FieldKey = 'firstName' | 'lastName' | 'phone' | 'birth' | 'gender';
+type FieldKey = 'firstName' | 'lastName' | 'phone' | 'password' | 'birth' | 'gender';
 
 export default function Onboarding() {
   const router = useRouter();
-  const { setAccount, setLevel, loadDemo } = useApp();
+  const { signUpWithPhone, signInWithPhone, loadDemo } = useApp();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('+225 ');
+  const [password, setPassword] = useState('');
   const [birth, setBirth] = useState('');
   const [gender, setGender] = useState<Gender | null>(null);
   const [photoUri, setPhotoUri] = useState<string | undefined>(undefined);
   const [lvl, setLvl] = useState(3.0);
   // Erreurs par champ — affichées au tap sur « Créer mon profil » (aucun tap silencieux).
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
+  const [busy, setBusy] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  // Mode « Se connecter » (compte existant, ex. après réinstallation).
+  const [signInOpen, setSignInOpen] = useState(false);
+  const [siPhone, setSiPhone] = useState('+225 ');
+  const [siPass, setSiPass] = useState('');
+  const [siBusy, setSiBusy] = useState(false);
+  const [siError, setSiError] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const positions = useRef<Partial<Record<FieldKey, number>>>({});
 
@@ -42,6 +52,7 @@ export default function Onboarding() {
   const validate = (): Partial<Record<FieldKey, string>> => {
     const e: Partial<Record<FieldKey, string>> = {};
     if (phone.replace(/\D/g, '').length < 8) e.phone = 'Numéro invalide — au moins 8 chiffres.';
+    if (password.length < 6) e.password = 'Mot de passe : 6 caractères minimum.';
     if (firstName.trim().length < 2) e.firstName = 'Indique ton prénom (2 lettres minimum).';
     if (lastName.trim().length < 1) e.lastName = 'Indique ton nom.';
     // Date de naissance optionnelle : on ne signale une erreur QUE si elle est mal saisie.
@@ -50,25 +61,42 @@ export default function Onboarding() {
     return e;
   };
 
-  const create = () => {
+  const create = async () => {
     const e = validate();
     setErrors(e);
-    const first = (['phone', 'firstName', 'lastName', 'birth', 'gender'] as FieldKey[]).find((k) => e[k]);
+    setAuthError(null);
+    const first = (['phone', 'password', 'firstName', 'lastName', 'birth', 'gender'] as FieldKey[]).find((k) => e[k]);
     if (first) {
       // Scroll automatique vers le premier champ en erreur.
       scrollRef.current?.scrollTo({ y: Math.max(0, (positions.current[first] ?? 0) - 24), animated: true });
       return;
     }
-    setAccount({
+    setBusy(true);
+    const res = await signUpWithPhone(phone, password, {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      phone: phone.trim(),
-      photoUri,
-      birthDate: birth.trim(),
+      birthDate: birth.trim() || undefined,
       gender: gender!,
+      level: lvl,
     });
-    setLevel(lvl);
-    router.replace('/');
+    setBusy(false);
+    if (res.ok) router.replace('/');
+    else setAuthError(res.error ?? 'Inscription impossible. Réessaie.');
+  };
+
+  const signIn = async () => {
+    if (siPhone.replace(/\D/g, '').length < 8 || siPass.length < 6) {
+      setSiError('Numéro et mot de passe requis.');
+      return;
+    }
+    setSiBusy(true);
+    setSiError(null);
+    const res = await signInWithPhone(siPhone, siPass);
+    setSiBusy(false);
+    if (res.ok) {
+      setSignInOpen(false);
+      router.replace('/');
+    } else setSiError(res.error ?? 'Connexion impossible.');
   };
 
   const demo = () => {
@@ -117,6 +145,21 @@ export default function Onboarding() {
               positions.current.phone = y;
             }}
             autoFocus
+          />
+          <Field
+            label="Mot de passe"
+            value={password}
+            onChangeText={(t) => {
+              setPassword(t);
+              clearError('password');
+            }}
+            placeholder="6 caractères minimum"
+            secureTextEntry
+            autoCapitalize="none"
+            error={errors.password}
+            onLayout={(y) => {
+              positions.current.password = y;
+            }}
           />
           <Field
             label="Prénom"
@@ -221,10 +264,28 @@ export default function Onboarding() {
             </Txt>
           </View>
 
+          {authError ? (
+            <View style={styles.authError}>
+              <Ionicons name="alert-circle" size={16} color={colors.danger} />
+              <Txt variant="small" color={colors.danger} style={{ flex: 1 }}>
+                {authError}
+              </Txt>
+            </View>
+          ) : null}
+
           <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
-            <Button label="Créer mon profil" icon="checkmark" onPress={create} full />
+            <Button label={busy ? 'Création…' : 'Créer mon profil'} icon="checkmark" onPress={create} disabled={busy} full />
             <Button label="Découvrir en démo" icon="play" variant="secondary" onPress={demo} full />
           </View>
+
+          <Pressable onPress={() => setSignInOpen(true)} style={{ marginTop: spacing.lg, alignItems: 'center' }}>
+            <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center' }}>
+              Tu as déjà un compte ?{' '}
+              <Txt variant="small" color={colors.signature}>
+                Se connecter →
+              </Txt>
+            </Txt>
+          </Pressable>
 
           {/* C-S2 : lien discret vers /decouvrir pour les débutants */}
           <Pressable onPress={() => router.push('/decouvrir')} style={{ marginTop: spacing.lg, alignItems: 'center' }}>
@@ -247,6 +308,46 @@ export default function Onboarding() {
           </Pressable>
         </View>
       </ScrollView>
+
+      {/* Se connecter à un compte existant (ex. après réinstallation). */}
+      <BottomSheet
+        visible={signInOpen}
+        title="Se connecter"
+        subtitle="Ton compte est enregistré — retrouve-le avec ton numéro et ton mot de passe."
+        onClose={() => setSignInOpen(false)}
+      >
+        <View style={{ gap: spacing.md }}>
+          <TextInput
+            value={siPhone}
+            onChangeText={(t) => {
+              setSiPhone(t);
+              setSiError(null);
+            }}
+            placeholder="+225 07 00 00 00 00"
+            placeholderTextColor={colors.textFaint}
+            keyboardType="phone-pad"
+            style={styles.input}
+          />
+          <TextInput
+            value={siPass}
+            onChangeText={(t) => {
+              setSiPass(t);
+              setSiError(null);
+            }}
+            placeholder="Mot de passe"
+            placeholderTextColor={colors.textFaint}
+            secureTextEntry
+            autoCapitalize="none"
+            style={styles.input}
+          />
+          {siError ? (
+            <Txt variant="small" color={colors.danger}>
+              {siError}
+            </Txt>
+          ) : null}
+          <Button label={siBusy ? 'Connexion…' : 'Se connecter'} icon="log-in" onPress={signIn} disabled={siBusy} full />
+        </View>
+      </BottomSheet>
     </View>
   );
 }
@@ -262,6 +363,7 @@ function Field({
   onLayout,
   autoFocus,
   autoCapitalize = 'sentences',
+  secureTextEntry,
 }: {
   label: string;
   value: string;
@@ -273,6 +375,7 @@ function Field({
   onLayout?: (y: number) => void;
   autoFocus?: boolean;
   autoCapitalize?: 'none' | 'words' | 'sentences' | 'characters';
+  secureTextEntry?: boolean;
 }) {
   return (
     <View onLayout={(e) => onLayout?.(e.nativeEvent.layout.y)}>
@@ -289,6 +392,7 @@ function Field({
         autoFocus={autoFocus}
         autoCapitalize={autoCapitalize}
         autoCorrect={false}
+        secureTextEntry={secureTextEntry}
         returnKeyType="done"
         style={[styles.input, error ? { borderColor: colors.danger } : null]}
       />
@@ -313,6 +417,15 @@ const styles = StyleSheet.create({
   },
   heroTitle: { marginTop: spacing.xl, lineHeight: 38 },
   fieldLabel: { marginTop: spacing.lg },
+  authError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.dangerSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginTop: spacing.lg,
+  },
   body: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   avatar: {
     width: 96,

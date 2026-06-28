@@ -9,6 +9,7 @@ import type { Review } from '@/data/reviews';
 import { seedFriends, type Friend } from '@/data/user';
 import { dayKey, nextDays } from '@/lib/days';
 import { priceForSlot } from '@/lib/pricing';
+import { phoneToAuthEmail, supabase } from '@/lib/supabase';
 import { ACCENTS } from '@/theme';
 
 export type Account = {
@@ -127,6 +128,19 @@ const LEVEL_PENALTY = 0.25; // malus de niveau pour l'équipe classée dernière
 const STORAGE_KEY = 'padelco_state_v4'; // v4 : modèle sans matchs ni victoires/défaites
 export const MAX_CLUB_PHOTOS = 6; // plafond de photos par club (quota de stockage local)
 
+// Traduit les messages d'erreur Supabase en français clair pour l'utilisateur.
+function frAuthError(msg: string): string {
+  const m = (msg || '').toLowerCase();
+  if (m.includes('invalid login')) return 'Numéro ou mot de passe incorrect.';
+  if (m.includes('already registered') || m.includes('already been registered'))
+    return 'Ce numéro a déjà un compte — connecte-toi.';
+  if (m.includes('password should be') || m.includes('password')) return 'Mot de passe trop court (6 caractères minimum).';
+  if (m.includes('network') || m.includes('fetch') || m.includes('timeout')) return 'Connexion internet impossible — réessaie.';
+  if (m.includes('email logins are disabled') || m.includes('signups not allowed'))
+    return 'Connexion désactivée côté serveur (vérifie la config Supabase).';
+  return msg || 'Une erreur est survenue. Réessaie.';
+}
+
 const initialState: AppState = {
   account: null,
   level: 3.0,
@@ -177,6 +191,13 @@ type AppContextType = {
   setAccount: (a: Account) => void;
   updateAccount: (patch: Partial<Account>) => void;
   loadDemo: () => void;
+  // Connexion serveur (Supabase) — téléphone + mot de passe (sans SMS).
+  signUpWithPhone: (
+    phone: string,
+    password: string,
+    profile: { firstName: string; lastName: string; birthDate?: string; gender?: Account['gender']; level?: number },
+  ) => Promise<{ ok: boolean; error?: string }>;
+  signInWithPhone: (phone: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   signOut: () => void;
   setLevel: (n: number) => void;
   closeCompetition: (
@@ -372,7 +393,70 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ],
           };
         }),
-      signOut: () => setState((s) => ({ ...s, account: null })),
+      // Création de compte serveur : téléphone + mot de passe (e-mail interne, sans SMS).
+      signUpWithPhone: async (phone, password, profile) => {
+        const email = phoneToAuthEmail(phone);
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) return { ok: false, error: frAuthError(error.message) };
+        let userId = data.user?.id;
+        if (!data.session) {
+          // Si signUp ne renvoie pas de session (selon config), on se connecte aussitôt.
+          const si = await supabase.auth.signInWithPassword({ email, password });
+          if (si.error) return { ok: false, error: frAuthError(si.error.message) };
+          userId = si.data.user?.id ?? userId;
+        }
+        if (!userId) return { ok: false, error: 'Compte créé, mais connexion impossible. Réessaie.' };
+        const level = clampLevel(profile.level ?? 3.0);
+        const { error: pErr } = await supabase.from('profiles').upsert({
+          id: userId,
+          first_name: profile.firstName.trim(),
+          last_name: profile.lastName.trim(),
+          phone: phone.trim(),
+          birth_date: profile.birthDate?.trim() || null,
+          gender: profile.gender ?? null,
+          level,
+          updated_at: new Date().toISOString(),
+        });
+        if (pErr) return { ok: false, error: 'Profil non enregistré — réessaie.' };
+        setState((s) => ({
+          ...s,
+          account: {
+            firstName: profile.firstName.trim(),
+            lastName: profile.lastName.trim(),
+            phone: phone.trim(),
+            birthDate: profile.birthDate?.trim() || undefined,
+            gender: profile.gender,
+          },
+          level,
+        }));
+        return { ok: true };
+      },
+      // Connexion serveur d'un compte existant (ex. après réinstallation).
+      signInWithPhone: async (phone, password) => {
+        const email = phoneToAuthEmail(phone);
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) return { ok: false, error: frAuthError(error.message) };
+        const userId = data.user?.id;
+        if (!userId) return { ok: false, error: 'Connexion impossible. Réessaie.' };
+        const { data: prof } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+        setState((s) => ({
+          ...s,
+          account: {
+            firstName: prof?.first_name ?? '',
+            lastName: prof?.last_name ?? '',
+            phone: prof?.phone ?? phone.trim(),
+            photoUri: prof?.photo_uri ?? undefined,
+            birthDate: prof?.birth_date ?? undefined,
+            gender: prof?.gender ?? undefined,
+          },
+          level: clampLevel(Number(prof?.level ?? 3.0)),
+        }));
+        return { ok: true };
+      },
+      signOut: () => {
+        supabase.auth.signOut().catch(() => {});
+        setState((s) => ({ ...s, account: null }));
+      },
       setLevel: (n) => setState((s) => ({ ...s, level: clampLevel(n) })),
       // Clôture par l'ORGANISATEUR : fige le vainqueur (et, en option, l'équipe classée
       // dernière), et si TU étais inscrit met à jour ton palmarès. Tournoi OFFICIEL :
