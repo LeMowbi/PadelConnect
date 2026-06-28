@@ -222,7 +222,17 @@ export default function Onboarding() {
             <Button label="Découvrir en démo" icon="play" variant="secondary" onPress={demo} full />
           </View>
 
-          <Pressable onPress={() => router.push('/legal')} style={{ marginTop: spacing.lg }}>
+          {/* C-S2 : lien discret vers /decouvrir pour les débutants */}
+          <Pressable onPress={() => router.push('/decouvrir')} style={{ marginTop: spacing.lg, alignItems: 'center' }}>
+            <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center' }}>
+              Nouveau au padel ?{' '}
+              <Txt variant="small" color={colors.signature}>
+                Découvrir les règles →
+              </Txt>
+            </Txt>
+          </Pressable>
+
+          <Pressable onPress={() => router.push('/legal')} style={{ marginTop: spacing.md }}>
             <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center' }}>
               En continuant, tu acceptes nos{' '}
               <Txt variant="small" color={colors.signature}>

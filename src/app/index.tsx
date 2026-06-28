@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Avatar } from '@/components/Avatar';
 import { ClubCard } from '@/components/ClubCard';
@@ -9,30 +10,44 @@ import { Logo } from '@/components/Logo';
 import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
 import { Card, SectionHeader, Txt } from '@/components/ui';
-import { activeClubs } from '@/data/clubs';
+import { activeClubs, findClub } from '@/data/clubs';
 import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { dayKey } from '@/lib/days';
-import { initials } from '@/lib/format';
+import { initials, perPlayer } from '@/lib/format';
+import { openWhatsApp } from '@/lib/contact';
 import { isBirthdayToday, parseBirthDate, zodiacFor } from '@/lib/zodiac';
-import { useApp } from '@/store/AppContext';
+import { isPlayed, useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
-// Accès rapide — 4 univers, un accent chacun (maquette Accueil).
+// Accès rapide — 5 univers (Réserver / Tournois / Coachs / Amis / Mes matchs).
+// C-S1 : tuile « Mes matchs » ajoutée, grille 5 items équilibrée (≤ 7 entrées, pas de tabbar).
 type Action = { icon: keyof typeof Ionicons.glyphMap; label: string; route: string; tint: string; bg: string };
 const ACTIONS: Action[] = [
   { icon: 'calendar', label: 'Réserver', route: '/reserver', tint: colors.signature, bg: colors.signatureSoft },
   { icon: 'trophy', label: 'Tournois', route: '/competitions', tint: colors.purple, bg: colors.purpleSoft },
   { icon: 'school', label: 'Coachs', route: '/coachs', tint: colors.blue, bg: colors.blueSoft },
   { icon: 'people', label: 'Amis', route: '/amis', tint: colors.coral, bg: colors.coralSoft },
+  { icon: 'list', label: 'Mes matchs', route: '/reservations', tint: colors.green, bg: colors.greenSoft },
 ];
 
 const MONTHS_SHORT = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 const AVATAR_TONES = [colors.signature, colors.blue, colors.purple, colors.coral];
 
+// ─── Compte à rebours doux ────────────────────────────────────────────────────
+// B-R2 : libellé « dans X jours / demain / aujourd'hui » pour la carte prochain match.
+function countdownLabel(startsAt: number): string {
+  const now = Date.now();
+  const diffMs = startsAt - now;
+  if (diffMs <= 0) return 'maintenant';
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffDays === 0) return "aujourd'hui";
+  if (diffDays === 1) return 'demain';
+  return `dans ${diffDays} jour${diffDays > 1 ? 's' : ''}`;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
-  const { state, dismissNews } = useApp();
-  // L'accueil est le hub : tout s'ouvre par-dessus, le retour ramène toujours ici.
+  const { state, dismissNews, stats } = useApp();
   const go = (route: string) => router.push(route as never);
 
   const fullName = `${state.account?.firstName ?? ''} ${state.account?.lastName ?? ''}`.trim();
@@ -48,6 +63,26 @@ export default function HomeScreen() {
     .filter((c) => isTournamentPublic(c) && c.dateKey >= today)
     .slice(0, 2);
   const upcoming = [...state.reservations].filter((r) => r.startsAt > now).sort((a, b) => a.startsAt - b.startsAt)[0];
+
+  // A-L1 : dernier club joué/réservé (la réservation passée la plus récente).
+  // N'apparaît QUE s'il n'y a AUCUNE réservation à venir.
+  const lastPlayed = !upcoming
+    ? ([...state.reservations].filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt)[0] ?? null)
+    : null;
+  const lastPlayedClub = lastPlayed ? findClub(lastPlayed.clubId, state.customClubs, state.clubInfo) : null;
+
+  // B-R5 : tournoi inscrit à venir (≤ 7 jours).
+  const upcomingTournament =
+    Object.keys(state.compRegistrations)
+      .map((id) => [...state.myCompetitions, ...seedCompetitions].find((c) => c.id === id))
+      .filter((c): c is NonNullable<typeof c> => {
+        if (!c) return false;
+        if (c.dateKey < today) return false;
+        const [y, m, d] = c.dateKey.split('-').map(Number);
+        const compTs = new Date(y, m - 1, d).getTime();
+        return compTs - now <= 7 * 86400000;
+      })
+      .sort((a, b) => a.dateKey.localeCompare(b.dateKey))[0] ?? null;
 
   // Clin d'œil anniversaire (ADN de l'app : astro + fun).
   const bd = state.account?.birthDate ? parseBirthDate(state.account.birthDate) : null;
@@ -66,6 +101,75 @@ export default function HomeScreen() {
   // Équipe du prochain match (toi + invités) pour la pile d'avatars.
   const matchPlayers = upcoming ? [fullName || 'Toi', ...upcoming.invited.map((i) => i.name)].slice(0, 4) : [];
   const [, mm, dd] = upcoming ? upcoming.dateKey.split('-') : ['', '', ''];
+
+  // ── Nudge unique (priorité décroissante) ─────────────────────────────────
+  // Règle : un seul nudge affiché à la fois ; mutuellement exclusifs par priorité.
+  //   a) 0 partie jouée → carte « Nouveau au padel ? » (C-S2)
+  //   b) profil incomplet → bandeau « Complète ton profil » (B-R4)
+  //   c) trophée proche → « Plus qu'X partie(s)… » (B-R1)
+  // La carte contextuelle (prochain match / rejouer) et la carte tournoi (B-R5) sont séparées du nudge.
+
+  // B-R4 : profil incomplet si birthDate / photo / genre manquent.
+  const profileIncomplete =
+    !state.account?.birthDate || !state.account?.photoUri || !state.account?.gender || state.account.gender === 'nd';
+
+  // B-R4 : bandeau fermable (état local, pas persisté).
+  const [profileNudgeDismissed, setProfileNudgeDismissed] = useState(false);
+  const showProfileNudge = profileIncomplete && !profileNudgeDismissed;
+
+  // Champ manquant le plus visible pour le libellé personnalisé.
+  const missingField = !state.account?.birthDate ? 'date de naissance' : !state.account?.photoUri ? 'photo de profil' : 'genre';
+
+  // B-R1 : trophée le plus proche du palier (excluant Vainqueur de tournoi et Niveau 4+).
+  // Trophées éligibles, ordonnés par proximité (1 ou 2 unités du palier).
+  type NudgeTrophy = { label: string; current: number; target: number; cta: 'reserve' | 'invite' };
+  const trophyNudge: NudgeTrophy | null = (() => {
+    const played = stats.played;
+    const friendsCount = state.friends.length;
+    const tournamentsPlayed = stats.tournamentsPlayed;
+
+    const candidates: NudgeTrophy[] = [
+      { label: 'Première partie', current: played, target: 1, cta: 'reserve' },
+      { label: '5 parties', current: played, target: 5, cta: 'reserve' },
+      { label: '20 parties', current: played, target: 20, cta: 'reserve' },
+      { label: 'Premier tournoi', current: tournamentsPlayed, target: 1, cta: 'reserve' },
+      { label: '5 amis', current: friendsCount, target: 5, cta: 'invite' },
+    ];
+
+    // Garder ceux où il manque exactement 1 ou 2 unités et qui ne sont pas encore atteints.
+    const close = candidates.filter((t) => {
+      const remaining = t.target - t.current;
+      return remaining === 1 || remaining === 2;
+    });
+
+    if (close.length === 0) return null;
+    // Le plus proche du palier (remaining le plus petit, à égalité on prend le premier).
+    return close.sort((a, b) => a.target - a.current - (b.target - b.current))[0];
+  })();
+
+  // C-S2 : 0 partie jouée = débutant → nudge prioritaire.
+  const isNovice = stats.played === 0;
+  const [noviceNudgeDismissed, setNoviceNudgeDismissed] = useState(false);
+
+  // Décision du nudge unique affiché :
+  let activeNudge: 'novice' | 'profile' | 'trophy' | null = null;
+  if (isNovice && !noviceNudgeDismissed) activeNudge = 'novice';
+  else if (showProfileNudge) activeNudge = 'profile';
+  else if (trophyNudge) activeNudge = 'trophy';
+
+  // B-R2 : notifier les partenaires depuis la carte prochain match.
+  const notifyPartners = () => {
+    if (!upcoming) return;
+    const who = upcoming.invited.length ? `\nÉquipe : ${upcoming.invited.map((i) => i.name).join(', ')}` : '';
+    const share = upcoming.price ? `\nPrévois ${perPlayer(upcoming.price)} chacun.` : '';
+    openWhatsApp(
+      '',
+      `On joue au padel ! 🎾\n${upcoming.clubName} — ${upcoming.date} à ${upcoming.time} (session 1h30)\n${upcoming.court}${who}${share}\nRéservé via PadelConnect.`,
+    );
+  };
+
+  // B-R2 : équipe incomplète si toi + moins de 3 invités.
+  const teamIncomplete = upcoming ? upcoming.invited.length < 3 : false;
 
   return (
     <Screen>
@@ -116,7 +220,7 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {/* HERO */}
+        {/* HERO — CTA principal unique */}
         <Pressable onPress={() => go('/reserver')}>
           <LinearGradient colors={gradients.heroSoft} start={{ x: 0, y: 0 }} end={{ x: 0.7, y: 1 }} style={styles.hero}>
             <View style={styles.brandRow}>
@@ -140,19 +244,104 @@ export default function HomeScreen() {
           </LinearGradient>
         </Pressable>
 
-        {/* Accès rapide — 4 univers */}
+        {/* Accès rapide — 5 univers (C-S1 : + Mes matchs) */}
         <View style={styles.quickRow}>
           {ACTIONS.map((a) => (
             <Pressable key={a.label} onPress={() => go(a.route)} style={styles.quickItem}>
               <View style={[styles.quickIcon, { backgroundColor: a.bg }]}>
-                <Ionicons name={a.icon} size={24} color={a.tint} />
+                <Ionicons name={a.icon} size={22} color={a.tint} />
               </View>
-              <Txt variant="small" style={{ fontWeight: '600' }}>
+              <Txt variant="small" style={{ fontWeight: '600', textAlign: 'center' }}>
                 {a.label}
               </Txt>
             </Pressable>
           ))}
         </View>
+
+        {/* ── Nudge unique (a / b / c — mutuellement exclusifs) ─────────── */}
+
+        {/* a) C-S2 : carte « Nouveau au padel ? » (0 partie jouée) */}
+        {activeNudge === 'novice' ? (
+          <Pressable onPress={() => go('/decouvrir')} style={[styles.nudge, { backgroundColor: colors.coralSoft }]}>
+            <View style={[styles.nudgeIcon, { backgroundColor: colors.coral }]}>
+              <Ionicons name="help-circle" size={20} color={colors.white} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Txt variant="body" style={{ fontWeight: '700' }}>
+                Nouveau au padel ?
+              </Txt>
+              <Txt variant="small" color={colors.textMuted}>
+                Découvrir les règles en 2 minutes →
+              </Txt>
+            </View>
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                setNoviceNudgeDismissed(true);
+              }}
+              hitSlop={8}
+              style={styles.nudgeClose}
+            >
+              <Ionicons name="close" size={15} color={colors.textMuted} />
+            </Pressable>
+          </Pressable>
+        ) : null}
+
+        {/* b) B-R4 : bandeau « Complète ton profil » */}
+        {activeNudge === 'profile' ? (
+          <Pressable onPress={() => go('/profil')} style={[styles.nudge, { backgroundColor: colors.amberSoft }]}>
+            <View style={[styles.nudgeIcon, { backgroundColor: colors.amber }]}>
+              <Ionicons name="person-circle" size={20} color={colors.white} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Txt variant="body" style={{ fontWeight: '700' }}>
+                Complète ton profil
+              </Txt>
+              <Txt variant="small" color={colors.textMuted}>
+                Ajoute ta {missingField} pour ton signe astro →
+              </Txt>
+            </View>
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                setProfileNudgeDismissed(true);
+              }}
+              hitSlop={8}
+              style={styles.nudgeClose}
+            >
+              <Ionicons name="close" size={15} color={colors.textMuted} />
+            </Pressable>
+          </Pressable>
+        ) : null}
+
+        {/* c) B-R1 : trophée proche */}
+        {activeNudge === 'trophy' && trophyNudge ? (
+          <Pressable
+            onPress={() => go(trophyNudge.cta === 'reserve' ? '/reserver' : '/amis')}
+            style={[styles.nudge, { backgroundColor: colors.amberSoft }]}
+          >
+            <View style={[styles.nudgeIcon, { backgroundColor: colors.amber }]}>
+              <Ionicons name="trophy" size={20} color={colors.white} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Txt variant="body" style={{ fontWeight: '700' }}>
+                Plus que {trophyNudge.target - trophyNudge.current} {trophyNudge.cta === 'invite' ? 'ami(s)' : 'partie(s)'} pour le trophée
+              </Txt>
+              <View style={styles.trophyGaugeTrack}>
+                <View
+                  style={[
+                    styles.trophyGaugeFill,
+                    { width: `${Math.round((trophyNudge.current / trophyNudge.target) * 100)}%` as `${number}%` },
+                  ]}
+                />
+              </View>
+              <Txt variant="small" color={colors.textMuted}>
+                « {trophyNudge.label} » · {trophyNudge.current}/{trophyNudge.target}
+              </Txt>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.amber} />
+          </Pressable>
+        ) : null}
 
         {/* Anniversaire */}
         {birthday && bd ? (
@@ -175,12 +364,15 @@ export default function HomeScreen() {
           </Pressable>
         ) : null}
 
-        {/* Prochain match — toujours affiché si une réservation à venir existe.
-            remindersOn ne pilote QUE le bandeau/rappel, pas la présence de cette carte. */}
+        {/* ── Carte contextuelle « continuer » ──────────────────────────────
+            Prochain match (B-R2) si à venir, sinon Rejouer dernier club (A-L1).
+            Ces deux cartes sont SÉPARÉES du nudge unique. */}
+
+        {/* B-R2 : Ton prochain match — enrichi (compte à rebours + inviter + prévenir) */}
         {upcoming ? (
           <View style={styles.section}>
             <SectionHeader title="Ton prochain match" />
-            <Card onPress={() => go('/reservations')}>
+            <Card>
               <View style={styles.matchHead}>
                 <View style={styles.dateChip}>
                   <Txt variant="h2" color={colors.onSignature} style={{ fontSize: 18, lineHeight: 20 }}>
@@ -197,6 +389,13 @@ export default function HomeScreen() {
                   <Txt variant="muted">
                     {upcoming.time} · {upcoming.court} · 1h30
                   </Txt>
+                  {/* Compte à rebours doux */}
+                  <View style={styles.countdownRow}>
+                    <Ionicons name="time-outline" size={13} color={colors.signature} />
+                    <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
+                      {countdownLabel(upcoming.startsAt)}
+                    </Txt>
+                  </View>
                 </View>
                 <View style={[styles.statusPill, { backgroundColor: upcoming.clubConfirmed ? colors.greenSoft : colors.amberSoft }]}>
                   <Txt
@@ -226,17 +425,99 @@ export default function HomeScreen() {
                   </Txt>
                 </View>
                 <View style={{ flex: 1 }} />
-                <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
-                  Voir
-                </Txt>
+                <Pressable onPress={() => go('/reservations')} hitSlop={6}>
+                  <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
+                    Voir
+                  </Txt>
+                </Pressable>
+              </View>
+              {/* B-R2 : équipe incomplète → actions contextuelles */}
+              {teamIncomplete ? (
+                <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
+                  <View style={[styles.incompleteHint, { backgroundColor: colors.signatureSoft }]}>
+                    <Ionicons name="people-outline" size={14} color={colors.signature} />
+                    <Txt variant="small" color={colors.signature} style={{ flex: 1 }}>
+                      Équipe incomplète ({matchPlayers.length}/4)
+                    </Txt>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                    <Pressable onPress={() => go('/amis')} style={[styles.matchAction, { backgroundColor: colors.signatureSoft }]}>
+                      <Ionicons name="person-add-outline" size={14} color={colors.signature} />
+                      <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
+                        Inviter un ami
+                      </Txt>
+                    </Pressable>
+                    <Pressable onPress={notifyPartners} style={[styles.matchAction, { backgroundColor: colors.greenSoft }]}>
+                      <Ionicons name="logo-whatsapp" size={14} color={colors.green} />
+                      <Txt variant="small" color={colors.green} style={{ fontWeight: '700' }}>
+                        Prévenir mes partenaires
+                      </Txt>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                /* Équipe complète : on peut quand même prévenir */
+                <View style={{ marginTop: spacing.md }}>
+                  <Pressable onPress={notifyPartners} style={[styles.matchAction, { backgroundColor: colors.greenSoft }]}>
+                    <Ionicons name="logo-whatsapp" size={14} color={colors.green} />
+                    <Txt variant="small" color={colors.green} style={{ fontWeight: '700' }}>
+                      Prévenir mes partenaires
+                    </Txt>
+                  </Pressable>
+                </View>
+              )}
+            </Card>
+          </View>
+        ) : lastPlayedClub ? (
+          /* A-L1 : Rejouer au dernier club (seulement si 0 réservation à venir) */
+          <View style={styles.section}>
+            <Card onPress={() => go(`/reserver/${lastPlayedClub.id}`)}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                <View style={[styles.replayIcon, { backgroundColor: colors.signatureSoft }]}>
+                  <Ionicons name="refresh" size={22} color={colors.signature} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Txt variant="h3">Rejouer à {lastPlayedClub.name} ?</Txt>
+                  <Txt variant="muted">Réserver un créneau →</Txt>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.signature} />
               </View>
             </Card>
           </View>
         ) : null}
 
-        {/* Clubs près de vous */}
+        {/* B-R5 : carte tournoi à venir (≤ 7 jours) — séparée du nudge */}
+        {upcomingTournament ? (
+          <View style={styles.section}>
+            <Card onPress={() => go(`/competition/${upcomingTournament.id}`)}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                <View style={[styles.replayIcon, { backgroundColor: colors.purpleSoft }]}>
+                  <Ionicons name="trophy-outline" size={22} color={colors.purple} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Txt variant="h3" numberOfLines={1}>
+                    Ton tournoi à {upcomingTournament.clubName ?? upcomingTournament.organizer}
+                  </Txt>
+                  <Txt variant="muted">
+                    {(() => {
+                      const [y, m, d] = upcomingTournament.dateKey.split('-').map(Number);
+                      const compTs = new Date(y, m - 1, d).getTime();
+                      const diffDays = Math.ceil((compTs - now) / 86400000);
+                      if (diffDays <= 0) return "aujourd'hui !";
+                      if (diffDays === 1) return 'demain !';
+                      return `dans ${diffDays} jour${diffDays > 1 ? 's' : ''}`;
+                    })()}
+                  </Txt>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.purple} />
+              </View>
+            </Card>
+          </View>
+        ) : null}
+
+        {/* Clubs près de vous (C-S4 : carrousel en lecture seule, lien « Tout voir » discret en SectionHeader) */}
         <View style={styles.section}>
-          <SectionHeader title="Clubs près de toi" actionLabel="Tout voir" onAction={() => go('/clubs')} />
+          <SectionHeader title="Clubs près de toi" actionLabel="Explorer" onAction={() => go('/clubs')} />
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -297,9 +578,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     ...shadows.e2,
   },
+  // 5 items en ligne, on réduit légèrement les icônes pour tenir
   quickRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.xl },
-  quickItem: { alignItems: 'center', gap: spacing.sm, width: '23%' },
-  quickIcon: { width: 56, height: 56, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
+  quickItem: { alignItems: 'center', gap: spacing.sm, width: '18%' },
+  quickIcon: { width: 50, height: 50, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   alert: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -342,6 +624,71 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 2,
     borderColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 3,
+  },
+  incompleteHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+  },
+  matchAction: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  nudge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  nudgeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nudgeClose: {
+    width: 26,
+    height: 26,
+    borderRadius: radius.pill,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trophyGaugeTrack: {
+    height: 5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.white,
+    overflow: 'hidden',
+    marginVertical: spacing.xs,
+  },
+  trophyGaugeFill: {
+    height: 5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.amber,
+  },
+  replayIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },

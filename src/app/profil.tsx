@@ -50,6 +50,21 @@ export default function ProfilScreen() {
     { label: '5 amis', ok: friends.length >= 5, need: `${friends.length}/5 amis` },
   ];
 
+  // B-R6 : prochain trophée le plus proche (excluant Vainqueur de tournoi et Niveau 4+).
+  type NextTrophy = { label: string; current: number; target: number };
+  const nextTrophy: NextTrophy | null = (() => {
+    const candidates: NextTrophy[] = [
+      { label: 'Première partie', current: stats.played, target: 1 },
+      { label: '5 parties', current: stats.played, target: 5 },
+      { label: '20 parties', current: stats.played, target: 20 },
+      { label: 'Premier tournoi', current: stats.tournamentsPlayed, target: 1 },
+      { label: '5 amis', current: friends.length, target: 5 },
+    ];
+    const pending = candidates.filter((t) => t.current < t.target);
+    if (pending.length === 0) return null;
+    return pending.sort((a, b) => a.target - a.current - (b.target - b.current))[0];
+  })();
+
   const bd = account.birthDate ? parseBirthDate(account.birthDate) : null;
   const zod = bd ? zodiacFor(bd) : null;
   // « Non défini » ne s'affiche pas — on ne montre le sexe que s'il est renseigné.
@@ -130,6 +145,30 @@ export default function ProfilScreen() {
               {levelLabel(level)} · monte ou descend selon tes résultats en tournoi officiel (+0.50 / −0.25).
             </Txt>
           </View>
+          {/* B-R6 : prochain trophée le plus proche (hors Vainqueur / Niveau 4+) */}
+          {nextTrophy ? (
+            <>
+              <Divider style={{ marginVertical: spacing.md }} />
+              <View style={{ gap: spacing.xs }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Txt variant="small" color={colors.textMuted}>
+                    Prochain trophée : « {nextTrophy.label} »
+                  </Txt>
+                  <Txt variant="small" color={colors.amber} style={{ fontWeight: '700' }}>
+                    {nextTrophy.current}/{nextTrophy.target}
+                  </Txt>
+                </View>
+                <View style={styles.nextTrophyTrack}>
+                  <View
+                    style={[
+                      styles.nextTrophyFill,
+                      { width: `${Math.round((nextTrophy.current / nextTrophy.target) * 100)}%` as `${number}%` },
+                    ]}
+                  />
+                </View>
+              </View>
+            </>
+          ) : null}
           {officialResults.length > 0 ? (
             <>
               <Divider style={{ marginVertical: spacing.md }} />
@@ -410,6 +449,8 @@ const styles = StyleSheet.create({
   },
   gaugeTrack: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   gaugeFill: { height: 8, borderRadius: radius.pill, backgroundColor: colors.signature },
+  nextTrophyTrack: { height: 5, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
+  nextTrophyFill: { height: 5, borderRadius: radius.pill, backgroundColor: colors.amber },
   avatar: {
     width: 72,
     height: 72,

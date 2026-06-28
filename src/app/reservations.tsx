@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, SectionHeader, Tag, Txt } from '@/components/ui';
@@ -225,6 +225,13 @@ export default function ReservationsScreen() {
                   </View>
                   <Tag label="Jouée" tone="blue" />
                 </View>
+                {/* A-R7 : bouton discret « Rejouer ici » → écran de réservation du club */}
+                <Pressable onPress={() => router.push(`/reserver/${r.clubId}`)} style={styles.replayBtn}>
+                  <Ionicons name="refresh-outline" size={13} color={colors.signature} />
+                  <Txt variant="small" color={colors.signature} style={{ fontWeight: '600' }}>
+                    Rejouer ici
+                  </Txt>
+                </Pressable>
               </View>
             ))}
             {past.length > PAST_PREVIEW ? (
@@ -299,5 +306,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.sm,
     padding: spacing.sm,
+  },
+  replayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: spacing.xs,
+    alignSelf: 'flex-start',
+    paddingVertical: 2,
   },
 });

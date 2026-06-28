@@ -55,6 +55,13 @@ export default function ReserverScreen() {
   const compToday = !!day && hasCompetition(club.id, day.key, ctx.comps);
   const free = day && slot ? freeCourts(club, day.key, slot, ctx) : [];
 
+  // A-L2 : pré-sélectionner le 1er terrain libre dès que jour + créneau sont choisis.
+  // Valeur dérivée : si l'utilisateur n'a pas encore choisi manuellement (court === null)
+  // ET qu'un terrain libre existe, on propose le premier. L'utilisateur peut toujours
+  // cliquer sur un autre chip pour le remplacer (setCourt(c)). Pur UX, pas de setState
+  // dans le rendu ni d'effet — la dispo ne change pas.
+  const effectiveCourt = court ?? (day && slot && free.length > 0 ? free[0] : null);
+
   const participantCount = friendIds.length + extraNames.length;
   const toggleFriend = (id: string) =>
     setFriendIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : participantCount < 3 ? [...cur, id] : cur));
@@ -66,12 +73,12 @@ export default function ReserverScreen() {
     setExtraName('');
   };
 
-  const ready = !!day && !!slot && !!court && !compToday;
+  const ready = !!day && !!slot && !!effectiveCourt && !compToday;
   const hasTiers = priceTiersFor(club).length > 0;
   const slotPrice = slot ? priceForSlot(club, slot) : minPrice(club);
 
   const confirm = () => {
-    if (!day || !slot || !court) return;
+    if (!day || !slot || !effectiveCourt) return;
     const startsAt = slotTimestamp(day.value, slot);
     if (startsAt <= Date.now()) return;
     const invited = [
@@ -81,7 +88,7 @@ export default function ReserverScreen() {
     const ok = addReservation({
       clubId: club.id,
       clubName: club.name,
-      court,
+      court: effectiveCourt,
       date: day.label,
       dateKey: day.key,
       time: slot,
@@ -91,7 +98,7 @@ export default function ReserverScreen() {
       invited,
     });
     if (ok) setDone(true);
-    else setCourt(null); // terrain pris entre-temps
+    else setCourt(null); // terrain pris entre-temps → réinitialise aussi la pré-sélection
   };
 
   if (done) {
@@ -107,7 +114,7 @@ export default function ReserverScreen() {
           </Txt>
           <View style={styles.summary}>
             <Row label="Club" value={club.name} />
-            <Row label="Terrain" value={court!} />
+            <Row label="Terrain" value={effectiveCourt!} />
             <Row label="Jour" value={day!.label} />
             <Row label="Heure" value={slot!} />
             <Row label="Durée" value="1h30" />
@@ -128,7 +135,7 @@ export default function ReserverScreen() {
                   const share = slotPrice ? `\nPrévois ${perPlayer(slotPrice)} chacun.` : '';
                   openWhatsApp(
                     '',
-                    `On joue au padel ! 🎾\n${club.name} — ${day!.label} à ${slot!} (session 1h30)\n${court!}${who}${share}\nRéservé via PadelConnect.`,
+                    `On joue au padel ! 🎾\n${club.name} — ${day!.label} à ${slot!} (session 1h30)\n${effectiveCourt!}${who}${share}\nRéservé via PadelConnect.`,
                   );
                 }}
                 full
@@ -153,7 +160,8 @@ export default function ReserverScreen() {
   }
 
   // Progression du parcours guidé (après le choix Par heure/Par club, fait en amont).
-  const step = !day ? 0 : !slot ? 1 : !court ? 2 : 3;
+  // A-L2 : le step 2 (terrain) est considéré complété dès qu'effectiveCourt est défini.
+  const step = !day ? 0 : !slot ? 1 : !effectiveCourt ? 2 : 3;
 
   return (
     <Screen
@@ -260,7 +268,7 @@ export default function ReserverScreen() {
                   <Chip
                     key={c}
                     label={isFree ? c : `${c} · pris`}
-                    active={c === court}
+                    active={c === effectiveCourt}
                     disabled={!isFree}
                     onPress={() => setCourt(c)}
                     size="lg"
