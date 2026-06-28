@@ -22,6 +22,20 @@ export type Account = {
 };
 export type Invited = { id: string; name: string; confirmed: boolean };
 
+// Demande d'inscription de club stockée côté serveur (table public.club_requests).
+export type ServerClubRequest = {
+  id: string;
+  name: string;
+  area: string | null;
+  type: string | null;
+  courts: number | null;
+  price_from: number | null;
+  contact_phone: string | null;
+  message: string | null;
+  status: 'new' | 'contacted' | 'approved' | 'rejected';
+  created_at: string;
+};
+
 export type Reservation = {
   id: string;
   clubId: string;
@@ -248,6 +262,19 @@ type AppContextType = {
     contactPhone?: string;
   }) => void;
   cancelOwnClubRequest: (id: string) => void; // annule une demande « en attente » créée sur cet appareil
+  // Demande d'inscription de club envoyée au SERVEUR (visible par l'opérateur).
+  submitClubRequest: (input: {
+    name: string;
+    area: string;
+    type?: Club['type'];
+    courts?: number;
+    priceFrom?: number;
+    contactPhone?: string;
+    message?: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  // L'opérateur lit toutes les demandes (RLS) ; setStatus met à jour une demande.
+  fetchClubRequests: () => Promise<ServerClubRequest[]>;
+  setClubRequestStatus: (id: string, status: ServerClubRequest['status']) => Promise<void>;
   approveClub: (id: string) => void;
   rejectClub: (id: string) => void;
   unlockClub: (clubId: string, code: string) => boolean;
@@ -722,6 +749,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...s,
           customClubs: s.customClubs.filter((c) => !(c.id === id && c.status === 'pending')),
         })),
+      // ── Demandes d'inscription club (serveur) ──────────────────────────────
+      // Un joueur envoie « inscris mon club » → ligne dans club_requests (RLS :
+      // l'auteur peut créer, seul l'opérateur lit/traite). L'opérateur les voit
+      // dans son espace et change leur statut (nouveau → contacté → approuvé…).
+      submitClubRequest: async (input) => {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return { ok: false, error: 'Connecte-toi pour inscrire ton club.' };
+        const name = input.name.trim();
+        if (name.length < 2) return { ok: false, error: 'Indique le nom du club.' };
+        const { error } = await supabase.from('club_requests').insert({
+          name,
+          area: input.area?.trim() || null,
+          type: input.type ?? null,
+          courts: input.courts ?? null,
+          price_from: input.priceFrom ?? null,
+          contact_phone: input.contactPhone?.trim() || null,
+          message: input.message?.trim() || null,
+          requested_by: user.id,
+        });
+        if (error) return { ok: false, error: 'Envoi impossible — réessaie dans un instant.' };
+        return { ok: true };
+      },
+      fetchClubRequests: async () => {
+        const { data, error } = await supabase
+          .from('club_requests')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (error) return [];
+        return (data ?? []) as ServerClubRequest[];
+      },
+      setClubRequestStatus: async (id, status) => {
+        await supabase.from('club_requests').update({ status }).eq('id', id);
+      },
       approveClub: (id) =>
         setState((s) => ({
           ...s,
