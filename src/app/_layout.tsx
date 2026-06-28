@@ -16,14 +16,17 @@ import { colors } from '@/theme';
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
-  // Polices embarquées localement (assets/fonts) plutôt que via le paquet
-  // @expo-google-fonts, qui embarquait les 7 graisses + leurs aperçus et
-  // provoquait une collision de fichiers au build iOS. Ici on ne charge que
-  // les 3 graisses réellement utilisées. Les clés correspondent à src/theme.
+  // Polices embarquées localement (assets/fonts). Refonte : Bricolage Grotesque
+  // pour les titres/chiffres, Schibsted Grotesk pour le corps/UI. Les clés
+  // correspondent aux familles déclarées dans src/theme.
   const [fontsLoaded] = useFonts({
     BricolageGrotesque_600SemiBold: require('../../assets/fonts/BricolageGrotesque_600SemiBold.ttf'),
     BricolageGrotesque_700Bold: require('../../assets/fonts/BricolageGrotesque_700Bold.ttf'),
     BricolageGrotesque_800ExtraBold: require('../../assets/fonts/BricolageGrotesque_800ExtraBold.ttf'),
+    SchibstedGrotesk_400Regular: require('../../assets/fonts/SchibstedGrotesk_400Regular.ttf'),
+    SchibstedGrotesk_500Medium: require('../../assets/fonts/SchibstedGrotesk_500Medium.ttf'),
+    SchibstedGrotesk_600SemiBold: require('../../assets/fonts/SchibstedGrotesk_600SemiBold.ttf'),
+    SchibstedGrotesk_700Bold: require('../../assets/fonts/SchibstedGrotesk_700Bold.ttf'),
   });
 
   // Polices chargées → on masque le splash (la transition se fait sans flash blanc).
