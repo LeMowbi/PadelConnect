@@ -52,8 +52,7 @@
     ],
     "experiments": {
       "typedRoutes": false,
-      "reactCompiler": false,
-      "baseUrl": "/PadelConnect"
+      "reactCompiler": false
     },
     "extra": {
       "eas": {

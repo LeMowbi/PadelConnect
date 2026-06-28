@@ -33,6 +33,14 @@ jobs:
       - name: Installer les dépendances
         run: npm ci
 
+      # baseUrl ne vit PAS dans app.json (sinon il casse le build natif iOS/Android :
+      # les assets seraient rangés sous un dossier « PadelConnect/ » qui entre en
+      # collision avec le binaire de l'app). On l'injecte donc UNIQUEMENT ici, juste
+      # avant l'export web, pour servir la démo sous https://…/PadelConnect/.
+      - name: Injecter baseUrl pour le web
+        run: |
+          node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('app.json'));j.expo.experiments=j.expo.experiments||{};j.expo.experiments.baseUrl='/PadelConnect';fs.writeFileSync('app.json',JSON.stringify(j,null,2));console.log('baseUrl=/PadelConnect injecte pour le web');"
+
       - name: Exporter le web (baseUrl /PadelConnect)
         run: npx expo export --platform web --output-dir dist
 
