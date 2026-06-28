@@ -356,6 +356,17 @@ export default function ClubDetail() {
               {c.phone ? <ContactButtons phone={c.phone} style={{ marginTop: spacing.sm }} /> : null}
             </View>
           ))}
+          {/* D1 : accès à l'annuaire global des coachs (la tuile du hub a été retirée). */}
+          <Pressable
+            onPress={() => router.push('/coachs')}
+            hitSlop={6}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.md }}
+          >
+            <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
+              Voir tous les coachs
+            </Txt>
+            <Ionicons name="chevron-forward" size={14} color={colors.signature} />
+          </Pressable>
         </Card>
       ) : null}
 

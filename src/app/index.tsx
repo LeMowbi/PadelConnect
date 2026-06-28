@@ -19,13 +19,13 @@ import { isBirthdayToday, parseBirthDate, zodiacFor } from '@/lib/zodiac';
 import { isPlayed, useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
-// Accès rapide — 5 univers (Réserver / Tournois / Coachs / Amis / Mes matchs).
-// C-S1 : tuile « Mes matchs » ajoutée, grille 5 items équilibrée (≤ 7 entrées, pas de tabbar).
+// Accès rapide — 4 univers (Réserver / Tournois / Amis / Mes matchs).
+// D1 : Coachs retiré du hub (consultés sur chaque fiche club + lien « Voir tous les coachs »)
+// pour garder la priorité visuelle sur « Réserver ». Grille 4 items équilibrée, pas de tabbar.
 type Action = { icon: keyof typeof Ionicons.glyphMap; label: string; route: string; tint: string; bg: string };
 const ACTIONS: Action[] = [
   { icon: 'calendar', label: 'Réserver', route: '/reserver', tint: colors.signature, bg: colors.signatureSoft },
   { icon: 'trophy', label: 'Tournois', route: '/competitions', tint: colors.purple, bg: colors.purpleSoft },
-  { icon: 'school', label: 'Coachs', route: '/coachs', tint: colors.blue, bg: colors.blueSoft },
   { icon: 'people', label: 'Amis', route: '/amis', tint: colors.coral, bg: colors.coralSoft },
   { icon: 'list', label: 'Mes matchs', route: '/reservations', tint: colors.green, bg: colors.greenSoft },
 ];
@@ -150,12 +150,16 @@ export default function HomeScreen() {
   // C-S2 : 0 partie jouée = débutant → nudge prioritaire.
   const isNovice = stats.played === 0;
   const [noviceNudgeDismissed, setNoviceNudgeDismissed] = useState(false);
+  // D2 : nudge parrainage (croissance) — le plus bas en priorité, seulement si 0 ami,
+  // fermable, et SANS aucune récompense chiffrée (simple partage WhatsApp).
+  const [referralNudgeDismissed, setReferralNudgeDismissed] = useState(false);
 
   // Décision du nudge unique affiché :
-  let activeNudge: 'novice' | 'profile' | 'trophy' | null = null;
+  let activeNudge: 'novice' | 'profile' | 'trophy' | 'referral' | null = null;
   if (isNovice && !noviceNudgeDismissed) activeNudge = 'novice';
   else if (showProfileNudge) activeNudge = 'profile';
   else if (trophyNudge) activeNudge = 'trophy';
+  else if (state.friends.length === 0 && !referralNudgeDismissed) activeNudge = 'referral';
 
   // B-R2 : notifier les partenaires depuis la carte prochain match.
   const notifyPartners = () => {
@@ -244,7 +248,7 @@ export default function HomeScreen() {
           </LinearGradient>
         </Pressable>
 
-        {/* Accès rapide — 5 univers (C-S1 : + Mes matchs) */}
+        {/* Accès rapide — 4 univers (D1 : Coachs retiré, accessible par fiche club) */}
         <View style={styles.quickRow}>
           {ACTIONS.map((a) => (
             <Pressable key={a.label} onPress={() => go(a.route)} style={styles.quickItem}>
@@ -340,6 +344,33 @@ export default function HomeScreen() {
               </Txt>
             </View>
             <Ionicons name="chevron-forward" size={16} color={colors.amber} />
+          </Pressable>
+        ) : null}
+
+        {/* d) D2 : invitation au parrainage (si 0 ami) — sobre, fermable, sans récompense */}
+        {activeNudge === 'referral' ? (
+          <Pressable onPress={() => go('/parrainage')} style={[styles.nudge, { backgroundColor: colors.signatureSoft }]}>
+            <View style={[styles.nudgeIcon, { backgroundColor: colors.signature }]}>
+              <Ionicons name="share-social" size={20} color={colors.white} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Txt variant="body" style={{ fontWeight: '700' }}>
+                Tu connais des padelistes ?
+              </Txt>
+              <Txt variant="small" color={colors.textMuted}>
+                Invite-les sur PadelConnect — on joue mieux à plusieurs →
+              </Txt>
+            </View>
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                setReferralNudgeDismissed(true);
+              }}
+              hitSlop={8}
+              style={styles.nudgeClose}
+            >
+              <Ionicons name="close" size={15} color={colors.textMuted} />
+            </Pressable>
           </Pressable>
         ) : null}
 
@@ -578,10 +609,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     ...shadows.e2,
   },
-  // 5 items en ligne, on réduit légèrement les icônes pour tenir
+  // 4 univers en ligne, équilibrés
   quickRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.xl },
-  quickItem: { alignItems: 'center', gap: spacing.sm, width: '18%' },
-  quickIcon: { width: 50, height: 50, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
+  quickItem: { alignItems: 'center', gap: spacing.sm, width: '22%' },
+  quickIcon: { width: 54, height: 54, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   alert: {
     flexDirection: 'row',
     alignItems: 'center',
