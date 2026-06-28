@@ -77,11 +77,16 @@ export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, xxxl: 48
 export const radius = { xs: 6, sm: 10, md: 14, lg: 20, xl: 28, pill: 999 } as const;
 
 export const font = {
-  // Famille signée (titres, chiffres clés, boutons). Corps en système pour lisibilité/perf.
+  // REFONTE — Titres/chiffres : Bricolage Grotesque (semi/bold/heavy).
+  //           Corps/UI : Schibsted Grotesk (body/bodyMedium/bodySemi/bodyBold).
   family: {
     semi: 'BricolageGrotesque_600SemiBold',
     bold: 'BricolageGrotesque_700Bold',
     heavy: 'BricolageGrotesque_800ExtraBold',
+    body: 'SchibstedGrotesk_400Regular',
+    bodyMedium: 'SchibstedGrotesk_500Medium',
+    bodySemi: 'SchibstedGrotesk_600SemiBold',
+    bodyBold: 'SchibstedGrotesk_700Bold',
   },
   size: { xs: 11, sm: 13, md: 15, lg: 17, xl: 22, xxl: 26, display: 32 },
   weight: {

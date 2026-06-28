@@ -10,6 +10,17 @@ export type IconName = keyof typeof Ionicons.glyphMap;
 
 type TxtVariant = 'display' | 'h1' | 'h2' | 'h3' | 'body' | 'small' | 'muted' | 'label' | 'price';
 
+// Corps/UI en Schibsted Grotesk : on choisit la graisse selon le poids effectif
+// (gère aussi les surcharges inline `fontWeight`). Les titres gardent leur famille
+// (Bricolage) car ils déclarent déjà un fontFamily.
+function bodyFamilyForWeight(w?: TextStyle['fontWeight']): string {
+  const n = typeof w === 'number' ? w : parseInt(String(w ?? '400'), 10) || 400;
+  if (n >= 700) return font.family.bodyBold;
+  if (n >= 600) return font.family.bodySemi;
+  if (n >= 500) return font.family.bodyMedium;
+  return font.family.body;
+}
+
 export function Txt({
   variant = 'body',
   color,
@@ -23,8 +34,10 @@ export function Txt({
   children: React.ReactNode;
   numberOfLines?: number;
 }) {
+  const merged = (StyleSheet.flatten([txt[variant], color ? { color } : null, style]) || {}) as TextStyle;
+  if (!merged.fontFamily) merged.fontFamily = bodyFamilyForWeight(merged.fontWeight);
   return (
-    <Text numberOfLines={numberOfLines} style={[txt[variant], color ? { color } : null, style]}>
+    <Text numberOfLines={numberOfLines} style={merged}>
       {children}
     </Text>
   );
