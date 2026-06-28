@@ -1,21 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { Screen } from '@/components/Screen';
 import { BottomSheet } from '@/components/BottomSheet';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { useToast } from '@/components/Toast';
-import { Button, Card, Divider, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
+import { Button, Card, Divider, SectionHeader, Tag, Txt } from '@/components/ui';
 import { ClosePanel } from '@/components/club-admin/ClosePanel';
-import { CodeGate } from '@/components/club-admin/CodeGate';
 import { SectionMonClub } from '@/components/club-admin/SectionMonClub';
 import { SectionReservations } from '@/components/club-admin/SectionReservations';
 import { SectionTournois } from '@/components/club-admin/SectionTournois';
 import { clubsByName, findClub, manageableClubs, type Club } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
-import { canAccessClub } from '@/lib/access';
 import { hasCompetition } from '@/lib/availability';
 import { slotTimestamp } from '@/lib/days';
 import { useApp } from '@/store/AppContext';
@@ -30,13 +28,11 @@ export default function ClubAdmin() {
   const router = useRouter();
   const {
     state,
-    setClubMode,
     setManagedClub,
     requestClub,
     cancelOwnClubRequest,
     closeCompetition,
     deleteCompetition,
-    unlockClub,
     blockSlot,
     unblockSlot,
   } = useApp();
@@ -57,12 +53,11 @@ export default function ClubAdmin() {
   const [ncPhone, setNcPhone] = useState('');
 
   const manageable = manageableClubs(state.customClubs, state.clubInfo);
-  const club = findClub(state.managedClubId, state.customClubs, state.clubInfo) ?? clubsByName[0];
+  // Un compte 'club' gère le club que le serveur lui a attribué (serverManagedClubId).
+  // L'opérateur peut basculer librement (managedClubId local).
+  const managedId = state.role === 'club' ? (state.serverManagedClubId ?? state.managedClubId) : state.managedClubId;
+  const club = findClub(managedId, state.customClubs, state.clubInfo) ?? clubsByName[0];
   const pendingOwn = state.customClubs.find((c) => c.id === club.id)?.status === 'pending';
-  // Espace verrouillé par un code à 4 chiffres tant que ce club n'a pas été déverrouillé ici.
-  // Décision d'accès déléguée au module central (src/lib/access.ts) — point de
-  // branchement unique pour la vérification serveur de l'app finale.
-  const locked = !canAccessClub(club.id, state.unlockedClubIds);
 
   const comps = [...state.myCompetitions.filter((c) => c.clubId === club.id), ...seedCompetitions.filter((c) => c.clubId === club.id)];
   const closingComp = comps.find((c) => c.id === closingId);
@@ -91,42 +86,26 @@ export default function ClubAdmin() {
   };
 
   const header = (
-    <>
-      <View style={styles.note}>
-        <Ionicons name="information-circle-outline" size={15} color={colors.textFaint} />
-        <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
-          Démo de l'interface gérant. En production, l'accès serait réservé au club connecté.
-        </Txt>
-      </View>
-
-      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-        <IconCircle icon="business" />
-        <View style={{ flex: 1 }}>
-          <Txt variant="h3">Compte club (démo)</Txt>
-          <Txt variant="muted">Active le mode gérant pour gérer ton club.</Txt>
-        </View>
-        <Switch
-          value={state.clubMode}
-          onValueChange={setClubMode}
-          trackColor={{ true: colors.signature, false: colors.border }}
-          thumbColor={colors.white}
-        />
-      </Card>
-    </>
+    <View style={styles.note}>
+      <Ionicons name="business" size={15} color={colors.textFaint} />
+      <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
+        {club.name} — espace gérant.
+      </Txt>
+    </View>
   );
 
-  // Espace verrouillé tant que le mode gérant n'est pas activé.
-  if (!state.clubMode) {
+  // Espace réservé aux comptes CLUB (et à l'opérateur). Un joueur normal est bloqué —
+  // l'entrée n'apparaît déjà pas dans son profil, et un accès direct est refusé ici.
+  if (state.role !== 'club' && state.role !== 'operator') {
     return (
-      <Screen back title="Espace Club" subtitle="Gérez votre club">
-        {header}
+      <Screen back title="Espace Club">
         <Card style={{ marginTop: spacing.md, alignItems: 'center', paddingVertical: spacing.xl }}>
           <Ionicons name="lock-closed-outline" size={28} color={colors.textFaint} />
           <Txt variant="h3" style={{ marginTop: spacing.sm }}>
-            Espace réservé au gérant
+            Réservé aux clubs
           </Txt>
           <Txt variant="muted" style={{ marginTop: 4, textAlign: 'center' }}>
-            Active le mode gérant ci-dessus pour recevoir tes réservations et gérer photos, offres, coachs, terrains, créneaux et tournois.
+            Cet espace est réservé aux clubs partenaires. Tu gères un club ? Inscris-le depuis ton profil.
           </Txt>
         </Card>
       </Screen>
@@ -246,17 +225,13 @@ export default function ClubAdmin() {
         ) : null}
       </View>
 
-      {locked ? (
-        <CodeGate club={club} onUnlock={(code) => unlockClub(club.id, code)} />
-      ) : (
-        <SegmentedControl options={SECTIONS} value={section} onChange={setSection} />
-      )}
+      <SegmentedControl options={SECTIONS} value={section} onChange={setSection} />
 
-      {!locked && section === 'Réservations' ? <SectionReservations club={club} comps={comps} onSelectCell={setSelectedCell} /> : null}
+      {section === 'Réservations' ? <SectionReservations club={club} comps={comps} onSelectCell={setSelectedCell} /> : null}
 
-      {!locked && section === 'Mon club' ? <SectionMonClub club={club} /> : null}
+      {section === 'Mon club' ? <SectionMonClub club={club} /> : null}
 
-      {!locked && section === 'Tournois' ? <SectionTournois club={club} comps={comps} onCloseComp={setClosingId} /> : null}
+      {section === 'Tournois' ? <SectionTournois club={club} comps={comps} onCloseComp={setClosingId} /> : null}
 
       {/* Détail d'un créneau (bottom sheet) — état de chaque terrain + Bloquer / Débloquer */}
       <BottomSheet

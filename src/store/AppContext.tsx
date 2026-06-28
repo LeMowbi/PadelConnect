@@ -109,6 +109,11 @@ type AppState = {
   // chaque lancement) → le PIN est redemandé à chaque ouverture de l'app.
   operatorPin: string | null;
   operatorUnlocked: boolean;
+  // RÔLE vérifié côté serveur (Supabase) — la VRAIE sécurité des espaces.
+  //  - 'operator' : toi (PadelConnect). 'club' : un gérant. 'player' : par défaut.
+  // Un joueur ne peut pas se promouvoir (protégé par un trigger côté serveur).
+  role: 'player' | 'operator' | 'club';
+  serverManagedClubId: string | null; // pour un compte 'club' : l'id du club géré
   storageFull: boolean; // true si la sauvegarde a dû abandonner des photos (quota plein)
   managedClubId: string;
   clubSlots: Record<string, string[]>; // horaires ouverts par club
@@ -169,6 +174,8 @@ const initialState: AppState = {
   clubMode: false,
   operatorPin: null,
   operatorUnlocked: false,
+  role: 'player',
+  serverManagedClubId: null,
   storageFull: false,
   managedClubId: 'padelta',
   clubSlots: {},
@@ -294,6 +301,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     })();
   }, []);
+
+  // Au démarrage, si une session serveur existe, on rafraîchit le profil ET le RÔLE
+  // depuis Supabase (ainsi, dès que l'opérateur promeut un compte côté serveur, le
+  // changement prend effet à la prochaine ouverture). Sans session → on ne touche à rien.
+  useEffect(() => {
+    if (!hydrated) return;
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (!userId) return;
+      const { data: prof } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+      if (!prof) return;
+      setState((s) => ({
+        ...s,
+        account: {
+          firstName: prof.first_name ?? s.account?.firstName ?? '',
+          lastName: prof.last_name ?? s.account?.lastName ?? '',
+          phone: prof.phone ?? s.account?.phone ?? '',
+          photoUri: prof.photo_uri ?? s.account?.photoUri,
+          birthDate: prof.birth_date ?? s.account?.birthDate,
+          gender: prof.gender ?? s.account?.gender,
+        },
+        role: (prof.role as AppState['role']) ?? 'player',
+        serverManagedClubId: prof.managed_club_id ?? null,
+        level: clampLevel(Number(prof.level ?? s.level)),
+      }));
+    })();
+  }, [hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -449,13 +486,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             birthDate: prof?.birth_date ?? undefined,
             gender: prof?.gender ?? undefined,
           },
+          role: (prof?.role as AppState['role']) ?? 'player',
+          serverManagedClubId: prof?.managed_club_id ?? null,
           level: clampLevel(Number(prof?.level ?? 3.0)),
         }));
         return { ok: true };
       },
       signOut: () => {
         supabase.auth.signOut().catch(() => {});
-        setState((s) => ({ ...s, account: null }));
+        setState((s) => ({ ...s, account: null, role: 'player', serverManagedClubId: null, operatorUnlocked: false }));
       },
       setLevel: (n) => setState((s) => ({ ...s, level: clampLevel(n) })),
       // Clôture par l'ORGANISATEUR : fige le vainqueur (et, en option, l'équipe classée

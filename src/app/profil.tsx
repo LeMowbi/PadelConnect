@@ -7,7 +7,6 @@ import { Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { Avatar } from '@/components/Avatar';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Chip } from '@/components/Chip';
-import { OperatorPinSheet } from '@/components/OperatorPinSheet';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
@@ -24,23 +23,14 @@ export default function ProfilScreen() {
   const [editing, setEditing] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [photoSheet, setPhotoSheet] = useState(false);
-  // Espaces pro : masqués par défaut (geste discret pour les révéler). Un gérant déjà
-  // déverrouillé garde l'accès à l'Espace Club sans le geste. L'opérateur (PadelConnect)
-  // n'apparaît JAMAIS sans le geste — il n'a pas sa place dans la navigation normale.
-  const [proRevealed, setProRevealed] = useState(false);
-  const [pinOpen, setPinOpen] = useState(false); // feuille de saisie du code opérateur
 
   if (!account) return null;
 
-  // Tap sur la carte opérateur : si la session est déjà déverrouillée on entre ;
-  // sinon on demande le code PIN (créé puis vérifié dans OperatorPinSheet).
-  const openOperator = () => {
-    if (state.operatorUnlocked) router.push('/operateur');
-    else setPinOpen(true);
-  };
-
-  const showClub = proRevealed || state.unlockedClubIds.length > 0 || state.clubMode;
-  const showOperator = proRevealed;
+  // Visibilité des espaces pro = RÔLE vérifié côté serveur. Un joueur normal ne voit
+  // NI l'opérateur NI l'Espace Club. (Plus de geste secret ni de code PIN : c'est le
+  // compte lui-même, validé par le serveur, qui fait foi.)
+  const showOperator = state.role === 'operator';
+  const showClub = state.role === 'club' || state.role === 'operator';
 
   const changePhoto = async () => {
     const uri = await pickImage({ square: true });
@@ -93,13 +83,7 @@ export default function ProfilScreen() {
           {/* Bandeau signature — avatar (anneau dégradé) + identité (maquette Profil) */}
           <LinearGradient colors={gradients.deepGreen} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.band}>
             <View style={styles.head}>
-              <Pressable
-                onPress={() => setPhotoSheet(true)}
-                onLongPress={() => setProRevealed(true)}
-                delayLongPress={3000}
-                hitSlop={6}
-                accessibilityLabel="Photo de profil"
-              >
+              <Pressable onPress={() => setPhotoSheet(true)} hitSlop={6} accessibilityLabel="Photo de profil">
                 <Avatar uri={account.photoUri} name={`${account.firstName} ${account.lastName}`} size={76} />
               </Pressable>
               <View style={{ flex: 1 }}>
@@ -293,17 +277,11 @@ export default function ProfilScreen() {
             </Card>
           ) : null}
           {showOperator ? (
-            <Card onPress={openOperator} style={styles.cta}>
-              <IconCircle
-                icon={state.operatorUnlocked ? 'stats-chart' : 'lock-closed'}
-                color={colors.green}
-                bg={colors.greenSoft}
-              />
+            <Card onPress={() => router.push('/operateur')} style={styles.cta}>
+              <IconCircle icon="stats-chart" color={colors.green} bg={colors.greenSoft} />
               <View style={{ flex: 1 }}>
                 <Txt variant="h3">Espace opérateur (PadelConnect)</Txt>
-                <Txt variant="muted">
-                  {state.operatorUnlocked ? 'Décomptes, commissions, nouveaux clubs.' : 'Protégé par un code — réservé à toi.'}
-                </Txt>
+                <Txt variant="muted">Décomptes, commissions, demandes de clubs.</Txt>
               </View>
               <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
             </Card>
@@ -364,15 +342,6 @@ export default function ProfilScreen() {
           <Button label="Annuler" variant="ghost" onPress={() => setPhotoSheet(false)} full />
         </View>
       </BottomSheet>
-
-      <OperatorPinSheet
-        visible={pinOpen}
-        onClose={() => setPinOpen(false)}
-        onUnlocked={() => {
-          setPinOpen(false);
-          router.push('/operateur');
-        }}
-      />
     </Screen>
   );
 }

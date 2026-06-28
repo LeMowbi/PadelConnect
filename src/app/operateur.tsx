@@ -92,10 +92,9 @@ export default function Operateur() {
     setPaymentStatus(row.clubId, week, 'sent');
   };
 
-  // Garde d'accès centralisée (src/lib/access.ts). L'Espace opérateur n'est rendu que
-  // si la session est déverrouillée par le code PIN (cf. Profil → appui long sur l'avatar).
-  // App finale : rendu seulement si le serveur confirme role === 'operator'.
-  if (!canAccessOperator(state.operatorUnlocked)) return null;
+  // Garde d'accès : l'Espace opérateur n'est rendu que si le RÔLE serveur === 'operator'.
+  // (La vraie barrière reste la Row Level Security côté Supabase.)
+  if (!canAccessOperator(state.role)) return null;
 
   return (
     <Screen back title="Espace opérateur" subtitle="PadelConnect — suivi & commissions">

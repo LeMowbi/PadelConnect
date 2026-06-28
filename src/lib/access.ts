@@ -1,41 +1,29 @@
 // ─── Contrôle d'accès CENTRALISÉ aux espaces sensibles ──────────────────────────
 //
-// PROTOTYPE (aujourd'hui) : tout est local, mono-appareil — la navigation ne change
-// pas. Ce module est le SEUL point d'entrée des décisions d'accès : les écrans ne
-// décident jamais eux-mêmes. Ainsi, passer à l'app finale sera un BRANCHEMENT ici
-// (remplacer le corps de ces fonctions par des appels serveur), pas une réécriture.
+// La sécurité repose désormais sur le RÔLE vérifié côté serveur (Supabase) :
+//   - 'operator' : toi (PadelConnect) — seul à voir l'Espace opérateur ;
+//   - 'club'     : un gérant — ne voit QUE l'Espace Club de SON club ;
+//   - 'player'   : par défaut — ne voit NI l'opérateur NI l'Espace Club.
 //
-// CIBLE VALIDÉE pour l'app finale (Supabase) :
-//   (a) Espace opérateur : l'écran reste in-app mais n'est RENDU que si le serveur
-//       confirme `role === 'operator'` sur le compte de Moustapha (session Supabase
-//       Auth vérifiée côté serveur — jamais un simple flag local).
-//   (b) Espaces Club : un compte PAR CLUB (téléphone + OTP) ; les droits de gestion
-//       par club sont vérifiés côté serveur (Supabase Auth + Row Level Security) —
-//       plus de code à 4 chiffres partagé dans l'app.
-//
-// DÉCISION PORTEUR (juin 2026) : lier l'Espace opérateur « uniquement à mon compte »
-// est DIFFÉRÉ au serveur (§B). Deux pistes envisagées ont été volontairement écartées
-// pour le prototype (gardées ici pour la version serveur) :
-//   - code secret opérateur saisi une fois (claim) liant le compte courant à l'opérateur ;
-//   - reconnaissance par numéro de téléphone du compte.
-// Aucune n'est une vraie sécurité sans vérification serveur ; en attendant, l'Espace
-// opérateur est simplement DISCRET (révélé par un appui long sur l'avatar du Profil) et
-// n'apparaît pas dans la navigation normale.
+// Le rôle est posé côté serveur (un trigger empêche un joueur de se promouvoir).
+// La vraie barrière est la Row Level Security : même en truquant l'affichage, un
+// joueur n'obtient aucune donnée protégée du serveur. Ces fonctions ne pilotent que
+// la VISIBILITÉ des entrées dans l'app.
 
-/** L'utilisateur peut-il voir l'Espace opérateur ? */
-export function canAccessOperator(operatorUnlocked: boolean): boolean {
-  // PROTOTYPE : l'Espace opérateur est verrouillé par un code PIN choisi par l'opérateur
-  // sur son appareil (redemandé à chaque lancement). `operatorUnlocked` reflète une
-  // session déverrouillée. Comme les codes d'accès des clubs ne sont visibles QUE dans
-  // cet espace, ce verrou protège aussi indirectement les comptes clubs.
-  // TODO(app finale) : return session?.user.role === 'operator' (vérifié serveur).
-  return operatorUnlocked;
+export type Role = 'player' | 'operator' | 'club';
+
+/** Seul l'opérateur voit l'Espace opérateur. */
+export function canAccessOperator(role: Role): boolean {
+  return role === 'operator';
 }
 
-/** L'utilisateur peut-il gérer CE club ? */
-export function canAccessClub(clubId: string, unlockedClubIds: string[]): boolean {
-  // PROTOTYPE : code à 4 chiffres saisi une fois, mémorisé sur l'appareil (CodeGate).
-  // TODO(app finale) : return session?.user.clubIds.includes(clubId) — droits par
-  // club délivrés par le serveur (RLS), suppression du système de codes.
-  return unlockedClubIds.includes(clubId);
+/** L'Espace Club doit-il apparaître ? Jamais pour un joueur normal. */
+export function canSeeClubSpace(role: Role): boolean {
+  return role === 'club' || role === 'operator';
+}
+
+/** Un compte 'club' ne gère que SON club ; l'opérateur peut tout voir. */
+export function canAccessClub(role: Role, managedClubId: string | null, clubId: string): boolean {
+  if (role === 'operator') return true;
+  return role === 'club' && !!managedClubId && managedClubId === clubId;
 }
