@@ -151,8 +151,7 @@ export const MAX_CLUB_PHOTOS = 6; // plafond de photos par club (quota de stocka
 function frAuthError(msg: string): string {
   const m = (msg || '').toLowerCase();
   if (m.includes('invalid login')) return 'Numéro ou mot de passe incorrect.';
-  if (m.includes('already registered') || m.includes('already been registered'))
-    return 'Ce numéro a déjà un compte — connecte-toi.';
+  if (m.includes('already registered') || m.includes('already been registered')) return 'Ce numéro a déjà un compte — connecte-toi.';
   if (m.includes('password should be') || m.includes('password')) return 'Mot de passe trop court (6 caractères minimum).';
   if (m.includes('network') || m.includes('fetch') || m.includes('timeout')) return 'Connexion internet impossible — réessaie.';
   if (m.includes('email logins are disabled') || m.includes('signups not allowed'))
@@ -774,10 +773,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return { ok: true };
       },
       fetchClubRequests: async () => {
-        const { data, error } = await supabase
-          .from('club_requests')
-          .select('*')
-          .order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('club_requests').select('*').order('created_at', { ascending: false });
         if (error) return [];
         return (data ?? []) as ServerClubRequest[];
       },

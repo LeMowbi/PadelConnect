@@ -289,6 +289,22 @@ export default function ProfilScreen() {
         </View>
       ) : null}
 
+      {/* Inscrire son club — ouvert à TOUT joueur (ne donne aucun accès gérant :
+          la demande part à PadelConnect, qui recontacte puis active). On masque
+          l'entrée aux comptes qui gèrent déjà un club (club/opérateur). */}
+      {!showClub ? (
+        <View style={{ marginTop: spacing.xl }}>
+          <Card onPress={() => router.push('/inscrire-club')} style={styles.cta}>
+            <IconCircle icon="business" color={colors.amber} bg={colors.amberSoft} />
+            <View style={{ flex: 1 }}>
+              <Txt variant="h3">Tu gères un club ?</Txt>
+              <Txt variant="muted">Référence-le sur PadelConnect — on te recontacte.</Txt>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+          </Card>
+        </View>
+      ) : null}
+
       {/* La suite — fonctions qui arrivent avec la version connectée (serveur) */}
       <View style={{ marginTop: spacing.xl }}>
         <Card onPress={() => router.push('/a-venir')} style={styles.cta}>

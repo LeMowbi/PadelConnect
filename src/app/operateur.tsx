@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { canAccessOperator } from '@/lib/access';
-import { COMMISSION_RATE, isPlayed, useApp } from '@/store/AppContext';
+import { COMMISSION_RATE, isPlayed, useApp, type ServerClubRequest } from '@/store/AppContext';
 import { addWeeks, dateKeyLabel, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
@@ -14,7 +14,46 @@ import { colors, font, radius, shadows, spacing } from '@/theme';
 const PAY_PCT = Math.round(COMMISSION_RATE * 100);
 
 export default function Operateur() {
-  const { state, setBoost, approveClub, rejectClub, setPaymentStatus, setOperatorNews, removeOperatorNews } = useApp();
+  const {
+    state,
+    setBoost,
+    approveClub,
+    rejectClub,
+    setPaymentStatus,
+    setOperatorNews,
+    removeOperatorNews,
+    fetchClubRequests,
+    setClubRequestStatus,
+  } = useApp();
+
+  // Demandes d'inscription reçues sur le SERVEUR (table club_requests, lisible par le
+  // seul opérateur via RLS). Un joueur les envoie depuis « Inscrire mon club ».
+  const [requests, setRequests] = useState<ServerClubRequest[]>([]);
+  const [loadingReq, setLoadingReq] = useState(true);
+  const loadRequests = useCallback(async () => {
+    setLoadingReq(true);
+    setRequests(await fetchClubRequests());
+    setLoadingReq(false);
+  }, [fetchClubRequests]);
+  // Chargement initial : on n'appelle setState que DANS le callback async (après await),
+  // jamais de façon synchrone dans le corps de l'effet (cf. react-hooks/set-state-in-effect).
+  useEffect(() => {
+    let alive = true;
+    fetchClubRequests().then((rows) => {
+      if (!alive) return;
+      setRequests(rows);
+      setLoadingReq(false);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [fetchClubRequests]);
+
+  const markRequest = async (id: string, status: ServerClubRequest['status']) => {
+    setRequests((cur) => cur.map((r) => (r.id === id ? { ...r, status } : r)));
+    await setClubRequestStatus(id, status);
+  };
+  const pendingRequests = requests.filter((r) => r.status === 'new' || r.status === 'contacted').length;
 
   // Le décompte est HEBDOMADAIRE (semaine calendaire lundi → dimanche).
   const thisWeek = weekKeyOf(Date.now());
@@ -261,7 +300,106 @@ export default function Operateur() {
         )}
       </View>
 
-      {/* Demandes d'inscription de clubs — TU valides chaque nouveau club. */}
+      {/* Demandes reçues sur le SERVEUR — un gérant a utilisé « Inscrire mon club ». */}
+      <View style={{ marginTop: spacing.xl }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <SectionHeader title={`Demandes reçues · ${pendingRequests}`} />
+          <Pressable onPress={loadRequests} hitSlop={8} accessibilityLabel="Rafraîchir les demandes">
+            <Ionicons name="refresh" size={18} color={colors.textMuted} />
+          </Pressable>
+        </View>
+        {loadingReq ? (
+          <Card>
+            <Txt variant="muted">Chargement des demandes…</Txt>
+          </Card>
+        ) : requests.length === 0 ? (
+          <Card>
+            <Txt variant="muted">
+              Aucune demande pour l'instant. Quand un joueur inscrit son club (Profil → « Tu gères un club ? »), elle apparaît ici.
+            </Txt>
+          </Card>
+        ) : (
+          requests.map((r) => (
+            <Card key={r.id} style={{ marginBottom: spacing.sm }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                <IconCircle icon="business" color={colors.amber} bg={colors.amberSoft} size={40} />
+                <View style={{ flex: 1 }}>
+                  <Txt variant="h3" style={{ fontSize: 15 }}>
+                    {r.name}
+                  </Txt>
+                  <Txt variant="muted">
+                    {[
+                      r.area,
+                      r.type,
+                      r.courts ? `${r.courts} terrain${r.courts > 1 ? 's' : ''}` : null,
+                      r.price_from ? `dès ${fcfa(r.price_from)}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || 'Sans détail'}
+                  </Txt>
+                </View>
+                <Tag
+                  label={
+                    r.status === 'approved'
+                      ? 'Approuvé ✓'
+                      : r.status === 'rejected'
+                        ? 'Refusé'
+                        : r.status === 'contacted'
+                          ? 'Contacté'
+                          : 'Nouveau'
+                  }
+                  tone={
+                    r.status === 'approved' ? 'green' : r.status === 'rejected' ? 'neutral' : r.status === 'contacted' ? 'blue' : 'coral'
+                  }
+                />
+              </View>
+              {r.message ? (
+                <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm, fontStyle: 'italic' }}>
+                  « {r.message} »
+                </Txt>
+              ) : null}
+              <Divider style={{ marginVertical: spacing.md }} />
+              <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
+                {r.contact_phone ? (
+                  <View style={{ flex: 1, minWidth: 140 }}>
+                    <Button
+                      size="sm"
+                      label="WhatsApp"
+                      icon="logo-whatsapp"
+                      variant="secondary"
+                      onPress={() => {
+                        openWhatsApp(
+                          r.contact_phone ?? '',
+                          `Bonjour 👋 PadelConnect à propos de l'inscription de « ${r.name} ». Es-tu dispo pour en parler ?`,
+                        );
+                        if (r.status === 'new') markRequest(r.id, 'contacted');
+                      }}
+                      full
+                    />
+                  </View>
+                ) : null}
+                {r.status === 'approved' ? (
+                  <Button size="sm" label="Rouvrir" icon="arrow-undo" variant="ghost" onPress={() => markRequest(r.id, 'contacted')} />
+                ) : (
+                  <>
+                    <Button size="sm" label="Approuver" icon="checkmark" onPress={() => markRequest(r.id, 'approved')} />
+                    {r.status !== 'rejected' ? (
+                      <Button size="sm" label="Écarter" icon="close" variant="ghost" onPress={() => markRequest(r.id, 'rejected')} />
+                    ) : null}
+                  </>
+                )}
+              </View>
+              {r.contact_phone ? (
+                <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                  {r.contact_phone}
+                </Txt>
+              ) : null}
+            </Card>
+          ))
+        )}
+      </View>
+
+      {/* Clubs en démo locale — flux gérant historique (sans serveur). */}
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title={`Nouveaux clubs · ${state.customClubs.length}`} />
         {state.customClubs.length === 0 ? (
