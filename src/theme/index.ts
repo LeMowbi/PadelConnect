@@ -64,8 +64,9 @@ export const gradients = {
   deepPurple: [colors.purple, colors.purpleDark] as const, // héros univers Tournois (fiche tournoi)
 } as const;
 
-// Palette d'accents pour les visuels de club (placeholders) — tokens, pas de hex épars.
-export const ACCENTS = ['#1FB57A', '#C2922B', '#3C85D4', '#E0653A', '#7C5CD6', '#0A6B5D'] as const;
+// Palette d'accents pour les visuels de club (placeholders) — référence les tokens
+// (zéro couleur en dur), pas de hex épars.
+export const ACCENTS = [colors.green, colors.amber, colors.blue, colors.coral, colors.purple, colors.signature] as const;
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, xxxl: 48 } as const;
 
