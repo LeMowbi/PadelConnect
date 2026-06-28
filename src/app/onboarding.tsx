@@ -41,11 +41,11 @@ export default function Onboarding() {
 
   const validate = (): Partial<Record<FieldKey, string>> => {
     const e: Partial<Record<FieldKey, string>> = {};
+    if (phone.replace(/\D/g, '').length < 8) e.phone = 'Numéro invalide — au moins 8 chiffres.';
     if (firstName.trim().length < 2) e.firstName = 'Indique ton prénom (2 lettres minimum).';
     if (lastName.trim().length < 1) e.lastName = 'Indique ton nom.';
-    if (phone.replace(/\D/g, '').length < 8) e.phone = 'Numéro invalide — au moins 8 chiffres.';
-    if (!birthDate)
-      e.birth = birth.trim().length > 0 ? 'Date invalide — vérifie le jour, le mois et l’année.' : 'Indique ta date de naissance.';
+    // Date de naissance optionnelle : on ne signale une erreur QUE si elle est mal saisie.
+    if (birth.trim().length > 0 && !birthDate) e.birth = 'Date invalide — vérifie le jour, le mois et l’année.';
     if (!gender) e.gender = 'Choisis une option.';
     return e;
   };
@@ -53,7 +53,7 @@ export default function Onboarding() {
   const create = () => {
     const e = validate();
     setErrors(e);
-    const first = (['firstName', 'lastName', 'phone', 'birth', 'gender'] as FieldKey[]).find((k) => e[k]);
+    const first = (['phone', 'firstName', 'lastName', 'birth', 'gender'] as FieldKey[]).find((k) => e[k]);
     if (first) {
       // Scroll automatique vers le premier champ en erreur.
       scrollRef.current?.scrollTo({ y: Math.max(0, (positions.current[first] ?? 0) - 24), animated: true });
@@ -102,6 +102,22 @@ export default function Onboarding() {
             </Txt>
           </View>
 
+          {/* Téléphone d'abord (brief) — c'est l'identifiant clé pour les réservations. */}
+          <Field
+            label="Numéro de téléphone"
+            value={phone}
+            onChangeText={(t) => {
+              setPhone(t);
+              clearError('phone');
+            }}
+            placeholder="+225 07 00 00 00 00"
+            keyboardType="phone-pad"
+            error={errors.phone}
+            onLayout={(y) => {
+              positions.current.phone = y;
+            }}
+            autoFocus
+          />
           <Field
             label="Prénom"
             value={firstName}
@@ -115,7 +131,6 @@ export default function Onboarding() {
             onLayout={(y) => {
               positions.current.firstName = y;
             }}
-            autoFocus
           />
           <Field
             label="Nom"
@@ -131,22 +146,9 @@ export default function Onboarding() {
               positions.current.lastName = y;
             }}
           />
+          {/* Date de naissance OPTIONNELLE (brief : différée au profil). */}
           <Field
-            label="Numéro de téléphone"
-            value={phone}
-            onChangeText={(t) => {
-              setPhone(t);
-              clearError('phone');
-            }}
-            placeholder="+225 07 00 00 00 00"
-            keyboardType="phone-pad"
-            error={errors.phone}
-            onLayout={(y) => {
-              positions.current.phone = y;
-            }}
-          />
-          <Field
-            label="Date de naissance"
+            label="Date de naissance (optionnel)"
             value={birth}
             onChangeText={(t) => {
               setBirth(maskBirthDate(t, birth));
