@@ -1,5 +1,8 @@
-// Système de design PadelConnect — « luxe sportif » : fond crème chaud, vert profond signature,
-// accents par univers (vert / bleu / violet / corail) et or réel pour Sponsorisé & trophées.
+// Système de design PadelConnect — « luxe sportif » (brief 28/06/2026).
+// PALETTE DISCIPLINÉE : le VERT structure, le LIME ne sert qu'à 1 action clé par écran,
+// l'OR est réservé au prestige (tournois, trophées, premium), la TERRE aux erreurs/urgences.
+// Violet / corail / bleu / orange ont été retirés : leurs tokens sont remappés sur cette
+// échelle (les noms restent pour compat, mais rendent en vert/or/terre).
 
 export const colors = {
   // Fonds — crème chaud (plus premium qu'un blanc froid), cartes blanches.
@@ -7,7 +10,7 @@ export const colors = {
   bgElevated: '#FFFFFF',
   surface: '#FFFFFF',
   surfaceAlt: '#ECE8DC',
-  border: '#D8D2C4',
+  border: '#E6E0D2', // filets (brief)
   borderSoft: 'rgba(0,0,0,0.06)',
 
   // Couleur SIGNATURE = vert profond du terrain (CTA, héros, sélection, prix, niveau).
@@ -19,20 +22,20 @@ export const colors = {
   green: '#1E9E73',
   greenDark: '#167A58',
   greenSoft: 'rgba(30,158,115,0.14)',
-  // Bleu — univers Coachs / info.
-  blue: '#3C85D4',
-  blueSoft: 'rgba(60,133,212,0.14)',
-  // Corail — univers Découvrir + alertes douces.
-  coral: '#E0653A',
-  coralSoft: 'rgba(224,101,58,0.14)',
-  // Violet — univers Tournois & récompenses.
-  purple: '#7C5CD6',
-  purpleDark: '#5B3FB0', // bas du dégradé héros Tournois
-  purpleSoft: 'rgba(124,92,214,0.14)',
-  // OR réel (champagne) — Sponsorisé, trophées, victoires.
+  // « Bleu » (univers Coachs/info) → remappé sur le vert signature.
+  blue: '#0A6B5D',
+  blueSoft: 'rgba(10,107,93,0.12)',
+  // « Corail » (univers Découvrir) → remappé sur le vert vif.
+  coral: '#1E9E73',
+  coralSoft: 'rgba(30,158,115,0.14)',
+  // « Violet » (univers Tournois/récompenses) → remappé sur l'OR (prestige).
+  purple: '#C2922B',
+  purpleDark: '#9A7322', // bas du dégradé héros Tournois (or profond)
+  purpleSoft: 'rgba(194,146,43,0.16)',
+  // OR réel (champagne) — prestige : tournois, trophées, Sponsorisé.
   amber: '#C2922B',
   amberSoft: 'rgba(194,146,43,0.16)',
-  // Balle de padel (vert lime/fluo) — touche d'énergie / logo.
+  // Balle de padel (vert lime/fluo) — réservé à 1 action clé par écran (brief).
   lime: '#C6F24A',
 
   text: '#0C1A16',
@@ -43,10 +46,12 @@ export const colors = {
   scrim: 'rgba(12,26,22,0.55)', // overlay bas de photo + fond des bottom sheets
   scrimStrong: 'rgba(12,26,22,0.85)', // bas d'un en-tête photo, pour garantir le contraste du texte blanc
 
-  danger: '#E5484D',
-  dangerSoft: 'rgba(229,72,77,0.16)',
-  warning: '#E0973A',
-  warningSoft: 'rgba(224,151,58,0.16)',
+  // TERRE — erreurs et urgences (brief #C0492F).
+  danger: '#C0492F',
+  dangerSoft: 'rgba(192,73,47,0.16)',
+  // « Warning » (orange retiré) → remappé sur l'or.
+  warning: '#C2922B',
+  warningSoft: 'rgba(194,146,43,0.16)',
   white: '#FFFFFF',
   black: '#000000',
   onSignature: '#FFFFFF', // texte / icône posés sur la couleur signature (vert profond)
