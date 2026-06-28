@@ -3,8 +3,8 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BookingConfirmation } from './BookingConfirmation';
 import { Chip } from './Chip';
-import { Confetti } from './Confetti';
 import { useToast } from './Toast';
 import { Button, Txt } from './ui';
 import { activeClubs, type Club } from '@/data/clubs';
@@ -87,10 +87,27 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
     }
   };
 
+  // Succès → écran de confirmation PLEIN ÉCRAN (handoff refonte).
+  if (done) {
+    return (
+      <BookingConfirmation
+        clubName={club.name}
+        dayLabel={day.label}
+        time={time}
+        court={court ?? ''}
+        participantCount={participantCount}
+        onSeeReservations={() => {
+          onClose();
+          router.push('/reservations');
+        }}
+        onClose={onClose}
+      />
+    );
+  }
+
   return (
     <Modal transparent animationType="slide" visible onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.backdrop} onPress={onClose} />
-      {done ? <Confetti /> : null}
       <KeyboardAvoidingView
         style={styles.wrapper}
         pointerEvents="box-none"
@@ -99,35 +116,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
         <View style={[styles.sheet, { paddingBottom: spacing.xxl + insets.bottom }]}>
           <View style={styles.handle} />
 
-          {done ? (
-            <View style={{ alignItems: 'center', paddingVertical: spacing.md }}>
-              <Ionicons name="checkmark-circle" size={60} color={colors.green} />
-              <Txt variant="h2" style={{ marginTop: spacing.sm }}>
-                Terrain réservé !
-              </Txt>
-              <Txt variant="muted" style={{ marginTop: 4, textAlign: 'center' }}>
-                {club.name} · {day.label} à {time}
-              </Txt>
-              <View style={styles.badge}>
-                <Ionicons name="tennisball" size={15} color={colors.signature} />
-                <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
-                  {court} · toi{participantCount > 0 ? ` + ${participantCount}` : ''}
-                </Txt>
-              </View>
-              <View style={{ alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.lg }}>
-                <Button
-                  label="Voir mes réservations"
-                  icon="calendar"
-                  onPress={() => {
-                    onClose();
-                    router.push('/reservations');
-                  }}
-                  full
-                />
-                <Button label="Terminé" variant="ghost" onPress={onClose} full />
-              </View>
-            </View>
-          ) : (
+          {
             <>
               <View style={styles.head}>
                 <View style={{ flex: 1 }}>
@@ -220,7 +209,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
                 </>
               )}
             </>
-          )}
+          }
         </View>
       </KeyboardAvoidingView>
     </Modal>

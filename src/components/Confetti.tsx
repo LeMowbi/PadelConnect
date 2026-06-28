@@ -3,7 +3,8 @@ import { Animated, Dimensions, StyleSheet, View } from 'react-native';
 import { colors } from '@/theme';
 
 const W = Dimensions.get('window').width;
-const PALETTE = [colors.signature, colors.green, colors.blue, colors.lime, colors.danger];
+// Confettis refonte : or / violet / vert / corail.
+const PALETTE = [colors.amber, colors.purple, colors.green, colors.coral, colors.lime];
 const PIECES = Array.from({ length: 26 }, (_, i) => ({
   left: Math.random() * W,
   size: 6 + Math.random() * 8,
