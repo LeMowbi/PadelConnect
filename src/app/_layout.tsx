@@ -1,9 +1,4 @@
-import {
-  BricolageGrotesque_600SemiBold,
-  BricolageGrotesque_700Bold,
-  BricolageGrotesque_800ExtraBold,
-  useFonts,
-} from '@expo-google-fonts/bricolage-grotesque';
+import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -20,10 +15,14 @@ import { colors } from '@/theme';
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
+  // Polices embarquées localement (assets/fonts) plutôt que via le paquet
+  // @expo-google-fonts, qui embarquait les 7 graisses + leurs aperçus et
+  // provoquait une collision de fichiers au build iOS. Ici on ne charge que
+  // les 3 graisses réellement utilisées. Les clés correspondent à src/theme.
   const [fontsLoaded] = useFonts({
-    BricolageGrotesque_600SemiBold,
-    BricolageGrotesque_700Bold,
-    BricolageGrotesque_800ExtraBold,
+    BricolageGrotesque_600SemiBold: require('../../assets/fonts/BricolageGrotesque_600SemiBold.ttf'),
+    BricolageGrotesque_700Bold: require('../../assets/fonts/BricolageGrotesque_700Bold.ttf'),
+    BricolageGrotesque_800ExtraBold: require('../../assets/fonts/BricolageGrotesque_800ExtraBold.ttf'),
   });
 
   // Polices chargées → on masque le splash (la transition se fait sans flash blanc).
