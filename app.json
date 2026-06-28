@@ -12,7 +12,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ci.padelco.app",
-      "buildNumber": "7",
+      "buildNumber": "8",
       "config": {
         "usesNonExemptEncryption": false
       }
