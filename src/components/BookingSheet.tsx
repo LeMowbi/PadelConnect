@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Chip } from './Chip';
 import { Confetti } from './Confetti';
+import { useToast } from './Toast';
 import { Button, Txt } from './ui';
 import { activeClubs, type Club } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
@@ -19,6 +21,8 @@ import { colors, radius, shadows, spacing } from '@/theme';
 export function BookingSheet({ club, day, time, onClose }: { club: Club; day: DayOption; time: string; onClose: () => void }) {
   const router = useRouter();
   const { state, addReservation } = useApp();
+  const toast = useToast();
+  const insets = useSafeAreaInsets();
 
   const ctx: AvailCtx = {
     clubs: activeClubs(state.customClubs, state.clubInfo),
@@ -71,16 +75,28 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
       players: 1 + invited.length,
       invited,
     });
-    if (ok) setDone(true);
-    else setCourt(free.find((c) => c !== court) ?? null); // terrain pris entre-temps : on repropose
+    if (ok) {
+      setDone(true);
+    } else {
+      // Terrain pris entre-temps : on repropose un autre terrain libre et on prévient.
+      const alt = free.find((c) => c !== court) ?? null;
+      setCourt(alt);
+      toast.show(alt ? 'Ce terrain vient d’être pris — réessaie' : 'Plus aucun terrain libre à cet horaire', {
+        icon: 'alert-circle',
+      });
+    }
   };
 
   return (
     <Modal transparent animationType="slide" visible onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.backdrop} onPress={onClose} />
       {done ? <Confetti /> : null}
-      <View style={styles.wrapper} pointerEvents="box-none">
-        <View style={styles.sheet}>
+      <KeyboardAvoidingView
+        style={styles.wrapper}
+        pointerEvents="box-none"
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={[styles.sheet, { paddingBottom: spacing.xxl + insets.bottom }]}>
           <View style={styles.handle} />
 
           {done ? (
@@ -130,12 +146,27 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
               <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
                 TERRAIN
               </Txt>
-              <View style={styles.row}>
-                {free.map((c) => (
-                  <Chip key={c} label={c} active={c === court} onPress={() => setCourt(c)} size="lg" />
-                ))}
-              </View>
+              {free.length === 0 ? (
+                <View style={styles.empty}>
+                  <Ionicons name="time-outline" size={22} color={colors.textMuted} />
+                  <Txt variant="muted" style={{ flex: 1 }}>
+                    Plus aucun terrain libre à cet horaire. Essaie un autre créneau ou un autre club.
+                  </Txt>
+                </View>
+              ) : (
+                <View style={styles.row}>
+                  {free.map((c) => (
+                    <Chip key={c} label={c} active={c === court} onPress={() => setCourt(c)} size="lg" />
+                  ))}
+                </View>
+              )}
 
+              {free.length === 0 ? (
+                <View style={{ marginTop: spacing.lg }}>
+                  <Button label="Voir d’autres créneaux" icon="calendar" variant="secondary" onPress={onClose} full />
+                </View>
+              ) : (
+                <>
               <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
                 AVEC QUI ? (TOI + {participantCount}/3)
               </Txt>
@@ -186,17 +217,28 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
                   Session de 1h30 · sans paiement en ligne — réglé au club. Annulation jusqu'à 5h avant.
                 </Txt>
               </View>
+                </>
+              )}
             </>
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.overlay },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.scrim },
   wrapper: { flex: 1, justifyContent: 'flex-end' },
+  empty: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+  },
   sheet: {
     backgroundColor: colors.bgElevated,
     borderTopLeftRadius: radius.xl,

@@ -110,6 +110,7 @@ export default function Onboarding() {
               clearError('firstName');
             }}
             placeholder="Ex. Moustapha"
+            autoCapitalize="words"
             error={errors.firstName}
             onLayout={(y) => {
               positions.current.firstName = y;
@@ -124,6 +125,7 @@ export default function Onboarding() {
               clearError('lastName');
             }}
             placeholder="Ex. Bitar"
+            autoCapitalize="words"
             error={errors.lastName}
             onLayout={(y) => {
               positions.current.lastName = y;
@@ -151,7 +153,7 @@ export default function Onboarding() {
               clearError('birth');
             }}
             placeholder="JJ/MM/AAAA"
-            keyboardType="phone-pad"
+            keyboardType="number-pad"
             maxLength={10}
             error={errors.birth}
             onLayout={(y) => {
@@ -257,16 +259,18 @@ function Field({
   error,
   onLayout,
   autoFocus,
+  autoCapitalize = 'sentences',
 }: {
   label: string;
   value: string;
   onChangeText: (t: string) => void;
   placeholder: string;
-  keyboardType?: 'default' | 'phone-pad';
+  keyboardType?: 'default' | 'phone-pad' | 'number-pad';
   maxLength?: number;
   error?: string;
   onLayout?: (y: number) => void;
   autoFocus?: boolean;
+  autoCapitalize?: 'none' | 'words' | 'sentences' | 'characters';
 }) {
   return (
     <View onLayout={(e) => onLayout?.(e.nativeEvent.layout.y)}>
@@ -281,6 +285,9 @@ function Field({
         keyboardType={keyboardType ?? 'default'}
         maxLength={maxLength}
         autoFocus={autoFocus}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={false}
+        returnKeyType="done"
         style={[styles.input, error ? { borderColor: colors.danger } : null]}
       />
       {error ? (

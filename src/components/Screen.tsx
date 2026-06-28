@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View, type ViewStyle } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Txt } from './ui';
 import { colors, radius, spacing } from '@/theme';
@@ -55,11 +55,18 @@ export function Screen({ children, title, subtitle, back, scroll = true, headerR
   );
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+      style={[styles.root, { paddingTop: insets.top }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       {scroll ? (
         <ScrollView
           ref={scrollRef}
           showsVerticalScrollIndicator={false}
+          // Le 1er tap sur un bouton ne doit pas être « avalé » par la fermeture du clavier ;
+          // et on referme le clavier dès qu'on fait défiler un formulaire.
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxxl }}
         >
           {body}
@@ -68,7 +75,7 @@ export function Screen({ children, title, subtitle, back, scroll = true, headerR
         body
       )}
       {overlay}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

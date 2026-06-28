@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Txt } from './ui';
 import { colors, radius, shadows, spacing } from '@/theme';
 
@@ -18,11 +19,16 @@ export function BottomSheet({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const insets = useSafeAreaInsets();
   return (
     <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={styles.wrapper} pointerEvents="box-none">
-        <View style={styles.sheet}>
+      <KeyboardAvoidingView
+        style={styles.wrapper}
+        pointerEvents="box-none"
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={[styles.sheet, { paddingBottom: spacing.xxl + insets.bottom }]}>
           <View style={styles.handle} />
           <View style={styles.head}>
             <View style={{ flex: 1 }}>
@@ -39,11 +45,11 @@ export function BottomSheet({
               <Ionicons name="close" size={20} color={colors.textMuted} />
             </Pressable>
           </View>
-          <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 460 }}>
+          <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 460 }} keyboardShouldPersistTaps="handled">
             {children}
           </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
