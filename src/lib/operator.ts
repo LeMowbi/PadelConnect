@@ -3,6 +3,6 @@
 //    (ex. Côte d'Ivoire : 225XXXXXXXXXX). Laisse vide tant que tu ne veux pas l'exposer :
 //    le bouton « Contacter PadelConnect » disparaît alors et seul l'envoi de demande
 //    (via le serveur) reste proposé.
-export const OPERATOR_WHATSAPP = '';
+export const OPERATOR_WHATSAPP = '+2250504001124';
 
 export const hasOperatorContact = OPERATOR_WHATSAPP.replace(/\D/g, '').length >= 8;
