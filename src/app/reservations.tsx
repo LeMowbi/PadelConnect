@@ -21,16 +21,18 @@ const MONTHS = ['JANV.', 'FÉVR.', 'MARS', 'AVR.', 'MAI', 'JUIN', 'JUIL.', 'AOÛ
 
 export default function ReservationsScreen() {
   const router = useRouter();
-  const { state, cancelReservation } = useApp();
+  const { state, myReservations, cancelReservation } = useApp();
   const toast = useToast();
   const [showAllPast, setShowAllPast] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null); // confirmation avant annulation
 
   const now = Date.now();
-  // « Mes réservations » = les MIENNES. En mode serveur, un compte club/opérateur reçoit
-  // (via RLS) les résas de tout son périmètre : on filtre ici sur mon user_id pour que cet
-  // écran joueur ne montre que mes propres réservations.
-  const mine = state.serverUserId ? state.reservations.filter((r) => !r.userId || r.userId === state.serverUserId) : state.reservations;
+  // « Mes réservations » = celles que j'ai créées + celles où un ami m'a invité (résa
+  // PARTAGÉE). La source unique est `myReservations` (cf. AppContext) : un compte
+  // club/opérateur ne voit donc pas le périmètre RLS de son club sur cet écran joueur.
+  const mine = myReservations;
+  // Suis-je l'AUTEUR de la résa ? (sinon je suis invité → pas d'annulation, RLS = auteur).
+  const isOwner = (r: Reservation) => !state.serverUserId || !r.userId || r.userId === state.serverUserId;
   const upcoming = mine.filter((r) => !isPlayed(r, now)).sort((a, b) => a.startsAt - b.startsAt);
   const past = mine.filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt);
   const pastShown = showAllPast ? past : past.slice(0, PAST_PREVIEW);
@@ -70,7 +72,8 @@ export default function ReservationsScreen() {
           </Card>
         ) : (
           upcoming.map((r) => {
-            const canCancel = r.startsAt - now > FIVE_H;
+            const owner = isOwner(r);
+            const canCancel = owner && r.startsAt - now > FIVE_H;
             const [, mm, dd] = r.dateKey.split('-');
             const day = dd ?? '';
             const month = MONTHS[Number(mm) - 1] ?? '';
@@ -105,7 +108,14 @@ export default function ReservationsScreen() {
                   )}
                 </View>
 
-                {r.invited.length > 0 ? (
+                {!owner && r.bookedBy?.name ? (
+                  <View style={styles.participants}>
+                    <Ionicons name="person-circle-outline" size={14} color={colors.signature} />
+                    <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
+                      Réservé par {r.bookedBy.name} — tu es invité
+                    </Txt>
+                  </View>
+                ) : r.invited.length > 0 ? (
                   <View style={styles.participants}>
                     <Ionicons name="people-outline" size={14} color={colors.textMuted} />
                     <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
@@ -155,7 +165,7 @@ export default function ReservationsScreen() {
                     <Button size="sm" label="Annuler" icon="close" variant="danger" onPress={() => setCancelTarget(r)} pill />
                   ) : null}
                 </View>
-                {!canCancel ? (
+                {owner && !canCancel ? (
                   <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
                     Annulation impossible (moins de 5h avant) — à voir directement avec le club.
                   </Txt>

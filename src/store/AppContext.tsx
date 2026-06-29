@@ -12,9 +12,11 @@ import { dayKey, nextDays } from '@/lib/days';
 import { priceForSlot } from '@/lib/pricing';
 import {
   deleteReservationRow,
+  fetchMyParticipations,
   fetchOccupancy,
   fetchReservations,
   insertReservation,
+  linkParticipants,
   setClubConfirmedRow,
   type SlotOccupancy,
 } from '@/lib/reservations';
@@ -151,6 +153,7 @@ type AppState = {
   role: 'player' | 'operator' | 'club';
   serverManagedClubId: string | null; // pour un compte 'club' : l'id du club géré
   serverUserId: string | null; // id Supabase quand connecté → mode « réservations serveur »
+  participantReservationIds: string[]; // résas où JE suis invité (partagées par un ami)
   occupancy: SlotOccupancy[]; // créneaux pris par TOUS (vue publique) → dispo cross-joueur
   storageFull: boolean; // true si la sauvegarde a dû abandonner des photos (quota plein)
   managedClubId: string;
@@ -217,6 +220,7 @@ const initialState: AppState = {
   role: 'player',
   serverManagedClubId: null,
   serverUserId: null,
+  participantReservationIds: [],
   occupancy: [],
   storageFull: false,
   managedClubId: 'padelta',
@@ -400,16 +404,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Réservations : le serveur est la source de vérité → on remplace le miroir local
         // par les résas pertinentes (les miennes ; club/opérateur : celles de leur périmètre,
         // via RLS), et on charge l'occupation de TOUS pour la disponibilité cross-joueur.
-        const [reservationsRes, occ] = await Promise.all([fetchReservations(), fetchOccupancy()]);
+        const [reservationsRes, occ, parts] = await Promise.all([fetchReservations(), fetchOccupancy(), fetchMyParticipations(userId)]);
         setState((s) => ({
           ...s,
           // En cas d'échec réseau on garde le miroir persisté (offline-friendly).
           reservations: reservationsRes.ok ? reservationsRes.reservations : s.reservations,
           occupancy: occ,
+          participantReservationIds: parts,
         }));
         // Resynchronise les rappels locaux (résas créées sur un autre appareil incluses).
         if (reservationsRes.ok) {
-          const mine = reservationsRes.reservations.filter((r) => (!r.userId || r.userId === userId) && r.startsAt > Date.now());
+          const mine = reservationsRes.reservations.filter(
+            (r) => (!r.userId || r.userId === userId || parts.includes(r.id)) && r.startsAt > Date.now(),
+          );
           void syncMatchReminders(mine, state.remindersOn);
         }
       } catch {
@@ -425,12 +432,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // disponibilité affichée ne reste pas figée si d'autres joueurs ont réservé entre-temps.
   useEffect(() => {
     if (!state.serverUserId) return;
+    const userId = state.serverUserId;
     const sub = RNAppState.addEventListener('change', (st) => {
       if (st !== 'active') return;
       void fetchOccupancy().then((occ) => setState((s) => ({ ...s, occupancy: occ })));
       void fetchReservations().then((res) => {
         if (res.ok) setState((s) => ({ ...s, reservations: res.reservations }));
       });
+      void fetchMyParticipations(userId).then((parts) => setState((s) => ({ ...s, participantReservationIds: parts })));
     });
     return () => sub.remove();
   }, [state.serverUserId]);
@@ -464,9 +473,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // MES réservations — source unique pour tout calcul PERSONNEL. En mode serveur, un compte
   // club/opérateur reçoit aussi les résas de son périmètre (RLS) ; on filtre donc sur mon
   // user_id pour ne jamais afficher/compter celles des autres comme les miennes.
+  // En mode serveur : mes résas = celles que J'AI créées + celles où un ami m'a invité
+  // (participantReservationIds) — ces dernières apparaissent chez moi sans recompter la
+  // commission (une résa = un terrain = une commission, comptée chez l'auteur).
   const myReservations = useMemo(
-    () => (state.serverUserId ? state.reservations.filter((r) => !r.userId || r.userId === state.serverUserId) : state.reservations),
-    [state.reservations, state.serverUserId],
+    () =>
+      state.serverUserId
+        ? state.reservations.filter(
+            (r) => !r.userId || r.userId === state.serverUserId || state.participantReservationIds.includes(r.id),
+          )
+        : state.reservations,
+    [state.reservations, state.serverUserId, state.participantReservationIds],
   );
 
   const stats = useMemo(() => computeStats(myReservations, state.officialResults), [myReservations, state.officialResults]);
@@ -589,6 +606,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           level,
           serverUserId: userId, // mode « réservations serveur » activé
           reservations: [], // compte neuf → aucune résa locale parasite
+          participantReservationIds: [], // compte neuf → aucune invitation
           occupancy: occ, // créneaux déjà pris par les autres (disponibilité)
         }));
         return { ok: true };
@@ -602,7 +620,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!userId) return { ok: false, error: 'Connexion impossible. Réessaie.' };
         const { data: prof } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
         // Reconnexion : on recharge les résas du périmètre (RLS) + l'occupation de tous.
-        const [reservationsRes, occ] = await Promise.all([fetchReservations(), fetchOccupancy()]);
+        const [reservationsRes, occ, parts] = await Promise.all([fetchReservations(), fetchOccupancy(), fetchMyParticipations(userId)]);
         setState((s) => ({
           ...s,
           account: {
@@ -617,6 +635,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           serverManagedClubId: prof?.managed_club_id ?? null,
           serverUserId: userId,
           reservations: reservationsRes.ok ? reservationsRes.reservations : s.reservations,
+          participantReservationIds: parts,
           occupancy: occ,
           level: clampLevel(Number(prof?.level ?? 3.0)),
         }));
@@ -635,6 +654,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           serverManagedClubId: null,
           serverUserId: null,
           reservations: [],
+          participantReservationIds: [],
           occupancy: [],
           level: initialState.level,
           friends: [],
@@ -751,6 +771,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             reservations: [created, ...s.reservations.filter((x) => x.id !== created.id)],
             occupancy: [...s.occupancy, { clubId: created.clubId, dateKey: created.dateKey, time: created.time, court: created.court }],
           }));
+          // Réservation PARTAGÉE : les amis invités qui ont un compte la voient aussi chez eux.
+          // On rattache par numéro (résolu côté serveur) — la résa reste UNIQUE (une commission).
+          const invitedPhones = (created.invited ?? [])
+            .map((iv) => state.friends.find((f) => f.id === iv.id)?.phone)
+            .filter((p): p is string => !!p);
+          if (invitedPhones.length > 0) void linkParticipants(created.id, invitedPhones);
           if (state.remindersOn) void scheduleMatchReminder(created); // rappel local ~2 h avant
           return true;
         }

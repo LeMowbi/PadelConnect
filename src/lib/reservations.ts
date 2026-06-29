@@ -108,6 +108,22 @@ export async function fetchReservations(): Promise<{ ok: boolean; reservations: 
   return { ok: true, reservations: (data ?? []).map((r) => rowToReservation(r as Row)) };
 }
 
+// Réservation PARTAGÉE : rattache les amis invités (par leur numéro) à la réservation.
+// La résolution numéro → compte se fait côté serveur (fonction SECURITY DEFINER), donc on
+// n'expose jamais les profils. Les non-inscrits sont simplement ignorés.
+export async function linkParticipants(reservationId: string, phones: string[]): Promise<void> {
+  const clean = phones.map((p) => p.trim()).filter((p) => p.replace(/\D/g, '').length >= 8);
+  if (clean.length === 0) return;
+  await supabase.rpc('link_participants', { p_reservation_id: reservationId, p_phones: clean });
+}
+
+// Les réservations où JE suis invité (participant) → à inclure dans « mes réservations ».
+export async function fetchMyParticipations(userId: string): Promise<string[]> {
+  const { data, error } = await supabase.from('reservation_participants').select('reservation_id').eq('user_id', userId);
+  if (error) return [];
+  return (data ?? []).map((r: { reservation_id: string }) => r.reservation_id);
+}
+
 // Occupation de TOUS les créneaux pris (vue publique sans identité).
 export async function fetchOccupancy(): Promise<SlotOccupancy[]> {
   const { data, error } = await supabase.from('slot_occupancy').select('*');
