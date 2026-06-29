@@ -621,11 +621,13 @@ const styles = StyleSheet.create({
   },
   hero: { ...shadows.e2, marginBottom: spacing.md, alignItems: 'flex-start', gap: 2 },
   heroValue: {
-    fontSize: 40, // chiffre vitrine (handoff : 40px/800), au-dessus de l'échelle display (32)
+    fontSize: 36, // chiffre vitrine (gros) — lineHeight explicite pour éviter le débordement
+    lineHeight: 44,
     fontFamily: font.family.heavy,
     fontWeight: font.weight.heavy,
     color: colors.amber,
     letterSpacing: -0.5,
+    marginVertical: 2,
   },
   health: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   weekNav: {

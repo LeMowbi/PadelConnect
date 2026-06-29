@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Avatar } from '@/components/Avatar';
 import { ClubCard } from '@/components/ClubCard';
 import { CompetitionCard } from '@/components/CompetitionCard';
@@ -49,6 +49,22 @@ export default function HomeScreen() {
   const router = useRouter();
   const { state, dismissNews, stats, myReservations } = useApp();
   const go = (route: string) => router.push(route as never);
+
+  // Héro vivant : un reflet qui balaie la carte verte + le point « live » qui pulse.
+  const sheen = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(Animated.timing(sheen, { toValue: 1, duration: 3400, easing: Easing.inOut(Easing.ease), useNativeDriver: true })).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 850, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 850, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+      ]),
+    ).start();
+  }, [sheen, pulse]);
+  const sheenX = sheen.interpolate({ inputRange: [0, 1], outputRange: [-180, 440] });
+  const dotScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.7] });
+  const dotOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.4] });
 
   const fullName = `${state.account?.firstName ?? ''} ${state.account?.lastName ?? ''}`.trim();
   const greeting = new Date().getHours() < 18 ? 'Bonjour' : 'Bonsoir';
@@ -225,26 +241,27 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {/* HERO — CTA principal unique */}
+        {/* HERO — CTA principal unique, carte VERTE animée (reflet + point qui pulse) */}
         <Pressable onPress={() => go('/reserver')}>
-          <LinearGradient colors={gradients.heroSoft} start={{ x: 0, y: 0 }} end={{ x: 0.7, y: 1 }} style={styles.hero}>
+          <LinearGradient colors={gradients.deepGreen} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+            <Animated.View pointerEvents="none" style={[styles.heroSheen, { transform: [{ translateX: sheenX }, { rotate: '18deg' }] }]} />
             <View style={styles.brandRow}>
-              <Logo size={26} />
+              <Logo size={26} tone="light" />
             </View>
             <View style={styles.livePill}>
-              <View style={styles.liveDot} />
-              <Txt variant="small" color={colors.signatureDark} style={styles.liveText}>
+              <Animated.View style={[styles.liveDot, { opacity: dotOpacity, transform: [{ scale: dotScale }] }]} />
+              <Txt variant="small" color={colors.white} style={styles.liveText}>
                 {nearbyClubs.length} clubs près de toi
               </Txt>
             </View>
-            <Txt variant="display" style={{ fontSize: 26, marginTop: spacing.sm, maxWidth: 240 }}>
+            <Txt variant="display" color={colors.white} style={{ fontSize: 26, marginTop: spacing.sm, maxWidth: 240 }}>
               Réserve ton prochain match
             </Txt>
             <View style={styles.heroCta}>
-              <Txt variant="body" color={colors.onSignature} style={{ fontWeight: '700' }}>
+              <Txt variant="body" color={colors.signature} style={{ fontWeight: '700' }}>
                 Trouver un créneau
               </Txt>
-              <Ionicons name="arrow-forward" size={16} color={colors.onSignature} />
+              <Ionicons name="arrow-forward" size={16} color={colors.signature} />
             </View>
           </LinearGradient>
         </Pressable>
@@ -594,13 +611,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   hero: {
-    ...shadows.e2,
+    ...shadows.e3,
     padding: spacing.lg,
     borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
     overflow: 'hidden',
   },
+  // Bande de lumière translucide qui balaie la carte (animée en translateX).
+  heroSheen: { position: 'absolute', top: -60, bottom: -60, left: 0, width: 70, backgroundColor: 'rgba(255,255,255,0.12)' },
   brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   livePill: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: spacing.md },
   liveDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: colors.lime, borderWidth: 4, borderColor: colors.limeGlow },
@@ -611,7 +628,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: spacing.sm,
     marginTop: spacing.lg,
-    backgroundColor: colors.signature,
+    backgroundColor: colors.white,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderRadius: radius.pill,

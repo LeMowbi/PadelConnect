@@ -305,13 +305,13 @@ export default function ProfilScreen() {
         </View>
       ) : null}
 
-      {/* La suite — fonctions qui arrivent avec la version connectée (serveur) */}
+      {/* Parrainage — invite tes amis (fonction réelle) */}
       <View style={{ marginTop: spacing.xl }}>
-        <Card onPress={() => router.push('/a-venir')} style={styles.cta}>
-          <IconCircle icon="rocket-outline" color={colors.signature} bg={colors.signatureSoft} />
+        <Card onPress={() => router.push('/parrainage')} style={styles.cta}>
+          <IconCircle icon="gift-outline" color={colors.green} bg={colors.greenSoft} />
           <View style={{ flex: 1 }}>
-            <Txt variant="h3">La suite</Txt>
-            <Txt variant="muted">Ce qui arrive avec la version connectée.</Txt>
+            <Txt variant="h3">Parrainage</Txt>
+            <Txt variant="muted">Invite tes amis et suis tes filleuls.</Txt>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
         </Card>
