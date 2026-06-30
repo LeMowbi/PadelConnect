@@ -13,6 +13,10 @@ Trois nouveautés serveur, livrées ensemble. Tout est **idempotent** (relançab
 3. `supabase/25_friends.sql` — la liste d'amis vit désormais côté serveur : synchronisée
    d'un appareil à l'autre, conservée à la réinstallation. Chacun ne voit que ses propres
    amis (RLS). L'ajout se fait par numéro, sans jamais exposer la table des profils.
+4. `supabase/26_competitions.sql` — les TOURNOIS vivent désormais côté serveur (visibles par
+   tous, synchronisés). Un tournoi de club est publié directement ; un tournoi de joueur reste
+   « en attente » (invisible des autres) jusqu'à la validation du club hôte, et un frais fixe
+   PadelConnect (par défaut 5 000 FCFA, réglable dans l'Espace opérateur) s'y applique.
 
 ## Ce que ça change pour toi
 
