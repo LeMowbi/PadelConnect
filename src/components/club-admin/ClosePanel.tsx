@@ -5,8 +5,9 @@ import { Button, Tag, Txt } from '@/components/ui';
 import { demoTeams, type Competition } from '@/data/competitions';
 import { colors, radius, spacing } from '@/theme';
 
-// Panneau de clôture (organisateur) : équipes inscrites → vainqueur → (option) équipe
-// classée dernière. Tournoi officiel : vainqueur +0.50, dernière place −0.25.
+// Panneau de clôture (organisateur) : équipes inscrites → vainqueur → fin de parcours.
+// Tournoi à élimination : vainqueur (+0.50) puis (option) dernière place (−0.25).
+// Americano (par rotation) : on clôture par un PODIUM 1ᵉ/2ᵉ/3ᵉ (seul le 1ᵉ gagne du niveau).
 export function ClosePanel({
   comp,
   myTeam,
@@ -16,15 +17,20 @@ export function ClosePanel({
 }: {
   comp: Competition;
   myTeam?: string;
-  onClose: (winner: string, winnerIsMe: boolean, loser?: string, loserIsMe?: boolean) => void;
+  onClose: (winner: string, winnerIsMe: boolean, loser?: string, loserIsMe?: boolean, podium?: { second?: string; third?: string }) => void;
   onCancel: () => void;
   onDelete?: () => void;
 }) {
   const teams = demoTeams(comp, myTeam);
   const [selected, setSelected] = useState<string | null>(null);
   const [loser, setLoser] = useState<string | null>(null);
-  const [step, setStep] = useState<'winner' | 'loser'>('winner');
+  const [second, setSecond] = useState<string | null>(null);
+  const [third, setThird] = useState<string | null>(null);
+  const [step, setStep] = useState<'winner' | 'final'>('winner');
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Americano : tournoi par rotation → clôture par un podium (2ᵉ/3ᵉ place), pas une fin de tableau.
+  const isAmericano = comp.format.toLowerCase().includes('americano');
 
   // Aucun inscrit : rien à clôturer — on propose d'annuler le tournoi (avec confirmation).
   if (teams.length === 0) {
@@ -63,7 +69,9 @@ export function ClosePanel({
     <View style={{ marginTop: spacing.sm }}>
       {comp.official ? (
         <Txt variant="small" color={colors.amber} style={{ fontWeight: '600' }}>
-          Tournoi officiel — vainqueur +0.50, fin de tableau −0.25 de niveau.
+          {isAmericano
+            ? 'Tournoi officiel — l’équipe vainqueure gagne +0.50 de niveau.'
+            : 'Tournoi officiel — vainqueur +0.50, fin de tableau −0.25 de niveau.'}
         </Txt>
       ) : null}
 
@@ -92,9 +100,85 @@ export function ClosePanel({
           </View>
           <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
             <View style={{ flex: 1 }}>
-              <Button size="sm" label="Valider le vainqueur" icon="flag" onPress={() => setStep('loser')} disabled={!selected} full />
+              <Button
+                size="sm"
+                label={isAmericano ? 'Suite : podium →' : 'Valider le vainqueur'}
+                icon="flag"
+                onPress={() => setStep('final')}
+                disabled={!selected}
+                full
+              />
             </View>
             <Button size="sm" label="Annuler" variant="ghost" onPress={onCancel} />
+          </View>
+        </>
+      ) : isAmericano ? (
+        <>
+          <Txt variant="body" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
+            1ʳᵉ place : <Txt style={{ fontWeight: '700' }}>{selected}</Txt>. Ajoute la 2ᵉ et la 3ᵉ place (facultatif).
+          </Txt>
+          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+            🥈 2ᵉ place
+          </Txt>
+          <View style={{ marginTop: 6, gap: 6 }}>
+            {teams
+              .filter((t) => t !== selected)
+              .map((t) => {
+                const sel = second === t;
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => {
+                      setSecond((cur) => (cur === t ? null : t));
+                      if (third === t) setThird(null);
+                    }}
+                    style={[styles.teamRow, sel && styles.teamRowSel]}
+                  >
+                    <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.amber : colors.textMuted} />
+                    <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
+                      {t}
+                    </Txt>
+                    {myTeam === t ? <Tag label="Ton équipe" tone="blue" /> : null}
+                  </Pressable>
+                );
+              })}
+          </View>
+          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+            🥉 3ᵉ place
+          </Txt>
+          <View style={{ marginTop: 6, gap: 6 }}>
+            {teams
+              .filter((t) => t !== selected && t !== second)
+              .map((t) => {
+                const sel = third === t;
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => setThird((cur) => (cur === t ? null : t))}
+                    style={[styles.teamRow, sel && styles.teamRowSel]}
+                  >
+                    <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.coral : colors.textMuted} />
+                    <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
+                      {t}
+                    </Txt>
+                    {myTeam === t ? <Tag label="Ton équipe" tone="blue" /> : null}
+                  </Pressable>
+                );
+              })}
+          </View>
+          <View style={{ marginTop: spacing.md }}>
+            <Button
+              size="sm"
+              label="Clôturer le tournoi"
+              icon="trophy"
+              onPress={() =>
+                onClose(selected!, selected === myTeam, undefined, false, {
+                  second: second ?? undefined,
+                  third: third ?? undefined,
+                })
+              }
+              full
+            />
           </View>
         </>
       ) : (

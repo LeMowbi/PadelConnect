@@ -373,8 +373,8 @@ export default function ClubAdmin() {
                 ? `${state.account?.firstName ?? 'Toi'} & ${state.compRegistrations[closingComp.id].partner}`
                 : undefined
             }
-            onClose={(winner, isMe, loser, loserIsMe) => {
-              closeCompetition(closingComp, winner, isMe, loser, loserIsMe);
+            onClose={(winner, isMe, loser, loserIsMe, podium) => {
+              closeCompetition(closingComp, winner, isMe, loser, loserIsMe, podium);
               setClosingId(null);
             }}
             onCancel={() => setClosingId(null)}
