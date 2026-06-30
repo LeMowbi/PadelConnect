@@ -2,10 +2,11 @@ import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AnimatedSplash } from '@/components/AnimatedSplash';
 import { ToastProvider, useToast } from '@/components/Toast';
 import { useEmailConfirmLink } from '@/lib/useEmailConfirmLink';
 import { AppProvider, useApp } from '@/store/AppContext';
@@ -30,7 +31,10 @@ export default function RootLayout() {
     SchibstedGrotesk_700Bold: require('../../assets/fonts/SchibstedGrotesk_700Bold.ttf'),
   });
 
-  // Polices chargées → on masque le splash (la transition se fait sans flash blanc).
+  // Splash animée jouée une fois après le chargement des polices.
+  const [splashDone, setSplashDone] = useState(false);
+
+  // Polices chargées → on masque le splash NATIF (la splash animée prend le relais sans flash).
   useEffect(() => {
     if (fontsLoaded) SplashScreen.hideAsync().catch(() => {});
   }, [fontsLoaded]);
@@ -47,6 +51,8 @@ export default function RootLayout() {
         ) : (
           <View style={{ flex: 1, backgroundColor: colors.bg }} />
         )}
+        {/* Par-dessus l'app : la splash animée « P → PadelConnect », puis fondu de sortie. */}
+        {fontsLoaded && !splashDone ? <AnimatedSplash onDone={() => setSplashDone(true)} /> : null}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
