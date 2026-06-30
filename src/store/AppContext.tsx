@@ -27,6 +27,7 @@ import {
   type SlotOccupancy,
 } from '@/lib/reservations';
 import { cancelMatchReminder, scheduleMatchReminder, syncMatchReminders } from '@/lib/notifications';
+import { registerPushToken } from '@/lib/push';
 import { phoneToAuthEmail, supabase } from '@/lib/supabase';
 import { ACCENTS } from '@/theme';
 
@@ -495,6 +496,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } = await supabase.auth.getSession();
       const userId = session?.user?.id;
       if (!userId || !stillCurrent()) return;
+      void registerPushToken(userId); // jeton de push → profil (pour les notifs serveur)
       // On connaît la session → mode « réservations serveur ». Si on CHANGE de compte
       // (userId différent de celui en mémoire), on repart d'un périmètre personnel NEUF
       // pour ne jamais montrer les données du compte précédent (amis, favoris, miroir…).
