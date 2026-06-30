@@ -28,6 +28,7 @@ export default function Operateur() {
     approveClubRequest,
     operatorSetClubStatus,
     operatorSetBaseStatus,
+    operatorDeleteClub,
     operatorGrantClubAccess,
     operatorRevokeClubAccess,
     operatorSetClubCommission,
@@ -85,6 +86,32 @@ export default function Operateur() {
     const { ok } = await operatorSetBaseStatus(clubId, comingSoon ? 'active' : 'coming_soon');
     setBaseBusy(null);
     if (!ok) toast.show('Changement impossible — réessaie', { icon: 'alert-circle' });
+  };
+  // Remet dans l'app un club de base précédemment retiré (statut 'hidden' → 'active').
+  const restoreBaseClub = async (clubId: string) => {
+    if (baseBusy) return;
+    setBaseBusy(clubId);
+    const { ok } = await operatorSetBaseStatus(clubId, 'active');
+    setBaseBusy(null);
+    if (!ok) toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
+  };
+
+  // ── Suppression de club (confirmation) ───────────────────────────────────────
+  // Club serveur → suppression DÉFINITIVE ; club de base → retrait de l'app (réversible),
+  // car il vit dans le code de l'app et ne peut pas être effacé de la base.
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; server: boolean } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    const { ok } = deleteTarget.server ? await operatorDeleteClub(deleteTarget.id) : await operatorSetBaseStatus(deleteTarget.id, 'hidden');
+    setDeleting(false);
+    if (ok) {
+      setDeleteTarget(null);
+      toast.show(deleteTarget.server ? 'Club supprimé' : 'Club retiré de l’app');
+    } else {
+      toast.show('Suppression impossible — réessaie', { icon: 'alert-circle' });
+    }
   };
 
   // Messages d'aide / signalements (table support_messages, RLS opérateur).
@@ -566,59 +593,105 @@ export default function Operateur() {
           />
         </Card>
         {serverClubs.map((c) => (
-          <Card key={c.id} style={{ marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-            <IconCircle icon="business" color={colors.signature} bg={colors.signatureSoft} size={40} />
-            <View style={{ flex: 1 }}>
-              <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
-                {c.name}
-              </Txt>
-              <Txt variant="muted" numberOfLines={1}>
-                {c.area} · dès {fcfa(c.priceFrom)}
-              </Txt>
-            </View>
-            <Tag label={c.comingSoon ? 'Bientôt' : 'Actif'} tone={c.comingSoon ? 'purple' : 'green'} />
-            <Button
-              size="sm"
-              label={c.comingSoon ? 'Activer' : 'Mettre en attente'}
-              icon={c.comingSoon ? 'checkmark' : 'time'}
-              variant={c.comingSoon ? 'primary' : 'ghost'}
-              onPress={() => toggleClubStatus(c.id, !!c.comingSoon)}
-            />
-          </Card>
-        ))}
-      </View>
-
-      {/* Clubs de base embarqués (9) : bascule Actif ⇄ Bientôt, visible par TOUS les joueurs. */}
-      <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title={`Clubs de base · ${baseClubs.length}`} />
-        <Card>
-          <Txt variant="small" color={colors.textMuted}>
-            Mets un club en « Bientôt » s'il n'est pas encore prêt à recevoir des réservations : il reste visible (badge « Bientôt », non
-            réservable) pour tous les joueurs jusqu'à ce que tu le réactives.
-          </Txt>
-        </Card>
-        {baseClubs.map((c) => {
-          const comingSoon = state.clubStatus[c.id] === 'coming_soon';
-          return (
-            <Card key={c.id} style={{ marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-              <IconCircle icon="business" color={colors.green} bg={colors.greenSoft} size={40} />
+          <Card key={c.id} style={{ marginTop: spacing.sm }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+              <IconCircle icon="business" color={colors.signature} bg={colors.signatureSoft} size={40} />
               <View style={{ flex: 1 }}>
                 <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
                   {c.name}
                 </Txt>
                 <Txt variant="muted" numberOfLines={1}>
-                  {c.area}
+                  {c.area} · dès {fcfa(c.priceFrom)}
                 </Txt>
               </View>
-              <Tag label={comingSoon ? 'Bientôt' : 'Actif'} tone={comingSoon ? 'purple' : 'green'} />
+              <Tag label={c.comingSoon ? 'Bientôt' : 'Actif'} tone={c.comingSoon ? 'purple' : 'green'} />
+            </View>
+            <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  size="sm"
+                  label={c.comingSoon ? 'Activer' : 'Mettre en attente'}
+                  icon={c.comingSoon ? 'checkmark' : 'time'}
+                  variant={c.comingSoon ? 'primary' : 'ghost'}
+                  onPress={() => toggleClubStatus(c.id, !!c.comingSoon)}
+                  full
+                />
+              </View>
               <Button
                 size="sm"
-                label={comingSoon ? 'Activer' : 'Mettre en attente'}
-                icon={comingSoon ? 'checkmark' : 'time'}
-                variant={comingSoon ? 'primary' : 'ghost'}
-                disabled={baseBusy === c.id}
-                onPress={() => toggleBaseStatus(c.id, comingSoon)}
+                label="Supprimer"
+                icon="trash-outline"
+                variant="ghost"
+                onPress={() => setDeleteTarget({ id: c.id, name: c.name, server: true })}
               />
+            </View>
+          </Card>
+        ))}
+      </View>
+
+      {/* Clubs de base embarqués (9) : Actif ⇄ Bientôt, ou retrait de l'app (réversible). */}
+      <View style={{ marginTop: spacing.xl }}>
+        <SectionHeader title={`Clubs de base · ${baseClubs.length}`} />
+        <Card>
+          <Txt variant="small" color={colors.textMuted}>
+            Mets un club en « Bientôt » s'il n'est pas encore prêt, ou retire-le de l'app : il disparaît alors pour tous les joueurs. Comme
+            ces 9 clubs sont intégrés à l'app, « Supprimer » = retrait réversible (tu peux les remettre ici).
+          </Txt>
+        </Card>
+        {baseClubs.map((c) => {
+          const status = state.clubStatus[c.id];
+          const comingSoon = status === 'coming_soon';
+          const hidden = status === 'hidden';
+          return (
+            <Card key={c.id} style={{ marginTop: spacing.sm }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                <IconCircle icon="business" color={colors.green} bg={colors.greenSoft} size={40} />
+                <View style={{ flex: 1 }}>
+                  <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
+                    {c.name}
+                  </Txt>
+                  <Txt variant="muted" numberOfLines={1}>
+                    {c.area}
+                  </Txt>
+                </View>
+                <Tag
+                  label={hidden ? 'Retiré' : comingSoon ? 'Bientôt' : 'Actif'}
+                  tone={hidden ? 'neutral' : comingSoon ? 'purple' : 'green'}
+                />
+              </View>
+              {hidden ? (
+                <Button
+                  size="sm"
+                  label="Remettre dans l'app"
+                  icon="refresh"
+                  variant="primary"
+                  disabled={baseBusy === c.id}
+                  onPress={() => restoreBaseClub(c.id)}
+                  full
+                />
+              ) : (
+                <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      size="sm"
+                      label={comingSoon ? 'Activer' : 'Mettre en attente'}
+                      icon={comingSoon ? 'checkmark' : 'time'}
+                      variant={comingSoon ? 'primary' : 'ghost'}
+                      disabled={baseBusy === c.id}
+                      onPress={() => toggleBaseStatus(c.id, comingSoon)}
+                      full
+                    />
+                  </View>
+                  <Button
+                    size="sm"
+                    label="Supprimer"
+                    icon="trash-outline"
+                    variant="ghost"
+                    disabled={baseBusy === c.id}
+                    onPress={() => setDeleteTarget({ id: c.id, name: c.name, server: false })}
+                  />
+                </View>
+              )}
             </Card>
           );
         })}
@@ -798,6 +871,29 @@ export default function Operateur() {
             full
           />
           <Button label="Annuler" variant="secondary" onPress={() => setApproveTarget(null)} disabled={approving} full />
+        </View>
+      </BottomSheet>
+
+      {/* Confirmation de suppression — serveur : définitif ; base : retrait réversible de l'app. */}
+      <BottomSheet
+        visible={deleteTarget !== null}
+        title={deleteTarget ? `Supprimer « ${deleteTarget.name} » ?` : 'Supprimer ce club ?'}
+        subtitle={
+          deleteTarget?.server
+            ? 'Suppression définitive du club et de ses données (config, avis de page, commission).'
+            : 'Le club disparaît de l’app pour tous les joueurs. Réversible : tu peux le remettre ici.'
+        }
+        onClose={() => (deleting ? null : setDeleteTarget(null))}
+      >
+        <View style={{ gap: spacing.sm, marginTop: spacing.lg }}>
+          <Button
+            label={deleting ? 'Suppression…' : deleteTarget?.server ? 'Oui, supprimer définitivement' : 'Oui, retirer de l’app'}
+            icon="trash"
+            onPress={confirmDelete}
+            disabled={deleting}
+            full
+          />
+          <Button label="Annuler" variant="secondary" onPress={() => setDeleteTarget(null)} disabled={deleting} full />
         </View>
       </BottomSheet>
     </Screen>

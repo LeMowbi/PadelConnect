@@ -9,6 +9,7 @@ import {
   approveClubRequest as approveClubRequestRpc,
   createClub as createClubRpc,
   fetchClubOverrides,
+  deleteClub as deleteClubRpc,
   fetchClubCommissions,
   fetchClubConfigs,
   fetchClubStatus,
@@ -395,6 +396,8 @@ type AppContextType = {
   operatorSetClubStatus: (clubId: string, status: 'active' | 'coming_soon' | 'hidden') => Promise<{ ok: boolean }>;
   // Opérateur : statut piloté de N'IMPORTE QUEL club, y compris les 9 de base embarqués.
   operatorSetBaseStatus: (clubId: string, status: 'active' | 'coming_soon' | 'hidden') => Promise<{ ok: boolean }>;
+  // Opérateur : supprime définitivement un club serveur (+ données liées).
+  operatorDeleteClub: (clubId: string) => Promise<{ ok: boolean }>;
   // Opérateur : accorde / retire l'accès « Espace Club » à un joueur via son numéro (tout club).
   operatorGrantClubAccess: (phone: string, clubId: string) => Promise<{ ok: boolean; name?: string }>;
   operatorRevokeClubAccess: (phone: string) => Promise<{ ok: boolean; name?: string }>;
@@ -1325,6 +1328,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       operatorSetClubCommission: async (clubId, rate) => {
         const ok = await setClubCommissionRpc(clubId, rate);
         if (ok) setState((s) => ({ ...s, clubCommission: { ...s.clubCommission, [clubId]: rate } }));
+        return { ok };
+      },
+      // Opérateur : supprime définitivement un club serveur. On retire le club du miroir local
+      // et on recharge la liste serveur pour refléter la suppression chez tous.
+      operatorDeleteClub: async (clubId) => {
+        const ok = await deleteClubRpc(clubId);
+        if (ok) {
+          const serverClubs = await fetchServerClubs();
+          setState((s) => ({
+            ...s,
+            customClubs: mergeServerClubs(
+              s.customClubs.filter((c) => c.id !== clubId),
+              serverClubs,
+            ),
+          }));
+        }
         return { ok };
       },
       // Opérateur : pré-charge un club « Bientôt » côté serveur (il apparaît aussitôt en liste).

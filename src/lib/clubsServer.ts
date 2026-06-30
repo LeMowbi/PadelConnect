@@ -157,6 +157,12 @@ export async function setBaseClubStatus(clubId: string, status: 'active' | 'comi
   return !error && data === true;
 }
 
+// Opérateur : supprime DÉFINITIVEMENT un club serveur (+ ses données liées). false si refusé.
+export async function deleteClub(clubId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('delete_club', { p_id: clubId });
+  return !error && data === true;
+}
+
 // Commission propre à chaque club (lue par l'opérateur) → { clubId: taux } (0.10 = 10 %).
 export async function fetchClubCommissions(): Promise<Record<string, number>> {
   const { data, error } = await supabase.from('club_commission').select('club_id, rate');
