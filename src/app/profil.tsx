@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -385,6 +386,11 @@ export default function ProfilScreen() {
         {/* Suppression de compte — exigence App Store / Google Play (accessible depuis l'app). */}
         <Button label="Supprimer mon compte" icon="trash-outline" variant="ghost" onPress={() => setDeleteSheet(true)} />
       </View>
+
+      {/* À propos — version de l'app (utile pour le support et les stores). */}
+      <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center', marginTop: spacing.lg }}>
+        PadelConnect v{Constants.expoConfig?.version ?? '1.0.0'} · Abidjan 🇨🇮{'\n'}Réserve ton terrain de padel en 2 minutes.
+      </Txt>
 
       {/* Photo de profil : changer (recadrée + compressée) ou revenir aux initiales */}
       <BottomSheet visible={photoSheet} title="Photo de profil" onClose={() => setPhotoSheet(false)}>

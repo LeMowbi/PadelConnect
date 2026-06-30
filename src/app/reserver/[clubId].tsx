@@ -20,6 +20,8 @@ import { minPrice, priceForSlot, priceTiersFor } from '@/lib/pricing';
 import { useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
+const MAX_UPCOMING = 6; // réservations À VENIR max par joueur (anti-blocage des terrains)
+
 export default function ReserverScreen() {
   const params = useLocalSearchParams<{ clubId: string; dateKey?: string; time?: string }>();
   const router = useRouter();
@@ -99,6 +101,13 @@ export default function ReserverScreen() {
     if (!day || !slot || !effectiveCourt || submitting) return;
     const startsAt = slotTimestamp(day.key, slot);
     if (startsAt <= Date.now()) return;
+    // Limite anti-blocage : un joueur ne peut pas accaparer trop de créneaux à venir (les
+    // clubs n'aiment pas les terrains réservés « au cas où » puis libérés à la dernière minute).
+    const myUpcoming = state.reservations.filter((r) => (!r.userId || r.userId === state.serverUserId) && r.startsAt > Date.now()).length;
+    if (myUpcoming >= MAX_UPCOMING) {
+      toast.show(`Tu as déjà ${MAX_UPCOMING} réservations à venir — joue-les d'abord 😊`, { icon: 'alert-circle' });
+      return;
+    }
     setSubmitting(true);
     const invited = [
       ...state.friends.filter((f) => friendIds.includes(f.id)).map((f) => ({ id: f.id, name: f.name, confirmed: false })),
