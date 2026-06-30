@@ -401,7 +401,7 @@ export default function ClubDetail() {
                       <Txt variant="small" color={colors.textMuted} style={{ width: 10, textAlign: 'center' }}>
                         {s}
                       </Txt>
-                      <Ionicons name="star" size={10} color={colors.signature} />
+                      <Ionicons name="star" size={10} color={colors.amber} />
                       <View style={styles.summaryTrack}>
                         <View style={[styles.summaryFill, { width: `${pct}%` as `${number}%` }]} />
                       </View>
@@ -591,7 +591,7 @@ const styles = StyleSheet.create({
   eventRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xs },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   summaryTrack: { flex: 1, height: 6, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
-  summaryFill: { height: 6, borderRadius: radius.pill, backgroundColor: colors.signature },
+  summaryFill: { height: 6, borderRadius: radius.pill, backgroundColor: colors.amber },
   viewer: { flex: 1, backgroundColor: colors.viewerBg, justifyContent: 'center' },
   viewerClose: {
     position: 'absolute',

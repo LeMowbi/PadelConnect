@@ -11,7 +11,9 @@ import { fetchReferralCount, referralCodeForUser } from '@/lib/referrals';
 import { useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
-const APP_URL = 'https://lemowbi.github.io/PadelConnect/';
+// Lien d'invitation : la fiche App Store de PadelConnect (id App Store Connect 6785261310).
+// L'ami tape dessus → page de téléchargement de l'app (au lieu de l'ancienne page GitHub).
+const APP_URL = 'https://apps.apple.com/app/id6785261310';
 
 // Parrainage : chaque joueur connecté a un CODE unique. Son filleul le saisit à
 // l'inscription → le lien parrain→filleul est créé côté serveur, et le compteur ci-dessous

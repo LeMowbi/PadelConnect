@@ -32,7 +32,9 @@ export default function ReservationsScreen() {
   // club/opérateur ne voit donc pas le périmètre RLS de son club sur cet écran joueur.
   const mine = myReservations;
   // Suis-je l'AUTEUR de la résa ? (sinon je suis invité → pas d'annulation, RLS = auteur).
-  const isOwner = (r: Reservation) => !state.serverUserId || !r.userId || r.userId === state.serverUserId;
+  // Une résa avec un bookedBy mais sans mon user_id = je suis invité, même hors session :
+  // on ne propose donc PAS « Annuler » à un invité.
+  const isOwner = (r: Reservation) => (state.serverUserId ? !r.userId || r.userId === state.serverUserId : !r.bookedBy);
   const upcoming = mine.filter((r) => !isPlayed(r, now)).sort((a, b) => a.startsAt - b.startsAt);
   const past = mine.filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt);
   const pastShown = showAllPast ? past : past.slice(0, PAST_PREVIEW);

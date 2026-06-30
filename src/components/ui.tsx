@@ -209,7 +209,11 @@ export function Tag({ label, tone = 'neutral', icon }: { label: string; tone?: T
   return (
     <View style={[tag.base, { backgroundColor: t.bg }]}>
       {icon ? <Ionicons name={icon} size={12} color={t.fg} /> : null}
-      <Text style={[tag.text, { color: t.fg }]}>{label}</Text>
+      {/* Toujours sur une ligne, tronqué si le contenu est long (nom d'équipe, organisateur…) :
+          le Tag ne déborde ni ne pousse les éléments voisins. */}
+      <Text numberOfLines={1} style={[tag.text, { color: t.fg }]}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -234,8 +238,9 @@ const tag = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radius.pill,
     alignSelf: 'flex-start',
+    flexShrink: 1, // peut rétrécir dans une rangée serrée plutôt que pousser les voisins
   },
-  text: { fontSize: font.size.xs, fontFamily: font.family.bodySemi, fontWeight: font.weight.semibold },
+  text: { fontSize: font.size.xs, fontFamily: font.family.bodySemi, fontWeight: font.weight.semibold, flexShrink: 1 },
 });
 
 /* ----------------------------- Section / divers --------------------------- */

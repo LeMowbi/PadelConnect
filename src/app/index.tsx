@@ -251,7 +251,7 @@ export default function HomeScreen() {
             <View style={styles.livePill}>
               <Animated.View style={[styles.liveDot, { opacity: dotOpacity, transform: [{ scale: dotScale }] }]} />
               <Txt variant="small" color={colors.white} style={styles.liveText}>
-                {nearbyClubs.length} clubs près de toi
+                {nearbyClubs.length} club{nearbyClubs.length > 1 ? 's' : ''} près de toi
               </Txt>
             </View>
             <Txt variant="display" color={colors.white} style={{ fontSize: 26, marginTop: spacing.sm, maxWidth: 240 }}>

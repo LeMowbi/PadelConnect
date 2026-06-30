@@ -58,8 +58,10 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
               </Txt>
             </View>
           )}
-          <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
-            dès {fcfa(club.priceFrom)} · session
+          {/* Prix tronqué + flexShrink : sur une carte étroite (250px), il ne se colle plus à
+              la note et ne déborde plus (« …· session » coupé). */}
+          <Txt variant="small" color={colors.signature} numberOfLines={1} style={{ fontWeight: '700', flexShrink: 1, marginLeft: spacing.sm }}>
+            dès {fcfa(club.priceFrom)}
           </Txt>
         </View>
       </Card>
