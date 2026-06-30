@@ -8,7 +8,7 @@ import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Button, Card, EmptyState, Txt } from '@/components/ui';
-import { SAMPLE_SLOTS, activeClubs, type Club } from '@/data/clubs';
+import { activeClubs, type Club } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { clubsFreeAt, freeCourts, openSlotsFor, slotGrid, type AvailCtx } from '@/lib/availability';
 import { nextDays, slotTimestamp, type DayOption } from '@/lib/days';
@@ -29,8 +29,11 @@ export default function ReserverScreen() {
   const { refreshControl } = usePullToRefresh();
 
   const days = useMemo(() => nextDays(7), []);
-  // Le soir, quand tous les créneaux du jour sont passés, on ouvre directement sur Demain.
-  const todayOver = useMemo(() => !SAMPLE_SLOTS.some((t) => slotTimestamp(days[0].key, t) > Date.now()), [days]);
+  const visibleClubs = useMemo(() => activeClubs(state.customClubs, state.clubInfo), [state.customClubs, state.clubInfo]);
+  // Grille = union des créneaux RÉELLEMENT ouverts par les clubs visibles (peut dépasser SAMPLE_SLOTS).
+  const grid = useMemo(() => slotGrid({ clubs: visibleClubs, clubSlots: state.clubSlots }), [visibleClubs, state.clubSlots]);
+  // Le soir, quand TOUS les créneaux réellement proposés du jour sont passés, on ouvre sur Demain.
+  const todayOver = useMemo(() => !grid.some((t) => slotTimestamp(days[0].key, t) > Date.now()), [grid, days]);
   const [day, setDay] = useState(todayOver ? days[1] : days[0]);
   const [slot, setSlot] = useState<string | null>(null); // créneau choisi (vue « Par heure » guidée)
   // La dernière vue utilisée est mémorisée (l'écran rouvre comme tu l'avais laissé).
@@ -42,7 +45,6 @@ export default function ReserverScreen() {
     setSlot(null);
   };
 
-  const visibleClubs = useMemo(() => activeClubs(state.customClubs, state.clubInfo), [state.customClubs, state.clubInfo]);
   const ctx: AvailCtx = {
     clubs: visibleClubs,
     clubSlots: state.clubSlots,
@@ -53,7 +55,6 @@ export default function ReserverScreen() {
     blocked: state.blockedSlots,
   };
 
-  const grid = useMemo(() => slotGrid({ clubs: visibleClubs, clubSlots: state.clubSlots }), [visibleClubs, state.clubSlots]);
   const rows = grid
     .map((time) => {
       const ts = slotTimestamp(day.key, time);

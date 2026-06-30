@@ -29,8 +29,9 @@ export default function CompetitionsScreen() {
     });
   // À venir d'abord ; les tournois passés restent accessibles (déclaration du résultat).
   const today = dayKey(new Date());
-  const upcoming = list.filter((c) => c.dateKey >= today);
-  const past = list.filter((c) => c.dateKey < today);
+  // Un tournoi multi-jours reste « à venir » tant que sa date de FIN n'est pas passée.
+  const upcoming = list.filter((c) => (c.endDateKey ?? c.dateKey) >= today);
+  const past = list.filter((c) => (c.endDateKey ?? c.dateKey) < today);
 
   return (
     <Screen back title="Tournois" subtitle="Défis avec récompenses — par les clubs ou les joueurs" refreshControl={refreshControl}>

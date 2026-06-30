@@ -44,7 +44,8 @@ export default function CompetitionDetail() {
   const registered = !!reg;
   // Cycle de vie : à venir → terminé (jour STRICTEMENT passé) → clôturé (vainqueur désigné).
   // Le jour même = en cours, pas encore « terminé » (on ne clôture pas avant que ça se joue).
-  const played = comp.dateKey < dayKey(new Date());
+  // Pour un tournoi multi-jours, c'est la date de FIN qui fait foi.
+  const played = (comp.endDateKey ?? comp.dateKey) < dayKey(new Date());
   const result = state.compResults[comp.id];
   const mine = state.officialResults.find((o) => o.compId === comp.id);
   const myTeam = registered ? `${state.account?.firstName ?? 'Toi'} & ${reg.partner}` : '';
@@ -143,7 +144,7 @@ export default function CompetitionDetail() {
             {played ? 'Date' : 'Clôture'}
           </Txt>
           <Txt variant="h3" style={{ marginTop: 2 }}>
-            {comp.date}
+            {compDateLabel(comp)}
           </Txt>
         </View>
       </View>
@@ -475,7 +476,17 @@ export default function CompetitionDetail() {
           ) : null}
           {!played ? (
             <View style={{ marginTop: spacing.md }}>
-              <Button label="Se désinscrire" icon="close" variant="danger" onPress={() => unregisterCompetition(comp.id)} full />
+              <Button
+                label="Se désinscrire"
+                icon="close"
+                variant="danger"
+                onPress={() => {
+                  unregisterCompetition(comp.id);
+                  setToast('Désinscription effectuée');
+                  setTimeout(() => setToast(null), 2200);
+                }}
+                full
+              />
             </View>
           ) : null}
         </Card>
@@ -534,6 +545,8 @@ export default function CompetitionDetail() {
               onPress={() => {
                 if (!canRegister) return;
                 registerCompetition(comp.id, partner);
+                setToast('Inscription enregistrée ✓');
+                setTimeout(() => setToast(null), 2200);
               }}
               disabled={!canRegister}
               full

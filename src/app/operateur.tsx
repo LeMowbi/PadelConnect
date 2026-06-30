@@ -322,7 +322,7 @@ export default function Operateur() {
         </Txt>
         <Txt style={styles.heroValue}>{fcfa(allTimeCommission)}</Txt>
         <Txt variant="small" color={colors.textMuted}>
-          {allTimePlayed} partie{allTimePlayed > 1 ? 's' : ''} jouée{allTimePlayed > 1 ? 's' : ''} · 10 % réglés par Wave (hors app)
+          {allTimePlayed} partie{allTimePlayed > 1 ? 's' : ''} jouée{allTimePlayed > 1 ? 's' : ''} · réglées par Wave (hors app)
         </Txt>
       </Card>
 
@@ -330,7 +330,7 @@ export default function Operateur() {
       <View style={styles.health}>
         <StatTile value={`${activeClubsCount}`} label="Clubs actifs" color={colors.green} bg={colors.greenSoft} />
         <StatTile
-          value={`${resThisWeek} ${resThisWeek >= resPrevWeek ? '▲' : '▼'}`}
+          value={`${resThisWeek}${resThisWeek > resPrevWeek ? ' ▲' : resThisWeek < resPrevWeek ? ' ▼' : ''}`}
           label="Résas / 7 j"
           color={colors.green}
           bg={colors.greenSoft}
@@ -822,7 +822,7 @@ export default function Operateur() {
         )}
       </View>
 
-      {/* Boosts « Sponsorisé » — durée 7 ou 30 jours, activés une fois le paiement Wave reçu. */}
+      {/* Boosts « Sponsorisé » — durée 7, 14 ou 30 jours, activés une fois le paiement Wave reçu. */}
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Boosts « Sponsorisé »" />
         <Card>
@@ -850,7 +850,7 @@ export default function Operateur() {
                       </Txt>
                     )}
                   </View>
-                  {/* 7j / 30j toujours accessibles (on peut prolonger/changer la durée) ;
+                  {/* 7j / 14j / 30j toujours accessibles (on peut prolonger/changer la durée) ;
                       « Arrêter » apparaît quand le boost est actif. */}
                   <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
                     <Button size="sm" label="7 j" variant="secondary" onPress={() => setBoost(c.id, 7)} />

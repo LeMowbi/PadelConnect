@@ -352,7 +352,7 @@ export function SectionReservations({
       {/* Annulations récentes — un joueur a libéré son créneau (> 5 h avant le match). */}
       {cancelled.length > 0 ? (
         <View style={{ marginTop: spacing.xl }}>
-          <SectionHeader title={`Annulations récentes · ${cancelled.length}`} />
+          <SectionHeader title={`Annulations récentes · ${Math.min(cancelled.length, 8)}`} />
           <Card>
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.sm }}>
               <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
@@ -386,7 +386,7 @@ export function SectionReservations({
       {/* Absences (no-show) — joueurs marqués « pas venu » par le club. */}
       {noShows.length > 0 ? (
         <View style={{ marginTop: spacing.xl }}>
-          <SectionHeader title={`Absences · ${noShows.length}`} />
+          <SectionHeader title={`Absences · ${Math.min(noShows.length, 8)}`} />
           <Card>
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.sm }}>
               <Ionicons name="warning-outline" size={16} color={colors.coral} />

@@ -92,7 +92,7 @@ export const seedCompetitions: Competition[] = [
     organizer: 'Awa',
     date: D[4].label,
     dateKey: D[4].key,
-    format: 'Mini-tournoi 4 équipes',
+    format: 'Mini-tournoi 8 équipes',
     level: 'Débutant / Intermédiaire',
     reward: 'Cagnotte 30 000 FCFA',
     fee: 'Gratuit',

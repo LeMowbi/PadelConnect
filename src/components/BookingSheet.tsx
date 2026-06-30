@@ -36,7 +36,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
   const free = useMemo(
     () => freeCourts(club, day.key, time, ctx),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [club.id, day.key, time, state.reservations, state.occupancy, state.clubCourts],
+    [club.id, day.key, time, state.reservations, state.occupancy, state.clubCourts, state.blockedSlots, state.myCompetitions],
   );
 
   const price = priceForSlot(club, time);
@@ -121,7 +121,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
             <>
               <View style={styles.head}>
                 <View style={{ flex: 1 }}>
-                  <Txt variant="h2" style={{ fontSize: 20 }}>
+                  <Txt variant="h2" style={{ fontSize: 20 }} numberOfLines={1}>
                     {club.name}
                   </Txt>
                   <Txt variant="muted">

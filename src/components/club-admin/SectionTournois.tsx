@@ -77,7 +77,7 @@ export function SectionTournois({ club, comps, onCloseComp }: { club: Club; comp
                       {c.title}
                     </Txt>
                     <Txt variant="muted">
-                      {c.date} · {teamCount(c, !!state.compRegistrations[c.id])}/{c.slots} équipes
+                      {c.date} · {teamCount(c, false)}/{c.slots} équipes
                     </Txt>
                   </View>
                   {result ? (

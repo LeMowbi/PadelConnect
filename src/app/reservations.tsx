@@ -94,7 +94,7 @@ export default function ReservationsScreen() {
             <Card key={r.id} style={{ marginBottom: spacing.sm }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>
-                  <Txt variant="h3" style={{ fontSize: 15 }}>
+                  <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
                     {r.clubName}
                   </Txt>
                   <Txt variant="muted">
@@ -152,7 +152,7 @@ export default function ReservationsScreen() {
                     </Txt>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Txt variant="h3" style={{ fontSize: 15 }}>
+                    <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
                       {r.clubName}
                     </Txt>
                     <Txt variant="muted">

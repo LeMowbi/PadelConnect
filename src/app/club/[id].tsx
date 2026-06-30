@@ -141,7 +141,13 @@ export default function ClubDetail() {
   const removeMyReview = async () => {
     if (!state.serverUserId) return;
     const ok = await deleteMyReview(club.id, state.serverUserId);
-    if (ok) loadReviews();
+    if (ok) {
+      loadReviews();
+      setToast('Avis supprimé');
+    } else {
+      setToast('Suppression impossible — réessaie.');
+    }
+    setTimeout(() => setToast(null), 2200);
   };
   // Gérant : publier / retirer une réponse à un avis.
   const sendReply = async (reviewId: string) => {

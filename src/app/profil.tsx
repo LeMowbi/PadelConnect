@@ -9,6 +9,7 @@ import { Avatar } from '@/components/Avatar';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Chip } from '@/components/Chip';
 import { Screen } from '@/components/Screen';
+import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt, type IconName } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { levelLabel } from '@/lib/format';
@@ -536,6 +537,7 @@ export default function ProfilScreen() {
 
 function EditAccount({ onDone }: { onDone: () => void }) {
   const { state, updateAccount } = useApp();
+  const toast = useToast();
   const a = state.account!;
   const [firstName, setFirstName] = useState(a.firstName);
   const [lastName, setLastName] = useState(a.lastName);
@@ -557,6 +559,7 @@ function EditAccount({ onDone }: { onDone: () => void }) {
       birthDate: parseBirthDate(birth) ? birth.trim() : a.birthDate,
       gender,
     });
+    toast.show('Profil mis à jour ✓');
     onDone();
   };
 

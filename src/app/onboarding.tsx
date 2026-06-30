@@ -104,8 +104,13 @@ export default function Onboarding() {
   const signIn = async () => {
     if (siBusy) return; // garde anti double-tap
     const byEmail = siMode === 'email';
-    if ((byEmail ? !isEmail(siEmail) : siPhone.replace(/\D/g, '').length < 8) || siPass.length < 6) {
-      setSiError(byEmail ? 'E-mail et mot de passe requis.' : 'Numéro et mot de passe requis.');
+    const idOk = byEmail ? isEmail(siEmail) : siPhone.replace(/\D/g, '').length >= 8;
+    if (!idOk) {
+      setSiError(byEmail ? 'Adresse e-mail invalide.' : 'Numéro invalide.');
+      return;
+    }
+    if (siPass.length < 6) {
+      setSiError('Mot de passe : 6 caractères minimum.');
       return;
     }
     setSiBusy(true);
@@ -278,6 +283,7 @@ export default function Onboarding() {
             }}
             placeholder="+225 07 00 00 00 00"
             keyboardType="phone-pad"
+            autoCapitalize="none"
             error={errors.phone}
             onLayout={(y) => {
               positions.current.phone = y;
@@ -558,6 +564,8 @@ function SignInSheet({
             placeholder="+225 07 00 00 00 00"
             placeholderTextColor={colors.textFaint}
             keyboardType="phone-pad"
+            autoCorrect={false}
+            textContentType="telephoneNumber"
             style={styles.input}
           />
         )}

@@ -5,6 +5,7 @@ import { Avatar } from '@/components/Avatar';
 import { PlayerSheet, type PlayerLike } from '@/components/PlayerSheet';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
+import { useToast } from '@/components/Toast';
 import { findPlayerByPhone } from '@/lib/friends';
 import { openWhatsApp } from '@/lib/contact';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
@@ -15,6 +16,7 @@ export default function AmisScreen() {
   const router = useRouter();
   const { state, addFriend, removeFriend } = useApp();
   const { refreshControl } = usePullToRefresh();
+  const toast = useToast();
   const [phone, setPhone] = useState('');
   const [removeId, setRemoveId] = useState<string | null>(null); // ami en cours de retrait (confirmation)
   const [openPlayer, setOpenPlayer] = useState<PlayerLike | null>(null);
@@ -47,6 +49,7 @@ export default function AmisScreen() {
   const addFound = () => {
     if (!found) return;
     addFriend(found.name, phone, found.level);
+    toast.show(`${found.name} ajouté à tes amis ✓`);
     setPhone('');
     setFound(null);
     setSearch('idle');
