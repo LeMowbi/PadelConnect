@@ -80,6 +80,11 @@ export default function Operateur() {
     const { ok } = await operatorSetClubStatus(clubId, current ? 'active' : 'coming_soon');
     if (!ok) toast.show('Changement impossible — réessaie', { icon: 'alert-circle' });
   };
+  // Boost serveur (visible par tous) : on prévient si l'écriture échoue.
+  const doBoost = (clubId: string, days: number) =>
+    void setBoost(clubId, days).then(({ ok }) => {
+      if (!ok) toast.show('Boost impossible — réessaie', { icon: 'alert-circle' });
+    });
 
   // ── Clubs de base (les 9 embarqués) : statut piloté Actif ⇄ Bientôt côté serveur ──
   const [baseBusy, setBaseBusy] = useState<string | null>(null);
@@ -857,10 +862,10 @@ export default function Operateur() {
                   {/* 7j / 14j / 30j toujours accessibles (on peut prolonger/changer la durée) ;
                       « Arrêter » apparaît quand le boost est actif. */}
                   <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
-                    <Button size="sm" label="7 j" variant="secondary" onPress={() => setBoost(c.id, 7)} />
-                    <Button size="sm" label="14 j" variant="secondary" onPress={() => setBoost(c.id, 14)} />
-                    <Button size="sm" label="30 j" onPress={() => setBoost(c.id, 30)} />
-                    {on ? <Button size="sm" label="Arrêter" icon="close" variant="ghost" onPress={() => setBoost(c.id, 0)} /> : null}
+                    <Button size="sm" label="7 j" variant="secondary" onPress={() => doBoost(c.id, 7)} />
+                    <Button size="sm" label="14 j" variant="secondary" onPress={() => doBoost(c.id, 14)} />
+                    <Button size="sm" label="30 j" onPress={() => doBoost(c.id, 30)} />
+                    {on ? <Button size="sm" label="Arrêter" icon="close" variant="ghost" onPress={() => doBoost(c.id, 0)} /> : null}
                   </View>
                 </View>
               </View>

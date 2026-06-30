@@ -10,10 +10,12 @@ import {
   createClub as createClubRpc,
   fetchClubOverrides,
   deleteClub as deleteClubRpc,
+  fetchClubBoosts,
   fetchClubCommissions,
   fetchClubConfigs,
   fetchClubStatus,
   fetchServerClubs,
+  setClubBoost as setClubBoostRpc,
   grantClubAccessByPhone as grantClubAccessByPhoneRpc,
   revokeClubAccessByPhone as revokeClubAccessByPhoneRpc,
   setBaseClubStatus as setBaseClubStatusRpc,
@@ -264,7 +266,7 @@ type AppContextType = {
   setClubInfo: (clubId: string, patch: ClubInfo) => void;
   toggleHideCoach: (coachId: string) => void;
   toggleBoostClub: (clubId: string) => void;
-  setBoost: (clubId: string, days: number) => void; // days > 0 active (avec expiration), 0 désactive
+  setBoost: (clubId: string, days: number) => Promise<{ ok: boolean }>; // days > 0 active (expiration), 0 désactive — serveur
   setPaymentStatus: (clubId: string, weekKey: string, status: 'tofacture' | 'sent' | 'paid') => void;
   requestClub: (input: {
     name: string;
@@ -454,7 +456,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Réservations : le serveur est la source de vérité → on remplace le miroir local
       // par les résas pertinentes (les miennes ; club/opérateur : celles de leur périmètre,
       // via RLS), l'occupation de TOUS (disponibilité), et les clubs ajoutés côté serveur.
-      const [reservationsRes, occ, parts, serverClubs, overrides, clubStatus, configs, commissions] = await Promise.all([
+      const [reservationsRes, occ, parts, serverClubs, overrides, clubStatus, configs, commissions, boosts] = await Promise.all([
         fetchReservations(),
         fetchOccupancy(),
         fetchMyParticipations(userId),
@@ -463,6 +465,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         fetchClubStatus(),
         fetchClubConfigs(),
         fetchClubCommissions(),
+        fetchClubBoosts(),
       ]);
       if (!stillCurrent()) return; // déconnexion survenue pendant le chargement → on n'écrit rien
       const { active: activeParts, pending: pendingParts } = splitParticipations(parts);
@@ -478,6 +481,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         customClubs: mergeServerClubs(s.customClubs, serverClubs),
         clubStatus: clubStatus ?? s.clubStatus,
         clubCommission: commissions ?? s.clubCommission, // vide pour les non-opérateurs (RLS)
+        // Boosts serveur (visibles par tous) : actifs = ceux dont l'expiration est future.
+        boostExpiry: boosts ?? s.boostExpiry,
+        boostedClubIds: boosts ? Object.keys(boosts).filter((id) => boosts[id] > Date.now()) : s.boostedClubIds,
         // Pages club éditées par les gérants (serveur) → visibles par tous. On fusionne au-dessus
         // des éventuelles surcharges locales (le serveur fait foi pour les clubs qu'il connaît).
         clubInfo: { ...s.clubInfo, ...overrides },
@@ -549,6 +555,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!clubStatus || !ok()) return;
         setClubStatusMap(clubStatus);
         setState((s) => ({ ...s, clubStatus }));
+      });
+      void fetchClubBoosts().then((boosts) => {
+        if (!boosts || !ok()) return;
+        setState((s) => ({
+          ...s,
+          boostExpiry: boosts,
+          boostedClubIds: Object.keys(boosts).filter((id) => boosts[id] > Date.now()),
+        }));
       });
       // Config club (horaires, terrains, offres, coachs, photos) éditée par un gérant ailleurs :
       // on relit pour que la disponibilité et la fiche restent à jour sans réinstaller.
@@ -1068,9 +1082,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...s,
           boostedClubIds: s.boostedClubIds.includes(clubId) ? s.boostedClubIds.filter((x) => x !== clubId) : [...s.boostedClubIds, clubId],
         })),
-      setBoost: (clubId, days) =>
+      // Boost piloté côté SERVEUR → visible par tous les joueurs. On écrit d'abord au serveur
+      // (réservé à l'opérateur), puis on met à jour le miroir local au succès.
+      setBoost: async (clubId, days) => {
+        const expiry = days > 0 ? Date.now() + days * 86400000 : null;
+        if (state.serverUserId) {
+          const ok = await setClubBoostRpc(clubId, expiry);
+          if (!ok) return { ok: false };
+        }
         setState((s) => {
-          if (days <= 0) {
+          if (!expiry) {
             const exp = { ...s.boostExpiry };
             delete exp[clubId];
             return { ...s, boostedClubIds: s.boostedClubIds.filter((x) => x !== clubId), boostExpiry: exp };
@@ -1078,9 +1099,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return {
             ...s,
             boostedClubIds: s.boostedClubIds.includes(clubId) ? s.boostedClubIds : [...s.boostedClubIds, clubId],
-            boostExpiry: { ...s.boostExpiry, [clubId]: Date.now() + days * 86400000 },
+            boostExpiry: { ...s.boostExpiry, [clubId]: expiry },
           };
-        }),
+        });
+        return { ok: true };
+      },
       setPaymentStatus: (clubId, weekKey, status) =>
         setState((s) => {
           const next = { ...s.operatorPayments };

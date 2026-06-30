@@ -157,6 +157,28 @@ export async function setBaseClubStatus(clubId: string, status: 'active' | 'comi
   return !error && data === true;
 }
 
+// Boosts « Sponsorisé » pilotés par l'opérateur → { clubId: date d'expiration (ms) }. null si
+// échec réseau (on garde l'existant). Lu par tous (le club boosté remonte avec son badge).
+export async function fetchClubBoosts(): Promise<Record<string, number> | null> {
+  const { data, error } = await supabase.from('club_boost').select('club_id, expires_at');
+  if (error) return null;
+  const out: Record<string, number> = {};
+  for (const r of (data ?? []) as { club_id: string; expires_at: string }[]) {
+    const t = new Date(r.expires_at).getTime();
+    if (Number.isFinite(t)) out[r.club_id] = t;
+  }
+  return out;
+}
+
+// Opérateur : active/prolonge un boost (date d'expiration ISO) ou le retire (null).
+export async function setClubBoost(clubId: string, expiresAtMs: number | null): Promise<boolean> {
+  const { data, error } = await supabase.rpc('set_club_boost', {
+    p_club_id: clubId,
+    p_expires_at: expiresAtMs ? new Date(expiresAtMs).toISOString() : null,
+  });
+  return !error && data === true;
+}
+
 // Opérateur : supprime DÉFINITIVEMENT un club serveur (+ ses données liées). false si refusé.
 export async function deleteClub(clubId: string): Promise<boolean> {
   const { data, error } = await supabase.rpc('delete_club', { p_id: clubId });
