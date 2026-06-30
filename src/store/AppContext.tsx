@@ -8,8 +8,10 @@ import { type Club, type CustomClub, type PriceTier } from '@/data/clubs';
 import {
   approveClubRequest as approveClubRequestRpc,
   createClub as createClubRpc,
+  fetchClubOverrides,
   fetchServerClubs,
   setClubStatus as setClubStatusRpc,
+  upsertClubOverride,
 } from '@/lib/clubsServer';
 import type { Competition } from '@/data/competitions';
 import type { Review } from '@/data/reviews';
@@ -521,11 +523,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Réservations : le serveur est la source de vérité → on remplace le miroir local
       // par les résas pertinentes (les miennes ; club/opérateur : celles de leur périmètre,
       // via RLS), l'occupation de TOUS (disponibilité), et les clubs ajoutés côté serveur.
-      const [reservationsRes, occ, parts, serverClubs] = await Promise.all([
+      const [reservationsRes, occ, parts, serverClubs, overrides] = await Promise.all([
         fetchReservations(),
         fetchOccupancy(),
         fetchMyParticipations(userId),
         fetchServerClubs(),
+        fetchClubOverrides(),
       ]);
       if (!stillCurrent()) return; // déconnexion survenue pendant le chargement → on n'écrit rien
       const { active: activeParts, pending: pendingParts } = splitParticipations(parts);
@@ -537,6 +540,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         participantReservationIds: activeParts,
         pendingInvitationIds: pendingParts,
         customClubs: mergeServerClubs(s.customClubs, serverClubs),
+        // Pages club éditées par les gérants (serveur) → visibles par tous. On fusionne au-dessus
+        // des éventuelles surcharges locales (le serveur fait foi pour les clubs qu'il connaît).
+        clubInfo: { ...s.clubInfo, ...overrides },
       }));
       // Resynchronise les rappels locaux (résas créées sur un autre appareil incluses).
       if (reservationsRes.ok) {
@@ -1037,7 +1043,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       removeClubCoach: (clubId, id) =>
         setState((s) => ({ ...s, clubCoaches: { ...s.clubCoaches, [clubId]: (s.clubCoaches[clubId] ?? []).filter((c) => c.id !== id) } })),
       setClubInfo: (clubId, patch) =>
-        setState((s) => ({ ...s, clubInfo: { ...s.clubInfo, [clubId]: { ...s.clubInfo[clubId], ...patch } } })),
+        setState((s) => {
+          const merged = { ...s.clubInfo[clubId], ...patch };
+          // Le gérant connecté pousse sa page au serveur (visible par tous). Le serveur refuse
+          // si ce n'est pas son club (gérant d'un autre club / joueur) — la modif reste alors locale.
+          if (s.serverUserId) void upsertClubOverride(clubId, merged);
+          return { ...s, clubInfo: { ...s.clubInfo, [clubId]: merged } };
+        }),
       toggleHideCoach: (coachId) =>
         setState((s) => ({
           ...s,

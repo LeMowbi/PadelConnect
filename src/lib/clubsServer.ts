@@ -3,8 +3,64 @@
 // L'opérateur approuve une demande → un club est créé ici et apparaît chez tous les
 // joueurs, SANS nouvelle version de l'app.
 
-import { serverRowToClub, type CustomClub } from '@/data/clubs';
+import { serverRowToClub, type Club, type CustomClub, type PriceTier } from '@/data/clubs';
 import { supabase } from './supabase';
+
+// Surcharge de page club, telle que servie/stockée (mêmes champs que le store local clubInfo).
+export type ClubOverride = {
+  name?: string;
+  area?: string;
+  blurb?: string;
+  type?: Club['type'];
+  priceFrom?: number;
+  priceTiers?: PriceTier[];
+  contactPhone?: string;
+};
+
+// Toutes les surcharges de page (édités par les gérants) → { clubId: surcharge } pour fusion.
+export async function fetchClubOverrides(): Promise<Record<string, ClubOverride>> {
+  const { data, error } = await supabase.from('club_overrides').select('*');
+  if (error) return {};
+  const out: Record<string, ClubOverride> = {};
+  for (const r of (data ?? []) as ClubOverrideRow[]) {
+    out[r.club_id] = {
+      name: r.name ?? undefined,
+      area: r.area ?? undefined,
+      blurb: r.blurb ?? undefined,
+      type: (['Couvert', 'Extérieur', 'Mixte'] as const).includes(r.type as Club['type']) ? (r.type as Club['type']) : undefined,
+      priceFrom: r.price_from ?? undefined,
+      priceTiers: r.price_tiers ?? undefined,
+      contactPhone: r.contact_phone ?? undefined,
+    };
+  }
+  return out;
+}
+
+// Le gérant pousse sa page modifiée (réservé à son club côté serveur). false si refusé/échec.
+export async function upsertClubOverride(clubId: string, o: ClubOverride): Promise<boolean> {
+  const { data, error } = await supabase.rpc('upsert_club_override', {
+    p_club_id: clubId,
+    p_name: o.name ?? null,
+    p_area: o.area ?? null,
+    p_blurb: o.blurb ?? null,
+    p_type: o.type ?? null,
+    p_price_from: o.priceFrom ?? null,
+    p_price_tiers: o.priceTiers ?? null,
+    p_contact_phone: o.contactPhone ?? null,
+  });
+  return !error && data === true;
+}
+
+type ClubOverrideRow = {
+  club_id: string;
+  name: string | null;
+  area: string | null;
+  blurb: string | null;
+  type: string | null;
+  price_from: number | null;
+  price_tiers: PriceTier[] | null;
+  contact_phone: string | null;
+};
 
 type ClubRow = {
   id: string;
