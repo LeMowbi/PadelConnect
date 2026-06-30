@@ -34,8 +34,7 @@ export function rowToReservation(row: Row): Reservation {
   // neutraliser un éventuel fuseau erroné de l'appareil qui a créé la résa (le starts_at
   // stocké ne sert que de repli si la date/heure manquent). Repli sûr contre NaN.
   const storedTs = Number(row.starts_at);
-  const startsAt =
-    row.date_key && row.time ? slotTimestamp(row.date_key, row.time) : Number.isFinite(storedTs) ? storedTs : 0;
+  const startsAt = row.date_key && row.time ? slotTimestamp(row.date_key, row.time) : Number.isFinite(storedTs) ? storedTs : 0;
   const createdTs = row.created_at ? new Date(row.created_at).getTime() : NaN;
   return {
     id: row.id,
@@ -115,13 +114,22 @@ export async function setClubConfirmedRow(id: string, value: boolean): Promise<b
 // celles de son club / toutes. On exclut les annulées (status='cancelled') : elles ne
 // comptent ni dans la liste joueur ni dans la base de commission. Trié par date de créneau.
 export async function fetchReservations(): Promise<{ ok: boolean; reservations: Reservation[] }> {
+  const { data, error } = await supabase.from('reservations').select('*').eq('status', 'booked').order('starts_at', { ascending: true });
+  if (error) return { ok: false, reservations: [] };
+  return { ok: true, reservations: (data ?? []).map((r) => rowToReservation(r as Row)) };
+}
+
+// Réservations ANNULÉES du périmètre (RLS) — pour un compte club/opérateur, ce sont les
+// annulations de son club. On garde la trace (status='cancelled' posé par cancel_reservation)
+// pour que le club soit prévenu qu'un créneau s'est libéré. Trié du plus récent au plus ancien.
+export async function fetchCancelledReservations(): Promise<Reservation[]> {
   const { data, error } = await supabase
     .from('reservations')
     .select('*')
-    .eq('status', 'booked')
-    .order('starts_at', { ascending: true });
-  if (error) return { ok: false, reservations: [] };
-  return { ok: true, reservations: (data ?? []).map((r) => rowToReservation(r as Row)) };
+    .eq('status', 'cancelled')
+    .order('starts_at', { ascending: false });
+  if (error) return [];
+  return (data ?? []).map((r) => rowToReservation(r as Row));
 }
 
 // Réservation PARTAGÉE : rattache les amis invités (par leur numéro) à la réservation.

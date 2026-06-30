@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { BarChart } from '@/components/BarChart';
 import { useToast } from '@/components/Toast';
@@ -10,6 +10,7 @@ import { type Club } from '@/data/clubs';
 import { hasCompetition } from '@/lib/availability';
 import { nextDays, weekKeyOf, weekLabel } from '@/lib/days';
 import { openWhatsApp } from '@/lib/contact';
+import { fetchCancelledReservations } from '@/lib/reservations';
 import { isPlayed, useApp, type Reservation } from '@/store/AppContext';
 import { colors, radius, shadows, spacing } from '@/theme';
 
@@ -28,6 +29,19 @@ export function SectionReservations({
   const toast = useToast();
   const [planDayKey, setPlanDayKey] = useState<string | null>(null);
   const [showBlockForm, setShowBlockForm] = useState(false);
+
+  // Annulations récentes du club (serveur) : un joueur a annulé → le créneau s'est libéré.
+  // On garde la trace (status='cancelled') pour prévenir le club (cf. fonction serveur 09).
+  const [cancelled, setCancelled] = useState<Reservation[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetchCancelledReservations().then((rows) => {
+      if (alive) setCancelled(rows.filter((r) => r.clubId === club.id));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [club.id]);
 
   const now = Date.now();
   const clubRes = state.reservations.filter((r) => r.clubId === club.id);
@@ -283,6 +297,39 @@ export function SectionReservations({
           ))
         )}
       </View>
+
+      {/* Annulations récentes — un joueur a libéré son créneau (> 5 h avant le match). */}
+      {cancelled.length > 0 ? (
+        <View style={{ marginTop: spacing.xl }}>
+          <SectionHeader title={`Annulations récentes · ${cancelled.length}`} />
+          <Card>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.sm }}>
+              <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
+              <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
+                Ces créneaux ont été annulés par le joueur et sont de nouveau libres à la réservation.
+              </Txt>
+            </View>
+            {cancelled.slice(0, 8).map((r, i) => (
+              <View key={r.id}>
+                {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <View style={{ flex: 1 }}>
+                    <Txt variant="body" style={{ fontWeight: '600' }}>
+                      {r.date} · {r.time} · {r.court}
+                    </Txt>
+                    {r.bookedBy ? (
+                      <Txt variant="small" color={colors.textFaint}>
+                        {r.bookedBy.name}
+                      </Txt>
+                    ) : null}
+                  </View>
+                  <Tag label="Annulée" tone="coral" />
+                </View>
+              </View>
+            ))}
+          </Card>
+        </View>
+      ) : null}
 
       {/* Historique du club — regroupé par semaine, base de la commission PadelConnect */}
       <View style={{ marginTop: spacing.xl }}>
