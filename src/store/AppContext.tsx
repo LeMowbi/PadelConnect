@@ -17,6 +17,8 @@ import { type Friend } from '@/data/user';
 import {
   cancelReservationRow,
   fetchMyParticipations,
+  respondInvitation as respondInvitationRpc,
+  type MyParticipation,
   fetchOccupancy,
   fetchReservations,
   insertReservation,
@@ -157,7 +159,8 @@ type AppState = {
   role: 'player' | 'operator' | 'club';
   serverManagedClubId: string | null; // pour un compte 'club' : l'id du club géré
   serverUserId: string | null; // id Supabase quand connecté → mode « réservations serveur »
-  participantReservationIds: string[]; // résas où JE suis invité (partagées par un ami)
+  participantReservationIds: string[]; // résas où JE suis invité (hors invitations refusées)
+  pendingInvitationIds: string[]; // sous-ensemble : invitations à confirmer (Accepter/Refuser)
   occupancy: SlotOccupancy[]; // créneaux pris par TOUS (vue publique) → dispo cross-joueur
   storageFull: boolean; // true si la sauvegarde a dû abandonner des photos (quota plein)
   managedClubId: string;
@@ -225,6 +228,7 @@ const initialState: AppState = {
   serverManagedClubId: null,
   serverUserId: null,
   participantReservationIds: [],
+  pendingInvitationIds: [],
   occupancy: [],
   storageFull: false,
   managedClubId: 'padelta',
@@ -254,6 +258,7 @@ function loggedOutState(s: AppState): AppState {
     serverUserId: null,
     reservations: [],
     participantReservationIds: [],
+    pendingInvitationIds: [],
     occupancy: [],
     customClubs: s.customClubs.filter((c) => !c.fromServer),
     level: initialState.level,
@@ -315,6 +320,8 @@ type AppContextType = {
   // Réservations : SERVEUR = source de vérité quand connecté (sinon miroir local, démo).
   addReservation: (r: Omit<Reservation, 'id' | 'createdAt' | 'bookedBy' | 'userId'>) => Promise<boolean>;
   cancelReservation: (id: string) => Promise<boolean>;
+  // Réservation partagée : l'invité accepte (accept=true) ou refuse son invitation.
+  respondInvitation: (reservationId: string, accept: boolean) => Promise<boolean>;
   confirmReservationByClub: (id: string) => Promise<boolean>;
   addFriend: (name: string, phone: string) => void;
   removeFriend: (id: string) => void;
@@ -398,6 +405,15 @@ const clampLevel = (n: number) => Math.min(7, Math.max(1, Math.round(n * 100) / 
 // clubs démo créés localement (sans drapeau `fromServer`) et on remplace systématiquement
 // l'ensemble des clubs serveur par la version fraîchement chargée (dédup par id, le serveur
 // fait foi). Ainsi tous les écrans qui lisent déjà `customClubs` voient les nouveaux clubs.
+// Invitations → deux listes : celles à inclure dans « mes réservations » (tout sauf refusées)
+// et celles encore À CONFIRMER (Accepter/Refuser). Une seule source pour les deux dérivés.
+function splitParticipations(parts: MyParticipation[]): { active: string[]; pending: string[] } {
+  return {
+    active: parts.filter((p) => p.status !== 'declined').map((p) => p.reservationId),
+    pending: parts.filter((p) => p.status === 'invited').map((p) => p.reservationId),
+  };
+}
+
 function mergeServerClubs(local: CustomClub[], server: CustomClub[]): CustomClub[] {
   const serverIds = new Set(server.map((c) => c.id));
   const localOnly = local.filter((c) => !c.fromServer && !serverIds.has(c.id));
@@ -486,6 +502,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               serverUserId: userId,
               reservations: [],
               participantReservationIds: [],
+              pendingInvitationIds: [],
               occupancy: [],
               friends: [],
               favoriteClubIds: [],
@@ -528,18 +545,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         fetchServerClubs(),
       ]);
       if (!stillCurrent()) return; // déconnexion survenue pendant le chargement → on n'écrit rien
+      const { active: activeParts, pending: pendingParts } = splitParticipations(parts);
       setState((s) => ({
         ...s,
         // En cas d'échec réseau on garde le miroir persisté (offline-friendly).
         reservations: reservationsRes.ok ? reservationsRes.reservations : s.reservations,
         occupancy: occ,
-        participantReservationIds: parts,
+        participantReservationIds: activeParts,
+        pendingInvitationIds: pendingParts,
         customClubs: mergeServerClubs(s.customClubs, serverClubs),
       }));
       // Resynchronise les rappels locaux (résas créées sur un autre appareil incluses).
       if (reservationsRes.ok) {
         const mine = reservationsRes.reservations.filter(
-          (r) => (!r.userId || r.userId === userId || parts.includes(r.id)) && r.startsAt > Date.now(),
+          (r) => (!r.userId || r.userId === userId || activeParts.includes(r.id)) && r.startsAt > Date.now(),
         );
         void syncMatchReminders(mine, remindersOnRef.current);
       }
@@ -587,7 +606,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       void fetchReservations().then((res) => {
         if (res.ok && ok()) setState((s) => ({ ...s, reservations: res.reservations }));
       });
-      void fetchMyParticipations(userId).then((parts) => ok() && setState((s) => ({ ...s, participantReservationIds: parts })));
+      void fetchMyParticipations(userId).then((parts) => {
+        if (!ok()) return;
+        const { active, pending } = splitParticipations(parts);
+        setState((s) => ({ ...s, participantReservationIds: active, pendingInvitationIds: pending }));
+      });
       void fetchServerClubs().then(
         (serverClubs) => ok() && setState((s) => ({ ...s, customClubs: mergeServerClubs(s.customClubs, serverClubs) })),
       );
@@ -893,6 +916,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             : s.occupancy,
         }));
         return true;
+      },
+      // Réservation partagée : l'invité accepte ou refuse. Mise à jour optimiste (on retire
+      // l'invitation des « à confirmer » ; si refus, on retire aussi la résa de ma liste), puis
+      // on confirme côté serveur — en cas d'échec on rejoue l'état précédent.
+      respondInvitation: async (reservationId, accept) => {
+        const prevPending = state.pendingInvitationIds;
+        const prevParts = state.participantReservationIds;
+        setState((s) => ({
+          ...s,
+          pendingInvitationIds: s.pendingInvitationIds.filter((id) => id !== reservationId),
+          participantReservationIds: accept
+            ? s.participantReservationIds
+            : s.participantReservationIds.filter((id) => id !== reservationId),
+        }));
+        const ok = await respondInvitationRpc(reservationId, accept);
+        if (!ok) {
+          setState((s) => ({ ...s, pendingInvitationIds: prevPending, participantReservationIds: prevParts }));
+        }
+        return ok;
       },
       confirmReservationByClub: async (id) => {
         const res = state.reservations.find((r) => r.id === id);

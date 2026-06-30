@@ -141,11 +141,22 @@ export async function linkParticipants(reservationId: string, phones: string[]):
   await supabase.rpc('link_participants', { p_reservation_id: reservationId, p_phones: clean });
 }
 
-// Les réservations où JE suis invité (participant) → à inclure dans « mes réservations ».
-export async function fetchMyParticipations(userId: string): Promise<string[]> {
-  const { data, error } = await supabase.from('reservation_participants').select('reservation_id').eq('user_id', userId);
+// Les réservations où JE suis invité (participant), AVEC le statut de mon invitation.
+// 'invited' = à confirmer (Accepter/Refuser), 'accepted' = je viens, 'declined' = j'ai refusé.
+export type MyParticipation = { reservationId: string; status: 'invited' | 'accepted' | 'declined' };
+export async function fetchMyParticipations(userId: string): Promise<MyParticipation[]> {
+  const { data, error } = await supabase.from('reservation_participants').select('reservation_id, status').eq('user_id', userId);
   if (error) return [];
-  return (data ?? []).map((r: { reservation_id: string }) => r.reservation_id);
+  return (data ?? []).map((r: { reservation_id: string; status: string | null }) => ({
+    reservationId: r.reservation_id,
+    status: (r.status as MyParticipation['status']) ?? 'invited',
+  }));
+}
+
+// L'invité répond à une invitation (Accepter / Refuser) — fonction serveur (SECURITY DEFINER).
+export async function respondInvitation(reservationId: string, accept: boolean): Promise<boolean> {
+  const { data, error } = await supabase.rpc('respond_invitation', { p_reservation_id: reservationId, p_accept: accept });
+  return !error && data === true;
 }
 
 // Occupation de TOUS les créneaux pris (vue publique sans identité).

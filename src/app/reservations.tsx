@@ -21,7 +21,7 @@ const MONTHS = ['JANV.', 'FÉVR.', 'MARS', 'AVR.', 'MAI', 'JUIN', 'JUIL.', 'AOÛ
 
 export default function ReservationsScreen() {
   const router = useRouter();
-  const { state, myReservations, cancelReservation } = useApp();
+  const { state, myReservations, cancelReservation, respondInvitation } = useApp();
   const toast = useToast();
   const [showAllPast, setShowAllPast] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null); // confirmation avant annulation
@@ -35,14 +35,22 @@ export default function ReservationsScreen() {
   // Une résa avec un bookedBy mais sans mon user_id = je suis invité, même hors session :
   // on ne propose donc PAS « Annuler » à un invité.
   const isOwner = (r: Reservation) => (state.serverUserId ? !r.userId || r.userId === state.serverUserId : !r.bookedBy);
-  const upcoming = mine.filter((r) => !isPlayed(r, now)).sort((a, b) => a.startsAt - b.startsAt);
+  // Invitations à confirmer (résa partagée) : on les sort de « À venir » tant qu'elles sont
+  // en attente, pour les présenter à part avec Accepter / Refuser.
+  const isPending = (r: Reservation) => state.pendingInvitationIds.includes(r.id);
+  const upcomingAll = mine.filter((r) => !isPlayed(r, now)).sort((a, b) => a.startsAt - b.startsAt);
+  const pendingInvites = upcomingAll.filter(isPending);
+  const upcoming = upcomingAll.filter((r) => !isPending(r));
   const past = mine.filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt);
   const pastShown = showAllPast ? past : past.slice(0, PAST_PREVIEW);
 
   // Mes tournois : ceux où mon équipe est inscrite ET ceux que J'AI créés (dédupliqués),
   // pour qu'un défi créé sans s'y inscrire reste retrouvable ici (et clôturable).
   const today = dayKey(new Date());
-  const myCompIds = new Set([...Object.keys(state.compRegistrations), ...state.myCompetitions.filter((c) => c.createdByMe).map((c) => c.id)]);
+  const myCompIds = new Set([
+    ...Object.keys(state.compRegistrations),
+    ...state.myCompetitions.filter((c) => c.createdByMe).map((c) => c.id),
+  ]);
   const myComps = [...myCompIds]
     .map((id) => [...state.myCompetitions, ...seedCompetitions].find((c) => c.id === id))
     .filter((c): c is NonNullable<typeof c> => !!c)
@@ -59,8 +67,48 @@ export default function ReservationsScreen() {
     );
   };
 
+  const respond = async (r: Reservation, accept: boolean) => {
+    const ok = await respondInvitation(r.id, accept);
+    if (ok) toast.show(accept ? 'Invitation acceptée ✅' : 'Invitation refusée');
+    else toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
+  };
+
   return (
     <Screen back title="Mes réservations" subtitle="À venir, statut du club, passées">
+      {/* Invitations à confirmer — un ami t'a ajouté à sa réservation partagée. */}
+      {pendingInvites.length > 0 ? (
+        <View style={{ marginTop: spacing.sm }}>
+          <SectionHeader title={`Invitations · ${pendingInvites.length}`} />
+          {pendingInvites.map((r) => (
+            <Card key={r.id} style={{ marginBottom: spacing.sm }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Txt variant="h3" style={{ fontSize: 15 }}>
+                    {r.clubName}
+                  </Txt>
+                  <Txt variant="muted">
+                    {r.date} · {r.time} · {r.court}
+                  </Txt>
+                  {r.bookedBy ? (
+                    <Txt variant="small" color={colors.textFaint} style={{ marginTop: 2 }}>
+                      Invité par {r.bookedBy.name}
+                    </Txt>
+                  ) : null}
+                </View>
+                <Tag label="À confirmer" tone="purple" icon="mail-unread" />
+              </View>
+              <Divider style={{ marginVertical: spacing.md }} />
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Button size="sm" label="J'accepte" icon="checkmark" onPress={() => respond(r, true)} full />
+                </View>
+                <Button size="sm" label="Refuser" icon="close" variant="ghost" onPress={() => respond(r, false)} />
+              </View>
+            </Card>
+          ))}
+        </View>
+      ) : null}
+
       {/* À venir */}
       <View style={{ marginTop: spacing.sm }}>
         <SectionHeader title={`À venir · ${upcoming.length}`} />
