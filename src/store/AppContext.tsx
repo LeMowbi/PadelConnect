@@ -4,12 +4,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState as RNAppState } from 'react-native';
-import { type Club, type CustomClub, type PriceTier } from '@/data/clubs';
+import { setClubStatusMap, type Club, type CustomClub, type PriceTier } from '@/data/clubs';
 import {
   approveClubRequest as approveClubRequestRpc,
   createClub as createClubRpc,
   fetchClubOverrides,
+  fetchClubStatus,
   fetchServerClubs,
+  setBaseClubStatus as setBaseClubStatusRpc,
   setClubStatus as setClubStatusRpc,
   upsertClubOverride,
 } from '@/lib/clubsServer';
@@ -151,6 +153,7 @@ type AppState = {
   boostExpiry: Record<string, number>; // clubId → date d'expiration du boost (affichage)
   operatorPayments: Record<string, 'sent' | 'paid'>; // « clubId:AAAA-MM » → statut de règlement
   customClubs: CustomClub[]; // clubs inscrits via l'app (activation par l'opérateur)
+  clubStatus: Record<string, 'active' | 'coming_soon' | 'hidden'>; // statut piloté par l'opérateur (tout club)
   // RÔLE vérifié côté serveur (Supabase) — la VRAIE sécurité des espaces.
   //  - 'operator' : toi (PadelConnect). 'club' : un gérant. 'player' : par défaut.
   // Un joueur ne peut pas se promouvoir (protégé par un trigger côté serveur).
@@ -216,6 +219,7 @@ const initialState: AppState = {
   boostExpiry: {},
   operatorPayments: {},
   customClubs: [],
+  clubStatus: {},
   role: 'player',
   serverManagedClubId: null,
   serverUserId: null,
@@ -358,6 +362,8 @@ type AppContextType = {
   approveClubRequest: (requestId: string) => Promise<{ ok: boolean; clubId?: string }>;
   // Opérateur : statut d'un club serveur (Actif / Bientôt / masqué) et pré-chargement d'un club.
   operatorSetClubStatus: (clubId: string, status: 'active' | 'coming_soon' | 'hidden') => Promise<{ ok: boolean }>;
+  // Opérateur : statut piloté de N'IMPORTE QUEL club, y compris les 9 de base embarqués.
+  operatorSetBaseStatus: (clubId: string, status: 'active' | 'coming_soon' | 'hidden') => Promise<{ ok: boolean }>;
   operatorCreateClub: (input: {
     name: string;
     area: string;
@@ -425,7 +431,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         // On repart de l'état par défaut puis on superpose l'état persisté (champs connus).
-        if (raw) setState({ ...initialState, ...JSON.parse(raw) });
+        if (raw) {
+          const parsed = { ...initialState, ...JSON.parse(raw) } as AppState;
+          setClubStatusMap(parsed.clubStatus ?? {}); // statut « Bientôt » dès le 1er rendu
+          setState(parsed);
+        }
       } catch {
         // état par défaut
       } finally {
@@ -525,15 +535,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Réservations : le serveur est la source de vérité → on remplace le miroir local
       // par les résas pertinentes (les miennes ; club/opérateur : celles de leur périmètre,
       // via RLS), l'occupation de TOUS (disponibilité), et les clubs ajoutés côté serveur.
-      const [reservationsRes, occ, parts, serverClubs, overrides] = await Promise.all([
+      const [reservationsRes, occ, parts, serverClubs, overrides, clubStatus] = await Promise.all([
         fetchReservations(),
         fetchOccupancy(),
         fetchMyParticipations(userId),
         fetchServerClubs(),
         fetchClubOverrides(),
+        fetchClubStatus(),
       ]);
       if (!stillCurrent()) return; // déconnexion survenue pendant le chargement → on n'écrit rien
       const { active: activeParts, pending: pendingParts } = splitParticipations(parts);
+      setClubStatusMap(clubStatus); // registre lu dans data/clubs → statut « Bientôt » appliqué partout
       setState((s) => ({
         ...s,
         // En cas d'échec réseau on garde le miroir persisté (offline-friendly).
@@ -542,6 +554,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         participantReservationIds: activeParts,
         pendingInvitationIds: pendingParts,
         customClubs: mergeServerClubs(s.customClubs, serverClubs),
+        clubStatus,
         // Pages club éditées par les gérants (serveur) → visibles par tous. On fusionne au-dessus
         // des éventuelles surcharges locales (le serveur fait foi pour les clubs qu'il connaît).
         clubInfo: { ...s.clubInfo, ...overrides },
@@ -605,6 +618,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       void fetchServerClubs().then(
         (serverClubs) => ok() && setState((s) => ({ ...s, customClubs: mergeServerClubs(s.customClubs, serverClubs) })),
       );
+      // Statut piloté par l'opérateur (badges « Bientôt »/masquage de tout club) : on relit
+      // pour refléter une bascule décidée sur un autre appareil sans réinstaller.
+      void fetchClubStatus().then((clubStatus) => {
+        if (!ok()) return;
+        setClubStatusMap(clubStatus);
+        setState((s) => ({ ...s, clubStatus }));
+      });
       // Rafraîchit le RÔLE/profil : si l'opérateur vient d'accorder l'accès gérant (#39), le
       // gérant voit son Espace Club apparaître au retour dans l'app, sans réinstaller.
       void supabase
@@ -1188,6 +1208,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (ok) {
           const serverClubs = await fetchServerClubs();
           setState((s) => ({ ...s, customClubs: mergeServerClubs(s.customClubs, serverClubs) }));
+        }
+        return { ok };
+      },
+      // Opérateur : bascule le statut de N'IMPORTE QUEL club (y compris les 9 de base
+      // embarqués). On relit la table club_status, met à jour le registre lu par data/clubs
+      // (badges « Bientôt »/masquage appliqués partout) et l'état pour re-rendre.
+      operatorSetBaseStatus: async (clubId, status) => {
+        const ok = await setBaseClubStatusRpc(clubId, status);
+        if (ok) {
+          const clubStatus = await fetchClubStatus();
+          setClubStatusMap(clubStatus);
+          setState((s) => ({ ...s, clubStatus }));
         }
         return { ok };
       },

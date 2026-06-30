@@ -260,16 +260,30 @@ export type ClubOverrides = Record<
   Partial<Pick<Club, 'name' | 'area' | 'blurb' | 'type' | 'priceFrom' | 'priceTiers'>> & { contactPhone?: string }
 >;
 
+// Statut piloté par l'OPÉRATEUR (côté serveur, club_status), appliqué à N'IMPORTE QUEL club —
+// y compris les 9 de base. Registre module mis à jour par AppContext au chargement ; lu ici
+// dans applyInfo. Un changement déclenche un re-rendu via state.clubStatus (cf. AppContext).
+let clubStatusMap: Record<string, 'active' | 'coming_soon' | 'hidden'> = {};
+export function setClubStatusMap(m: Record<string, 'active' | 'coming_soon' | 'hidden'>): void {
+  clubStatusMap = m;
+}
+
 function applyInfo(club: Club, overrides?: ClubOverrides): Club & { contactPhone?: string } {
   const patch = overrides?.[club.id];
-  return patch ? { ...club, ...patch } : club;
+  const merged = patch ? { ...club, ...patch } : club;
+  // Statut opérateur : 'coming_soon' → « Bientôt » (non réservable) ; 'active' force réservable.
+  const status = clubStatusMap[club.id];
+  if (status === 'coming_soon') return { ...merged, comingSoon: true };
+  if (status === 'active') return { ...merged, comingSoon: false };
+  return merged;
 }
 
 // Clubs visibles par les JOUEURS : clubs de base + clubs serveur activés OU « Bientôt »
-// (ces derniers s'affichent avec un badge et ne sont pas réservables). On exclut seulement
-// les demandes locales « pending » (pas encore approuvées).
+// (ces derniers s'affichent avec un badge et ne sont pas réservables). On exclut les demandes
+// locales « pending » ET les clubs que l'opérateur a masqués (statut 'hidden').
 export function activeClubs(custom: CustomClub[], overrides?: ClubOverrides): Club[] {
   return [...clubs, ...custom.filter((c) => c.status === 'active' || c.status === 'coming_soon')]
+    .filter((c) => clubStatusMap[c.id] !== 'hidden')
     .map((c) => applyInfo(c, overrides))
     .sort((a, b) => a.name.localeCompare(b.name));
 }

@@ -5,7 +5,7 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Screen } from '@/components/Screen';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt } from '@/components/ui';
-import { activeClubs, findClub } from '@/data/clubs';
+import { activeClubs, clubs as baseClubs, findClub } from '@/data/clubs';
 import { canAccessOperator } from '@/lib/access';
 import { COMMISSION_RATE, isPlayed, useApp, type ServerClubRequest, type ServerSupportMessage } from '@/store/AppContext';
 import { addWeeks, dateKeyLabel, weekKeyOf, weekLabel } from '@/lib/days';
@@ -28,6 +28,7 @@ export default function Operateur() {
     setClubRequestStatus,
     approveClubRequest,
     operatorSetClubStatus,
+    operatorSetBaseStatus,
     operatorCreateClub,
     fetchSupportMessages,
     setSupportMessageStatus,
@@ -63,6 +64,17 @@ export default function Operateur() {
   const toggleClubStatus = async (clubId: string, current: boolean) => {
     // current = est « Bientôt » → on bascule vers Actif, et inversement.
     const { ok } = await operatorSetClubStatus(clubId, current ? 'active' : 'coming_soon');
+    if (!ok) toast.show('Changement impossible — réessaie', { icon: 'alert-circle' });
+  };
+
+  // ── Clubs de base (les 9 embarqués) : statut piloté Actif ⇄ Bientôt côté serveur ──
+  const [baseBusy, setBaseBusy] = useState<string | null>(null);
+  const toggleBaseStatus = async (clubId: string, comingSoon: boolean) => {
+    if (baseBusy) return;
+    setBaseBusy(clubId);
+    // comingSoon = actuellement « Bientôt » → on active ; sinon on met en « Bientôt ».
+    const { ok } = await operatorSetBaseStatus(clubId, comingSoon ? 'active' : 'coming_soon');
+    setBaseBusy(null);
     if (!ok) toast.show('Changement impossible — réessaie', { icon: 'alert-circle' });
   };
 
@@ -550,6 +562,42 @@ export default function Operateur() {
             />
           </Card>
         ))}
+      </View>
+
+      {/* Clubs de base embarqués (9) : bascule Actif ⇄ Bientôt, visible par TOUS les joueurs. */}
+      <View style={{ marginTop: spacing.xl }}>
+        <SectionHeader title={`Clubs de base · ${baseClubs.length}`} />
+        <Card>
+          <Txt variant="small" color={colors.textMuted}>
+            Mets un club en « Bientôt » s'il n'est pas encore prêt à recevoir des réservations : il reste visible (badge « Bientôt », non
+            réservable) pour tous les joueurs jusqu'à ce que tu le réactives.
+          </Txt>
+        </Card>
+        {baseClubs.map((c) => {
+          const comingSoon = state.clubStatus[c.id] === 'coming_soon';
+          return (
+            <Card key={c.id} style={{ marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+              <IconCircle icon="business" color={colors.green} bg={colors.greenSoft} size={40} />
+              <View style={{ flex: 1 }}>
+                <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
+                  {c.name}
+                </Txt>
+                <Txt variant="muted" numberOfLines={1}>
+                  {c.area}
+                </Txt>
+              </View>
+              <Tag label={comingSoon ? 'Bientôt' : 'Actif'} tone={comingSoon ? 'purple' : 'green'} />
+              <Button
+                size="sm"
+                label={comingSoon ? 'Activer' : 'Mettre en attente'}
+                icon={comingSoon ? 'checkmark' : 'time'}
+                variant={comingSoon ? 'primary' : 'ghost'}
+                disabled={baseBusy === c.id}
+                onPress={() => toggleBaseStatus(c.id, comingSoon)}
+              />
+            </Card>
+          );
+        })}
       </View>
 
       {/* Signalements / messages d'aide envoyés par les joueurs (serveur). */}

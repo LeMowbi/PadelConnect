@@ -91,6 +91,21 @@ export async function setClubStatus(clubId: string, status: 'active' | 'coming_s
   return !error && data === true;
 }
 
+// Statut piloté par l'opérateur pour N'IMPORTE QUEL club (y compris les 9 de base) → clubId → statut.
+export async function fetchClubStatus(): Promise<Record<string, 'active' | 'coming_soon' | 'hidden'>> {
+  const { data, error } = await supabase.from('club_status').select('club_id, status');
+  if (error) return {};
+  const out: Record<string, 'active' | 'coming_soon' | 'hidden'> = {};
+  for (const r of (data ?? []) as { club_id: string; status: 'active' | 'coming_soon' | 'hidden' }[]) out[r.club_id] = r.status;
+  return out;
+}
+
+// Opérateur : bascule le statut d'un club de base (ou tout club) — visible par tous.
+export async function setBaseClubStatus(clubId: string, status: 'active' | 'coming_soon' | 'hidden'): Promise<boolean> {
+  const { data, error } = await supabase.rpc('set_base_club_status', { p_club_id: clubId, p_status: status });
+  return !error && data === true;
+}
+
 // Opérateur : pré-charge un club « Bientôt » sans demande préalable. Renvoie l'id créé.
 export async function createClub(input: {
   name: string;
