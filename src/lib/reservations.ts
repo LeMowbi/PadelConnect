@@ -96,9 +96,12 @@ export async function insertReservation(
   return { ok: true, reservation: rowToReservation(data as Row) };
 }
 
-export async function deleteReservationRow(id: string): Promise<boolean> {
-  const { error } = await supabase.from('reservations').delete().eq('id', id);
-  return !error;
+// Annulation : passe par la fonction serveur (SECURITY DEFINER) qui vérifie l'auteur ET le
+// délai des 5h (règle non contournable côté serveur) et met la résa en statut 'cancelled'
+// (le créneau se libère, mais la trace reste pour que le club voie l'annulation).
+export async function cancelReservationRow(id: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('cancel_reservation', { p_id: id });
+  return !error && data === true;
 }
 
 export async function setClubConfirmedRow(id: string, value: boolean): Promise<boolean> {
@@ -108,10 +111,15 @@ export async function setClubConfirmedRow(id: string, value: boolean): Promise<b
   return !error && data === true;
 }
 
-// Mes réservations (RLS) — pour un compte club/opérateur, la RLS renvoie aussi celles
-// de son club / toutes. On trie par date de créneau.
+// Mes réservations ACTIVES (RLS) — pour un compte club/opérateur, la RLS renvoie aussi
+// celles de son club / toutes. On exclut les annulées (status='cancelled') : elles ne
+// comptent ni dans la liste joueur ni dans la base de commission. Trié par date de créneau.
 export async function fetchReservations(): Promise<{ ok: boolean; reservations: Reservation[] }> {
-  const { data, error } = await supabase.from('reservations').select('*').order('starts_at', { ascending: true });
+  const { data, error } = await supabase
+    .from('reservations')
+    .select('*')
+    .eq('status', 'booked')
+    .order('starts_at', { ascending: true });
   if (error) return { ok: false, reservations: [] };
   return { ok: true, reservations: (data ?? []).map((r) => rowToReservation(r as Row)) };
 }

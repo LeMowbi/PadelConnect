@@ -10,7 +10,7 @@ import type { Competition } from '@/data/competitions';
 import type { Review } from '@/data/reviews';
 import { type Friend } from '@/data/user';
 import {
-  deleteReservationRow,
+  cancelReservationRow,
   fetchMyParticipations,
   fetchOccupancy,
   fetchReservations,
@@ -843,9 +843,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       cancelReservation: async (id) => {
         const res = state.reservations.find((r) => r.id === id);
         // Serveur d'abord (si connecté et résa serveur) : on n'efface le miroir qu'au succès.
+        // La fonction serveur refuse l'annulation à moins de 5h (règle non contournable).
         if (state.serverUserId && res) {
-          const ok = await deleteReservationRow(id);
-          if (!ok) return false; // échec réseau → on ne ment pas à l'UI
+          const ok = await cancelReservationRow(id);
+          if (!ok) return false; // refus serveur (délai 5h) ou réseau → on ne ment pas à l'UI
         }
         void cancelMatchReminder(id); // on retire son rappel local
 
