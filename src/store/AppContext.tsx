@@ -165,7 +165,6 @@ type AppState = {
   blockedSlots: BlockedSlot[]; // créneaux fermés hors app par les clubs
   operatorNews: OperatorNews | null; // actu d'accueil publiée par l'opérateur
   dismissedNewsId: string | null; // id de l'actu fermée par le joueur (réapparaît si nouvelle)
-  followed: Record<string, { name: string; level?: number; favoriteClub?: string }>; // joueurs suivis
 };
 
 // 3 chiffres, pas plus : parties jouées (auto), tournois joués, tournois gagnés.
@@ -239,7 +238,6 @@ const initialState: AppState = {
     subtitle: "Réserve ton terrain en 2 minutes — tous les clubs d'Abidjan.",
   },
   dismissedNewsId: null,
-  followed: {},
 };
 
 type AppContextType = {
@@ -352,7 +350,6 @@ type AppContextType = {
   setOperatorNews: (news: { title: string; subtitle?: string; link?: string }) => void;
   removeOperatorNews: () => void; // retire l'actu d'accueil publiée
   dismissNews: (id: string) => void;
-  toggleFollow: (id: string, info: { name: string; level?: number; favoriteClub?: string }) => void;
   resetAll: () => void;
 };
 
@@ -445,7 +442,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               compRegistrations: {},
               compResults: {},
               officialResults: [],
-              followed: {},
               level: initialState.level,
             },
       );
@@ -795,7 +791,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           compRegistrations: {},
           compResults: {},
           officialResults: [],
-          followed: {},
           operatorUnlocked: false,
         }));
       },
@@ -1232,13 +1227,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }),
       removeOperatorNews: () => setState((s) => ({ ...s, operatorNews: null })),
       dismissNews: (id) => setState((s) => ({ ...s, dismissedNewsId: id })),
-      toggleFollow: (id, info) =>
-        setState((s) => {
-          const followed = { ...s.followed };
-          if (followed[id]) delete followed[id];
-          else followed[id] = info;
-          return { ...s, followed };
-        }),
       resetAll: () => {
         // Réinitialisation TOTALE : on coupe la session serveur, on efface les rappels et
         // la clé persistée, puis on revient à l'état seed complet (≈ première ouverture).

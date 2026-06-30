@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 import { Avatar } from './Avatar';
 import { BottomSheet } from './BottomSheet';
-import { Button, Tag, Txt } from './ui';
+import { Tag, Txt } from './ui';
 import { findClub } from '@/data/clubs';
 import { levelLabel } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
@@ -18,11 +18,10 @@ export type PlayerLike = {
   isTeam?: boolean;
 };
 
-// Mini-fiche joueur en bottom sheet : niveau, stats, club favori + bouton « Suivre ».
+// Mini-fiche joueur en bottom sheet : niveau, stats, club favori.
 export function PlayerSheet({ player, onClose }: { player: PlayerLike | null; onClose: () => void }) {
-  const { state, toggleFollow } = useApp();
+  const { state } = useApp();
   const club = player?.favoriteClubId ? findClub(player.favoriteClubId, state.customClubs, state.clubInfo) : undefined;
-  const following = player ? !!state.followed[player.id] : false;
 
   return (
     <BottomSheet
@@ -42,7 +41,7 @@ export function PlayerSheet({ player, onClose }: { player: PlayerLike | null; on
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
             <Avatar name={player.name} size={48} />
             <View style={{ flex: 1 }}>
-              {player.level !== undefined ? <Tag label={`Niveau ${player.level.toFixed(2)}`} tone="blue" icon="ribbon" /> : null}
+              {player.level !== undefined ? <Tag label={`Niveau ${player.level.toFixed(2)}`} tone="amber" icon="ribbon" /> : null}
               {club ? (
                 <Txt variant="small" color={colors.textMuted} style={{ marginTop: 4 }}>
                   Club favori : {club.name}
@@ -56,19 +55,6 @@ export function PlayerSheet({ player, onClose }: { player: PlayerLike | null; on
               <Stat value={player.tournamentsPlayed ?? 0} label="Tournois joués" />
               <Stat value={player.tournamentsWon ?? 0} label="Tournois gagnés" />
             </View>
-          ) : null}
-
-          <Button
-            label={following ? 'Suivi ✓' : 'Suivre'}
-            icon={following ? 'checkmark' : 'person-add'}
-            variant={following ? 'secondary' : 'primary'}
-            onPress={() => toggleFollow(player.id, { name: player.name, level: player.level, favoriteClub: club?.name })}
-            full
-          />
-          {following ? (
-            <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center' }}>
-              Apparaît dans « Suivis » sur ton écran Amis.
-            </Txt>
           ) : null}
         </View>
       ) : null}
