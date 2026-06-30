@@ -16,6 +16,7 @@ import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { isPlayed, useApp } from '@/store/AppContext';
 import { deleteMyReview, fetchClubReviews, replyToReview, submitReview, type ServerReview } from '@/lib/reviewsServer';
 import { openWhatsApp } from '@/lib/contact';
+import { hapticSuccess } from '@/lib/haptics';
 import { fcfa, initials } from '@/lib/format';
 import { groupTiersByLabel, minPrice, priceTiersFor } from '@/lib/pricing';
 import { shareClub } from '@/lib/share';
@@ -124,6 +125,7 @@ export default function ClubDetail() {
     setRating(0);
     setText('');
     setSent(true);
+    hapticSuccess();
     loadReviews();
   };
 

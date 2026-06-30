@@ -10,6 +10,7 @@ import { seedCompetitions } from '@/data/competitions';
 import { useToast } from '@/components/Toast';
 import { isPlayed, useApp, type Reservation } from '@/store/AppContext';
 import { openWhatsApp } from '@/lib/contact';
+import { hapticSuccess } from '@/lib/haptics';
 import { dayKey } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
 import { openMaps } from '@/lib/maps';
@@ -76,8 +77,10 @@ export default function ReservationsScreen() {
 
   const respond = async (r: Reservation, accept: boolean) => {
     const ok = await respondInvitation(r.id, accept);
-    if (ok) toast.show(accept ? 'Invitation acceptée ✅' : 'Invitation refusée');
-    else toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
+    if (ok) {
+      if (accept) hapticSuccess();
+      toast.show(accept ? 'Invitation acceptée ✅' : 'Invitation refusée');
+    } else toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
   };
 
   return (

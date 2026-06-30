@@ -13,6 +13,7 @@ import { Button, Card, EmptyState, Txt, type IconName } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { openWhatsApp } from '@/lib/contact';
+import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { courtsFor, freeCourts, hasCompetition, openSlotsFor, type AvailCtx } from '@/lib/availability';
 import { nextDays, slotTimestamp, type DayOption } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
@@ -126,10 +127,13 @@ export default function ReserverScreen() {
       invited,
     });
     setSubmitting(false);
-    if (ok) setDone(true);
-    else {
+    if (ok) {
+      hapticSuccess();
+      setDone(true);
+    } else {
       // Terrain pris entre-temps (autre joueur / conflit serveur) : on prévient et on
       // réinitialise la pré-sélection pour en choisir un autre.
+      hapticWarning();
       setCourt(null);
       toast.show('Ce terrain vient d’être pris — choisis-en un autre', { icon: 'alert-circle' });
     }
