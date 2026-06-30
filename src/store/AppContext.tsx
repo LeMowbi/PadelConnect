@@ -11,6 +11,8 @@ import {
   fetchClubOverrides,
   fetchClubStatus,
   fetchServerClubs,
+  grantClubAccessByPhone as grantClubAccessByPhoneRpc,
+  revokeClubAccessByPhone as revokeClubAccessByPhoneRpc,
   setBaseClubStatus as setBaseClubStatusRpc,
   setClubStatus as setClubStatusRpc,
   upsertClubOverride,
@@ -364,6 +366,9 @@ type AppContextType = {
   operatorSetClubStatus: (clubId: string, status: 'active' | 'coming_soon' | 'hidden') => Promise<{ ok: boolean }>;
   // Opérateur : statut piloté de N'IMPORTE QUEL club, y compris les 9 de base embarqués.
   operatorSetBaseStatus: (clubId: string, status: 'active' | 'coming_soon' | 'hidden') => Promise<{ ok: boolean }>;
+  // Opérateur : accorde / retire l'accès « Espace Club » à un joueur via son numéro (tout club).
+  operatorGrantClubAccess: (phone: string, clubId: string) => Promise<{ ok: boolean; name?: string }>;
+  operatorRevokeClubAccess: (phone: string) => Promise<{ ok: boolean; name?: string }>;
   operatorCreateClub: (input: {
     name: string;
     area: string;
@@ -1223,6 +1228,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         return { ok };
       },
+      // Opérateur : donne l'accès « Espace Club » à un joueur (par numéro) pour un club donné.
+      // Le gérant le voit apparaître au prochain retour dans l'app (rafraîchissement du rôle).
+      operatorGrantClubAccess: async (phone, clubId) => grantClubAccessByPhoneRpc(phone, clubId),
+      operatorRevokeClubAccess: async (phone) => revokeClubAccessByPhoneRpc(phone),
       // Opérateur : pré-charge un club « Bientôt » côté serveur (il apparaît aussitôt en liste).
       operatorCreateClub: async (input) => {
         const res = await createClubRpc(input);

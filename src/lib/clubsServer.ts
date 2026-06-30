@@ -106,6 +106,21 @@ export async function setBaseClubStatus(clubId: string, status: 'active' | 'comi
   return !error && data === true;
 }
 
+// Opérateur : donne l'accès « Espace Club » à un joueur (par son numéro) pour un club donné —
+// n'importe quel club, y compris les 9 de base. Renvoie le nom du joueur promu si trouvé.
+export async function grantClubAccessByPhone(phone: string, clubId: string): Promise<{ ok: boolean; name?: string }> {
+  const { data, error } = await supabase.rpc('grant_club_access_by_phone', { p_phone: phone.trim(), p_club_id: clubId });
+  if (error || !data) return { ok: false };
+  return { ok: true, name: data as string };
+}
+
+// Opérateur : retire l'accès gérant d'un joueur (par son numéro). Renvoie son nom si trouvé.
+export async function revokeClubAccessByPhone(phone: string): Promise<{ ok: boolean; name?: string }> {
+  const { data, error } = await supabase.rpc('revoke_club_access_by_phone', { p_phone: phone.trim() });
+  if (error || !data) return { ok: false };
+  return { ok: true, name: data as string };
+}
+
 // Opérateur : pré-charge un club « Bientôt » sans demande préalable. Renvoie l'id créé.
 export async function createClub(input: {
   name: string;
