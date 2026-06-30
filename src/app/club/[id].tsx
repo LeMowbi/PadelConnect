@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { ClubPhoto } from '@/components/ClubPhoto';
 import { ContactButtons } from '@/components/ContactButtons';
@@ -13,8 +13,8 @@ import { StickyBar } from '@/components/StickyBar';
 import { clubGallery, defaultCourts, findClub, offersForClub } from '@/data/clubs';
 import { coaches } from '@/data/coaches';
 import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
-import { ratingFor, reviewsFor } from '@/data/reviews';
 import { isPlayed, useApp } from '@/store/AppContext';
+import { deleteMyReview, fetchClubReviews, replyToReview, submitReview, type ServerReview } from '@/lib/reviewsServer';
 import { openWhatsApp } from '@/lib/contact';
 import { fcfa, initials } from '@/lib/format';
 import { groupTiersByLabel, minPrice, priceTiersFor } from '@/lib/pricing';
@@ -22,10 +22,16 @@ import { shareClub } from '@/lib/share';
 import { openMaps } from '@/lib/maps';
 import { colors, radius, spacing } from '@/theme';
 
+// Date d'un avis serveur (ISO) → libellé court FR ; repli silencieux si la date est invalide.
+function reviewDate(iso: string): string {
+  const t = new Date(iso).getTime();
+  return Number.isFinite(t) ? new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+}
+
 export default function ClubDetail() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { state, addReview, toggleFavorite, myReservations } = useApp();
+  const { state, toggleFavorite, myReservations } = useApp();
   const club = findClub(id, state.customClubs, state.clubInfo);
 
   const [rating, setRating] = useState(0);
@@ -36,7 +42,24 @@ export default function ClubDetail() {
   const [viewer, setViewer] = useState<number | null>(null); // photo ouverte en plein écran
   const [tierTab, setTierTab] = useState(0); // onglet de tarifs actif (plages nommées)
   const [showAllReviews, setShowAllReviews] = useState(false); // liste d'avis repliée par défaut
+  const [serverReviews, setServerReviews] = useState<ServerReview[]>([]);
+  const [replyTarget, setReplyTarget] = useState<string | null>(null); // avis auquel le gérant répond
+  const [replyDraft, setReplyDraft] = useState('');
   const { width: winW } = useWindowDimensions();
+
+  // Avis VÉRIFIÉS du serveur : chargés à l'ouverture (effet) et rechargés après chaque action
+  // via loadReviews (fonction simple, utilisée seulement dans des handlers → pas de mémo).
+  const clubId = club?.id;
+  const loadReviews = () => {
+    if (clubId) void fetchClubReviews(clubId).then(setServerReviews);
+  };
+  useEffect(() => {
+    let alive = true;
+    if (clubId) void fetchClubReviews(clubId).then((r) => alive && setServerReviews(r));
+    return () => {
+      alive = false;
+    };
+  }, [clubId]);
 
   if (!club) {
     return (
@@ -65,12 +88,16 @@ export default function ClubDetail() {
       .map((c) => ({ id: c.id, name: c.name, sub: c.level, phone: c.phone })),
     ...(state.clubCoaches[club.id] ?? []).map((c) => ({ id: c.id, name: c.name, sub: c.specialty, phone: c.phone })),
   ];
-  // Une seule source de vérité : la liste (avis utilisateur en tête + avis générés).
-  const reviews = reviewsFor(club, state.userReviews);
+  // Source de vérité : les avis VÉRIFIÉS du serveur (un joueur ne peut noter qu'après avoir joué).
+  const reviews = serverReviews;
   // Liste repliée : on n'affiche que les premiers avis, avec un bouton « Voir tout ».
   const REVIEWS_PREVIEW = 3;
   const reviewsShown = showAllReviews ? reviews : reviews.slice(0, REVIEWS_PREVIEW);
-  const { rating: avgRating, count: ratingCount } = ratingFor(club, state.userReviews);
+  const ratingCount = reviews.length;
+  const avgRating = ratingCount ? Math.round((reviews.reduce((s, r) => s + r.rating, 0) / ratingCount) * 10) / 10 : 0;
+  // Mon avis (modifiable / supprimable) et mon rôle de gérant de CE club (pour répondre).
+  const myReview = state.serverUserId ? reviews.find((r) => r.userId === state.serverUserId) : undefined;
+  const isManager = state.serverManagedClubId === club.id || state.role === 'operator';
   // Plages tarifaires définies par le gérant (vide → tarif unique).
   const tiers = priceTiersFor(club);
   // Plages NOMMÉES → onglets (sinon liste à plat). Purement présentation.
@@ -81,17 +108,48 @@ export default function ClubDetail() {
   // résas passées à ce club). Sinon, le formulaire laisse place à une invitation à jouer.
   const hasPlayedHere = myReservations.some((r) => r.clubId === club.id && isPlayed(r));
 
-  const submit = () => {
+  const submit = async () => {
     if (!hasPlayedHere) return; // garde-fou : pas de note sans partie jouée
     if (rating === 0) {
       setNoteError(true); // plus de tap silencieux : on demande la note
       return;
     }
     setNoteError(false);
-    addReview(club.id, rating, text);
+    const ok = await submitReview(club.id, rating, text);
+    if (!ok) {
+      setToast('Avis impossible — il faut avoir joué ici.');
+      setTimeout(() => setToast(null), 2400);
+      return;
+    }
     setRating(0);
     setText('');
     setSent(true);
+    loadReviews();
+  };
+
+  // Modifier mon avis : on repré-remplit le formulaire avec ma note/mon texte.
+  const editMyReview = () => {
+    if (!myReview) return;
+    setRating(myReview.rating);
+    setText(myReview.text);
+    setSent(false);
+  };
+  const removeMyReview = async () => {
+    if (!state.serverUserId) return;
+    const ok = await deleteMyReview(club.id, state.serverUserId);
+    if (ok) loadReviews();
+  };
+  // Gérant : publier / retirer une réponse à un avis.
+  const sendReply = async (reviewId: string) => {
+    const ok = await replyToReview(reviewId, replyDraft);
+    if (ok) {
+      setReplyTarget(null);
+      setReplyDraft('');
+      loadReviews();
+    } else {
+      setToast('Réponse impossible — réessaie.');
+      setTimeout(() => setToast(null), 2400);
+    }
   };
 
   return (
@@ -467,29 +525,95 @@ export default function ClubDetail() {
                 multiline
                 style={styles.input}
               />
-              <Button label="Publier l'avis" icon="send" onPress={submit} />
+              <Button label={myReview ? 'Mettre à jour mon avis' : "Publier l'avis"} icon="send" onPress={submit} />
             </>
           )}
         </Card>
 
         {reviews.length === 0 ? (
           <Txt variant="muted" style={{ marginTop: spacing.md }}>
-            Aucun avis pour l’instant — sois le premier !
+            Aucun avis pour l’instant — sois le premier à en laisser un après avoir joué ici !
           </Txt>
         ) : (
           <>
             {reviewsShown.map((r) => (
               <Card key={r.id} style={{ marginTop: spacing.md }}>
                 <View style={styles.reviewHead}>
-                  <Txt variant="h3">{r.author}</Txt>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                    <Txt variant="h3" numberOfLines={1} style={{ flexShrink: 1 }}>
+                      {r.author}
+                    </Txt>
+                    <Tag label="Vérifié" tone="green" icon="shield-checkmark" />
+                  </View>
                   <Txt variant="small" color={colors.textFaint}>
-                    {r.date}
+                    {reviewDate(r.createdAt)}
                   </Txt>
                 </View>
                 <View style={{ marginVertical: 6 }}>
                   <RatingStars value={r.rating} size={14} />
                 </View>
-                <Txt variant="body">{r.text}</Txt>
+                {r.text ? <Txt variant="body">{r.text}</Txt> : null}
+
+                {/* Réponse publique du club */}
+                {r.reply ? (
+                  <View style={styles.replyBox}>
+                    <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
+                      Réponse du club
+                    </Txt>
+                    <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
+                      {r.reply}
+                    </Txt>
+                  </View>
+                ) : null}
+
+                {/* Mon avis : le modifier / le supprimer (#85) */}
+                {state.serverUserId === r.userId ? (
+                  <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                    <Button size="sm" label="Modifier" variant="ghost" icon="create-outline" onPress={editMyReview} />
+                    <Button size="sm" label="Supprimer" variant="ghost" icon="trash-outline" onPress={removeMyReview} />
+                  </View>
+                ) : null}
+
+                {/* Gérant du club : répondre à l'avis (#85) */}
+                {isManager && state.serverUserId !== r.userId ? (
+                  replyTarget === r.id ? (
+                    <View style={{ marginTop: spacing.sm, gap: spacing.sm }}>
+                      <TextInput
+                        value={replyDraft}
+                        onChangeText={setReplyDraft}
+                        placeholder="Ta réponse en tant que club…"
+                        placeholderTextColor={colors.textFaint}
+                        multiline
+                        style={styles.input}
+                      />
+                      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                        <Button size="sm" label="Publier la réponse" icon="send" onPress={() => sendReply(r.id)} />
+                        <Button
+                          size="sm"
+                          label="Annuler"
+                          variant="ghost"
+                          onPress={() => {
+                            setReplyTarget(null);
+                            setReplyDraft('');
+                          }}
+                        />
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={{ marginTop: spacing.sm }}>
+                      <Button
+                        size="sm"
+                        label={r.reply ? 'Modifier la réponse' : 'Répondre'}
+                        variant="ghost"
+                        icon="chatbubble-outline"
+                        onPress={() => {
+                          setReplyTarget(r.id);
+                          setReplyDraft(r.reply ?? '');
+                        }}
+                      />
+                    </View>
+                  )
+                ) : null}
               </Card>
             ))}
             {reviews.length > REVIEWS_PREVIEW ? (
@@ -604,7 +728,15 @@ const styles = StyleSheet.create({
     marginVertical: spacing.md,
     fontSize: 15,
   },
-  reviewHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  reviewHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
+  replyBox: {
+    marginTop: spacing.sm,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.signature,
+  },
   coachRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   eventRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xs },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

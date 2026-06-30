@@ -314,7 +314,6 @@ type AppContextType = {
   ) => void;
   setRemindersOn: (on: boolean) => void;
   setReserverView: (v: 'Par heure' | 'Par club') => void;
-  addReview: (clubId: string, rating: number, text: string) => void;
   addCompetition: (c: Omit<Competition, 'id' | 'createdByMe'>) => void;
   approveCompetition: (id: string) => void; // le club hôte valide un tournoi créé par un joueur
   deleteCompetition: (id: string) => void; // annulation / refus d'un tournoi (créateur ou club hôte)
@@ -862,14 +861,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         void syncMatchReminders(upcoming, on);
       },
       setReserverView: (v) => setState((s) => ({ ...s, reserverView: v })),
-      addReview: (clubId, rating, text) =>
-        setState((s) => ({
-          ...s,
-          userReviews: [
-            { id: uid(), clubId, author: 'Vous', rating, text: text.trim() || 'Bonne expérience.', date: "À l'instant" },
-            ...s.userReviews,
-          ],
-        })),
       addCompetition: (c) => setState((s) => ({ ...s, myCompetitions: [{ ...c, id: uid(), createdByMe: true }, ...s.myCompetitions] })),
       // Le club hôte valide un tournoi créé par un joueur (« en attente » → visible).
       approveCompetition: (id) =>
