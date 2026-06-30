@@ -28,6 +28,7 @@ import {
 } from '@/lib/reservations';
 import { cancelMatchReminder, scheduleMatchReminder, syncMatchReminders } from '@/lib/notifications';
 import { registerPushToken } from '@/lib/push';
+import { uploadAvatar } from '@/lib/avatar';
 import { phoneToAuthEmail, supabase } from '@/lib/supabase';
 import { ACCENTS } from '@/theme';
 
@@ -687,8 +688,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateAccount: (patch) => {
         setState((s) => ({ ...s, account: s.account ? { ...s.account, ...patch } : s.account }));
         // Persistance SERVEUR des champs texte modifiés (si connecté) : sans ça, ils étaient
-        // écrasés par l'ancienne valeur serveur au prochain chargement. La photo reste locale
-        // (conservée par le repli de loadSession ; l'upload vers le stockage viendra ensuite).
+        // écrasés par l'ancienne valeur serveur au prochain chargement.
         const userId = state.serverUserId;
         if (!userId) return;
         const row: Record<string, string | null> = {};
@@ -698,6 +698,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (patch.birthDate !== undefined) row.birth_date = patch.birthDate?.trim() || null;
         if (patch.gender !== undefined) row.gender = patch.gender ?? null;
         if (Object.keys(row).length > 0) void supabase.from('profiles').update(row).eq('id', userId);
+        // PHOTO : on l'envoie au stockage (survit à une réinstallation, synchro multi-appareils).
+        if ('photoUri' in patch) {
+          const uri = patch.photoUri;
+          if (uri && !uri.startsWith('http')) {
+            // Nouvelle photo locale → upload, puis on remplace l'URI locale par l'URL publique.
+            void uploadAvatar(userId, uri).then((url) => {
+              if (!url) return;
+              setState((s) => ({ ...s, account: s.account ? { ...s.account, photoUri: url } : s.account }));
+              void supabase.from('profiles').update({ photo_uri: url }).eq('id', userId);
+            });
+          } else {
+            // Photo retirée (uri vide) ou déjà une URL serveur → on reflète tel quel côté serveur.
+            void supabase
+              .from('profiles')
+              .update({ photo_uri: uri ?? null })
+              .eq('id', userId);
+          }
+        }
       },
       // ── Inscription par E-MAIL (parcours principal) ────────────────────────
       // E-mail réel + mot de passe ; le téléphone est conservé (sans SMS). Avec la
