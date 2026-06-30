@@ -9,8 +9,12 @@ export type Competition = {
   organizer: string;
   clubId?: string;
   clubName?: string;
-  date: string; // libellé d'affichage
-  dateKey: string; // identité stable du jour (AAAA-MM-JJ) — base du blocage des terrains
+  date: string; // libellé d'affichage (jour de DÉBUT)
+  dateKey: string; // identité stable du jour de début (AAAA-MM-JJ) — base du blocage des terrains
+  // Tournoi sur PLUSIEURS jours (ex. americano sur un week-end) : jour de fin optionnel.
+  // Absent ou égal au jour de début → événement d'une seule journée.
+  endDate?: string;
+  endDateKey?: string;
   format: string;
   level: string;
   reward: string; // récompense / dotation
@@ -27,6 +31,11 @@ export type Competition = {
 // Tournoi visible publiquement (listes, accueil, fiche club) : tout sauf « en attente ».
 export function isTournamentPublic(c: Competition): boolean {
   return c.status !== 'pending';
+}
+
+// Libellé de date : « du X au Y » si le tournoi s'étale sur plusieurs jours, sinon le jour seul.
+export function compDateLabel(c: Competition): string {
+  return c.endDateKey && c.endDateKey !== c.dateKey ? `${c.date} → ${c.endDate}` : c.date;
 }
 
 // Jours réels (relatifs au lancement) pour que l'affichage ET le blocage des terrains

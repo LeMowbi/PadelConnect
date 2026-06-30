@@ -64,6 +64,7 @@ export default function NouvelleCompetition() {
   const [reward, setReward] = useState('');
   const [fee, setFee] = useState('');
   const [day, setDay] = useState<DayOption | null>(null);
+  const [endDay, setEndDay] = useState<DayOption | null>(null); // fin optionnelle (tournoi multi-jours)
   const [hostId, setHostId] = useState<string | null>(null);
   const [format, setFormat] = useState(COMP_FORMATS[2]);
   const [level, setLevel] = useState('Tous niveaux');
@@ -93,6 +94,9 @@ export default function NouvelleCompetition() {
       clubName: host?.name,
       date: day!.label,
       dateKey: day!.key,
+      // Fin seulement si elle est postérieure au début (tournoi multi-jours).
+      endDate: endDay && endDay.key > day!.key ? endDay.label : undefined,
+      endDateKey: endDay && endDay.key > day!.key ? endDay.key : undefined,
       format,
       level,
       reward: reward.trim(),
@@ -138,6 +142,7 @@ export default function NouvelleCompetition() {
               active={d.key === day?.key}
               onPress={() => {
                 setDay(d);
+                if (endDay && endDay.key <= d.key) setEndDay(null); // fin devenue invalide → on réinitialise
                 if (errors.date) setErrors((cur) => ({ ...cur, date: undefined }));
               }}
             />
@@ -149,6 +154,24 @@ export default function NouvelleCompetition() {
           </Txt>
         ) : null}
       </View>
+
+      {/* Fin optionnelle — pour un tournoi sur plusieurs jours (ex. americano sur un week-end).
+          On ne propose que des jours STRICTEMENT après le début ; « 1 seul jour » remet à zéro. */}
+      {day ? (
+        <View style={{ marginTop: spacing.lg }}>
+          <Txt variant="label" color={colors.textFaint}>
+            Fin (optionnel — plusieurs jours)
+          </Txt>
+          <View style={styles.wrap}>
+            <Chip label="1 seul jour" active={!endDay} onPress={() => setEndDay(null)} />
+            {dates
+              .filter((d) => d.key > day.key)
+              .map((d) => (
+                <Chip key={d.key} label={d.label} active={d.key === endDay?.key} onPress={() => setEndDay(d)} />
+              ))}
+          </View>
+        </View>
+      ) : null}
 
       <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
         Format

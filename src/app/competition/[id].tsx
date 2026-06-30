@@ -7,7 +7,7 @@ import { Chip } from '@/components/Chip';
 import { PlayerSheet, type PlayerLike } from '@/components/PlayerSheet';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
-import { demoTeams, formatFee, seedCompetitions, teamCount } from '@/data/competitions';
+import { compDateLabel, demoTeams, formatFee, seedCompetitions, teamCount } from '@/data/competitions';
 import { dayKey } from '@/lib/days';
 import { shareCompetition } from '@/lib/share';
 import { useApp } from '@/store/AppContext';
@@ -101,7 +101,7 @@ export default function CompetitionDetail() {
         <View style={styles.heroMetaRow}>
           <Ionicons name="calendar-outline" size={14} color={colors.white} style={{ opacity: 0.85 }} />
           <Txt variant="small" color={colors.white} style={styles.heroMeta}>
-            {comp.date}
+            {compDateLabel(comp)}
             {comp.clubName ? ` · ${comp.clubName}` : ''}
           </Txt>
         </View>
@@ -146,7 +146,7 @@ export default function CompetitionDetail() {
       ) : null}
 
       <Card style={{ marginTop: spacing.md }}>
-        <Info icon="calendar-outline" label="Date" value={comp.date} />
+        <Info icon="calendar-outline" label="Date" value={compDateLabel(comp)} />
         <Info icon="git-network-outline" label="Format" value={comp.format} />
         <Info icon="podium-outline" label="Niveau" value={comp.level} />
         <Info icon="cash-outline" label="Inscription" value={formatFee(comp.fee)} />

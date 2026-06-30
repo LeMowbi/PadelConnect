@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { Card, Tag, Txt } from './ui';
-import { formatFee, teamCount, type Competition } from '@/data/competitions';
+import { compDateLabel, formatFee, teamCount, type Competition } from '@/data/competitions';
 import { dayKey } from '@/lib/days';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
@@ -33,7 +33,7 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
           {comp.official ? <Tag label="Officiel" tone="amber" icon="shield-checkmark" /> : null}
           {comp.status === 'pending' ? <Tag label="En attente" tone="coral" icon="hourglass-outline" /> : null}
         </View>
-        <Txt variant="muted">{comp.date}</Txt>
+        <Txt variant="muted">{compDateLabel(comp)}</Txt>
       </View>
 
       <Txt variant="h3" style={{ marginTop: spacing.sm }}>
