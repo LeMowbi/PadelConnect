@@ -7,6 +7,7 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { Button, EmptyState, SectionHeader } from '@/components/ui';
 import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { dayKey } from '@/lib/days';
+import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useApp } from '@/store/AppContext';
 import { spacing } from '@/theme';
 
@@ -15,6 +16,7 @@ const TABS = ['Tous', 'Par les clubs', 'Par les joueurs'] as const;
 export default function CompetitionsScreen() {
   const router = useRouter();
   const { state } = useApp();
+  const { refreshControl } = usePullToRefresh();
   const [tab, setTab] = useState<(typeof TABS)[number]>('Tous');
 
   const list = [...state.myCompetitions, ...seedCompetitions]
@@ -31,7 +33,7 @@ export default function CompetitionsScreen() {
   const past = list.filter((c) => c.dateKey < today);
 
   return (
-    <Screen back title="Tournois" subtitle="Défis avec récompenses — par les clubs ou les joueurs">
+    <Screen back title="Tournois" subtitle="Défis avec récompenses — par les clubs ou les joueurs" refreshControl={refreshControl}>
       <View style={{ marginTop: spacing.sm }}>
         <Button label="Créer un tournoi" icon="add" onPress={() => router.push('/competition/nouvelle')} full />
       </View>

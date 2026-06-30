@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, SectionHeader, Tag, Txt } from '@/components/ui';
@@ -14,6 +14,7 @@ import { hapticSuccess } from '@/lib/haptics';
 import { dayKey } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
 import { openMaps } from '@/lib/maps';
+import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { colors, radius, spacing } from '@/theme';
 
 const FIVE_H = 5 * 3600000;
@@ -22,17 +23,12 @@ const MONTHS = ['JANV.', 'FÉVR.', 'MARS', 'AVR.', 'MAI', 'JUIN', 'JUIL.', 'AOÛ
 
 export default function ReservationsScreen() {
   const router = useRouter();
-  const { state, myReservations, cancelReservation, respondInvitation, refreshSession } = useApp();
+  const { state, myReservations, cancelReservation, respondInvitation } = useApp();
   const toast = useToast();
   const [showAllPast, setShowAllPast] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null); // confirmation avant annulation
   // Tirer pour rafraîchir : resynchronise mes réservations depuis le serveur.
-  const [refreshing, setRefreshing] = useState(false);
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await refreshSession();
-    setRefreshing(false);
-  };
+  const { refreshControl } = usePullToRefresh();
 
   const now = Date.now();
   // « Mes réservations » = celles que j'ai créées + celles où un ami m'a invité (résa
@@ -88,11 +84,7 @@ export default function ReservationsScreen() {
       back
       title="Mes réservations"
       subtitle="À venir, statut du club, passées"
-      refreshControl={
-        state.serverUserId ? (
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.signature} colors={[colors.signature]} />
-        ) : undefined
-      }
+      refreshControl={state.serverUserId ? refreshControl : undefined}
     >
       {/* Invitations à confirmer — un ami t'a ajouté à sa réservation partagée. */}
       {pendingInvites.length > 0 ? (

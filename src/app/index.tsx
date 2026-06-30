@@ -15,6 +15,7 @@ import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { DAY_MS, dayKey } from '@/lib/days';
 import { initials, perPlayer } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
+import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { isBirthdayToday, parseBirthDate, zodiacFor } from '@/lib/zodiac';
 import { isPlayed, useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
@@ -48,6 +49,7 @@ function countdownLabel(startsAt: number): string {
 export default function HomeScreen() {
   const router = useRouter();
   const { state, dismissNews, stats, myReservations } = useApp();
+  const { refreshControl } = usePullToRefresh();
   const go = (route: string) => router.push(route as never);
 
   // Héro vivant : un reflet qui balaie la carte verte + le point « live » qui pulse.
@@ -198,7 +200,7 @@ export default function HomeScreen() {
   const teamIncomplete = upcoming ? upcoming.invited.length < 3 : false;
 
   return (
-    <Screen>
+    <Screen refreshControl={refreshControl}>
       <Reveal>
         {/* En-tête : salutation + avatar (→ profil) */}
         <View style={styles.header}>

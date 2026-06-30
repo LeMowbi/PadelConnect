@@ -7,12 +7,14 @@ import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
 import { findPlayerByPhone } from '@/lib/friends';
 import { openWhatsApp } from '@/lib/contact';
+import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
 export default function AmisScreen() {
   const router = useRouter();
   const { state, addFriend, removeFriend } = useApp();
+  const { refreshControl } = usePullToRefresh();
   const [phone, setPhone] = useState('');
   const [removeId, setRemoveId] = useState<string | null>(null); // ami en cours de retrait (confirmation)
   const [openPlayer, setOpenPlayer] = useState<PlayerLike | null>(null);
@@ -63,7 +65,7 @@ export default function AmisScreen() {
   };
 
   return (
-    <Screen back title="Amis" subtitle="Tes partenaires de jeu — invite-les sur tes réservations">
+    <Screen back title="Amis" subtitle="Tes partenaires de jeu — invite-les sur tes réservations" refreshControl={refreshControl}>
       <View style={{ marginTop: spacing.sm }}>
         {state.friends.length === 0 ? (
           <>

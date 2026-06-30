@@ -8,6 +8,7 @@ import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt } 
 import { activeClubs, clubs as baseClubs, findClub, manageableClubs } from '@/data/clubs';
 import { canAccessOperator } from '@/lib/access';
 import { COMMISSION_RATE, isPlayed, useApp, type ServerClubRequest, type ServerSupportMessage } from '@/store/AppContext';
+import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { addWeeks, dateKeyLabel, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
@@ -35,6 +36,7 @@ export default function Operateur() {
     setSupportMessageStatus,
   } = useApp();
   const toast = useToast();
+  const { refreshControl } = usePullToRefresh();
 
   // Liste de TOUS les clubs (base + serveur) pour le sélecteur « Accès gérant ».
   const manageableList = useMemo(
@@ -242,7 +244,7 @@ export default function Operateur() {
   if (!canAccessOperator(state.role)) return null;
 
   return (
-    <Screen back title="Espace opérateur" subtitle="PadelConnect — suivi & commissions">
+    <Screen back title="Espace opérateur" subtitle="PadelConnect — suivi & commissions" refreshControl={refreshControl}>
       <View style={styles.infoBanner}>
         <Ionicons name="information-circle" size={17} color={colors.amberDark} />
         <Txt variant="small" color={colors.amberDark} style={{ flex: 1 }}>

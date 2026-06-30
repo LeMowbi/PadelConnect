@@ -21,6 +21,7 @@ import { fcfa, initials } from '@/lib/format';
 import { groupTiersByLabel, minPrice, priceTiersFor } from '@/lib/pricing';
 import { shareClub } from '@/lib/share';
 import { openMaps } from '@/lib/maps';
+import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { colors, radius, spacing } from '@/theme';
 
 // Date d'un avis serveur (ISO) → libellé court FR ; repli silencieux si la date est invalide.
@@ -54,6 +55,7 @@ export default function ClubDetail() {
   const loadReviews = () => {
     if (clubId) void fetchClubReviews(clubId).then(setServerReviews);
   };
+  const { refreshControl } = usePullToRefresh(loadReviews);
   useEffect(() => {
     let alive = true;
     if (clubId) void fetchClubReviews(clubId).then((r) => alive && setServerReviews(r));
@@ -157,6 +159,7 @@ export default function ClubDetail() {
   return (
     <Screen
       back
+      refreshControl={refreshControl}
       contentStyle={{ paddingBottom: 96 }}
       overlay={
         <>

@@ -14,6 +14,7 @@ import { clubsFreeAt, freeCourts, openSlotsFor, slotGrid, type AvailCtx } from '
 import { nextDays, slotTimestamp, type DayOption } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
 import { minPrice, priceForSlot } from '@/lib/pricing';
+import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, shadows, spacing } from '@/theme';
 
@@ -25,6 +26,7 @@ const PRIME_TIMES = new Set(['16:30', '18:00', '19:30']);
 export default function ReserverScreen() {
   const router = useRouter();
   const { state, setReserverView } = useApp();
+  const { refreshControl } = usePullToRefresh();
 
   const days = useMemo(() => nextDays(7), []);
   // Le soir, quand tous les créneaux du jour sont passés, on ouvre directement sur Demain.
@@ -75,7 +77,7 @@ export default function ReserverScreen() {
   const noSlotsByClub = !byClub.some((b) => b.slots.length > 0);
 
   return (
-    <Screen back title="Réserver" subtitle="Sessions de 1h30 — on te montre les terrains libres">
+    <Screen back title="Réserver" subtitle="Sessions de 1h30 — on te montre les terrains libres" refreshControl={refreshControl}>
       <Reveal>
         {/* Jour — pastilles (maquette) : jour abrégé + numéro, signature si actif */}
         <ScrollView

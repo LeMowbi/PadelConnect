@@ -15,6 +15,7 @@ import { clubsByName, findClub, manageableClubs, type Club } from '@/data/clubs'
 import { seedCompetitions } from '@/data/competitions';
 import { hasCompetition } from '@/lib/availability';
 import { slotTimestamp } from '@/lib/days';
+import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
@@ -27,6 +28,7 @@ export default function ClubAdmin() {
   const { state, setManagedClub, requestClub, cancelOwnClubRequest, closeCompetition, deleteCompetition, blockSlot, unblockSlot } =
     useApp();
   const toast = useToast();
+  const { refreshControl } = usePullToRefresh();
 
   const [section, setSection] = useState<(typeof SECTIONS)[number]>('Réservations');
   const [closingId, setClosingId] = useState<string | null>(null);
@@ -122,7 +124,7 @@ export default function ClubAdmin() {
   }
 
   return (
-    <Screen back title="Espace Club" subtitle="Gérez votre club">
+    <Screen back title="Espace Club" subtitle="Gérez votre club" refreshControl={refreshControl}>
       {header}
 
       {/* Bandeau démo (vert tint, fidèle au prototype) : l'accès serait réservé au club connecté. */}

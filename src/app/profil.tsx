@@ -13,6 +13,7 @@ import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt, t
 import { useApp } from '@/store/AppContext';
 import { levelLabel } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
+import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { GENDERS, ageFrom, genderLabel, maskBirthDate, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
 import { colors, gradients, radius, spacing } from '@/theme';
 
@@ -32,6 +33,7 @@ function trophyTier(t: Trophy): { tier: number; name: string | null; next: numbe
 export default function ProfilScreen() {
   const router = useRouter();
   const { state, stats, setRemindersOn, signOut, updateAccount, deleteAccount, updateEmail } = useApp();
+  const { refreshControl } = usePullToRefresh();
   const { account, level, friends, officialResults } = state;
 
   const [editing, setEditing] = useState(false);
@@ -116,7 +118,7 @@ export default function ProfilScreen() {
   const lvlPct = `${Math.round(Math.max(0, Math.min(1, level - lvlLow)) * 100)}%` as `${number}%`;
 
   return (
-    <Screen back>
+    <Screen back refreshControl={refreshControl}>
       {editing ? (
         <EditAccount onDone={() => setEditing(false)} />
       ) : (

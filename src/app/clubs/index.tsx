@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
-import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { ClubCard } from '@/components/ClubCard';
 import { Screen } from '@/components/Screen';
 import { EmptyState, Txt } from '@/components/ui';
 import { activeClubs } from '@/data/clubs';
+import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
@@ -17,15 +18,10 @@ function norm(s: string): string {
 }
 
 export default function ClubsScreen() {
-  const { state, refreshSession } = useApp();
+  const { state } = useApp();
+  const { refreshControl } = usePullToRefresh();
   const [filter, setFilter] = useState('Tous');
   const [query, setQuery] = useState('');
-  const [refreshing, setRefreshing] = useState(false);
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await refreshSession();
-    setRefreshing(false);
-  };
 
   const all = useMemo(() => activeClubs(state.customClubs, state.clubInfo), [state.customClubs, state.clubInfo]);
   const list = useMemo(() => {
@@ -44,11 +40,7 @@ export default function ClubsScreen() {
       back
       title="Clubs"
       subtitle={`${all.length} clubs de padel à Abidjan`}
-      refreshControl={
-        state.serverUserId ? (
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.signature} colors={[colors.signature]} />
-        ) : undefined
-      }
+      refreshControl={state.serverUserId ? refreshControl : undefined}
     >
       {/* Recherche par nom ou quartier */}
       <View style={styles.search}>
