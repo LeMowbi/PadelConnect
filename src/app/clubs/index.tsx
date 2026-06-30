@@ -75,8 +75,10 @@ export default function ClubsScreen() {
       {list.length === 0 ? (
         query.trim() ? (
           <EmptyState icon="search-outline" title="Aucun résultat" text={`Aucun club ne correspond à « ${query.trim()} ».`} />
-        ) : (
+        ) : filter === 'Favoris' ? (
           <EmptyState icon="heart-outline" title="Aucun favori" text="Touche le cœur sur un club pour l’ajouter ici." />
+        ) : (
+          <EmptyState icon="business-outline" title="Aucun club" text={`Aucun club « ${filter} » pour l’instant — change de filtre.`} />
         )
       ) : (
         list.map((c) => <ClubCard key={c.id} club={c} />)
