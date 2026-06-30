@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState } from 'react';
 import { Pressable, Share, StyleSheet, View } from 'react-native';
@@ -44,6 +45,12 @@ export default function ParrainageScreen() {
 
   const invite = () => openWhatsApp('', message);
   const shareMore = () => Share.share({ message }).catch(() => {});
+  // Copie RÉELLE du code dans le presse-papiers (le bouton le promettait sans le faire).
+  const copyCode = async () => {
+    if (!myCode) return;
+    await Clipboard.setStringAsync(myCode);
+    toast.show('Code copié ✓');
+  };
 
   return (
     <Screen back title="Parrainage" subtitle="Invite tes amis à jouer">
@@ -92,16 +99,10 @@ export default function ParrainageScreen() {
         <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
           <Button label="Inviter par WhatsApp" icon="logo-whatsapp" onPress={invite} full pill />
           {myCode ? (
-            <Button
-              label="Copier mon code"
-              icon="copy-outline"
-              variant="secondary"
-              onPress={() => {
-                shareMore();
-                toast.show(`Ton code : ${myCode}`);
-              }}
-              full
-            />
+            <>
+              <Button label="Copier mon code" icon="copy-outline" variant="secondary" onPress={copyCode} full />
+              <Button label="Plus d'options de partage" icon="share-outline" variant="ghost" onPress={shareMore} full />
+            </>
           ) : null}
         </View>
 
