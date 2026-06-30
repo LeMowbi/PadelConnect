@@ -378,6 +378,8 @@ type AppContextType = {
   // Aide / signalements : le joueur envoie un message, l'opérateur les lit/traite.
   submitSupportMessage: (message: string, contactPhone?: string) => Promise<{ ok: boolean; error?: string }>;
   fetchSupportMessages: () => Promise<{ ok: boolean; messages: ServerSupportMessage[] }>;
+  // Boucle de retour : le joueur relit SES messages d'aide et leur statut.
+  fetchMySupportMessages: () => Promise<ServerSupportMessage[]>;
   setSupportMessageStatus: (id: string, status: ServerSupportMessage['status']) => Promise<{ ok: boolean }>;
   approveClub: (id: string) => void;
   rejectClub: (id: string) => void;
@@ -1221,6 +1223,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const { data, error } = await supabase.from('support_messages').select('*').order('created_at', { ascending: false });
         if (error) return { ok: false, messages: [] };
         return { ok: true, messages: (data ?? []) as ServerSupportMessage[] };
+      },
+      // Boucle de retour : le JOUEUR relit SES propres messages et leur statut (RLS select_own).
+      fetchMySupportMessages: async () => {
+        const userId = state.serverUserId;
+        if (!userId) return [];
+        const { data, error } = await supabase
+          .from('support_messages')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+        if (error) return [];
+        return (data ?? []) as ServerSupportMessage[];
       },
       setSupportMessageStatus: async (id, status) => {
         const { error } = await supabase.from('support_messages').update({ status }).eq('id', id);

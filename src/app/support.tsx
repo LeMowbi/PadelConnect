@@ -1,24 +1,32 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Linking, StyleSheet, TextInput, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { useToast } from '@/components/Toast';
-import { Button, Card, IconCircle, Txt } from '@/components/ui';
+import { Button, Card, Divider, IconCircle, Tag, Txt } from '@/components/ui';
 import { SUPPORT_EMAIL } from '@/lib/operator';
-import { useApp } from '@/store/AppContext';
+import { useApp, type ServerSupportMessage } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
 // Aide & Support : signaler un problème (→ serveur, vu par l'opérateur), référencer son
 // club, et nous écrire par e-mail. On n'expose aucun numéro : PadelConnect recontacte.
 export default function Support() {
   const router = useRouter();
-  const { submitSupportMessage } = useApp();
+  const { submitSupportMessage, fetchMySupportMessages } = useApp();
   const toast = useToast();
 
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  // Boucle de retour : l'historique de MES messages avec leur statut (Reçu / Traité).
+  const [mine, setMine] = useState<ServerSupportMessage[]>([]);
+  const loadMine = useCallback(() => {
+    void fetchMySupportMessages().then(setMine);
+  }, [fetchMySupportMessages]);
+  useEffect(() => {
+    loadMine();
+  }, [loadMine]);
 
   const send = async () => {
     if (message.trim().length < 5 || sending) return;
@@ -29,6 +37,7 @@ export default function Support() {
       setSent(true);
       setMessage('');
       toast.show('Message envoyé à PadelConnect ✅');
+      loadMine(); // rafraîchit l'historique avec le nouveau message
     } else {
       toast.show(res.error ?? 'Envoi impossible', { icon: 'alert-circle' });
     }
@@ -92,6 +101,28 @@ export default function Support() {
         </View>
         <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
       </Card>
+
+      {/* Mes messages — boucle de retour : le joueur suit l'état de ses signalements. */}
+      {mine.length > 0 ? (
+        <Card style={{ marginTop: spacing.md }}>
+          <Txt variant="h3">Mes messages</Txt>
+          {mine.map((m, i) => (
+            <View key={m.id}>
+              {i > 0 ? <Divider style={{ marginVertical: spacing.md }} /> : null}
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm }}>
+                <Txt variant="body" style={{ flex: 1 }}>
+                  {m.message}
+                </Txt>
+                <Tag
+                  label={m.status === 'resolved' ? 'Traité' : 'Reçu'}
+                  tone={m.status === 'resolved' ? 'green' : 'amber'}
+                  icon={m.status === 'resolved' ? 'checkmark-done' : 'time'}
+                />
+              </View>
+            </View>
+          ))}
+        </Card>
+      ) : null}
     </Screen>
   );
 }
