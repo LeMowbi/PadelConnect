@@ -617,6 +617,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       void fetchServerClubs().then(
         (serverClubs) => ok() && setState((s) => ({ ...s, customClubs: mergeServerClubs(s.customClubs, serverClubs) })),
       );
+      // Rafraîchit le RÔLE/profil : si l'opérateur vient d'accorder l'accès gérant (#39), le
+      // gérant voit son Espace Club apparaître au retour dans l'app, sans réinstaller.
+      void supabase
+        .from('profiles')
+        .select('role, managed_club_id, level')
+        .eq('id', userId)
+        .maybeSingle()
+        .then(({ data: prof }) => {
+          if (!prof || !ok()) return;
+          setState((s) => ({
+            ...s,
+            role: (prof.role as AppState['role']) ?? s.role,
+            serverManagedClubId: prof.managed_club_id ?? null,
+            level: clampLevel(Number(prof.level ?? s.level)),
+          }));
+        });
     });
     return () => sub.remove();
   }, [state.serverUserId]);
