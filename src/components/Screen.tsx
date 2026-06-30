@@ -1,7 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View, type ViewStyle } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  type RefreshControlProps,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Txt } from './ui';
 import { colors, radius, spacing } from '@/theme';
@@ -16,9 +25,22 @@ type Props = {
   contentStyle?: ViewStyle;
   overlay?: React.ReactNode;
   scrollRef?: React.Ref<ScrollView>;
+  // Élément RefreshControl pour le « tirer pour rafraîchir » (laissé au choix de l'écran).
+  refreshControl?: React.ReactElement<RefreshControlProps>;
 };
 
-export function Screen({ children, title, subtitle, back, scroll = true, headerRight, contentStyle, overlay, scrollRef }: Props) {
+export function Screen({
+  children,
+  title,
+  subtitle,
+  back,
+  scroll = true,
+  headerRight,
+  contentStyle,
+  overlay,
+  scrollRef,
+  refreshControl,
+}: Props) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -64,6 +86,7 @@ export function Screen({ children, title, subtitle, back, scroll = true, headerR
           // et on referme le clavier dès qu'on fait défiler un formulaire.
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          refreshControl={refreshControl}
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxxl }}
         >
           {body}
