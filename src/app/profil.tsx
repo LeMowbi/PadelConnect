@@ -263,7 +263,7 @@ export default function ProfilScreen() {
               Rappels de match
             </Txt>
             <Txt variant="small" color={colors.textMuted}>
-              Une notification ~2 h avant chaque partie. Tu peux la désactiver ici quand tu veux.
+              Deux rappels par match : avant la fin de l'annulation gratuite, puis ~2 h avant. Désactivable ici.
             </Txt>
           </View>
           <Switch
