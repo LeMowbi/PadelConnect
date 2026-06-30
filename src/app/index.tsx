@@ -12,7 +12,7 @@ import { Screen } from '@/components/Screen';
 import { Card, SectionHeader, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
-import { dayKey } from '@/lib/days';
+import { DAY_MS, dayKey } from '@/lib/days';
 import { initials, perPlayer } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
 import { isBirthdayToday, parseBirthDate, zodiacFor } from '@/lib/zodiac';
@@ -39,7 +39,7 @@ function countdownLabel(startsAt: number): string {
   const now = Date.now();
   const diffMs = startsAt - now;
   if (diffMs <= 0) return 'maintenant';
-  const diffDays = Math.floor(diffMs / 86400000);
+  const diffDays = Math.floor(diffMs / DAY_MS);
   if (diffDays === 0) return "aujourd'hui";
   if (diffDays === 1) return 'demain';
   return `dans ${diffDays} jour${diffDays > 1 ? 's' : ''}`;
@@ -89,15 +89,20 @@ export default function HomeScreen() {
   const lastPlayedClub = lastPlayed ? findClub(lastPlayed.clubId, state.customClubs, state.clubInfo) : null;
 
   // B-R5 : tournoi inscrit à venir (≤ 7 jours).
+  // Tournois où je suis inscrit OU que j'ai créés (mes engagements personnels).
+  const myTournamentIds = new Set([
+    ...Object.keys(state.compRegistrations),
+    ...state.myCompetitions.filter((c) => c.createdByMe).map((c) => c.id),
+  ]);
   const upcomingTournament =
-    Object.keys(state.compRegistrations)
+    [...myTournamentIds]
       .map((id) => [...state.myCompetitions, ...seedCompetitions].find((c) => c.id === id))
       .filter((c): c is NonNullable<typeof c> => {
         if (!c) return false;
         if (c.dateKey < today) return false;
         const [y, m, d] = c.dateKey.split('-').map(Number);
         const compTs = new Date(y, m - 1, d).getTime();
-        return compTs - now <= 7 * 86400000;
+        return compTs - now <= 7 * DAY_MS;
       })
       .sort((a, b) => a.dateKey.localeCompare(b.dateKey))[0] ?? null;
 
@@ -108,7 +113,7 @@ export default function HomeScreen() {
   // Résultats de tournoi disponibles ? Le plus récent (closedAt max), clôturé < 7 j.
   const pendingResult = Object.keys(state.compRegistrations)
     .map((id) => ({ id, res: state.compResults[id] }))
-    .filter((x) => !!x.res && now - x.res.closedAt < 7 * 86400000)
+    .filter((x) => !!x.res && now - x.res.closedAt < 7 * DAY_MS)
     .sort((a, b) => b.res!.closedAt - a.res!.closedAt)[0];
 
   // Actu d'accueil (opérateur) — masquée si le joueur l'a fermée (réapparaît si nouvelle).
@@ -551,7 +556,7 @@ export default function HomeScreen() {
                     {(() => {
                       const [y, m, d] = upcomingTournament.dateKey.split('-').map(Number);
                       const compTs = new Date(y, m - 1, d).getTime();
-                      const diffDays = Math.ceil((compTs - now) / 86400000);
+                      const diffDays = Math.ceil((compTs - now) / DAY_MS);
                       if (diffDays <= 0) return "aujourd'hui !";
                       if (diffDays === 1) return 'demain !';
                       return `dans ${diffDays} jour${diffDays > 1 ? 's' : ''}`;

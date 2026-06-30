@@ -40,14 +40,16 @@ export default function CompetitionDetail() {
 
   const reg = state.compRegistrations[comp.id];
   const registered = !!reg;
-  // Cycle de vie : à venir → terminé (date passée) → clôturé (vainqueur désigné par l'ORGANISATEUR).
-  const played = comp.dateKey <= dayKey(new Date());
+  // Cycle de vie : à venir → terminé (jour STRICTEMENT passé) → clôturé (vainqueur désigné).
+  // Le jour même = en cours, pas encore « terminé » (on ne clôture pas avant que ça se joue).
+  const played = comp.dateKey < dayKey(new Date());
   const result = state.compResults[comp.id];
   const mine = state.officialResults.find((o) => o.compId === comp.id);
   const myTeam = registered ? `${state.account?.firstName ?? 'Toi'} & ${reg.partner}` : '';
-  // Un défi créé par un joueur se clôture ici, par son créateur. (Les tournois de
-  // club se clôturent dans l'Espace Club.)
-  const canClose = !!comp.createdByMe && played && !result;
+  // Un défi AMICAL créé par un joueur se clôture ici, par son créateur. Un tournoi OFFICIEL
+  // ne se clôture JAMAIS depuis cette fiche (réservé à l'Espace Club) — sinon un joueur
+  // pourrait s'auto-attribuer des points de niveau.
+  const canClose = !!comp.createdByMe && !comp.official && played && !result;
   const teams = teamCount(comp, registered);
   const teamList = demoTeams(comp, registered ? myTeam : undefined);
   const left = Math.max(0, comp.slots - teams);

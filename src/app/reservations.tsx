@@ -39,9 +39,11 @@ export default function ReservationsScreen() {
   const past = mine.filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt);
   const pastShown = showAllPast ? past : past.slice(0, PAST_PREVIEW);
 
-  // Mes tournois : ceux où mon équipe est inscrite (à venir / résultats).
+  // Mes tournois : ceux où mon équipe est inscrite ET ceux que J'AI créés (dédupliqués),
+  // pour qu'un défi créé sans s'y inscrire reste retrouvable ici (et clôturable).
   const today = dayKey(new Date());
-  const myComps = Object.keys(state.compRegistrations)
+  const myCompIds = new Set([...Object.keys(state.compRegistrations), ...state.myCompetitions.filter((c) => c.createdByMe).map((c) => c.id)]);
+  const myComps = [...myCompIds]
     .map((id) => [...state.myCompetitions, ...seedCompetitions].find((c) => c.id === id))
     .filter((c): c is NonNullable<typeof c> => !!c)
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
@@ -186,7 +188,10 @@ export default function ReservationsScreen() {
             {myComps.map((c, i) => {
               const result = state.compResults[c.id];
               const mine = state.officialResults.find((o) => o.compId === c.id);
-              const finished = c.dateKey <= today;
+              const finished = c.dateKey < today;
+              // Inscrit → « avec {partenaire} » ; créé sans s'y inscrire → « organisé par toi ».
+              const reg = state.compRegistrations[c.id];
+              const subtitle = reg ? `${c.date} · avec ${reg.partner}` : `${c.date} · organisé par toi`;
               return (
                 <View key={c.id}>
                   {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
@@ -196,7 +201,7 @@ export default function ReservationsScreen() {
                         {c.title}
                       </Txt>
                       <Txt variant="small" color={colors.textMuted}>
-                        {c.date} · avec {state.compRegistrations[c.id].partner}
+                        {subtitle}
                       </Txt>
                     </View>
                     {result ? (

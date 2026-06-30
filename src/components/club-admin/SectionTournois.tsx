@@ -65,7 +65,7 @@ export function SectionTournois({ club, comps, onCloseComp }: { club: Club; comp
           <EmptyState icon="trophy-outline" title="Aucun tournoi" text="Crée le premier tournoi de ton club." />
         ) : (
           publishedComps.map((c) => {
-            const finished = c.dateKey <= todayKey;
+            const finished = c.dateKey < todayKey;
             const result = state.compResults[c.id];
             return (
               <Card key={c.id} style={{ marginBottom: spacing.sm }}>

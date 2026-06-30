@@ -357,6 +357,10 @@ export default function Onboarding() {
             <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
               {levelLabel(lvl)} · évoluera selon tes tournois officiels
             </Txt>
+            {/* Clin d'œil pour inciter à l'honnêteté (sinon le terrain s'en charge 😅). */}
+            <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs, textAlign: 'center' }}>
+              Joue franc-jeu 😉 — un « 6 » qui perd 6-0, ça se voit en 2 échanges.
+            </Txt>
           </View>
 
           {/* Parrainage (facultatif) : code d'un ami qui t'a invité. */}

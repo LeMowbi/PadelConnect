@@ -16,8 +16,8 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
   const left = Math.max(0, comp.slots - teams);
   const full = left === 0;
   const pct = Math.min(100, Math.round((teams / comp.slots) * 100));
-  // Cycle de vie : à venir → terminé (date passée) → clôturé (vainqueur désigné).
-  const finished = comp.dateKey <= dayKey(new Date());
+  // Cycle de vie : à venir → terminé (jour STRICTEMENT passé) → clôturé (vainqueur désigné).
+  const finished = comp.dateKey < dayKey(new Date());
   const result = state.compResults[comp.id];
   const mine = state.officialResults.find((o) => o.compId === comp.id);
 

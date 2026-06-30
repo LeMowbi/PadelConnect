@@ -50,8 +50,11 @@ function Field({
 export default function NouvelleCompetition() {
   const router = useRouter();
   const params = useLocalSearchParams<{ as?: string; clubId?: string }>();
-  const asClub = params.as === 'club';
   const { state, addCompetition } = useApp();
+  // « asClub » (tournoi OFFICIEL, publié direct) n'est autorisé qu'aux comptes club/opérateur :
+  // on le verrouille sur le RÔLE, pas seulement sur le paramètre d'URL — sinon un joueur
+  // pourrait forger « ?as=club » et créer un tournoi officiel (puis s'attribuer du niveau).
+  const asClub = params.as === 'club' && (state.role === 'club' || state.role === 'operator');
   const club = asClub ? findClub(params.clubId, state.customClubs, state.clubInfo) : undefined;
   // Tournoi créé par un JOUEUR : il choisit le club hôte, qui devra valider.
   const hosts = useMemo(() => activeClubs(state.customClubs, state.clubInfo), [state.customClubs, state.clubInfo]);
