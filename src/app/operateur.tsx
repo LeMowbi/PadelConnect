@@ -5,6 +5,10 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Screen } from '@/components/Screen';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt } from '@/components/ui';
+import { CommissionRates } from '@/components/operator/CommissionRates';
+import { ManagerAccess } from '@/components/operator/ManagerAccess';
+import { NewsEditor } from '@/components/operator/NewsEditor';
+import { opStyles } from '@/components/operator/styles';
 import { activeClubs, clubs as baseClubs, findClub, manageableClubs } from '@/data/clubs';
 import { canAccessOperator } from '@/lib/access';
 import { COMMISSION_RATE, isPlayed, useApp, type ServerClubRequest, type ServerSupportMessage } from '@/store/AppContext';
@@ -585,7 +589,7 @@ export default function Operateur() {
             onChangeText={setNcName}
             placeholder="Nom du club"
             placeholderTextColor={colors.textFaint}
-            style={styles.clubInput}
+            style={opStyles.clubInput}
           />
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
             <TextInput
@@ -593,7 +597,7 @@ export default function Operateur() {
               onChangeText={setNcArea}
               placeholder="Quartier"
               placeholderTextColor={colors.textFaint}
-              style={[styles.clubInput, { flex: 1 }]}
+              style={[opStyles.clubInput, { flex: 1 }]}
             />
             <TextInput
               value={ncPrice}
@@ -601,7 +605,7 @@ export default function Operateur() {
               placeholder="Tarif dès (FCFA)"
               placeholderTextColor={colors.textFaint}
               keyboardType="numeric"
-              style={[styles.clubInput, { flex: 1 }]}
+              style={[opStyles.clubInput, { flex: 1 }]}
             />
           </View>
           <Button
@@ -920,309 +924,7 @@ export default function Operateur() {
   );
 }
 
-// Petit éditeur d'actu d'accueil : titre (obligatoire), sous-titre + lien (optionnels).
-function NewsEditor({
-  news,
-  onPublish,
-  onRemove,
-}: {
-  news: { title: string; subtitle?: string; link?: string } | null;
-  onPublish: (n: { title: string; subtitle?: string; link?: string }) => void;
-  onRemove: () => void;
-}) {
-  const [title, setTitle] = useState(news?.title ?? '');
-  const [subtitle, setSubtitle] = useState(news?.subtitle ?? '');
-  const [link, setLink] = useState(news?.link ?? '');
-  const [saved, setSaved] = useState(false);
-
-  const publish = () => {
-    if (title.trim().length < 3) return;
-    onPublish({ title, subtitle, link });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-  };
-
-  return (
-    <Card>
-      <Txt variant="muted" style={{ marginBottom: spacing.sm }}>
-        S'affiche en bandeau en haut de l'accueil joueur. Publier une nouvelle actu la fait réapparaître même chez ceux qui l'avaient
-        fermée.
-      </Txt>
-      <TextInput
-        value={title}
-        onChangeText={setTitle}
-        placeholder="Titre (obligatoire)"
-        placeholderTextColor={colors.textFaint}
-        style={styles.newsInput}
-      />
-      <TextInput
-        value={subtitle}
-        onChangeText={setSubtitle}
-        placeholder="Sous-titre (optionnel)"
-        placeholderTextColor={colors.textFaint}
-        style={styles.newsInput}
-      />
-      <TextInput
-        value={link}
-        onChangeText={setLink}
-        placeholder="Lien (optionnel — https://…)"
-        placeholderTextColor={colors.textFaint}
-        autoCapitalize="none"
-        keyboardType="url"
-        style={styles.newsInput}
-      />
-      <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
-        <Button
-          size="sm"
-          label={saved ? 'Publiée ✓' : 'Publier l’actu'}
-          icon={saved ? 'checkmark' : 'megaphone'}
-          onPress={publish}
-          disabled={title.trim().length < 3}
-          full
-        />
-        {news ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            label="Retirer l’actu de l’accueil"
-            icon="trash-outline"
-            onPress={() => {
-              onRemove();
-              setTitle('');
-              setSubtitle('');
-              setLink('');
-            }}
-            full
-          />
-        ) : null}
-      </View>
-    </Card>
-  );
-}
-
-// Commission par club : l'opérateur fixe le % négocié avec chaque club (repli sur le défaut).
-function CommissionRates({
-  clubs,
-  rates,
-  defaultRate,
-  onSet,
-  toast,
-}: {
-  clubs: { id: string; name: string; area: string }[];
-  rates: Record<string, number>;
-  defaultRate: number;
-  onSet: (clubId: string, rate: number) => Promise<{ ok: boolean }>;
-  toast: ReturnType<typeof useToast>;
-}) {
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState<string | null>(null);
-
-  const save = async (clubId: string) => {
-    const raw = draft[clubId];
-    const pct = Number((raw ?? '').replace(',', '.'));
-    if (busy || !Number.isFinite(pct) || pct < 0 || pct > 100) {
-      toast.show('Entre un pourcentage entre 0 et 100', { icon: 'alert-circle' });
-      return;
-    }
-    setBusy(clubId);
-    const { ok } = await onSet(clubId, pct / 100);
-    setBusy(null);
-    if (ok) {
-      setDraft((d) => ({ ...d, [clubId]: '' }));
-      toast.show('Commission mise à jour ✅');
-    } else {
-      toast.show('Changement impossible — réessaie', { icon: 'alert-circle' });
-    }
-  };
-
-  return (
-    <Card>
-      <Txt variant="small" color={colors.textMuted}>
-        Par défaut {Math.round(defaultRate * 100)} %. Tu peux fixer un taux différent pour chaque club selon ton accord — il s'applique
-        aussitôt au décompte.
-      </Txt>
-      <Button
-        size="sm"
-        variant="ghost"
-        label={open ? 'Masquer les taux' : 'Régler les taux par club'}
-        icon={open ? 'chevron-up' : 'options'}
-        onPress={() => setOpen((v) => !v)}
-        full
-      />
-      {open
-        ? clubs.map((c, i) => {
-            const current = Math.round((rates[c.id] ?? defaultRate) * 100);
-            const custom = rates[c.id] !== undefined;
-            return (
-              <View key={c.id}>
-                {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                  <View style={{ flex: 1 }}>
-                    <Txt variant="body" style={{ fontWeight: '600' }} numberOfLines={1}>
-                      {c.name}
-                    </Txt>
-                    <Txt variant="muted">
-                      Actuel : {current}%{custom ? '' : ' (défaut)'}
-                    </Txt>
-                  </View>
-                  <TextInput
-                    value={draft[c.id] ?? ''}
-                    onChangeText={(t) => setDraft((d) => ({ ...d, [c.id]: t }))}
-                    placeholder={`${current}`}
-                    placeholderTextColor={colors.textFaint}
-                    keyboardType="numeric"
-                    style={[styles.clubInput, { width: 64, marginTop: 0, textAlign: 'center' }]}
-                  />
-                  <Button
-                    size="sm"
-                    label={busy === c.id ? '…' : 'OK'}
-                    onPress={() => save(c.id)}
-                    disabled={busy === c.id || !(draft[c.id] ?? '').trim()}
-                  />
-                </View>
-              </View>
-            );
-          })
-        : null}
-    </Card>
-  );
-}
-
-// Accès gérant : l'opérateur saisit le numéro du joueur (qui a déjà créé un compte) et
-// choisit le club. Le joueur devient gérant et voit son Espace Club au prochain retour.
-function ManagerAccess({
-  clubs,
-  onGrant,
-  onRevoke,
-  toast,
-}: {
-  clubs: { id: string; name: string; area: string }[];
-  onGrant: (phone: string, clubId: string) => Promise<{ ok: boolean; name?: string }>;
-  onRevoke: (phone: string) => Promise<{ ok: boolean; name?: string }>;
-  toast: ReturnType<typeof useToast>;
-}) {
-  const [phone, setPhone] = useState('');
-  const [clubId, setClubId] = useState<string | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [busy, setBusy] = useState<'grant' | 'revoke' | null>(null);
-  const selected = clubs.find((c) => c.id === clubId);
-  const digits = phone.replace(/\D/g, '');
-
-  const grant = async () => {
-    if (busy || !clubId || digits.length < 8) return;
-    setBusy('grant');
-    const { ok, name } = await onGrant(phone, clubId);
-    setBusy(null);
-    if (ok) {
-      toast.show(`${name || 'Gérant'} → accès ${selected?.name ?? 'club'} ✅`);
-      setPhone('');
-      setClubId(null);
-    } else {
-      toast.show('Aucun joueur avec ce numéro — il doit d’abord créer un compte', { icon: 'alert-circle' });
-    }
-  };
-
-  const revoke = async () => {
-    if (busy || digits.length < 8) return;
-    setBusy('revoke');
-    const { ok, name } = await onRevoke(phone);
-    setBusy(null);
-    if (ok) {
-      toast.show(`Accès gérant retiré (${name || 'joueur'})`);
-      setPhone('');
-    } else {
-      toast.show('Aucun joueur avec ce numéro', { icon: 'alert-circle' });
-    }
-  };
-
-  return (
-    <Card>
-      <Txt variant="small" color={colors.textMuted}>
-        Le gérant crée d’abord un compte normal dans l’app, puis te communique son numéro. Saisis-le ici et choisis son club : il obtient
-        l’accès « Espace Club » à sa prochaine ouverture de l’app, sans rien faire de technique.
-      </Txt>
-      <TextInput
-        value={phone}
-        onChangeText={setPhone}
-        placeholder="Numéro du gérant"
-        placeholderTextColor={colors.textFaint}
-        keyboardType="phone-pad"
-        style={styles.clubInput}
-      />
-      <Pressable onPress={() => setPickerOpen(true)} style={[styles.clubInput, styles.pickerRow]}>
-        <Txt variant="body" color={selected ? colors.text : colors.textFaint} numberOfLines={1} style={{ flex: 1 }}>
-          {selected ? selected.name : 'Choisir le club…'}
-        </Txt>
-        <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
-      </Pressable>
-      <Button
-        size="sm"
-        label={busy === 'grant' ? 'Attribution…' : 'Donner l’accès gérant'}
-        icon="key"
-        onPress={grant}
-        disabled={!!busy || !clubId || digits.length < 8}
-        full
-      />
-      <Button
-        size="sm"
-        variant="ghost"
-        label={busy === 'revoke' ? 'Retrait…' : 'Retirer l’accès gérant'}
-        icon="remove-circle-outline"
-        onPress={revoke}
-        disabled={!!busy || digits.length < 8}
-        full
-      />
-
-      <BottomSheet visible={pickerOpen} title="Choisir le club" onClose={() => setPickerOpen(false)}>
-        {clubs.map((c) => (
-          <Pressable
-            key={c.id}
-            onPress={() => {
-              setClubId(c.id);
-              setPickerOpen(false);
-            }}
-            style={styles.pickerOption}
-          >
-            <IconCircle icon="business" color={colors.green} bg={colors.greenSoft} size={36} />
-            <View style={{ flex: 1 }}>
-              <Txt variant="body" numberOfLines={1}>
-                {c.name}
-              </Txt>
-              <Txt variant="muted" numberOfLines={1}>
-                {c.area}
-              </Txt>
-            </View>
-            {clubId === c.id ? <Ionicons name="checkmark-circle" size={20} color={colors.green} /> : null}
-          </Pressable>
-        ))}
-      </BottomSheet>
-    </Card>
-  );
-}
-
 const styles = StyleSheet.create({
-  clubInput: {
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    color: colors.text,
-    padding: spacing.md,
-    marginTop: spacing.sm,
-    fontSize: font.size.md,
-  },
-  pickerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  pickerOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-  },
   infoBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1280,14 +982,4 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   totals: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  newsInput: {
-    backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    color: colors.text,
-    padding: spacing.md,
-    marginTop: spacing.sm,
-    fontSize: 15,
-  },
 });
