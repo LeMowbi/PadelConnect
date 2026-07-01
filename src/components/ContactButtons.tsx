@@ -12,7 +12,7 @@ export function ContactButtons({
 }: {
   phone: string;
   size?: 'sm' | 'md';
-  primaryCall?: boolean; // « Appeler » en doré (action principale de l'écran)
+  primaryCall?: boolean; // « Appeler » en vert signature (action principale de l'écran)
   style?: StyleProp<ViewStyle>;
 }) {
   return (

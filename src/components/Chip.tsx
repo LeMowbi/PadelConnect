@@ -23,6 +23,9 @@ export function Chip({
     <Pressable
       onPress={disabled ? undefined : onPress}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ selected: !!active, disabled: !!disabled }}
+      accessibilityLabel={label}
       style={[styles.base, size === 'lg' && styles.lg, active && styles.active, disabled && styles.disabled]}
     >
       {icon ? <Ionicons name={icon} size={13} color={active ? colors.onSignature : colors.textMuted} /> : null}

@@ -311,7 +311,6 @@ type AppContextType = {
   addClubCoach: (clubId: string, name: string, specialty: string, phone: string) => void;
   removeClubCoach: (clubId: string, id: string) => void;
   setClubInfo: (clubId: string, patch: ClubInfo) => void;
-  toggleBoostClub: (clubId: string) => void;
   setBoost: (clubId: string, days: number) => Promise<{ ok: boolean }>; // days > 0 active (expiration), 0 désactive — serveur
   setPaymentStatus: (clubId: string, weekKey: string, status: 'tofacture' | 'sent' | 'paid') => void;
   requestClub: (input: {
@@ -548,7 +547,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         fetchOperatorNews(),
       ]);
       if (!stillCurrent()) return; // déconnexion survenue pendant le chargement → on n'écrit rien
-      const { active: activeParts, pending: pendingParts } = splitParticipations(parts);
+      // null = échec réseau → on garde les invitations existantes (≠ tableau vide = « aucune »).
+      const split = parts ? splitParticipations(parts) : null;
+      // Pour la resynchro des rappels ci-dessous uniquement : si le fetch a échoué, on ne re-planifie
+      // que MES résas (les invitations déjà connues gardent leurs rappels déjà posés).
+      const activeParts = split ? split.active : [];
       // null = échec réseau pour ce fetch → on garde l'existant (≠ tableau/objet vide = succès).
       if (clubStatus) setClubStatusMap(clubStatus); // registre lu dans data/clubs (badge « Bientôt »)
       setState((s) => ({
@@ -556,8 +559,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // En cas d'échec réseau on garde le miroir persisté (offline-friendly).
         reservations: reservationsRes.ok ? reservationsRes.reservations : s.reservations,
         occupancy: occ ?? s.occupancy,
-        participantReservationIds: activeParts,
-        pendingInvitationIds: pendingParts,
+        participantReservationIds: split ? split.active : s.participantReservationIds,
+        pendingInvitationIds: split ? split.pending : s.pendingInvitationIds,
         // Amis synchronisés (le serveur fait foi). null = échec réseau → on garde le miroir.
         friends: friends ?? s.friends,
         // Demandes d'ami reçues en attente (Accepter / Refuser). null = échec réseau → on garde.
@@ -645,7 +648,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (res.ok && ok()) setState((s) => ({ ...s, reservations: res.reservations }));
       });
       void fetchMyParticipations(userId).then((parts) => {
-        if (!ok()) return;
+        if (!ok() || !parts) return; // null = échec réseau → on garde les invitations existantes
         const { active, pending } = splitParticipations(parts);
         setState((s) => ({ ...s, participantReservationIds: active, pendingInvitationIds: pending }));
       });
@@ -790,8 +793,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const uri = patch.photoUri;
           if (uri && !uri.startsWith('http')) {
             // Nouvelle photo locale → upload, puis on remplace l'URI locale par l'URL publique.
+            const prevPhoto = state.account?.photoUri; // photo AVANT ce changement (snapshot)
             void uploadAvatar(userId, uri).then((url) => {
-              if (!url) return;
+              if (!url) {
+                // Échec d'upload : on NE conserve PAS l'URI locale file:// (illisible après une
+                // réinstallation ou sur un autre appareil) → on revient à la photo précédente.
+                setState((s) => ({ ...s, account: s.account ? { ...s.account, photoUri: prevPhoto } : s.account }));
+                return;
+              }
               setState((s) => ({ ...s, account: s.account ? { ...s.account, photoUri: url } : s.account }));
               void supabase.from('profiles').update({ photo_uri: url }).eq('id', userId);
             });
@@ -1325,11 +1334,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (s.serverUserId) void upsertClubOverride(clubId, merged);
           return { ...s, clubInfo: { ...s.clubInfo, [clubId]: merged } };
         }),
-      toggleBoostClub: (clubId) =>
-        setState((s) => ({
-          ...s,
-          boostedClubIds: s.boostedClubIds.includes(clubId) ? s.boostedClubIds.filter((x) => x !== clubId) : [...s.boostedClubIds, clubId],
-        })),
       // Boost piloté côté SERVEUR → visible par tous les joueurs. On écrit d'abord au serveur
       // (réservé à l'opérateur), puis on met à jour le miroir local au succès.
       setBoost: async (clubId, days) => {

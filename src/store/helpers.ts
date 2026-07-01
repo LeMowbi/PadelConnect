@@ -167,7 +167,7 @@ export function competitionSlices(
   // PALMARÈS (affichage) de MES tournois serveur clôturés — DÉRIVÉ des clôtures serveur et
   // reconstruit à chaque fois (idempotent, sûr à la réinstallation). Le NIVEAU, lui, est attribué
   // UNE SEULE FOIS côté serveur à la clôture (close_competition) → on ne le recalcule jamais ici.
-  const serverCompIds = new Set(comps.filter((c) => c.server).map((c) => c.id));
+  // (On réutilise `serverIds` calculé plus haut — même ensemble d'ids de tournois serveur.)
   const serverResults: OfficialResult[] = [];
   for (const c of comps) {
     if (!c.server) continue;
@@ -195,7 +195,7 @@ export function competitionSlices(
   }
   // On conserve les palmarès locaux éventuels (compId absent des tournois serveur) et on
   // remplace ceux des tournois serveur par la version dérivée.
-  const keptLocal = s.officialResults.filter((o) => !o.compId || !serverCompIds.has(o.compId));
+  const keptLocal = s.officialResults.filter((o) => !o.compId || !serverIds.has(o.compId));
   const officialResults = [...serverResults, ...keptLocal];
   return { ...base, officialResults };
 }

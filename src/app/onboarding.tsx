@@ -432,7 +432,7 @@ export default function Onboarding() {
             label="Code de parrainage (facultatif)"
             value={referralCode}
             onChangeText={(t) => setReferralCode(t.toUpperCase())}
-            placeholder="Ex. A1B2C3D4"
+            placeholder="Ex. A1B2C3D4E5F6"
             autoCapitalize="characters"
           />
 

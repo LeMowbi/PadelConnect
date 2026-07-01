@@ -6,7 +6,7 @@ import { PhotoPlaceholder } from './PhotoPlaceholder';
 import { Txt } from './ui';
 import { colors, radius, spacing } from '@/theme';
 
-// Photo distante (réelle) avec repli automatique sur le visuel doré si l'image manque.
+// Photo distante (réelle) avec repli automatique sur le visuel d'accent du club si l'image manque.
 // `overlay` + `caption` permettent un rendu "héros" (nom du club superposé sur la photo).
 export function ClubPhoto({
   uri,

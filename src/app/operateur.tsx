@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Share, StyleSheet, TextInput, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Screen } from '@/components/Screen';
@@ -129,38 +129,51 @@ export default function Operateur() {
 
   // Messages d'aide / signalements (table support_messages, RLS opérateur).
   const [support, setSupport] = useState<ServerSupportMessage[]>([]);
+  // Refs vers les actions serveur : leur identité change à chaque rendu (objet de contexte
+  // recréé), donc on les appelle via une ref stable pour NE PAS relancer les fetch en boucle
+  // à chaque changement d'état (effets à dépendances vides).
+  const fetchSupportRef = useRef(fetchSupportMessages);
+  fetchSupportRef.current = fetchSupportMessages;
   useEffect(() => {
     let alive = true;
-    fetchSupportMessages().then(({ messages }) => {
+    fetchSupportRef.current().then(({ messages }) => {
       if (alive) setSupport(messages);
     });
     return () => {
       alive = false;
     };
-  }, [fetchSupportMessages]);
+  }, []);
   const markSupport = async (id: string, status: ServerSupportMessage['status']) => {
+    const prev = support.find((m) => m.id === id)?.status;
     setSupport((cur) => cur.map((m) => (m.id === id ? { ...m, status } : m)));
-    await setSupportMessageStatus(id, status);
+    const { ok } = await setSupportMessageStatus(id, status);
+    // Échec serveur : on annule l'affichage optimiste (sinon le statut affiché ment).
+    if (!ok && prev) setSupport((cur) => cur.map((m) => (m.id === id ? { ...m, status: prev } : m)));
   };
   const newSupport = support.filter((m) => m.status === 'new').length;
+  // Clubs démo LOCAUX seulement (les clubs serveur ont fromServer=true et sont gérés ailleurs).
+  const demoClubs = state.customClubs.filter((c) => !c.fromServer);
 
   // Demandes d'inscription reçues sur le SERVEUR (table club_requests, lisible par le
   // seul opérateur via RLS). Un joueur les envoie depuis « Inscrire mon club ».
   const [requests, setRequests] = useState<ServerClubRequest[]>([]);
   const [loadingReq, setLoadingReq] = useState(true);
   const [reqError, setReqError] = useState(false);
+  // Ref stable vers l'action (identité recréée à chaque rendu) → pas de refetch en boucle.
+  const fetchRequestsRef = useRef(fetchClubRequests);
+  fetchRequestsRef.current = fetchClubRequests;
   const loadRequests = useCallback(async () => {
     setLoadingReq(true);
-    const { ok, requests: rows } = await fetchClubRequests();
+    const { ok, requests: rows } = await fetchRequestsRef.current();
     setReqError(!ok);
     setRequests(rows);
     setLoadingReq(false);
-  }, [fetchClubRequests]);
+  }, []);
   // Chargement initial : on n'appelle setState que DANS le callback async (après await),
   // jamais de façon synchrone dans le corps de l'effet (cf. react-hooks/set-state-in-effect).
   useEffect(() => {
     let alive = true;
-    fetchClubRequests().then(({ ok, requests: rows }) => {
+    fetchRequestsRef.current().then(({ ok, requests: rows }) => {
       if (!alive) return;
       setReqError(!ok);
       setRequests(rows);
@@ -828,8 +841,10 @@ export default function Operateur() {
       {/* Clubs en démo locale — flux gérant historique (sans serveur). À ne pas confondre
           avec « Demandes reçues » ci-dessus, qui vient du serveur. */}
       <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title={`Clubs démo (local) · ${state.customClubs.length}`} />
-        {state.customClubs.length === 0 ? (
+        {/* UNIQUEMENT les clubs démo LOCAUX (fromServer=false) : les clubs venus du serveur sont
+            déjà gérés via « Demandes reçues » / la liste publique, ne pas les compter deux fois. */}
+        <SectionHeader title={`Clubs démo (local) · ${demoClubs.length}`} />
+        {demoClubs.length === 0 ? (
           <Card>
             <Txt variant="muted">
               Clubs créés en local depuis l'Espace Club (démo). Les vraies demandes d'inscription arrivent dans « Demandes reçues »
@@ -837,7 +852,7 @@ export default function Operateur() {
             </Txt>
           </Card>
         ) : (
-          state.customClubs.map((c) => (
+          demoClubs.map((c) => (
             <Card key={c.id} style={{ marginBottom: spacing.sm }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
                 <IconCircle icon="business" color={colors.blue} bg={colors.blueSoft} size={40} />

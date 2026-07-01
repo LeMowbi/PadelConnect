@@ -60,7 +60,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.xxl,
   },
   handle: {
     alignSelf: 'center',

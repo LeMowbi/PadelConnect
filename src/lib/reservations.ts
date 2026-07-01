@@ -209,9 +209,11 @@ export async function linkParticipants(reservationId: string, phones: string[]):
 // Les réservations où JE suis invité (participant), AVEC le statut de mon invitation.
 // 'invited' = à confirmer (Accepter/Refuser), 'accepted' = je viens, 'declined' = j'ai refusé.
 export type MyParticipation = { reservationId: string; status: 'invited' | 'accepted' | 'declined' };
-export async function fetchMyParticipations(userId: string): Promise<MyParticipation[]> {
+// null = échec réseau (≠ tableau vide = « aucune invitation ») → l'appelant garde l'existant et
+// n'efface pas les invitations en cours au retour au premier plan.
+export async function fetchMyParticipations(userId: string): Promise<MyParticipation[] | null> {
   const { data, error } = await supabase.from('reservation_participants').select('reservation_id, status').eq('user_id', userId);
-  if (error) return [];
+  if (error) return null;
   return (data ?? []).map((r: { reservation_id: string; status: string | null }) => ({
     reservationId: r.reservation_id,
     status: (r.status as MyParticipation['status']) ?? 'invited',

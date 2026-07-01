@@ -43,7 +43,9 @@ shipper sur TestFlight.
 ## 5. Stack technique
 
 - **Expo SDK ~56**, **React Native 0.85**, **expo-router**, **TypeScript strict**.
-- **React Compiler activé** — pièges à respecter :
+- **React Compiler** : le flag `experiments.reactCompiler` est **désactivé** dans `app.json`
+  (stabilité), mais on **respecte quand même ses règles** pour pouvoir l'activer plus tard —
+  pièges à respecter :
   - pas de `useCallback` avant un `return` anticipé ;
   - **jamais** de `setState` synchrone dans le corps d'un effet (utiliser un callback après
     `await`, ou un initialiseur `useState`).
@@ -90,7 +92,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `32` (voir dossier `supabase/`).
+  **SQL Editor → Run**. Migrations actuelles : `02` → `35` (voir dossier `supabase/`).
 - **Edge Function** `supabase/functions/notify-club/index.ts` (Deno) : envoie les push via
   l'API Expo. Déclenchée par des **Database Webhooks** (INSERT + UPDATE). Redéploiement **sans
   terminal** : Dashboard → Edge Functions → notify-club → Edit → coller le code → Deploy.

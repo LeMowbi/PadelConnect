@@ -7,6 +7,7 @@ import { Card, Tag, Txt } from './ui';
 import { clubGallery, defaultCourts, type Club } from '@/data/clubs';
 import { useApp } from '@/store/AppContext';
 import { hapticLight } from '@/lib/haptics';
+import { minPrice } from '@/lib/pricing';
 import { fcfa, initials } from '@/lib/format';
 import { colors, radius, spacing } from '@/theme';
 
@@ -35,7 +36,13 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
   };
 
   const heart = (
-    <Pressable onPress={onHeart} hitSlop={8} style={styles.heart}>
+    <Pressable
+      onPress={onHeart}
+      hitSlop={8}
+      style={styles.heart}
+      accessibilityRole="button"
+      accessibilityLabel={fav ? `Retirer ${club.name} des favoris` : `Ajouter ${club.name} aux favoris`}
+    >
       <Animated.View style={{ transform: [{ scale: heartScale }] }}>
         <Ionicons name={fav ? 'heart' : 'heart-outline'} size={18} color={fav ? colors.danger : colors.white} />
       </Animated.View>
@@ -82,7 +89,7 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
               numberOfLines={1}
               style={{ fontWeight: '700', flexShrink: 1, marginLeft: spacing.sm }}
             >
-              dès {fcfa(club.priceFrom)}
+              dès {fcfa(minPrice(club))}
             </Txt>
           )}
         </View>
@@ -128,7 +135,7 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
             </Txt>
           ) : (
             <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
-              dès {fcfa(club.priceFrom)} · session
+              dès {fcfa(minPrice(club))} · session
             </Txt>
           )}
         </View>

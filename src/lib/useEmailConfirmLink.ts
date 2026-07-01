@@ -4,7 +4,7 @@
 // recharge le profil et entre dans l'écran d'accueil.
 
 import * as Linking from 'expo-linking';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { supabase } from './supabase';
 
 type Result = 'confirmed' | 'error';
@@ -24,6 +24,10 @@ function hasAuthError(url: string | null): boolean {
 }
 
 export function useEmailConfirmLink(onResult: (r: Result) => void) {
+  // Codes déjà échangés (PKCE consomme le code au 1er échange) : garde d'idempotence pour éviter
+  // un 2ᵉ échange (via getInitialURL stable + ré-run de l'effet) qui échouerait et afficherait un
+  // faux « lien expiré » alors que la confirmation a RÉUSSI. Persiste entre les re-renders.
+  const handledCodes = useRef<Set<string>>(new Set());
   useEffect(() => {
     let active = true;
 
@@ -37,7 +41,8 @@ export function useEmailConfirmLink(onResult: (r: Result) => void) {
         return;
       }
       const code = codeFromUrl(url);
-      if (!code) return;
+      if (!code || handledCodes.current.has(code)) return; // déjà traité → on n'échange pas 2 fois
+      handledCodes.current.add(code);
       const { error } = await supabase.auth.exchangeCodeForSession(code);
       if (!active) return;
       onResult(error ? 'error' : 'confirmed');
