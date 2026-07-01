@@ -44,10 +44,15 @@ publicitaire. → « Data is **not** used to track you ».
 
 - **Sensitive Info / Location / Financial / Browsing history** : **rien** (l'app n'utilise pas le
   GPS, ne fait aucun paiement, n'a pas de navigateur).
-- **Diagnostics / Usage** : **rien pour l'instant.** ⚠️ Si on ajoute plus tard le suivi de bugs
-  (Sentry) ou des statistiques d'usage, il faudra ajouter **Diagnostics → Crash Data** et/ou
-  **Usage Data → Product Interaction** (toujours *Not used for tracking*). Je te préviendrai le
-  jour où on l'active.
+
+**Données collectées mais NON reliées à l'identité** (*Not Linked to You*, *Used for tracking* =
+NON, *Purpose* = App Functionality / Analytics) — journal de diagnostics self-hosted dans Supabase,
+sans identifiant utilisateur :
+
+| Catégorie Apple            | Donnée                          | Pourquoi |
+|----------------------------|---------------------------------|----------|
+| **Diagnostics**            | Crash Data                      | Détecter et corriger les bugs |
+| **Usage Data**             | Product Interaction             | Compter inscriptions / réservations / tournois |
 
 ## 3. Autorisations (déjà en place dans l'app ✅)
 

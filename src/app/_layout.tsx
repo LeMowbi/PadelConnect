@@ -7,7 +7,9 @@ import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnimatedSplash } from '@/components/AnimatedSplash';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ToastProvider, useToast } from '@/components/Toast';
+import { installGlobalErrorLogging } from '@/lib/diagnostics';
 import { useEmailConfirmLink } from '@/lib/useEmailConfirmLink';
 import { AppProvider, useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
@@ -16,6 +18,10 @@ import { colors } from '@/theme';
 // prêtes : sinon, sur iPhone/Android, le splash se masque trop tôt et l'utilisateur
 // voit un bref écran crème vide. (No-op sur le web.)
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// Journalise les erreurs JS non rattrapées (crashs) dans nos diagnostics (self-hosted Supabase).
+// Appelé une fois au chargement du module — avant tout rendu.
+installGlobalErrorLogging();
 
 export default function RootLayout() {
   // Polices embarquées localement (assets/fonts). Refonte : Bricolage Grotesque
@@ -43,11 +49,13 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>
         {fontsLoaded ? (
-          <AppProvider>
-            <ToastProvider>
-              <RootNav />
-            </ToastProvider>
-          </AppProvider>
+          <ErrorBoundary>
+            <AppProvider>
+              <ToastProvider>
+                <RootNav />
+              </ToastProvider>
+            </AppProvider>
+          </ErrorBoundary>
         ) : (
           <View style={{ flex: 1, backgroundColor: colors.bg }} />
         )}

@@ -71,6 +71,7 @@ import { cancelMatchReminder, scheduleMatchReminder, syncMatchReminders } from '
 import { registerPushToken } from '@/lib/push';
 import { uploadAvatar } from '@/lib/avatar';
 import { clearOperatorNewsServer, fetchOperatorNews, setOperatorNewsServer } from '@/lib/operatorNews';
+import { track } from '@/lib/diagnostics';
 import { phoneToAuthEmail, supabase } from '@/lib/supabase';
 import {
   clampLevel,
@@ -859,6 +860,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (pendingPhoto && !/^https?:\/\//.test(pendingPhoto)) {
           await AsyncStorage.setItem(PENDING_AVATAR_KEY, pendingPhoto);
         }
+        track('signup_completed', { needsConfirm: !data.session });
         // Confirmation requise → pas encore de session : on invite à valider l'e-mail.
         if (!data.session) return { ok: true, needsConfirm: true };
         // Confirmation désactivée (selon config) → session immédiate : on charge tout.
@@ -1037,6 +1039,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           });
           if (!newId) return { ok: false };
           await refreshCompetitions(state.serverUserId);
+          track('competition_created', { organizerType: c.organizerType, clubId: c.clubId });
           return { ok: true };
         }
         setState((s) => ({ ...s, myCompetitions: [{ ...c, id: uid(), createdByMe: true, server: false }, ...s.myCompetitions] }));
@@ -1145,6 +1148,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             .filter((p): p is string => !!p);
           if (invitedPhones.length > 0) void linkParticipants(created.id, invitedPhones);
           if (state.remindersOn) void scheduleMatchReminder(created); // rappel local ~2 h avant
+          track('reservation_created', { clubId: created.clubId, players: created.players });
           return true;
         }
 
