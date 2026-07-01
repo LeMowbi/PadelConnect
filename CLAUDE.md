@@ -125,11 +125,24 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 
 ## 10. État actuel / à faire
 
-- **Build #28** en cours de compilation + auto-submit TestFlight (remplace #27).
-- Le propriétaire doit avoir lancé sur Supabase : SQL `30`, `31`, `32` ; webhook `friend_requests`
-  (INSERT+UPDATE) → notify-club ; redéploiement de notify-club. **(fait le 2026-07-01)**
-- Pistes restantes / post-lancement : Universal Links, vrai SMTP de confirmation, perf, un
-  éventuel composant kit `PlanningGrid` (non prioritaire).
+- **Build #28** livré (auto-submit TestFlight) : amis-demande, contacts, badge Partenaire, actu
+  serveur, uploads réparés, sécurité stockage, animations.
+- Serveur appliqué le 2026-07-01 : SQL `30`/`31`/`32`, webhook `friend_requests`, redéploiement
+  notify-club.
+
+### Feuille de route (décidée avec le porteur le 2026-07-01)
+
+- ✅ **Stats club** (revenu + créneaux creux) — fait.
+- ✅ **Skeletons** de chargement — fait (`src/components/Skeleton.tsx`).
+- ✅ **Conformité App Store** (confidentialité) — `docs/privacy.html` +
+  `docs/APP-STORE-CONFORMITE.md` (le porteur doit héberger l'URL + remplir App Privacy).
+- ⏳ **Suivi bugs + usage** (idée 3) — à faire. Décision en attente : Sentry/PostHog (comptes
+  externes, riche) **vs** log self-hosted dans Supabase (simple, sans compte, dans notre contrôle).
+- ⏳ **Universal Links** (idée 6) — à faire. Bloqué par le choix d'un **domaine contrôlé** (le
+  root `lemowbi.github.io` via un repo dédié, ou un domaine propre) pour héberger l'AASA.
+- 🔒 **Programme de fidélité** (idée 5) — **gardé pour plus tard** (X parties jouées = récompense).
+- ❌ **Paiement en ligne** (idée 7) — pas pour l'instant.
+- Autres post-lancement : vrai SMTP de confirmation, perf, éventuel kit `PlanningGrid`.
 
 ## 11. Où regarder
 
