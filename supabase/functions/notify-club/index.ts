@@ -7,6 +7,8 @@
 //   • competitions UPDATE (pending → published) → notif à l'ORGANISATEUR (tournoi validé) ET, si
 //     frais > 0, à l'OPÉRATEUR (« frais à encaisser ») — donc seulement après validation du club.
 //   • friend_requests INSERT (pending) → notif au DESTINATAIRE (nouvelle demande d'ami).
+//   • friend_requests UPDATE (→ pending) → notif au DESTINATAIRE (demande RENVOYÉE après un refus :
+//     send_friend_request fait un UPDATE on conflict, pas un INSERT).
 //   • friend_requests UPDATE (→ accepted) → notif à l'EXPÉDITEUR (demande acceptée).
 // L'envoi passe par l'API Push d'Expo (pas besoin de gérer APNs soi-même : Expo route vers
 // Apple/Google). Les webhooks « reservations » et « competitions » doivent écouter INSERT
@@ -127,6 +129,14 @@ Deno.serve(async (req) => {
       }
     } else if (table === 'friend_requests' && type === 'INSERT' && record.status === 'pending') {
       // Nouvelle demande d'ami → prévenir le DESTINATAIRE (il accepte/refuse dans l'app).
+      notifs.push({
+        targets: await userToken(record.to_user),
+        title: 'Nouvelle demande d’ami 👋',
+        body: `${await userName(record.from_user)} veut t’ajouter sur PadelConnect.`,
+      });
+    } else if (table === 'friend_requests' && type === 'UPDATE' && record.status === 'pending' && oldRecord.status !== 'pending') {
+      // Demande RENVOYÉE après un refus : send_friend_request fait alors un UPDATE (on conflict),
+      // pas un INSERT (cf. 30_friend_requests.sql). Sans ce cas, la 2ᵉ demande n'enverrait aucun push.
       notifs.push({
         targets: await userToken(record.to_user),
         title: 'Nouvelle demande d’ami 👋',
