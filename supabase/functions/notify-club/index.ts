@@ -79,25 +79,29 @@ Deno.serve(async (req) => {
         body: 'Un ami a accepté de jouer avec toi.',
       });
     } else if (table === 'competitions' && type === 'INSERT' && record.status === 'pending' && record.organizer_type === 'joueur') {
-      // Tournoi créé par un JOUEUR → en attente : prévenir le club hôte (à valider) et l'opérateur (frais).
+      // Tournoi créé par un JOUEUR → en attente : prévenir le club hôte (à valider).
       notifs.push({
         targets: await clubManagerTokens(record.club_id),
         title: 'Nouvelle demande de tournoi 🏆',
         body: `${record.organizer_name ?? 'Un joueur'} propose « ${record.title ?? ''} » — à valider ou refuser.`,
       });
-      const fee = Number(record.commission ?? 0);
-      notifs.push({
-        targets: await operatorTokens(),
-        title: 'Tournoi joueur 🏆',
-        body: `« ${record.title ?? ''} »${fee > 0 ? ` — frais à encaisser : ${fee.toLocaleString('fr-FR')} FCFA (Wave).` : '.'}`,
-      });
     } else if (table === 'competitions' && type === 'UPDATE' && record.status === 'published' && oldRecord.status === 'pending') {
-      // Le club a VALIDÉ un tournoi joueur → prévenir l'organisateur.
+      // Le club a VALIDÉ un tournoi joueur → prévenir l'organisateur ET, si c'est un tournoi
+      // joueur avec frais, l'opérateur (à encaisser par Wave). On ne facture QUE les tournois
+      // réellement confirmés — un tournoi refusé ne génère aucun frais.
       notifs.push({
         targets: await userToken(record.organizer_id),
         title: 'Tournoi validé ✅',
         body: `${record.club_name ?? 'Le club'} a validé ton tournoi « ${record.title ?? ''} ». Il est maintenant visible.`,
       });
+      const fee = Number(record.commission ?? 0);
+      if (record.organizer_type === 'joueur' && fee > 0) {
+        notifs.push({
+          targets: await operatorTokens(),
+          title: 'Tournoi joueur à encaisser 🏆',
+          body: `« ${record.title ?? ''} » validé — frais à encaisser : ${fee.toLocaleString('fr-FR')} FCFA (Wave).`,
+        });
+      }
     }
 
     // Aplatis toutes les notifs en messages Expo (une entrée par destinataire).
