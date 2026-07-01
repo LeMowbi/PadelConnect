@@ -136,10 +136,12 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - ✅ **Skeletons** de chargement — fait (`src/components/Skeleton.tsx`).
 - ✅ **Conformité App Store** (confidentialité) — `docs/privacy.html` +
   `docs/APP-STORE-CONFORMITE.md` (le porteur doit héberger l'URL + remplir App Privacy).
-- ⏳ **Suivi bugs + usage** (idée 3) — à faire. Décision en attente : Sentry/PostHog (comptes
-  externes, riche) **vs** log self-hosted dans Supabase (simple, sans compte, dans notre contrôle).
-- ⏳ **Universal Links** (idée 6) — à faire. Bloqué par le choix d'un **domaine contrôlé** (le
-  root `lemowbi.github.io` via un repo dédié, ou un domaine propre) pour héberger l'AASA.
+- ✅ **Suivi bugs + usage** (idée 3) — fait, **self-hosted** (choix du porteur) : `33_diagnostics.sql`
+  (app_errors + app_events), `src/lib/diagnostics.ts` (logError/track), ErrorBoundary racine +
+  handler global. Anonyme, lecture opérateur uniquement. Le porteur doit lancer `33_diagnostics.sql`.
+- ⏳ **Universal Links** (idée 6) — porteur a choisi **domaine propre** ; AASA + guide prêts
+  (`docs/apple-app-site-association`, `docs/UNIVERSAL-LINKS.md`). **En attente du nom de domaine**
+  pour finaliser (associatedDomains + lien parrainage + rebuild).
 - 🔒 **Programme de fidélité** (idée 5) — **gardé pour plus tard** (X parties jouées = récompense).
 - ❌ **Paiement en ligne** (idée 7) — pas pour l'instant.
 - Autres post-lancement : vrai SMTP de confirmation, perf, éventuel kit `PlanningGrid`.
