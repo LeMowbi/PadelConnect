@@ -729,14 +729,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         expired.forEach((id) => delete boostExpiry[id]);
         return { ...s, boostedClubIds: s.boostedClubIds.filter((id) => !expired.includes(id)), boostExpiry };
       });
-    sweep();
+    // Premier balayage DIFFÉRÉ (pas de setState synchrone dans le corps de l'effet — règle
+    // React Compiler), puis à chaque retour au premier plan.
+    const t = setTimeout(sweep, 0);
     const sub = RNAppState.addEventListener('change', (st) => st === 'active' && sweep());
-    return () => sub.remove();
+    return () => {
+      clearTimeout(t);
+      sub.remove();
+    };
   }, [hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
-    (async () => {
+    const persist = async () => {
       try {
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         // Sauvegarde complète OK → on lève l'éventuel drapeau « stockage plein ».
@@ -757,7 +762,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         setState((s) => (s.storageFull ? s : { ...s, storageFull: true }));
       }
-    })();
+    };
+    // Debounce : une rafale de petites mutations (saisie d'un champ, bascule d'un favori) ne
+    // déclenche qu'UNE sérialisation après un court silence, au lieu d'un JSON.stringify + write
+    // à chaque frappe. Compromis accepté : une mutation dans les 500 ms précédant une fermeture
+    // brutale peut ne pas être persistée (miroir best-effort, le serveur reste la source de vérité).
+    const t = setTimeout(persist, 500);
+    return () => clearTimeout(t);
   }, [state, hydrated]);
 
   // MES réservations — source unique pour tout calcul PERSONNEL. En mode serveur, un compte

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Avatar } from '@/components/Avatar';
 import { ClubCard } from '@/components/ClubCard';
@@ -72,8 +72,15 @@ export default function HomeScreen() {
   const greeting = new Date().getHours() < 18 ? 'Bonjour' : 'Bonsoir';
 
   // Clubs sponsorisés en tête (badge visible), le reste en ordre alphabétique.
-  const nearbyClubs = activeClubs(state.customClubs, state.clubInfo).sort(
-    (a, b) => Number(state.boostedClubIds.includes(b.id)) - Number(state.boostedClubIds.includes(a.id)),
+  // Mémoïsé pour ne pas recalculer activeClubs + tri à chaque rendu (pulse du hero, etc.).
+  const nearbyClubs = useMemo(
+    () =>
+      activeClubs(state.customClubs, state.clubInfo).sort(
+        (a, b) => Number(state.boostedClubIds.includes(b.id)) - Number(state.boostedClubIds.includes(a.id)),
+      ),
+    // state.clubStatus : dépendance indirecte (activeClubs lit clubStatusMap) — cf. clubs/index.tsx.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.customClubs, state.clubInfo, state.clubStatus, state.boostedClubIds],
   );
   const now = Date.now();
   const today = dayKey(new Date());
@@ -255,7 +262,7 @@ export default function HomeScreen() {
         ) : null}
 
         {/* HERO — CTA principal unique, carte VERTE animée (reflet + point qui pulse) */}
-        <Pressable onPress={() => go('/reserver')}>
+        <Pressable onPress={() => go('/reserver')} accessibilityRole="button" accessibilityLabel="Réserver un créneau">
           <LinearGradient colors={gradients.deepGreen} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
             <Animated.View pointerEvents="none" style={[styles.heroSheen, { transform: [{ translateX: sheenX }, { rotate: '18deg' }] }]} />
             <View style={styles.brandRow}>
@@ -282,7 +289,13 @@ export default function HomeScreen() {
         {/* Accès rapide — 4 univers (D1 : Coachs retiré, accessible par fiche club) */}
         <View style={styles.quickRow}>
           {ACTIONS.map((a) => (
-            <Pressable key={a.label} onPress={() => go(a.route)} style={styles.quickItem}>
+            <Pressable
+              key={a.label}
+              onPress={() => go(a.route)}
+              style={styles.quickItem}
+              accessibilityRole="button"
+              accessibilityLabel={a.label}
+            >
               <View style={[styles.quickIcon, { backgroundColor: a.bg }]}>
                 <Ionicons name={a.icon} size={22} color={a.tint} />
               </View>

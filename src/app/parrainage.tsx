@@ -33,7 +33,7 @@ export default function ParrainageScreen() {
     const uid = state.serverUserId;
     if (!uid) return;
     const n = await fetchReferralCount(uid);
-    setCount(n);
+    if (n != null) setCount(n); // null = échec réseau → on garde le compteur affiché
   };
   const { refreshControl } = usePullToRefresh(reloadCount);
 
@@ -42,7 +42,7 @@ export default function ParrainageScreen() {
     const uid = state.serverUserId;
     if (!uid) return;
     fetchReferralCount(uid).then((n) => {
-      if (alive) setCount(n);
+      if (alive && n != null) setCount(n); // null = échec réseau → pas d'écrasement
     });
     return () => {
       alive = false;
@@ -106,7 +106,7 @@ export default function ParrainageScreen() {
 
         <View style={styles.stats}>
           <StatTile value={count == null ? '—' : `${count}`} label="Amis rejoints" color={colors.signature} bg={colors.signatureSoft} />
-          <StatTile value="Illimité" label="Invitations à envoyer" color={colors.amber} bg={colors.amberSoft} />
+          <StatTile value="Illimité" label="Invitations à envoyer" color={colors.amberDark} bg={colors.amberSoft} />
         </View>
 
         <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>

@@ -17,7 +17,7 @@ import { addReservationToCalendar } from '@/lib/calendar';
 import { openWhatsApp } from '@/lib/contact';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { courtsFor, freeCourts, hasFullDayCompetition, openSlotsFor, type AvailCtx } from '@/lib/availability';
-import { nextDays, slotTimestamp, type DayOption } from '@/lib/days';
+import { dateKeyLabel, nextDays, slotTimestamp, type DayOption } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
 import { minPrice, priceForSlot, priceTiersFor } from '@/lib/pricing';
 import { MAX_UPCOMING, useApp } from '@/store/AppContext';
@@ -119,7 +119,7 @@ export default function ReserverScreen() {
       clubId: club.id,
       clubName: club.name,
       court: effectiveCourt,
-      date: day.label,
+      date: dateKeyLabel(day.key), // libellé ABSOLU (« Lun 8 juin ») : ne devient jamais faux le lendemain
       dateKey: day.key,
       time: slot,
       startsAt,

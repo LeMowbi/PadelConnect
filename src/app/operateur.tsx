@@ -129,6 +129,7 @@ export default function Operateur() {
 
   // Messages d'aide / signalements (table support_messages, RLS opérateur).
   const [support, setSupport] = useState<ServerSupportMessage[]>([]);
+  const [supportError, setSupportError] = useState(false);
   // Refs vers les actions serveur : leur identité change à chaque rendu (objet de contexte
   // recréé), donc on les appelle via une ref stable pour NE PAS relancer les fetch en boucle
   // à chaque changement d'état (effets à dépendances vides).
@@ -136,8 +137,12 @@ export default function Operateur() {
   fetchSupportRef.current = fetchSupportMessages;
   useEffect(() => {
     let alive = true;
-    fetchSupportRef.current().then(({ messages }) => {
-      if (alive) setSupport(messages);
+    // On lit le drapeau `ok` : un échec réseau (ok=false, messages=[]) ne doit PAS afficher
+    // « aucun signalement » à tort ni écraser la liste — on signale l'erreur à la place.
+    fetchSupportRef.current().then(({ ok, messages }) => {
+      if (!alive) return;
+      setSupportError(!ok);
+      if (ok) setSupport(messages);
     });
     return () => {
       alive = false;
@@ -182,7 +187,9 @@ export default function Operateur() {
     return () => {
       alive = false;
     };
-  }, [fetchClubRequests]);
+    // Dépendances vides VOULUES : on passe par fetchRequestsRef.current (identité stable). Mettre
+    // `fetchClubRequests` en dépendance relancerait le fetch à CHAQUE changement d'état global.
+  }, []);
 
   const markRequest = async (id: string, status: ServerClubRequest['status']) => {
     const prev = requests;
@@ -379,7 +386,7 @@ export default function Operateur() {
           color={colors.green}
           bg={colors.greenSoft}
         />
-        <StatTile value={fcfa(thisWeekCommission)} label="Commission / 7 j" color={colors.amber} bg={colors.amberSoft} />
+        <StatTile value={fcfa(thisWeekCommission)} label="Commission / 7 j" color={colors.amberDark} bg={colors.amberSoft} />
       </View>
 
       {/* Sélecteur de semaine ‹ › */}
@@ -422,7 +429,7 @@ export default function Operateur() {
         <View style={styles.totals}>
           <StatTile value={`${totalCount}`} label="Parties jouées" color={colors.green} bg={colors.greenSoft} />
           <StatTile value={fcfa(totalRevenue)} label="Volume" color={colors.green} bg={colors.greenSoft} />
-          <StatTile value={fcfa(totalDue)} label="Reste à encaisser" color={colors.amber} bg={colors.amberSoft} />
+          <StatTile value={fcfa(totalDue)} label="Reste à encaisser" color={colors.amberDark} bg={colors.amberSoft} />
         </View>
         {weekUpcoming > 0 ? (
           <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
@@ -445,7 +452,7 @@ export default function Operateur() {
             return (
               <Card key={r.clubId} style={{ marginBottom: spacing.md }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                  <IconCircle icon="wallet" color={colors.amber} bg={colors.amberSoft} />
+                  <IconCircle icon="wallet" color={colors.amberDark} bg={colors.amberSoft} />
                   <View style={{ flex: 1 }}>
                     <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
                       {r.clubName}
@@ -556,7 +563,7 @@ export default function Operateur() {
           requests.map((r) => (
             <Card key={r.id} style={{ marginBottom: spacing.sm }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                <IconCircle icon="business" color={colors.amber} bg={colors.amberSoft} size={40} />
+                <IconCircle icon="business" color={colors.amberDark} bg={colors.amberSoft} size={40} />
                 <View style={{ flex: 1 }}>
                   <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
                     {r.name}
@@ -788,7 +795,11 @@ export default function Operateur() {
         <SectionHeader title={`Signalements · ${newSupport}`} />
         {support.length === 0 ? (
           <Card>
-            <Txt variant="muted">Aucun message pour l'instant. Les signalements des joueurs (Profil → Aide & support) arrivent ici.</Txt>
+            <Txt variant="muted">
+              {supportError
+                ? 'Impossible de charger les signalements — vérifie ta connexion, puis tire pour rafraîchir.'
+                : "Aucun message pour l'instant. Les signalements des joueurs (Profil → Aide & support) arrivent ici."}
+            </Txt>
           </Card>
         ) : (
           support.map((m) => (

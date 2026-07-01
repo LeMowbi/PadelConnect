@@ -86,7 +86,7 @@ export default function InscrireClub() {
 
       {/* Argumentaire : ce que le club gagne à rejoindre PadelConnect (écran dédié). */}
       <Card onPress={() => router.push('/pourquoi')} style={styles.whyLink}>
-        <IconCircle icon="sparkles-outline" color={colors.amber} bg={colors.amberSoft} />
+        <IconCircle icon="sparkles-outline" color={colors.amberDark} bg={colors.amberSoft} />
         <View style={{ flex: 1 }}>
           <Txt variant="h3">Pourquoi rejoindre PadelConnect ?</Txt>
           <Txt variant="muted">Plus de réservations, zéro paperasse, une page pro.</Txt>

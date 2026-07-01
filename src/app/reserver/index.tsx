@@ -98,7 +98,14 @@ export default function ReserverScreen() {
             const dd = new Date(d.value);
             const active = d.key === day.key;
             return (
-              <Pressable key={d.key} onPress={() => pickDay(d)} style={[styles.dayPill, active && styles.dayPillActive]}>
+              <Pressable
+                key={d.key}
+                onPress={() => pickDay(d)}
+                style={[styles.dayPill, active && styles.dayPillActive]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`${i === 0 ? "Aujourd'hui" : DOW[dd.getUTCDay()]} ${dd.getUTCDate()}`}
+              >
                 <Txt variant="small" color={active ? colors.onSignature : colors.textFaint} style={{ fontSize: 10, fontWeight: '700' }}>
                   {i === 0 ? 'AUJ.' : DOW[dd.getUTCDay()]}
                 </Txt>
@@ -154,6 +161,9 @@ export default function ReserverScreen() {
                       disabled={none}
                       onPress={() => setSlot(row.time)}
                       style={[styles.slotTile, sel ? styles.slotTileSel : none ? styles.slotTileOff : styles.slotTileFree]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: sel, disabled: none }}
+                      accessibilityLabel={`${row.time}, ${none ? 'complet' : `${row.clubs.length} club${row.clubs.length > 1 ? 's' : ''} libre${row.clubs.length > 1 ? 's' : ''}`}`}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         <Txt variant="h3" color={sel ? colors.onSignature : colors.text} style={{ fontSize: 18 }}>
@@ -304,18 +314,6 @@ const styles = StyleSheet.create({
   },
   legend: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md, paddingHorizontal: spacing.xs },
   autoHint: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.xs },
-  hourBlock: { marginBottom: spacing.lg },
-  hourHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.sm, paddingLeft: spacing.xs },
-  primePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: colors.coralSoft,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    marginLeft: 4,
-  },
   clubMini: {
     flexDirection: 'row',
     alignItems: 'center',

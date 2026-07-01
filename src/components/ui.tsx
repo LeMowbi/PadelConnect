@@ -226,7 +226,7 @@ const tagTones: Record<TagTone, { bg: string; fg: string }> = {
   blue: { bg: colors.blueSoft, fg: colors.blue },
   coral: { bg: colors.coralSoft, fg: colors.coral },
   purple: { bg: colors.purpleSoft, fg: colors.purple },
-  amber: { bg: colors.amberSoft, fg: colors.amber },
+  amber: { bg: colors.amberSoft, fg: colors.amberDark }, // texte or lisible sur tint or (WCAG AA)
 };
 
 const tag = StyleSheet.create({

@@ -347,7 +347,7 @@ export function SectionMonClub({ club }: { club: Club }) {
       </View>
 
       <Card style={{ marginTop: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-        <IconCircle icon="cash" color={colors.amber} bg={colors.amberSoft} size={40} />
+        <IconCircle icon="cash" color={colors.amberDark} bg={colors.amberSoft} size={40} />
         <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
           Tarif affiché aux joueurs :{' '}
           <Txt variant="small" style={{ fontWeight: '700' }}>

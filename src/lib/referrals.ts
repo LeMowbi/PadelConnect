@@ -18,8 +18,10 @@ export function referralCodeForUser(userId: string): string {
 
 // Nombre de filleuls : lignes où je suis le PARRAIN. On filtre explicitement sur
 // referrer_id (sinon la RLS « referrer OU referee » compterait aussi mon propre parrain).
-export async function fetchReferralCount(myUserId: string): Promise<number> {
+// Convention réseau (CLAUDE.md §8) : `null` en cas d'échec (≠ 0 = aucun filleul) pour que
+// l'écran distingue « pas encore de filleul » d'une panne réseau et ne remette pas 0 à tort.
+export async function fetchReferralCount(myUserId: string): Promise<number | null> {
   const { count, error } = await supabase.from('referrals').select('id', { count: 'exact', head: true }).eq('referrer_id', myUserId);
-  if (error || count == null) return 0;
+  if (error || count == null) return null;
   return count;
 }

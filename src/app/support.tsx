@@ -84,7 +84,7 @@ export default function Support() {
 
       {/* Inscrire un club */}
       <Card onPress={() => router.push('/inscrire-club')} style={[styles.row, { marginTop: spacing.md }]}>
-        <IconCircle icon="business" color={colors.amber} bg={colors.amberSoft} />
+        <IconCircle icon="business" color={colors.amberDark} bg={colors.amberSoft} />
         <View style={{ flex: 1 }}>
           <Txt variant="h3">Ton club n'est pas dans la liste ?</Txt>
           <Txt variant="muted">Inscris-le — on te recontacte pour l'activer.</Txt>

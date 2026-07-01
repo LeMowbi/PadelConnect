@@ -42,10 +42,11 @@ function toReview(r: Row): ServerReview {
   };
 }
 
-// Avis d'un club (les plus récents d'abord).
-export async function fetchClubReviews(clubId: string): Promise<ServerReview[]> {
+// Avis d'un club (les plus récents d'abord). Convention réseau (CLAUDE.md §8) : `null` en cas
+// d'échec réseau (≠ [] = aucun avis) pour que l'appelant NE VIDE PAS le miroir affiché sur un blip.
+export async function fetchClubReviews(clubId: string): Promise<ServerReview[] | null> {
   const { data, error } = await supabase.from('reviews').select('*').eq('club_id', clubId).order('created_at', { ascending: false });
-  if (error) return [];
+  if (error) return null;
   return (data ?? []).map((r) => toReview(r as Row));
 }
 

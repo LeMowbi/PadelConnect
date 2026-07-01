@@ -10,7 +10,7 @@ import { Button, Txt } from './ui';
 import { activeClubs, type Club } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { freeCourts, type AvailCtx } from '@/lib/availability';
-import { slotTimestamp, type DayOption } from '@/lib/days';
+import { dateKeyLabel, slotTimestamp, type DayOption } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
 import { priceForSlot } from '@/lib/pricing';
 import { MAX_UPCOMING, useApp } from '@/store/AppContext';
@@ -75,7 +75,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
       clubId: club.id,
       clubName: club.name,
       court,
-      date: day.label,
+      date: dateKeyLabel(day.key), // libellé ABSOLU (« Lun 8 juin ») : ne devient jamais faux le lendemain
       dateKey: day.key,
       time,
       startsAt: slotTimestamp(day.key, time),
@@ -283,14 +283,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   priceLine: { alignItems: 'center', marginTop: spacing.lg },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.signatureSoft,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    marginTop: spacing.md,
-  },
 });

@@ -297,7 +297,7 @@ export function SectionReservations({
         <View style={[styles.stats, { marginTop: spacing.md }]}>
           <StatTile value={`${occupancy}%`} label="Occupation (7 j)" color={colors.green} bg={colors.greenSoft} />
           <StatTile value={weekRes.length} label="Résas (7 j)" color={colors.green} bg={colors.greenSoft} />
-          <StatTile value={topHour} label="Heure phare" color={colors.amber} bg={colors.amberSoft} />
+          <StatTile value={topHour} label="Heure phare" color={colors.amberDark} bg={colors.amberSoft} />
         </View>
 
         {/* Remplissage par créneau sur la semaine (données réelles) */}

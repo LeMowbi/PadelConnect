@@ -77,7 +77,12 @@ export default function ResetPasswordScreen() {
               autoCapitalize="none"
               style={styles.inputInner}
             />
-            <Pressable onPress={() => setHidden((h) => !h)} hitSlop={10}>
+            <Pressable
+              onPress={() => setHidden((h) => !h)}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={hidden ? 'Afficher le mot de passe' : 'Masquer le mot de passe'}
+            >
               <Ionicons name={hidden ? 'eye-outline' : 'eye-off-outline'} size={20} color={colors.textMuted} />
             </Pressable>
           </View>

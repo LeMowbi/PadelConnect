@@ -33,8 +33,8 @@ export const colors = {
   purpleDark: '#5B4FC9',
   purpleSoft: '#E7E3FA',
   // OR — notes/avis, trophées, jauges de trophée.
-  amber: '#C29A3A',
-  amberDark: '#8A6A14', // texte or foncé (sur tint or)
+  amber: '#C29A3A', // or « accent » (icônes/étoiles/jauges sur fond clair ou photo)
+  amberDark: '#785A10', // or « texte » sur tint or (amberSoft) : contraste ≈ 5.2:1 → WCAG AA OK
   amberSoft: '#F3E7CC',
   // Balle de padel (touche d'énergie / point « live »).
   lime: '#C6F24A',

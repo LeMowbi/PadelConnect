@@ -22,13 +22,15 @@ import { colors, gradients, radius, spacing } from '@/theme';
 type Trophy = { label: string; icon: IconName; value: number; steps: number[] };
 const TIER_NAMES = ['Bronze', 'Argent', 'Or', 'Platine'];
 
-// Rang atteint (0 = pas encore débloqué) + prochain seuil à viser.
-function trophyTier(t: Trophy): { tier: number; name: string | null; next: number | null } {
+// Rang atteint (0 = pas encore débloqué) + prochain seuil à viser + seuil du palier COURANT
+// (`floor`) pour que la barre se remplisse sur le segment [palier courant → prochain], pas [0 → prochain].
+function trophyTier(t: Trophy): { tier: number; name: string | null; next: number | null; floor: number } {
   let tier = 0;
   for (const s of t.steps) if (t.value >= s) tier++;
   const name = tier > 0 ? TIER_NAMES[Math.min(tier - 1, TIER_NAMES.length - 1)] : null;
   const next = tier < t.steps.length ? t.steps[tier] : null;
-  return { tier, name, next };
+  const floor = tier > 0 ? t.steps[tier - 1] : 0;
+  return { tier, name, next, floor };
 }
 
 export default function ProfilScreen() {
@@ -240,7 +242,7 @@ export default function ProfilScreen() {
         <View style={styles.stats}>
           <StatTile value={stats.played} label="Parties jouées" color={colors.green} bg={colors.greenSoft} />
           <StatTile value={stats.tournamentsPlayed} label="Tournois joués" color={colors.purple} bg={colors.purpleSoft} />
-          <StatTile value={stats.tournamentsWon} label="Tournois gagnés" color={colors.amber} bg={colors.amberSoft} />
+          <StatTile value={stats.tournamentsWon} label="Tournois gagnés" color={colors.amberDark} bg={colors.amberSoft} />
         </View>
         <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
           Les parties jouées se comptent toutes seules : une réservation passée = une partie.
@@ -252,9 +254,10 @@ export default function ProfilScreen() {
         <SectionHeader title="Trophées" />
         <Card>
           {trophies.map((t, i) => {
-            const { tier, name, next } = trophyTier(t);
+            const { tier, name, next, floor } = trophyTier(t);
             const unlocked = tier > 0;
-            const pct = next ? `${Math.round((t.value / next) * 100)}%` : '100%';
+            // Progression DANS le palier courant : (valeur − seuil courant) / (prochain − seuil courant).
+            const pct = next ? `${Math.round(((t.value - floor) / (next - floor)) * 100)}%` : '100%';
             return (
               <View key={t.label}>
                 {i > 0 ? <Divider style={{ marginVertical: spacing.md }} /> : null}
@@ -370,7 +373,7 @@ export default function ProfilScreen() {
       {!showClub ? (
         <View style={{ marginTop: spacing.xl }}>
           <Card onPress={() => router.push('/inscrire-club')} style={styles.cta}>
-            <IconCircle icon="business" color={colors.amber} bg={colors.amberSoft} />
+            <IconCircle icon="business" color={colors.amberDark} bg={colors.amberSoft} />
             <View style={{ flex: 1 }}>
               <Txt variant="h3">Inscrire mon club</Txt>
               <Txt variant="muted">Ton club n'est pas dans la liste ? On te recontacte.</Txt>

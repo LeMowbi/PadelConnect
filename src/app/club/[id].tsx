@@ -55,7 +55,8 @@ export default function ClubDetail() {
   // via loadReviews (fonction simple, utilisée seulement dans des handlers → pas de mémo).
   const clubId = club?.id;
   const loadReviews = () => {
-    if (clubId) void fetchClubReviews(clubId).then(setServerReviews);
+    // Échec réseau → fetchClubReviews renvoie null : on garde les avis déjà affichés (pas d'écrasement).
+    if (clubId) void fetchClubReviews(clubId).then((r) => r && setServerReviews(r));
   };
   const { refreshControl } = usePullToRefresh(loadReviews);
   useEffect(() => {
@@ -63,7 +64,7 @@ export default function ClubDetail() {
     if (clubId)
       void fetchClubReviews(clubId).then((r) => {
         if (!alive) return;
-        setServerReviews(r);
+        if (r) setServerReviews(r); // null = échec réseau → on ne vide pas la liste
         setReviewsLoading(false);
       });
     return () => {

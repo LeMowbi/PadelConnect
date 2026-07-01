@@ -163,7 +163,12 @@ export default function Onboarding() {
     setResendMsg(res.ok ? 'E-mail renvoyé ✓' : (res.error ?? 'Renvoi impossible — réessaie.'));
   };
 
-  const clearError = (k: FieldKey) => setErrors((cur) => (cur[k] ? { ...cur, [k]: undefined } : cur));
+  const clearError = (k: FieldKey) => {
+    setErrors((cur) => (cur[k] ? { ...cur, [k]: undefined } : cur));
+    // On efface aussi le bandeau d'erreur GLOBAL dès que l'utilisateur corrige un champ, sinon
+    // il resterait affiché (« e-mail déjà utilisé »…) alors que la saisie a changé.
+    setAuthError((cur) => (cur ? null : cur));
+  };
 
   // Écran « Vérifie ta boîte mail » — après l'envoi du lien de confirmation. Le clic sur
   // le lien rouvre l'app et connecte automatiquement (cf. useEmailConfirmLink).
@@ -260,7 +265,12 @@ export default function Onboarding() {
 
         <View style={styles.body}>
           <View style={{ alignItems: 'center' }}>
-            <Pressable onPress={choosePhoto} style={styles.avatar}>
+            <Pressable
+              onPress={choosePhoto}
+              style={styles.avatar}
+              accessibilityRole="button"
+              accessibilityLabel={photoUri ? 'Changer la photo de profil' : 'Ajouter une photo de profil'}
+            >
               {photoUri ? (
                 <Image source={{ uri: photoUri }} style={styles.avatarImg} contentFit="cover" />
               ) : (
@@ -568,6 +578,7 @@ function SignInSheet({
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            accessibilityLabel="Adresse e-mail"
             style={styles.input}
           />
         ) : (
@@ -582,6 +593,7 @@ function SignInSheet({
             keyboardType="phone-pad"
             autoCorrect={false}
             textContentType="telephoneNumber"
+            accessibilityLabel="Numéro de téléphone"
             style={styles.input}
           />
         )}
