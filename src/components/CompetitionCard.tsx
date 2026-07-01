@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, View } from 'react-native';
 import { Card, Tag, Txt } from './ui';
 import { compDateLabel, formatFee, teamCount, type Competition } from '@/data/competitions';
 import { dayKey } from '@/lib/days';
@@ -16,6 +17,12 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
   const left = Math.max(0, comp.slots - teams);
   const full = left === 0;
   const pct = Math.min(100, Math.round((teams / comp.slots) * 100));
+  // Remplissage animé de la barre (0 → pct) — se rejoue si le nombre d'équipes change.
+  const fill = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(fill, { toValue: pct, duration: 600, useNativeDriver: false }).start();
+  }, [pct, fill]);
+  const fillWidth = fill.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] });
   // Cycle de vie : à venir → terminé (jour STRICTEMENT passé) → clôturé (vainqueur désigné).
   const finished = (comp.endDateKey ?? comp.dateKey) < dayKey(new Date());
   const result = state.compResults[comp.id];
@@ -50,7 +57,7 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
       ) : null}
 
       <View style={styles.barTrack}>
-        <View style={[styles.barFill, { width: `${pct}%` as `${number}%` }]} />
+        <Animated.View style={[styles.barFill, { width: fillWidth }]} />
       </View>
 
       <View style={styles.footer}>

@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Avatar } from '@/components/Avatar';
+import { Confetti } from '@/components/Confetti';
 import { PlayerSheet, type PlayerLike } from '@/components/PlayerSheet';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, SectionHeader, Tag, Txt } from '@/components/ui';
@@ -30,6 +31,7 @@ export default function AmisScreen() {
   const [found, setFound] = useState<{ name: string; level?: number } | null>(null);
   const [search, setSearch] = useState<'idle' | 'found' | 'notfound'>('idle');
   const [busyReq, setBusyReq] = useState<string | null>(null); // demande reçue en cours de réponse
+  const [celebrate, setCelebrate] = useState(false); // confettis à l'acceptation d'une demande
 
   const openFriend = (f: { id: string; name: string; level?: number }) => setOpenPlayer({ id: f.id, name: f.name, level: f.level });
 
@@ -86,6 +88,7 @@ export default function AmisScreen() {
       toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
       return;
     }
+    if (accept) setCelebrate(true); // 🎉 nouveau lien d'amitié
     toast.show(accept ? `${name} et toi êtes maintenant amis 🎾` : 'Demande refusée.');
   };
 
@@ -282,6 +285,7 @@ export default function AmisScreen() {
       </View>
 
       <PlayerSheet player={openPlayer} onClose={() => setOpenPlayer(null)} />
+      {celebrate ? <Confetti onDone={() => setCelebrate(false)} /> : null}
     </Screen>
   );
 }

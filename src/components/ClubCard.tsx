@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useRef } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { ClubPhoto } from './ClubPhoto';
+import { PopIn } from './PopIn';
 import { Card, Tag, Txt } from './ui';
 import { clubGallery, defaultCourts, type Club } from '@/data/clubs';
 import { useApp } from '@/store/AppContext';
@@ -66,15 +67,21 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
           {heart}
           {comingSoon ? (
             <View style={styles.boostBadge}>
-              <Tag label="Bientôt" tone="purple" icon="time" />
+              <PopIn delay={150}>
+                <Tag label="Bientôt" tone="purple" icon="time" />
+              </PopIn>
             </View>
           ) : boosted ? (
             <View style={styles.boostBadge}>
-              <Tag label="Sponsorisé" tone="amber" icon="megaphone" />
+              <PopIn delay={150}>
+                <Tag label="Sponsorisé" tone="amber" icon="megaphone" />
+              </PopIn>
             </View>
           ) : partner ? (
             <View style={styles.boostBadge}>
-              <Tag label="Partenaire" tone="green" icon="shield-checkmark" />
+              <PopIn delay={150}>
+                <Tag label="Partenaire" tone="green" icon="shield-checkmark" />
+              </PopIn>
             </View>
           ) : null}
         </View>
@@ -104,7 +111,9 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
         {heart}
         {partner ? (
           <View style={styles.boostBadge}>
-            <Tag label="Partenaire" tone="green" icon="shield-checkmark" />
+            <PopIn delay={150}>
+              <Tag label="Partenaire" tone="green" icon="shield-checkmark" />
+            </PopIn>
           </View>
         ) : null}
       </View>
