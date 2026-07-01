@@ -13,9 +13,6 @@
       "supportsTablet": true,
       "bundleIdentifier": "ci.padelco.app",
       "buildNumber": "30",
-      "associatedDomains": [
-        "applinks:padelconnectci.com"
-      ],
       "config": {
         "usesNonExemptEncryption": false
       }

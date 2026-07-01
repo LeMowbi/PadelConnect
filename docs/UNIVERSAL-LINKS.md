@@ -6,10 +6,24 @@ installée (le code de parrainage se pré-remplit tout seul), sinon la page renv
 Domaine : **padelconnectci.com** (acheté sur Cloudflare). Identifiant d'app :
 **`R77YWZ9487.ci.padelco.app`**.
 
-## Côté app — DÉJÀ FAIT ✅
-- `app.json` → `associatedDomains: ["applinks:padelconnectci.com"]`.
+## ⚠️ BLOQUEUR credentials (à régler avant de réactiver l'entitlement)
+Les builds #29 et #30 ont ÉCHOUÉ car le **profil de provisioning Apple** (généré le 2026-06-29) ne
+contient pas la capacité **Associated Domains**, et EAS **ne le régénère pas automatiquement** (la
+clé App Store Connect configurée sert à la soumission, pas à gérer les capacités/profils).
+Tant que ce n'est pas réglé, `associatedDomains` est **retiré d'app.json** pour que les builds
+passent. Le parrainage marche quand même (le lien renvoie vers l'App Store via `site/_redirects`).
+
+**Pour réactiver les Universal Links (ouverture directe de l'app) :**
+1. Régénérer le profil de provisioning AVEC « Associated Domains » — via `eas credentials`
+   (iOS → production → provisioning profile → recréer), OU activer la capacité dans le portail
+   Apple Developer sur l'App ID `ci.padelco.app` puis régénérer le profil.
+2. Remettre dans `app.json` (ios) : `"associatedDomains": ["applinks:padelconnectci.com"]`.
+3. Rebuild. (Le site `site/` + le fichier AASA sont déjà en ligne, rien à refaire côté hébergement.)
+
+## Côté app — code DÉJÀ prêt (indépendant de l'entitlement)
 - Route entrante `/invite/[code]` → met le code de côté et pré-remplit l'inscription.
 - Lien de parrainage = `padelconnectci.com/invite/CODE` (repli App Store si pas d'app).
+- Reste juste à remettre `associatedDomains` une fois le profil régénéré (voir bloqueur ci-dessus).
 
 ## Côté hébergement — À FAIRE (toi, sur Cloudflare Pages)
 
