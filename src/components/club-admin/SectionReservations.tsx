@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { BarChart } from '@/components/BarChart';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt } from '@/components/ui';
@@ -83,15 +83,31 @@ export function SectionReservations({
   };
 
   // Le club marque une absence : créneau libéré + absence comptée (même après l'appel tardif).
-  const onMarkNoShow = (r: Reservation) =>
-    void markNoShow(r.id).then((ok) => {
-      if (ok) {
-        toast.show('Absence enregistrée');
-        reloadTraces();
-      } else {
-        toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
-      }
-    });
+  // Confirmation obligatoire — l'absence pénalise la fiabilité du joueur, un tap par erreur
+  // aurait des conséquences injustes.
+  const onMarkNoShow = (r: Reservation) => {
+    const who = r.bookedBy?.name ? ` de ${r.bookedBy.name}` : '';
+    Alert.alert(
+      'Marquer une absence ?',
+      `Confirmes-tu que ce joueur n'est pas venu ? Le créneau${who} sera libéré et l'absence comptée dans sa fiabilité.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Confirmer l’absence',
+          style: 'destructive',
+          onPress: () =>
+            void markNoShow(r.id).then((ok) => {
+              if (ok) {
+                toast.show('Absence enregistrée');
+                reloadTraces();
+              } else {
+                toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
+              }
+            }),
+        },
+      ],
+    );
+  };
   // « Jouée » = heure de fin passée (la même règle que côté joueur — base de la commission).
   const upcomingRes = clubRes.filter((r) => !isPlayed(r, now)).sort((a, b) => a.startsAt - b.startsAt);
   const pastRes = clubRes.filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt);

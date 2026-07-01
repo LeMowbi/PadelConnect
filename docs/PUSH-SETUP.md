@@ -55,9 +55,13 @@ Dashboard Supabase → **Database → Webhooks** → *Create a new hook* :
   - UPDATE `pending → published` (le club valide) → notifie l'**organisateur** (« Tournoi
     validé ✅ ») **et l'opérateur** (« frais à encaisser », montant Wave) — on ne facture donc
     que les tournois réellement confirmés.
+- **Demandes d'ami** (notif sociale) : table `friend_requests`, événements **INSERT _et_
+  UPDATE** (coche les deux) → même fonction `notify-club`.
+  - INSERT d'une demande (`pending`) → notifie le **destinataire** (« Nouvelle demande d'ami »).
+  - UPDATE `→ accepted` (la personne accepte) → notifie l'**expéditeur** (« Demande acceptée »).
 
 La fonction lit la table + le type d'événement et envoie au bon destinataire (gérant du club,
-joueur, auteur de la réservation, opérateur ou organisateur du tournoi).
+joueur, auteur de la réservation, opérateur, organisateur du tournoi, ou ami invité).
 
 ## 5. Tester
 

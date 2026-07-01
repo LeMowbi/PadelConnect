@@ -1,6 +1,6 @@
 import { SaveFormat, manipulateAsync, type Action } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
-import { Alert, Linking } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
 
 // Message clair par défaut quand l'accès aux photos est refusé : on propose d'ouvrir Réglages.
 function defaultDenied() {
@@ -65,9 +65,11 @@ async function shrink(asset: { uri: string; width?: number; height?: number }, s
     const out = await manipulateAsync(asset.uri, actions, {
       compress: 0.8,
       format: SaveFormat.JPEG,
-      base64: true,
+      base64: Platform.OS === 'web', // base64 seulement utile au web ; en natif on lit le fichier à l'upload
     });
-    return out.base64 ? `data:image/jpeg;base64,${out.base64}` : out.uri;
+    // NATIF : on renvoie l'URI de fichier (file://) que `new File(uri).base64()` sait relire
+    // pour l'upload Supabase. WEB : pas de système de fichiers exploitable → data-URI base64.
+    return Platform.OS === 'web' ? (out.base64 ? `data:image/jpeg;base64,${out.base64}` : out.uri) : out.uri;
   } catch {
     return asset.uri; // au pire : l'image d'origine (comportement d'avant)
   }

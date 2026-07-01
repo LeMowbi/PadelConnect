@@ -3,7 +3,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState as RNAppState } from 'react-native';
+import { Alert, AppState as RNAppState } from 'react-native';
 import { setClubStatusMap, type Club, type CustomClub, type PriceTier } from '@/data/clubs';
 import {
   approveClubRequest as approveClubRequestRpc,
@@ -43,7 +43,15 @@ import {
 import type { Competition } from '@/data/competitions';
 import type { Review } from '@/data/reviews';
 import { type Friend } from '@/data/user';
-import { addFriendByPhone, fetchFriends, removeFriendOnServer } from '@/lib/friends';
+import {
+  fetchFriendRequests,
+  fetchFriends,
+  removeFriendOnServer,
+  respondFriendRequest as respondFriendRequestOnServer,
+  sendFriendRequest as sendFriendRequestOnServer,
+  type FriendRequestResult,
+  type IncomingFriendRequest,
+} from '@/lib/friends';
 import {
   blockSlotRow,
   cancelReservationRow,
@@ -183,6 +191,7 @@ export type AppState = {
   reservations: Reservation[];
   favoriteClubIds: string[];
   friends: Friend[];
+  friendRequests: IncomingFriendRequest[]; // demandes d'ami REÇUES en attente (Accepter / Refuser)
   officialResults: OfficialResult[];
   compRegistrations: Record<string, { partner: string; at: number }>;
   compResults: Record<string, CompResult>; // tournoi clôturé → équipe vainqueure
@@ -277,7 +286,10 @@ type AppContextType = {
   // Réservation partagée : l'invité accepte (accept=true) ou refuse son invitation.
   respondInvitation: (reservationId: string, accept: boolean) => Promise<boolean>;
   confirmReservationByClub: (id: string) => Promise<boolean>;
-  addFriend: (name: string, phone: string, level?: number) => Promise<{ ok: boolean }>;
+  // Envoie une DEMANDE d'ami par numéro (plus d'ajout instantané) : la personne doit accepter.
+  sendFriendRequest: (phone: string) => Promise<FriendRequestResult>;
+  // Réponds à une demande REÇUE (accept=true → on devient amis ; false → refusée).
+  respondFriendRequest: (requestId: string, accept: boolean) => Promise<boolean>;
   removeFriend: (id: string) => void;
   toggleFavorite: (clubId: string) => void;
   addClubPhoto: (clubId: string, uri: string) => Promise<void>;
@@ -500,6 +512,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         commissions,
         boosts,
         friends,
+        friendReqs,
         serverComps,
         compRegs,
         tournamentFee,
@@ -516,6 +529,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         fetchClubCommissions(),
         fetchClubBoosts(),
         fetchFriends(),
+        fetchFriendRequests(),
         fetchCompetitions(userId),
         fetchMyCompRegistrations(),
         fetchTournamentFee(),
@@ -535,6 +549,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         pendingInvitationIds: pendingParts,
         // Amis synchronisés (le serveur fait foi). null = échec réseau → on garde le miroir.
         friends: friends ?? s.friends,
+        // Demandes d'ami reçues en attente (Accepter / Refuser). null = échec réseau → on garde.
+        friendRequests: friendReqs ?? s.friendRequests,
         // null = échec réseau → on garde les clubs serveur déjà chargés (sinon ils disparaîtraient).
         customClubs: serverClubs ? mergeServerClubs(s.customClubs, serverClubs) : s.customClubs,
         clubStatus: clubStatus ?? s.clubStatus,
@@ -621,6 +637,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       // Amis ajoutés/retirés sur un autre appareil : on relit pour garder la liste à jour.
       void fetchFriends().then((friends) => friends && ok() && setState((s) => ({ ...s, friends })));
+      // Nouvelles demandes d'ami reçues (retour au premier plan) → badge/section à jour.
+      void fetchFriendRequests().then((reqs) => reqs && ok() && setState((s) => ({ ...s, friendRequests: reqs })));
       // Créneaux fermés par un club (sur un autre appareil) → dispo à jour partout.
       void fetchBlockedSlots().then((blocked) => blocked && ok() && setState((s) => ({ ...s, blockedSlots: blocked })));
       // Règlements opérateur (persistants) — vide pour les non-opérateurs (RLS).
@@ -1166,24 +1184,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }));
         return true;
       },
-      addFriend: async (name, phone) => {
-        // On n'ajoute QUE de vrais amis persistés côté serveur (id stable, partagé entre
-        // appareils). Hors session ou si le lien serveur échoue, on n'ajoute aucun ami fantôme
-        // local (qui serait silencieusement perdu à la 1ʳᵉ synchro) → l'appelant l'affiche.
-        if (name.trim().length < 2 || !state.serverUserId) return { ok: false };
-        const synced = await addFriendByPhone(phone);
-        if (!synced) return { ok: false };
-        setState((s) => {
-          // Anti-doublon : par id serveur stable, ou par numéro (10 derniers chiffres).
-          const digits = phone.replace(/\D/g, '').slice(-10);
-          if (s.friends.some((f) => f.id === synced.id)) return s;
-          if (digits.length >= 8 && s.friends.some((f) => (f.phone ?? '').replace(/\D/g, '').slice(-10) === digits)) return s;
-          return { ...s, friends: [synced, ...s.friends] };
-        });
-        return { ok: true };
+      sendFriendRequest: async (phone) => {
+        // Hors session : impossible d'envoyer une vraie demande.
+        if (!state.serverUserId) return { status: 'error' };
+        const res = await sendFriendRequestOnServer(phone);
+        // Cas 'accepted' (la personne m'avait déjà invité) : le lien mutuel est créé côté serveur,
+        // on l'ajoute tout de suite au miroir local (anti-doublon par id / numéro).
+        if (res.status === 'accepted' && res.friend) {
+          const friend = res.friend;
+          setState((s) => {
+            const digits = phone.replace(/\D/g, '').slice(-10);
+            if (s.friends.some((f) => f.id === friend.id)) return s;
+            if (digits.length >= 8 && s.friends.some((f) => (f.phone ?? '').replace(/\D/g, '').slice(-10) === digits)) return s;
+            return { ...s, friends: [friend, ...s.friends] };
+          });
+        }
+        return res;
+      },
+      respondFriendRequest: async (requestId, accept) => {
+        const ok = await respondFriendRequestOnServer(requestId, accept);
+        if (!ok) return false;
+        // On retire la demande de la liste « reçues » et, si acceptée, on recharge la liste d'amis
+        // (le lien mutuel vient d'être créé côté serveur → id stable, nom, niveau à jour).
+        setState((s) => ({ ...s, friendRequests: s.friendRequests.filter((r) => r.requestId !== requestId) }));
+        if (accept) void fetchFriends().then((friends) => friends && setState((s) => ({ ...s, friends })));
+        return true;
       },
       removeFriend: (id) => {
-        if (state.serverUserId) void removeFriendOnServer(id); // retrait serveur (idempotent)
+        if (state.serverUserId) void removeFriendOnServer(id); // retrait serveur (idempotent, deux sens)
         setState((s) => ({ ...s, friends: s.friends.filter((f) => f.id !== id) }));
       },
       toggleFavorite: (clubId) =>
@@ -1201,9 +1229,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const current = state.clubPhotos[clubId] ?? [];
         if (current.length >= MAX_CLUB_PHOTOS) return;
         let finalUrl = uri;
-        if (state.serverUserId && !/^https?:\/\//.test(uri)) {
+        const isLocalUri = !/^https?:\/\//.test(uri);
+        if (state.serverUserId && isLocalUri) {
           const uploaded = await uploadClubPhoto(clubId, uri);
-          if (uploaded) finalUrl = uploaded;
+          // Échec d'upload sur un club serveur : on N'ENREGISTRE PAS une URI locale (file:// ou
+          // data-URI) — elle serait illisible pour les autres appareils/joueurs. On prévient.
+          if (!uploaded) {
+            Alert.alert('Photo non envoyée', "L'envoi de la photo a échoué. Vérifie ta connexion et réessaie.");
+            return;
+          }
+          finalUrl = uploaded;
         }
         setState((s) => {
           const existing = s.clubPhotos[clubId] ?? [];
@@ -1473,6 +1508,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return { ok: true };
       },
       fetchSupportMessages: async () => {
+        // Nettoyage opportuniste : on purge les résolus de +7 jours à chaque ouverture (best-effort).
+        void supabase.rpc('purge_old_resolved_support');
         const { data, error } = await supabase.from('support_messages').select('*').order('created_at', { ascending: false });
         if (error) return { ok: false, messages: [] };
         return { ok: true, messages: (data ?? []) as ServerSupportMessage[] };

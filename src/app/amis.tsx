@@ -4,32 +4,39 @@ import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Avatar } from '@/components/Avatar';
 import { PlayerSheet, type PlayerLike } from '@/components/PlayerSheet';
 import { Screen } from '@/components/Screen';
-import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
+import { Button, Card, Divider, EmptyState, SectionHeader, Tag, Txt } from '@/components/ui';
 import { useToast } from '@/components/Toast';
 import { findPlayerByPhone } from '@/lib/friends';
 import { openWhatsApp } from '@/lib/contact';
+import { contactsSupported, pickContact } from '@/lib/contactsPicker';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
+// Indicatif Côte d'Ivoire pré-rempli (modifiable) : la plupart des joueurs sont locaux.
+const DEFAULT_DIAL = '+225 ';
+
 export default function AmisScreen() {
   const router = useRouter();
-  const { state, addFriend, removeFriend } = useApp();
+  const { state, sendFriendRequest, respondFriendRequest, removeFriend } = useApp();
   const { refreshControl } = usePullToRefresh();
   const toast = useToast();
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(DEFAULT_DIAL);
   const [removeId, setRemoveId] = useState<string | null>(null); // ami en cours de retrait (confirmation)
   const [openPlayer, setOpenPlayer] = useState<PlayerLike | null>(null);
-  // Recherche serveur par numéro : on n'ajoute QUE de vrais joueurs PadelConnect (pas de nom fictif).
+  // Recherche serveur par numéro : on n'invite QUE de vrais joueurs PadelConnect (pas de nom fictif).
   const [searching, setSearching] = useState(false);
+  const [sending, setSending] = useState(false);
   const [found, setFound] = useState<{ name: string; level?: number } | null>(null);
   const [search, setSearch] = useState<'idle' | 'found' | 'notfound'>('idle');
+  const [busyReq, setBusyReq] = useState<string | null>(null); // demande reçue en cours de réponse
 
   const openFriend = (f: { id: string; name: string; level?: number }) => setOpenPlayer({ id: f.id, name: f.name, level: f.level });
 
   const phoneReady = phone.replace(/\D/g, '').length >= 8;
+  const requests = state.friendRequests;
 
-  // Cherche le joueur par son numéro côté serveur. On n'ajoute que s'il a un VRAI compte.
+  // Cherche le joueur par son numéro côté serveur. On n'invite que s'il a un VRAI compte.
   const doSearch = async () => {
     if (!phoneReady || searching) return;
     setSearching(true);
@@ -45,19 +52,50 @@ export default function AmisScreen() {
     }
   };
 
-  // Ajoute le joueur RÉEL trouvé (son vrai nom + niveau viennent du serveur). L'ajout n'est
-  // confirmé que si le lien a bien été enregistré côté serveur (sinon pas de faux succès).
-  const addFound = async () => {
-    if (!found) return;
-    const res = await addFriend(found.name, phone, found.level);
-    if (!res.ok) {
-      toast.show('Ajout impossible — réessaie dans un instant', { icon: 'alert-circle' });
+  // Envoie une DEMANDE d'ami : la personne doit l'accepter (elle n'est pas ajoutée d'office).
+  const sendRequest = async () => {
+    if (!found || sending) return;
+    setSending(true);
+    const res = await sendFriendRequest(phone);
+    setSending(false);
+    const name = res.friend?.name ?? found.name;
+    if (res.status === 'sent') {
+      toast.show(`Demande envoyée à ${name} — il doit l'accepter ✓`);
+    } else if (res.status === 'accepted') {
+      toast.show(`${name} est maintenant ton ami 🎾`);
+    } else if (res.status === 'already_friends') {
+      toast.show(`Tu es déjà ami avec ${name}.`);
+    } else if (res.status === 'pending') {
+      toast.show('Demande déjà envoyée — en attente de sa réponse.');
+    } else {
+      toast.show('Envoi impossible — réessaie dans un instant', { icon: 'alert-circle' });
       return;
     }
-    toast.show(`${found.name} ajouté à tes amis ✓`);
-    setPhone('');
+    setPhone(DEFAULT_DIAL);
     setFound(null);
     setSearch('idle');
+  };
+
+  // Répondre à une demande REÇUE (Accepter / Refuser).
+  const respond = async (requestId: string, accept: boolean, name: string) => {
+    if (busyReq) return;
+    setBusyReq(requestId);
+    const ok = await respondFriendRequest(requestId, accept);
+    setBusyReq(null);
+    if (!ok) {
+      toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
+      return;
+    }
+    toast.show(accept ? `${name} et toi êtes maintenant amis 🎾` : 'Demande refusée.');
+  };
+
+  // Choisir un contact du téléphone (plus rapide que taper le numéro).
+  const chooseContact = async () => {
+    const c = await pickContact();
+    if (!c) return;
+    setPhone(c.phone);
+    setSearch('idle');
+    setFound(null);
   };
 
   const invite = () =>
@@ -75,6 +113,47 @@ export default function AmisScreen() {
   return (
     <Screen back title="Amis" subtitle="Tes partenaires de jeu — invite-les sur tes réservations" refreshControl={refreshControl}>
       <View style={{ marginTop: spacing.sm }}>
+        {/* Demandes REÇUES en attente : à accepter ou refuser (l'ami a le choix, dans les deux sens). */}
+        {requests.length > 0 ? (
+          <View style={{ marginBottom: spacing.lg }}>
+            <SectionHeader title={`Demandes d'ami · ${requests.length}`} />
+            <Card>
+              {requests.map((r, i) => (
+                <View key={r.requestId}>
+                  {i > 0 ? <Divider style={{ marginVertical: spacing.md }} /> : null}
+                  <View style={styles.row}>
+                    <Avatar name={r.name} size={44} />
+                    <View style={styles.rowInfo}>
+                      <Txt variant="body" style={styles.rowName}>
+                        {r.name}
+                      </Txt>
+                      <Txt variant="small" color={colors.textMuted}>
+                        {r.level !== undefined ? `Niveau ${r.level.toFixed(1)} · ` : ''}veut t'ajouter
+                      </Txt>
+                    </View>
+                  </View>
+                  <View style={styles.reqActions}>
+                    <Button
+                      size="sm"
+                      label={busyReq === r.requestId ? '…' : 'Accepter'}
+                      icon="checkmark"
+                      onPress={() => respond(r.requestId, true, r.name)}
+                      disabled={busyReq === r.requestId}
+                    />
+                    <Button
+                      size="sm"
+                      label="Refuser"
+                      variant="ghost"
+                      onPress={() => respond(r.requestId, false, r.name)}
+                      disabled={busyReq === r.requestId}
+                    />
+                  </View>
+                </View>
+              ))}
+            </Card>
+          </View>
+        ) : null}
+
         {state.friends.length === 0 ? (
           <>
             <EmptyState
@@ -132,8 +211,21 @@ export default function AmisScreen() {
           <Card>
             <Txt variant="h3">Ajouter un ami</Txt>
             <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
-              Entre son numéro : s'il est déjà sur PadelConnect, tu l'ajoutes en un tap. Sinon, invite-le à s'inscrire.
+              Entre son numéro (ou choisis un contact) : s'il est sur PadelConnect, tu lui envoies une demande. Il devient ton ami dès qu'il
+              l'accepte.
             </Txt>
+            {contactsSupported ? (
+              <View style={{ marginTop: spacing.sm }}>
+                <Button
+                  size="sm"
+                  label="Choisir dans mes contacts"
+                  icon="person-circle-outline"
+                  variant="secondary"
+                  onPress={chooseContact}
+                  pill
+                />
+              </View>
+            ) : null}
             <TextInput
               value={phone}
               onChangeText={onPhone}
@@ -161,7 +253,14 @@ export default function AmisScreen() {
                   <Tag label="Vérifié" tone="green" icon="checkmark" />
                 </View>
                 <View style={{ marginTop: spacing.md }}>
-                  <Button size="sm" label={`Ajouter ${found.name}`} icon="person-add" onPress={addFound} pill />
+                  <Button
+                    size="sm"
+                    label={sending ? 'Envoi…' : `Envoyer une demande à ${found.name}`}
+                    icon="person-add"
+                    onPress={sendRequest}
+                    disabled={sending}
+                    pill
+                  />
                 </View>
               </>
             ) : search === 'notfound' ? (
@@ -196,6 +295,7 @@ const styles = StyleSheet.create({
   rowTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rowInfo: { flex: 1, gap: 2 },
   rowName: { fontWeight: '600' },
+  reqActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, justifyContent: 'flex-end' },
   removeConfirm: {
     flexDirection: 'row',
     alignItems: 'center',

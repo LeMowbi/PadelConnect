@@ -55,6 +55,12 @@
         {
           "calendarPermission": "PadelConnect ajoute tes réservations de padel à ton calendrier, avec ton accord."
         }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "PadelConnect accède à tes contacts, avec ton accord, uniquement pour t'aider à retrouver et inviter tes amis par leur numéro."
+        }
       ]
     ],
     "experiments": {

@@ -33,15 +33,61 @@ export async function fetchFriends(): Promise<Friend[] | null> {
     }));
 }
 
-// Ajoute un ami par numéro, côté serveur. Renvoie son lien (id stable serveur) ou null si
-// introuvable / échec — l'appelant ne touche alors pas au miroir local.
-export async function addFriendByPhone(phone: string): Promise<Friend | null> {
-  const { data, error } = await supabase.rpc('add_friend_by_phone', { p_phone: phone.trim() });
-  if (error || !data || (Array.isArray(data) && data.length === 0)) return null;
-  const row = (Array.isArray(data) ? data[0] : data) as { friend_id: string; name: string | null; level: number | null };
-  const name = (row.name ?? '').trim();
-  if (!name) return null;
-  return { id: row.friend_id, name, phone: phone.trim() || undefined, level: row.level != null ? Number(row.level) : undefined };
+// Résultat d'une demande d'ami. `status` reflète ce qu'a fait le serveur :
+//   sent            : demande envoyée, en attente de sa réponse
+//   accepted        : la personne m'avait déjà invité → on est amis tout de suite
+//   already_friends : on était déjà amis
+//   pending         : j'avais déjà une demande en attente vers cette personne
+//   not_found       : aucun joueur PadelConnect avec ce numéro
+//   error           : échec réseau / serveur
+export type FriendRequestResult = {
+  status: 'sent' | 'accepted' | 'already_friends' | 'pending' | 'not_found' | 'error';
+  friend?: Friend;
+};
+
+// Envoie une DEMANDE d'ami par numéro (remplace l'ajout instantané). Le lien n'est créé qu'après
+// acceptation de la personne (ou immédiatement si elle m'avait déjà invité → statut 'accepted').
+export async function sendFriendRequest(phone: string): Promise<FriendRequestResult> {
+  const { data, error } = await supabase.rpc('send_friend_request', { p_phone: phone.trim() });
+  if (error) return { status: 'error' };
+  const row = (Array.isArray(data) ? data[0] : data) as
+    { status: string; friend_id: string | null; name: string | null; level: number | null } | undefined;
+  if (!row) return { status: 'error' };
+  const status = row.status as FriendRequestResult['status'];
+  const friend =
+    row.friend_id && (row.name ?? '').trim()
+      ? {
+          id: row.friend_id,
+          name: (row.name ?? '').trim(),
+          phone: phone.trim() || undefined,
+          level: row.level != null ? Number(row.level) : undefined,
+        }
+      : undefined;
+  return { status, friend };
+}
+
+// Une demande d'ami REÇUE, en attente de ma réponse (Accepter / Refuser).
+export type IncomingFriendRequest = { requestId: string; fromId: string; name: string; level?: number };
+
+// Mes demandes d'ami reçues (en attente). null = échec réseau → l'appelant garde l'existant.
+export async function fetchFriendRequests(): Promise<IncomingFriendRequest[] | null> {
+  const { data, error } = await supabase.rpc('fetch_friend_requests');
+  if (error) return null;
+  type Row = { request_id: string; from_id: string; name: string | null; level: number | null };
+  return ((data ?? []) as Row[])
+    .filter((r) => (r.name ?? '').trim().length > 0)
+    .map((r) => ({
+      requestId: r.request_id,
+      fromId: r.from_id,
+      name: (r.name ?? '').trim(),
+      level: r.level != null ? Number(r.level) : undefined,
+    }));
+}
+
+// Répond à une demande reçue. true si le serveur a bien enregistré la réponse.
+export async function respondFriendRequest(requestId: string, accept: boolean): Promise<boolean> {
+  const { data, error } = await supabase.rpc('respond_friend_request', { p_request_id: requestId, p_accept: accept });
+  return !error && data === true;
 }
 
 // Retire un ami côté serveur. false si le réseau a refusé (on ne touche pas au miroir local).

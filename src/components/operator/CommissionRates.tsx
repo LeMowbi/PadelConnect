@@ -26,6 +26,8 @@ export function CommissionRates({
   const save = async (clubId: string) => {
     const raw = draft[clubId];
     const pct = Number((raw ?? '').replace(',', '.'));
+    // L'opérateur fixe le taux LIBREMENT (il prévient lui-même le club avant) : on valide
+    // seulement que c'est un pourcentage plausible (0 à 100).
     if (busy || !Number.isFinite(pct) || pct < 0 || pct > 100) {
       toast.show('Entre un pourcentage entre 0 et 100', { icon: 'alert-circle' });
       return;
@@ -44,8 +46,8 @@ export function CommissionRates({
   return (
     <Card>
       <Txt variant="small" color={colors.textMuted}>
-        Par défaut {Math.round(defaultRate * 100)} %. Tu peux fixer un taux différent pour chaque club selon ton accord — il s'applique
-        aussitôt au décompte.
+        Par défaut {Math.round(defaultRate * 100)} %. Tu peux fixer un taux différent pour chaque club selon ton accord (préviens le club
+        avant) — il s'applique aussitôt au décompte.
       </Txt>
       <Button
         size="sm"

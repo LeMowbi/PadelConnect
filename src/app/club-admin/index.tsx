@@ -25,8 +25,17 @@ const BLOCK_REASONS = ['Résa téléphone/WhatsApp', 'Entretien', 'Privatisé', 
 const CLUB_TYPES: Club['type'][] = ['Couvert', 'Extérieur', 'Mixte'];
 
 export default function ClubAdmin() {
-  const { state, setManagedClub, requestClub, cancelOwnClubRequest, closeCompetition, deleteCompetition, blockSlot, unblockSlot } =
-    useApp();
+  const {
+    state,
+    setManagedClub,
+    requestClub,
+    submitClubRequest,
+    cancelOwnClubRequest,
+    closeCompetition,
+    deleteCompetition,
+    blockSlot,
+    unblockSlot,
+  } = useApp();
   const toast = useToast();
   const { refreshControl } = usePullToRefresh();
 
@@ -67,8 +76,26 @@ export default function ClubAdmin() {
     : [];
 
   const signupReady = ncName.trim().length >= 2 && ncArea.trim().length >= 2 && Number(ncPrice) > 0;
-  const submitSignup = () => {
-    if (!signupReady) return;
+  const [sendingSignup, setSendingSignup] = useState(false);
+  const submitSignup = async () => {
+    if (!signupReady || sendingSignup) return;
+    setSendingSignup(true);
+    // La demande part D'ABORD sur le SERVEUR (club_requests) : sans ça l'opérateur ne la
+    // voit jamais dans son espace. En cas de succès seulement, on crée aussi le club local
+    // « en attente » pour que le gérant prépare sa page tout de suite (activé après validation).
+    const res = await submitClubRequest({
+      name: ncName,
+      area: ncArea,
+      type: ncType,
+      courts: ncCourts,
+      priceFrom: Number(ncPrice),
+      contactPhone: ncPhone,
+    });
+    setSendingSignup(false);
+    if (!res.ok) {
+      toast.show(res.error ?? 'Envoi impossible — réessaie', { icon: 'alert-circle' });
+      return;
+    }
     requestClub({ name: ncName, area: ncArea, type: ncType, courts: ncCourts, priceFrom: Number(ncPrice), contactPhone: ncPhone });
     setShowSignup(false);
     setNcName('');

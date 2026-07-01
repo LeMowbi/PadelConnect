@@ -41,6 +41,7 @@ export const initialState: AppState = {
   // Un compte démarre sans ami : sinon « Mes amis · 4 », le trophée « 5 amis » à 4/5
   // et la relance « 0 ami » seraient faux dès l'inscription.
   friends: [],
+  friendRequests: [],
   officialResults: [],
   compRegistrations: {},
   compResults: {},
@@ -115,6 +116,7 @@ export function loggedOutState(s: AppState): AppState {
     clubCommission: {}, // donnée opérateur : on la purge à la déconnexion
     level: initialState.level,
     friends: [],
+    friendRequests: [],
     favoriteClubIds: [],
     userReviews: [],
     myCompetitions: [],

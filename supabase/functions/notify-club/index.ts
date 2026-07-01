@@ -6,6 +6,8 @@
 //   • competitions INSERT (tournoi JOUEUR en attente) → notif au(x) gérant(s) du club hôte
 //     (à valider) ET à l'OPÉRATEUR (frais à encaisser).
 //   • competitions UPDATE (pending → published) → notif à l'ORGANISATEUR (tournoi validé).
+//   • friend_requests INSERT (pending) → notif au DESTINATAIRE (nouvelle demande d'ami).
+//   • friend_requests UPDATE (→ accepted) → notif à l'EXPÉDITEUR (demande acceptée).
 // L'envoi passe par l'API Push d'Expo (pas besoin de gérer APNs soi-même : Expo route vers
 // Apple/Google). Les webhooks « reservations » et « competitions » doivent écouter INSERT
 // **et** UPDATE (cf. docs/PUSH-SETUP.md).
@@ -52,6 +54,13 @@ Deno.serve(async (req) => {
     const operatorTokens = async (): Promise<string[]> => {
       const { data } = await supabase.from('profiles').select('expo_push_token').eq('role', 'operator').not('expo_push_token', 'is', null);
       return (data ?? []).map((m: { expo_push_token: string }) => m.expo_push_token).filter(Boolean);
+    };
+    // Nom affiché d'un utilisateur (prénom + nom) — pour personnaliser une notif sociale.
+    const userName = async (userId: string): Promise<string> => {
+      if (!userId) return 'Un joueur';
+      const { data } = await supabase.from('profiles').select('first_name, last_name').eq('id', userId).maybeSingle();
+      const name = `${data?.first_name ?? ''} ${data?.last_name ?? ''}`.trim();
+      return name || 'Un joueur';
     };
 
     const notifs: Notif[] = [];
@@ -108,6 +117,20 @@ Deno.serve(async (req) => {
           body: `« ${record.title ?? ''} » validé — frais à encaisser : ${fee.toLocaleString('fr-FR')} FCFA (Wave).`,
         });
       }
+    } else if (table === 'friend_requests' && type === 'INSERT' && record.status === 'pending') {
+      // Nouvelle demande d'ami → prévenir le DESTINATAIRE (il accepte/refuse dans l'app).
+      notifs.push({
+        targets: await userToken(record.to_user),
+        title: 'Nouvelle demande d’ami 👋',
+        body: `${await userName(record.from_user)} veut t’ajouter sur PadelConnect.`,
+      });
+    } else if (table === 'friend_requests' && type === 'UPDATE' && record.status === 'accepted' && oldRecord.status !== 'accepted') {
+      // Demande acceptée → prévenir l'EXPÉDITEUR (vous êtes désormais amis).
+      notifs.push({
+        targets: await userToken(record.from_user),
+        title: 'Demande acceptée ✅',
+        body: `${await userName(record.to_user)} a accepté ta demande d’ami.`,
+      });
     }
 
     // Aplatis toutes les notifs en messages Expo (une entrée par destinataire).
