@@ -1,3 +1,6 @@
-# Cloudflare Pages : force le bon type MIME pour le fichier Apple (exigé pour les Universal Links).
+# Cloudflare : force le bon type MIME du fichier Apple (exigé pour les Universal Links), que le
+# fichier soit servi depuis /.well-known/… ou depuis la racine (via la réécriture ci-dessous).
 /.well-known/apple-app-site-association
+  Content-Type: application/json
+/apple-app-site-association
   Content-Type: application/json

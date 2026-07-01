@@ -1,3 +1,8 @@
+# Apple exige le fichier à l'adresse /.well-known/apple-app-site-association. Comme le dossier
+# caché « .well-known » ne se glisse pas facilement, on le RÉÉCRIT (status 200, sans redirection)
+# vers le fichier placé à la racine — Apple voit exactement la bonne URL.
+/.well-known/apple-app-site-association  /apple-app-site-association  200
+
 # Utilisateur SANS l'app : un lien /invite/CODE ouvert dans le navigateur → page de téléchargement
 # App Store. (Avec l'app installée, iOS ouvre directement l'app AVANT d'atteindre cette redirection.)
 /invite/*  https://apps.apple.com/app/id6785261310  302
