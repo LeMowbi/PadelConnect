@@ -12,6 +12,7 @@ type CompetitionRow = {
   organizer_id: string;
   organizer_type: 'club' | 'joueur';
   organizer_name: string;
+  organizer_phone: string | null;
   club_id: string | null;
   club_name: string | null;
   title: string;
@@ -32,6 +33,7 @@ type CompetitionRow = {
   third: string | null;
   loser: string | null;
   registered: number;
+  teams: string[] | null;
 };
 
 // Résultat de clôture figé côté serveur (rejoué dans le store sous compResults).
@@ -47,6 +49,7 @@ function rowToCompetition(r: CompetitionRow, myUserId: string): Competition {
     organizerType: r.organizer_type,
     organizer: r.organizer_name,
     organizerId: r.organizer_id,
+    organizerPhone: r.organizer_phone ?? undefined,
     clubId: r.club_id ?? undefined,
     clubName: r.club_name ?? undefined,
     date: dateKeyLabel(r.date_key),
@@ -64,6 +67,7 @@ function rowToCompetition(r: CompetitionRow, myUserId: string): Competition {
     server: true,
     courtNames: r.courts ?? undefined,
     timeSlots: r.slots ?? undefined,
+    teamNames: r.teams ?? undefined,
     commission: r.commission,
     status,
   };
@@ -106,6 +110,7 @@ export type CreateCompetitionInput = {
   title: string;
   organizerType: 'club' | 'joueur';
   organizerName: string;
+  organizerPhone?: string;
   clubId?: string;
   clubName?: string;
   dateKey: string;
@@ -125,6 +130,7 @@ export async function createCompetition(input: CreateCompetitionInput): Promise<
     p_title: input.title,
     p_organizer_type: input.organizerType,
     p_organizer_name: input.organizerName,
+    p_organizer_phone: input.organizerPhone ?? null,
     p_club_id: input.clubId ?? null,
     p_club_name: input.clubName ?? null,
     p_date_key: input.dateKey,

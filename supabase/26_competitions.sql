@@ -30,6 +30,7 @@ create table if not exists public.competitions (
   organizer_id uuid not null references auth.users (id) on delete cascade,
   organizer_type text not null check (organizer_type in ('club', 'joueur')),
   organizer_name text not null default '',
+  organizer_phone text,   -- pour contacter l'organisateur (règlement des frais d'inscription)
   club_id text,           -- club hôte (slug d'un club de base OU id texte d'un club serveur)
   club_name text,
   title text not null,
@@ -90,23 +91,29 @@ grant execute on function public.can_manage_club(text) to authenticated;
 -- « refusé » seulement pour l'organisateur et le club hôte (ou l'opérateur).
 create or replace function public.fetch_competitions()
 returns table (
-  id uuid, organizer_id uuid, organizer_type text, organizer_name text,
+  id uuid, organizer_id uuid, organizer_type text, organizer_name text, organizer_phone text,
   club_id text, club_name text, title text, format text, level text,
   date_key text, end_date_key text, courts text[], slots text[],
   capacity int, fee text, reward text, official boolean, status text, commission int,
-  winner text, second text, third text, loser text, registered int
+  winner text, second text, third text, loser text, registered int, teams text[]
 )
 language sql
 security definer
 set search_path = public
 stable
 as $$
-  select c.id, c.organizer_id, c.organizer_type, c.organizer_name,
+  select c.id, c.organizer_id, c.organizer_type, c.organizer_name, c.organizer_phone,
     c.club_id, c.club_name, c.title, c.format, c.level,
     c.date_key, c.end_date_key, c.courts, c.slots,
     c.capacity, c.fee, c.reward, c.official, c.status, c.commission,
     c.winner, c.second, c.third, c.loser,
-    (select count(*) from public.competition_registrations r where r.competition_id = c.id)::int
+    (select count(*) from public.competition_registrations r where r.competition_id = c.id)::int,
+    -- Roster RÉEL des équipes inscrites (« Prénom & Partenaire »), pour l'affichage et la
+    -- désignation du vainqueur/podium à la clôture — plus aucun nom fictif.
+    (select coalesce(array_agg(trim(coalesce(pr.first_name, '') || ' & ' || rg.partner) order by rg.created_at), '{}')
+       from public.competition_registrations rg
+       join public.profiles pr on pr.id = rg.user_id
+       where rg.competition_id = c.id)
   from public.competitions c
   where c.status in ('published', 'closed')
     or c.organizer_id = auth.uid()
@@ -132,7 +139,7 @@ grant execute on function public.fetch_my_registrations() to authenticated;
 
 -- Crée un tournoi. Club → publié direct (officiel). Joueur → « en attente » + frais fixe figé.
 create or replace function public.create_competition(
-  p_title text, p_organizer_type text, p_organizer_name text,
+  p_title text, p_organizer_type text, p_organizer_name text, p_organizer_phone text,
   p_club_id text, p_club_name text, p_date_key text, p_end_date_key text,
   p_courts text[], p_slots text[], p_capacity int,
   p_fee text, p_reward text, p_format text, p_level text
@@ -163,11 +170,11 @@ begin
   end if;
 
   insert into public.competitions (
-    organizer_id, organizer_type, organizer_name, club_id, club_name,
+    organizer_id, organizer_type, organizer_name, organizer_phone, club_id, club_name,
     title, format, level, date_key, end_date_key, courts, slots,
     capacity, fee, reward, official, status, commission
   ) values (
-    auth.uid(), p_organizer_type, coalesce(p_organizer_name, ''), p_club_id, p_club_name,
+    auth.uid(), p_organizer_type, coalesce(p_organizer_name, ''), nullif(trim(coalesce(p_organizer_phone, '')), ''), p_club_id, p_club_name,
     trim(p_title), coalesce(p_format, ''), coalesce(p_level, ''), p_date_key, nullif(p_end_date_key, ''),
     coalesce(p_courts, '{}'), coalesce(p_slots, '{}'),
     greatest(coalesce(p_capacity, 8), 1), coalesce(p_fee, ''), coalesce(p_reward, ''),
@@ -177,7 +184,7 @@ begin
 end;
 $$;
 
-grant execute on function public.create_competition(text, text, text, text, text, text, text, text[], text[], int, text, text, text, text) to authenticated;
+grant execute on function public.create_competition(text, text, text, text, text, text, text, text, text[], text[], int, text, text, text, text) to authenticated;
 
 -- Le club hôte (ou l'opérateur) valide un tournoi joueur « en attente » → publié (visible+bloque).
 create or replace function public.approve_competition(p_id uuid)

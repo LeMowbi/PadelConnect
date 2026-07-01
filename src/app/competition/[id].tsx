@@ -8,7 +8,7 @@ import { PlayerSheet, type PlayerLike } from '@/components/PlayerSheet';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
 import { findClub } from '@/data/clubs';
-import { compDateLabel, demoTeams, formatFee, seedCompetitions, teamCount } from '@/data/competitions';
+import { compDateLabel, formatFee, hasEntryFee, seedCompetitions, teamCount, teamsToShow } from '@/data/competitions';
 import { openWhatsApp } from '@/lib/contact';
 import { dayKey } from '@/lib/days';
 import { shareCompetition } from '@/lib/share';
@@ -65,7 +65,17 @@ export default function CompetitionDetail() {
   // pourrait s'auto-attribuer des points de niveau.
   const canClose = !!comp.createdByMe && !comp.official && played && !result;
   const teams = teamCount(comp, registered);
-  const teamList = demoTeams(comp, registered ? myTeam : undefined);
+  const teamList = teamsToShow(comp, registered ? myTeam : undefined);
+  // Frais d'inscription à régler → contacter l'organisateur : le club (tournoi club) ou le
+  // joueur organisateur (tournoi joueur). WhatsApp, canal n°1 en Côte d'Ivoire.
+  const feeContactPhone = comp.organizerType === 'club' ? hostClub?.contactPhone : comp.organizerPhone;
+  const contactForFee = () =>
+    feeContactPhone
+      ? openWhatsApp(
+          feeContactPhone,
+          `Bonjour, je viens de m'inscrire au tournoi « ${comp.title} » sur PadelConnect — comment régler les frais d'inscription (${formatFee(comp.fee)}) ?`,
+        )
+      : undefined;
   const left = Math.max(0, comp.slots - teams);
   const full = left === 0 && !registered;
   const pct = Math.min(100, Math.round((teams / comp.slots) * 100));
@@ -494,6 +504,25 @@ export default function CompetitionDetail() {
             </View>
             {played && !result ? <Tag label="Résultats à venir" tone="neutral" icon="hourglass-outline" /> : null}
           </View>
+          {/* Frais d'inscription à régler → on propose de contacter l'organisateur (WhatsApp). */}
+          {!played && hasEntryFee(comp.fee) && feeContactPhone ? (
+            <View style={{ marginTop: spacing.md }}>
+              <Txt variant="small" color={colors.textMuted}>
+                Frais d'inscription : <Txt style={{ fontWeight: '600' }}>{formatFee(comp.fee)}</Txt>. Règle-les directement avec
+                l'organisateur.
+              </Txt>
+              <View style={{ marginTop: spacing.sm }}>
+                <Button
+                  size="sm"
+                  label={comp.organizerType === 'club' ? 'Contacter le club (règlement)' : "Contacter l'organisateur (règlement)"}
+                  icon="logo-whatsapp"
+                  variant="secondary"
+                  onPress={contactForFee}
+                  full
+                />
+              </View>
+            </View>
+          ) : null}
           {played && !result && !comp.createdByMe ? (
             <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
               L'organisateur désignera l'équipe vainqueure — tes stats se mettront à jour automatiquement.

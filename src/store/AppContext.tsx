@@ -913,6 +913,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             title: c.title,
             organizerType: c.organizerType,
             organizerName: c.organizer,
+            organizerPhone: state.account?.phone,
             clubId: c.clubId,
             clubName: c.clubName,
             dateKey: c.dateKey,

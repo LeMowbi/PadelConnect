@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Tag, Txt } from '@/components/ui';
-import { demoTeams, type Competition } from '@/data/competitions';
+import { teamsToShow, type Competition } from '@/data/competitions';
 import { colors, radius, spacing } from '@/theme';
 
 // Panneau de clôture (organisateur) : équipes inscrites → vainqueur → fin de parcours.
@@ -21,7 +21,7 @@ export function ClosePanel({
   onCancel: () => void;
   onDelete?: () => void;
 }) {
-  const teams = demoTeams(comp, myTeam);
+  const teams = teamsToShow(comp, myTeam);
   const [selected, setSelected] = useState<string | null>(null);
   const [loser, setLoser] = useState<string | null>(null);
   const [second, setSecond] = useState<string | null>(null);

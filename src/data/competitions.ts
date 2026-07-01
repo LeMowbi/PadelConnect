@@ -8,6 +8,7 @@ export type Competition = {
   organizerType: 'club' | 'joueur';
   organizer: string;
   organizerId?: string; // id serveur de l'organisateur (tournois serveur) — sert au « c'est moi »
+  organizerPhone?: string; // numéro de l'organisateur (pour régler les frais d'inscription)
   clubId?: string;
   clubName?: string;
   date: string; // libellé d'affichage (jour de DÉBUT)
@@ -30,6 +31,9 @@ export type Competition = {
   // (tout le club bloqué ce jour-là) — gardé pour les seeds de démonstration.
   courtNames?: string[];
   timeSlots?: string[];
+  // Roster RÉEL des équipes inscrites (tournois serveur) — « Prénom & Partenaire ». Remplace
+  // les noms de démonstration : le nombre d'inscrits et les noms affichés sont vrais.
+  teamNames?: string[];
   commission?: number; // frais fixe PadelConnect figé à la création (tournois joueurs)
   // Modération : un tournoi créé par un JOUEUR reste « pending » jusqu'à validation du
   // club hôte (« rejected » s'il est refusé). Club / seeds → visibles directement.
@@ -146,10 +150,30 @@ export const seedCompetitions: Competition[] = [
   },
 ];
 
-// Nombre d'équipes affiché : ne dépasse JAMAIS la capacité (l'inscription locale
-// s'ajoute aux inscrits de démo, plafonnée).
+// Nombre d'équipes inscrites (jamais au-dessus de la capacité). Tournoi SERVEUR : le compteur
+// serveur est déjà exact (ma propre inscription incluse) → on le prend tel quel. Seeds de démo :
+// mon inscription LOCALE s'ajoute au nombre figé de la démo.
 export function teamCount(comp: Competition, isRegistered: boolean): number {
+  if (comp.server) return Math.min(comp.slots, comp.registered);
   return Math.min(comp.slots, comp.registered + (isRegistered ? 1 : 0));
+}
+
+// Équipes à afficher : le roster RÉEL pour un tournoi serveur (plus aucun nom fictif), sinon
+// les équipes de démonstration pour les seeds. `myTeam` est mis en tête pour le mettre en avant.
+export function teamsToShow(comp: Competition, myTeam?: string): string[] {
+  if (comp.server) {
+    const list = comp.teamNames ?? [];
+    if (!myTeam) return list;
+    return [myTeam, ...list.filter((t) => t !== myTeam)]; // ma team en tête, sans doublon
+  }
+  return demoTeams(comp, myTeam);
+}
+
+// Le tournoi a-t-il des frais d'inscription (≠ gratuit) ? Sert à proposer de contacter
+// l'organisateur pour le règlement.
+export function hasEntryFee(fee: string | undefined): boolean {
+  const v = (fee ?? '').trim().toLowerCase();
+  return v.length > 0 && v !== 'gratuit';
 }
 
 // Équipes de DÉMONSTRATION d'un tournoi (noms stables par tournoi). Si l'utilisateur
