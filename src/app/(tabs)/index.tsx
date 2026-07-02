@@ -22,17 +22,14 @@ import { isBirthdayToday, parseBirthDate, zodiacFor } from '@/lib/zodiac';
 import { SESSION_MS, isPlayed, useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
-// Accès rapide — 4 univers (Réserver / Tournois / Amis / Mes réservations).
-// D1 : Coachs retiré du hub (consultés sur chaque fiche club + lien « Voir tous les coachs »)
-// pour garder la priorité visuelle sur « Réserver ». Grille 4 items équilibrée, pas de tabbar.
-// Libellé « Mes réservations » aligné sur l’écran de destination (reservations.tsx) et le
-// raccourci du profil, pour ne pas avoir deux noms différents pour la même destination.
+// Accès rapide — 4 raccourcis UTILES sans onglet dédié : Réserver/Tournois/Amis/Profil
+// vivent désormais dans la barre du bas, les dupliquer ici serait du bruit.
 type Action = { icon: keyof typeof Ionicons.glyphMap; label: string; route: string; tint: string; bg: string };
 const ACTIONS: Action[] = [
-  { icon: 'calendar', label: 'Réserver', route: '/reserver', tint: colors.signature, bg: colors.signatureSoft },
-  { icon: 'trophy', label: 'Tournois', route: '/competitions', tint: colors.purple, bg: colors.purpleSoft },
-  { icon: 'people', label: 'Amis', route: '/amis', tint: colors.coral, bg: colors.coralSoft },
   { icon: 'list', label: 'Mes réservations', route: '/reservations', tint: colors.green, bg: colors.greenSoft },
+  { icon: 'business', label: 'Clubs', route: '/clubs', tint: colors.signature, bg: colors.signatureSoft },
+  { icon: 'school', label: 'Coachs', route: '/coachs', tint: colors.purple, bg: colors.purpleSoft },
+  { icon: 'gift', label: 'Parrainage', route: '/parrainage', tint: colors.coral, bg: colors.coralSoft },
 ];
 
 const MONTHS_SHORT = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
@@ -365,12 +362,10 @@ export default function HomeScreen() {
           </LinearGradient>
         </Pressable>
 
-        {/* Accès rapide — 4 univers (D1 : Coachs retiré, accessible par fiche club) */}
+        {/* Accès rapide — raccourcis sans onglet (la barre du bas porte les univers principaux) */}
         <View style={styles.quickRow}>
           {ACTIONS.map((a, i) => {
-            // Pastille corail sur « Amis » : découvrabilité des demandes d’ami en attente
-            // (sinon invisible dans l’app tant qu’on n’ouvre pas manuellement l’écran Amis).
-            const pendingRequests = a.route === '/amis' ? state.friendRequests.length : 0;
+            // (La pastille des demandes d’ami vit désormais sur l’onglet Amis de la barre.)
             // Même ressort d’appui que Chip.tsx (0.94 → 1) sur le cercle d’icône seul, pour ne
             // pas décaler le libellé sous l’icône.
             const springTo = (to: number, bounciness: number) =>
@@ -383,19 +378,10 @@ export default function HomeScreen() {
                 onPressOut={() => springTo(1, 6)}
                 style={styles.quickItem}
                 accessibilityRole="button"
-                accessibilityLabel={
-                  pendingRequests > 0 ? `${a.label}, ${pendingRequests} demande${pendingRequests > 1 ? 's' : ''} en attente` : a.label
-                }
+                accessibilityLabel={a.label}
               >
                 <Animated.View style={[styles.quickIcon, { backgroundColor: a.bg, transform: [{ scale: quickScales[i] }] }]}>
                   <Ionicons name={a.icon} size={22} color={a.tint} />
-                  {pendingRequests > 0 ? (
-                    <View style={styles.quickBadge}>
-                      <Txt variant="small" color={colors.white} style={{ fontWeight: '700', fontSize: 10 }}>
-                        {pendingRequests > 9 ? '9+' : pendingRequests}
-                      </Txt>
-                    </View>
-                  ) : null}
                 </Animated.View>
                 <Txt variant="small" style={{ fontWeight: '600', textAlign: 'center' }}>
                   {a.label}

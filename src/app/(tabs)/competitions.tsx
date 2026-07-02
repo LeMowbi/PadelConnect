@@ -35,7 +35,7 @@ export default function CompetitionsScreen() {
   const past = list.filter((c) => (c.endDateKey ?? c.dateKey) < today);
 
   return (
-    <Screen back title="Tournois" subtitle="Défis avec récompenses — par les clubs ou les joueurs" refreshControl={refreshControl}>
+    <Screen title="Tournois" subtitle="Défis avec récompenses — par les clubs ou les joueurs" refreshControl={refreshControl}>
       <View style={{ marginTop: spacing.sm }}>
         <Button label="Créer un tournoi" icon="add" onPress={() => router.push('/competition/nouvelle')} full />
       </View>

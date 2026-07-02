@@ -107,7 +107,7 @@ export default function ReserverScreen() {
   const noSlotsByClub = !byClub.some((b) => b.slots.length > 0);
 
   return (
-    <Screen back title="Réserver" subtitle="Sessions de 1h30 — on te montre les terrains libres" refreshControl={refreshControl}>
+    <Screen title="Réserver" subtitle="Sessions de 1h30 — on te montre les terrains libres" refreshControl={refreshControl}>
       <Reveal>
         {/* Jour — pastilles (maquette) : jour abrégé + numéro, signature si actif */}
         <ScrollView

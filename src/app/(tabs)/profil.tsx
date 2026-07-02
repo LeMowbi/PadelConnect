@@ -136,7 +136,7 @@ export default function ProfilScreen() {
   const lvlPct = `${Math.round(Math.max(0, Math.min(1, level - lvlLow)) * 100)}%` as `${number}%`;
 
   return (
-    <Screen back refreshControl={refreshControl}>
+    <Screen refreshControl={refreshControl}>
       {editing ? (
         <EditAccount onDone={() => setEditing(false)} />
       ) : (

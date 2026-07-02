@@ -139,7 +139,7 @@ export default function AmisScreen() {
   };
 
   return (
-    <Screen back title="Amis" subtitle="Tes partenaires de jeu — invite-les sur tes réservations" refreshControl={refreshControl}>
+    <Screen title="Amis" subtitle="Tes partenaires de jeu — invite-les sur tes réservations" refreshControl={refreshControl}>
       <View style={{ marginTop: spacing.sm }}>
         {/* Demandes REÇUES en attente : à accepter ou refuser (l’ami a le choix, dans les deux sens). */}
         {requests.length > 0 ? (
