@@ -176,9 +176,15 @@ export default function CompetitionDetail() {
         </View>
         <View style={styles.heroOrg}>
           <Tag
-            label={byClub ? `Organisé par ${comp.organizer}` : `Créé par ${comp.organizer} (joueur)`}
-            tone={byClub ? 'blue' : 'green'}
-            icon={byClub ? 'business' : 'person'}
+            label={
+              byClub
+                ? `Organisé par ${comp.organizer}`
+                : comp.organizerType === 'operator'
+                  ? 'Organisé par PadelConnect'
+                  : `Créé par ${comp.organizer} (joueur)`
+            }
+            tone={byClub ? 'blue' : comp.organizerType === 'operator' ? 'amber' : 'green'}
+            icon={byClub ? 'business' : comp.organizerType === 'operator' ? 'star' : 'person'}
           />
         </View>
         {/* Ce que « Officiel » veut dire, en clair — sinon le badge reste abstrait pour le joueur. */}
@@ -531,7 +537,13 @@ export default function CompetitionDetail() {
               <View style={{ marginTop: spacing.sm }}>
                 <Button
                   size="sm"
-                  label={comp.organizerType === 'club' ? 'Contacter le club (règlement)' : 'Contacter l’organisateur (règlement)'}
+                  label={
+                    comp.organizerType === 'club'
+                      ? 'Contacter le club (règlement)'
+                      : comp.organizerType === 'operator'
+                        ? 'Contacter PadelConnect (règlement)'
+                        : 'Contacter l’organisateur (règlement)'
+                  }
                   icon="logo-whatsapp"
                   variant="secondary"
                   onPress={contactForFee}

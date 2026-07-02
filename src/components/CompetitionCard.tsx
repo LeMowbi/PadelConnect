@@ -12,6 +12,10 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
   const router = useRouter();
   const { state } = useApp();
   const byClub = comp.organizerType === 'club';
+  // Tournoi officiel PADELCONNECT (organisé par l'opérateur, validé par le club hôte) :
+  // présentation PREMIUM — bandeau doré + liseré — pour accueillir demain les tournois
+  // officiels externes (FIP…) par le même canal.
+  const byPadel = comp.organizerType === 'operator';
   const registered = !!state.compRegistrations[comp.id];
   const teams = teamCount(comp, registered);
   const left = Math.max(0, comp.slots - teams);
@@ -29,17 +33,28 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
   const mine = state.officialResults.find((o) => o.compId === comp.id);
 
   return (
-    <Card onPress={() => router.push(`/competition/${comp.id}`)} style={{ marginBottom: spacing.md }}>
+    <Card onPress={() => router.push(`/competition/${comp.id}`)} style={[{ marginBottom: spacing.md }, byPadel && styles.padelCard]}>
+      {byPadel ? (
+        <View style={styles.padelBanner}>
+          <Ionicons name="shield-checkmark" size={13} color={colors.amberDark} />
+          <Txt variant="label" color={colors.amberDark}>
+            TOURNOI OFFICIEL PADELCONNECT
+          </Txt>
+        </View>
+      ) : null}
       <View style={styles.top}>
         <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', flex: 1 }}>
           <Tag
-            label={byClub ? `Club · ${comp.organizer}` : `Joueur · ${comp.organizer}`}
-            tone={byClub ? 'blue' : 'green'}
-            icon={byClub ? 'business' : 'person'}
+            label={byClub ? `Club · ${comp.organizer}` : byPadel ? comp.organizer : `Joueur · ${comp.organizer}`}
+            tone={byClub ? 'blue' : byPadel ? 'amber' : 'green'}
+            icon={byClub ? 'business' : byPadel ? 'star' : 'person'}
           />
-          {/* Officiel = compte pour le niveau ; sinon « Amical » (entre joueurs), dit explicitement. */}
+          {/* Officiel = compte pour le niveau ; sinon « Amical » (entre joueurs), dit explicitement.
+              (Le bandeau doré porte déjà « officiel » pour les tournois PadelConnect.) */}
           {comp.official ? (
-            <Tag label="Officiel" tone="amber" icon="shield-checkmark" />
+            byPadel ? null : (
+              <Tag label="Officiel" tone="amber" icon="shield-checkmark" />
+            )
           ) : (
             <Tag label="Amical" tone="neutral" icon="happy-outline" />
           )}
@@ -98,6 +113,18 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
 
 const styles = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // Habillage premium des tournois officiels PadelConnect : liseré + bandeau dorés.
+  padelCard: { borderWidth: 1.5, borderColor: colors.amber },
+  padelBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.amberSoft,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.xs,
+    marginBottom: spacing.sm,
+  },
   reward: {
     flexDirection: 'row',
     alignItems: 'center',

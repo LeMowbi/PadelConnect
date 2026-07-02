@@ -1,5 +1,17 @@
 # Audit — actions serveur (sans terminal)
 
+## 0) NOUVEAU (2026-07-02, soir) — coller les migrations `42` et `43` (3 min) — ⏳ À FAIRE
+
+1. Dashboard Supabase → **SQL Editor** → **New query**.
+2. `supabase/42_club_coach_price.sql` (le club fixe le tarif du cours de ses coachs) :
+   copie **tout** → colle → **Run**.
+3. `supabase/43_padelconnect_tournaments.sql` (tournois officiels PadelConnect : créés par
+   toi EN TANT QUE PadelConnect, validés par le club hôte dans son Espace Club) :
+   copie **tout** → colle → **Run**.
+   Attendu à chaque fois : « Success. No rows returned ».
+
+---
+
 État au 2026-07-02 : les migrations `30 → 36` sont appliquées, `notify-club` est redéployée
 (confirmé par le porteur). **Reste à faire : le §1 (coachs & photos, avec la 37 au passage) —
 puis, optionnel, le §3.**

@@ -10,7 +10,7 @@ import { supabase } from './supabase';
 type CompetitionRow = {
   id: string;
   organizer_id: string;
-  organizer_type: 'club' | 'joueur';
+  organizer_type: 'club' | 'joueur' | 'operator';
   organizer_name: string;
   organizer_phone: string | null;
   club_id: string | null;
@@ -108,7 +108,7 @@ export async function fetchMyCompRegistrations(): Promise<Record<string, string>
 
 export type CreateCompetitionInput = {
   title: string;
-  organizerType: 'club' | 'joueur';
+  organizerType: 'club' | 'joueur' | 'operator';
   organizerName: string;
   organizerPhone?: string;
   clubId?: string;

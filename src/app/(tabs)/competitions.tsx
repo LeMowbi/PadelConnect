@@ -24,7 +24,7 @@ export default function CompetitionsScreen() {
     // Un tournoi « en attente » n’est visible que par son créateur (sinon masqué jusqu’à validation du club).
     .filter((c) => isTournamentPublic(c) || c.createdByMe)
     .filter((c) => {
-      if (tab === 'Par les clubs') return c.organizerType === 'club';
+      if (tab === 'Par les clubs') return c.organizerType !== 'joueur'; // clubs + officiels PadelConnect
       if (tab === 'Par les joueurs') return c.organizerType === 'joueur';
       return true;
     });

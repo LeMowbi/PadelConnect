@@ -5,7 +5,7 @@ import { dateKeyLabel } from '@/lib/days';
 export type Competition = {
   id: string;
   title: string;
-  organizerType: 'club' | 'joueur';
+  organizerType: 'club' | 'joueur' | 'operator'; // operator = tournoi officiel PadelConnect
   organizer: string;
   organizerId?: string; // id serveur de l’organisateur (tournois serveur) — sert au « c’est moi »
   organizerPhone?: string; // numéro de l’organisateur (pour régler les frais d’inscription)

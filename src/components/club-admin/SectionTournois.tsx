@@ -38,7 +38,7 @@ export function SectionTournois({ club, comps, onCloseComp }: { club: Club; comp
 
   // Demandes de tournoi : créés par un joueur, en attente de validation de CE club.
   const tournamentRequests = state.myCompetitions.filter(
-    (c) => c.clubId === club.id && c.status === 'pending' && c.organizerType === 'joueur',
+    (c) => c.clubId === club.id && c.status === 'pending' && c.organizerType !== 'club',
   );
   // Tournois publiés du club (hors demandes en attente) — pour la liste « Tournois du club ».
   const publishedComps = comps.filter(isTournamentPublic);

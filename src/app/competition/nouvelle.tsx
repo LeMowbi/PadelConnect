@@ -60,6 +60,10 @@ export default function NouvelleCompetition() {
   // on le verrouille sur le RÔLE, pas seulement sur le paramètre d’URL — sinon un joueur
   // pourrait forger « ?as=club » et créer un tournoi officiel (puis s’attribuer du niveau).
   const asClub = params.as === 'club' && (state.role === 'club' || state.role === 'operator');
+  // « asPadel » : tournoi OFFICIEL PADELCONNECT créé par l'opérateur. Il choisit le club hôte
+  // et le tournoi part EN ATTENTE : le club le valide dans son Espace Club (sa permission,
+  // dans l'app — décision porteur : on n'entre pas dans le planning d'un club sans son accord).
+  const asPadel = params.as === 'padelconnect' && state.role === 'operator';
   const club = asClub ? findClub(params.clubId, state.customClubs, state.clubInfo) : undefined;
   // Tournoi créé par un JOUEUR : il choisit le club hôte, qui devra valider.
   const hosts = useMemo(
@@ -100,7 +104,7 @@ export default function NouvelleCompetition() {
   const toggleCourt = (c: string) => setCourts((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]));
   const toggleTime = (t: string) => setTimes((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
 
-  const isPlayerTournament = !asClub;
+  const isPlayerTournament = !asClub && !asPadel;
 
   const create = async () => {
     if (submitting) return;
@@ -117,8 +121,8 @@ export default function NouvelleCompetition() {
     setSubmitting(true);
     const res = await addCompetition({
       title: title.trim(),
-      organizerType: asClub ? 'club' : 'joueur',
-      organizer: asClub ? (club?.name ?? 'Club') : (state.account?.firstName ?? 'Joueur'),
+      organizerType: asClub ? 'club' : asPadel ? 'operator' : 'joueur',
+      organizer: asClub ? (club?.name ?? 'Club') : asPadel ? 'PadelConnect' : (state.account?.firstName ?? 'Joueur'),
       clubId: host?.id,
       clubName: host?.name,
       date: day!.label,
@@ -132,7 +136,7 @@ export default function NouvelleCompetition() {
       fee: fee.trim() || 'Gratuit',
       slots,
       registered: 0,
-      official: asClub,
+      official: asClub || asPadel,
       // Terrains/créneaux PRÉCIS réservés au tournoi (vides = tout le club ce jour-là).
       courtNames: courts,
       timeSlots: times,
@@ -153,12 +157,16 @@ export default function NouvelleCompetition() {
     toast.show(asClub ? 'Tournoi publié ✓' : 'Demande envoyée au club ✓');
     router.replace(asClub ? '/club-admin' : '/competitions');
   };
+  // NB : pour asPadel, le libellé « Demande envoyée au club ✓ » est exact — le club hôte
+  // valide le tournoi PadelConnect dans son Espace Club, comme un tournoi joueur.
 
   return (
     <Screen
       back
       title="Créer un tournoi"
-      subtitle={asClub ? `Pour ${club?.name ?? 'ton club'}` : 'En tant que joueur'}
+      subtitle={
+        asClub ? `Pour ${club?.name ?? 'ton club'}` : asPadel ? 'Tournoi officiel PadelConnect — le club hôte valide' : 'En tant que joueur'
+      }
       scrollRef={scrollRef}
     >
       <Field

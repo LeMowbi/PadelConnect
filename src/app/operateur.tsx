@@ -555,18 +555,22 @@ export default function Operateur() {
         />
       </View>
 
-      {/* Créer un tournoi OFFICIEL PadelConnect : l'opérateur passe par l'Espace Club du club
-          hôte (il y a accès pour tous les clubs) — publié direct, badge « Officiel », compte
-          pour le niveau des joueurs. */}
+      {/* Tournoi OFFICIEL PadelConnect : créé EN TANT QUE PadelConnect (pas en entrant dans
+          l'Espace Club d'un club) — le club hôte le VALIDE dans son espace (sa permission,
+          dans l'app). Présentation premium côté joueurs (bandeau doré) — même canal demain
+          pour des tournois officiels externes (FIP…). */}
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Tournoi officiel PadelConnect" />
-        <Card onPress={() => router.push('/club-admin')} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+        <Card
+          onPress={() => router.push('/competition/nouvelle?as=padelconnect')}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}
+        >
           <IconCircle icon="trophy" color={colors.amberDark} bg={colors.amberSoft} />
           <View style={{ flex: 1 }}>
             <Txt variant="h3">Créer un tournoi officiel</Txt>
             <Txt variant="small" color={colors.textMuted}>
-              Choisis le club hôte (ex. Padelta) → onglet Tournois → « Créer ». Publié direct, badge « Officiel », le résultat compte pour
-              le niveau des joueurs.
+              Organisé par PadelConnect, validé par le club hôte dans son Espace Club. Bandeau doré côté joueurs, le résultat compte pour le
+              niveau.
             </Txt>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
