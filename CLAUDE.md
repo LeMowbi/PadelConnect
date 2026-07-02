@@ -79,8 +79,11 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   l'écrire dans le dépôt).
 - Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
   --auto-submit --non-interactive --no-wait`.
-- **Dernier build : #37** (= #36 + audit n°3 complet « ultracode » : SQL 41, corrections
-  réseau/temps/perf/hydratation, quick wins UX joueur + gérant + onboarding, tablette).
+- **Dernier build : #38** (= #37 + demandes porteur du 2026-07-02 : barre d'onglets en bas
+  (Accueil/Réserver/Tournois/Amis/Profil, groupe `(tabs)`), tarif des cours fixé par le club
+  (SQL 42), badges Officiel/Amical + carte opérateur « Créer un tournoi officiel »,
+  annulation <5h → contact WhatsApp club, débordements de texte (Button/StatTile),
+  série en cours 🔥 profil, parrainage épuré).
 - Un module natif nouveau (ex. `expo-contacts`) ⇒ **nouveau build requis** + config plugin dans
   `app.json` avec la chaîne de permission.
 
