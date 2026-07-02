@@ -50,6 +50,10 @@ export default function ReserverScreen() {
   const [friendIds, setFriendIds] = useState<string[]>([]);
   const [extraNames, setExtraNames] = useState<string[]>([]);
   const [extraName, setExtraName] = useState('');
+  // Match OUVERT (45, modèle Playtomic) : le terrain est bloqué normalement, et les places
+  // restantes deviennent rejoignables par les autres joueurs (« Matchs ouverts »).
+  const [openMatch, setOpenMatch] = useState(false);
+  const [openLevel, setOpenLevel] = useState('');
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [celebrate, setCelebrate] = useState(false); // confettis à l’écran de succès (motif amis.tsx)
@@ -173,6 +177,9 @@ export default function ReserverScreen() {
       price: priceForSlot(club, slot),
       players: 1 + invited.length,
       invited,
+      // Match ouvert seulement s'il reste des places à prendre (équipe déjà complète = inutile).
+      openMatch: openMatch && invited.length < 3,
+      openLevel: openMatch ? openLevel : '',
     });
     setSubmitting(false);
     if (res.ok) {
@@ -459,6 +466,38 @@ export default function ReserverScreen() {
           </View>
         ) : null}
 
+        {/* Match OUVERT (modèle Playtomic) : il manque des joueurs → n'importe qui peut
+            rejoindre les places restantes depuis « Matchs ouverts ». Le terrain est bloqué
+            quoi qu'il arrive — s'il ne se remplit pas, la réservation reste normale. */}
+        {participantCount < 3 && state.serverUserId ? (
+          <Pressable
+            onPress={() => setOpenMatch((v) => !v)}
+            style={[styles.openMatchBox, openMatch && styles.openMatchBoxOn]}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: openMatch }}
+            accessibilityLabel="Ouvrir ce match aux autres joueurs"
+          >
+            <Ionicons name={openMatch ? 'radio-button-on' : 'radio-button-off'} size={20} color={colors.signature} />
+            <View style={{ flex: 1 }}>
+              <Txt variant="body" style={{ fontWeight: '700' }}>
+                Ouvrir ce match aux autres joueurs
+              </Txt>
+              <Txt variant="small" color={colors.textMuted}>
+                Ton terrain reste bloqué — les {3 - participantCount} place{3 - participantCount > 1 ? 's' : ''} restante
+                {3 - participantCount > 1 ? 's' : ''} deviennent rejoignables (tu es prévenu à chaque arrivée).
+              </Txt>
+            </View>
+          </Pressable>
+        ) : null}
+        {openMatch && participantCount < 3 ? (
+          <View style={[styles.wrap, { marginTop: spacing.sm }]}>
+            {['Tous niveaux', '2–3', '3–4', '4–5', '5+'].map((lv) => {
+              const value = lv === 'Tous niveaux' ? '' : lv;
+              return <Chip key={lv} label={lv} active={openLevel === value} onPress={() => setOpenLevel(value)} />;
+            })}
+          </View>
+        ) : null}
+
         <Card style={styles.priceRow}>
           <View>
             <Txt variant="muted">Tarif (session 1h30)</Txt>
@@ -517,6 +556,18 @@ const styles = StyleSheet.create({
   periodHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.md },
   extraRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
   inviteLink: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm, paddingVertical: spacing.xs },
+  openMatchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  openMatchBoxOn: { borderColor: colors.signature, backgroundColor: colors.signatureSoft },
   extraInput: {
     flex: 1,
     backgroundColor: colors.bg,

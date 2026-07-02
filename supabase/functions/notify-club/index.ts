@@ -118,6 +118,20 @@ Deno.serve(async (req) => {
         body: `${record.booked_by_name ?? 'Un joueur'} a annulé son créneau du ${record.date_label ?? ''} à ${record.time ?? ''} (${record.court ?? ''}).`,
         data: { kind: 'club_reservation', id: record.id },
       });
+    } else if (table === 'reservation_participants' && type === 'INSERT' && record.status === 'accepted') {
+      // MATCH OUVERT (45) : quelqu'un vient de REJOINDRE — join_open_match insère directement
+      // 'accepted' (≠ 'invited') → on prévient le CRÉATEUR du match, pas le nouveau venu.
+      const { data: resa } = await supabase
+        .from('reservations')
+        .select('user_id, club_name, date_label, time')
+        .eq('id', record.reservation_id)
+        .maybeSingle();
+      notifs.push({
+        targets: await userToken(resa?.user_id ?? ''),
+        title: 'Un joueur a rejoint ton match 🎾',
+        body: `${await userName(record.user_id)} a rejoint ton match du ${resa?.date_label ?? ''} à ${resa?.time ?? ''} (${resa?.club_name ?? ''}).`,
+        data: { kind: 'reservation', id: record.reservation_id },
+      });
     } else if (table === 'reservation_participants' && type === 'INSERT') {
       // Un ami vient d'être INVITÉ à une réservation (link_participants) → prévenir l'invité.
       const { data: resa } = await supabase

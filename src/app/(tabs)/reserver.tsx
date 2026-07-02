@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { BookingSheet } from '@/components/BookingSheet';
 import { Chip } from '@/components/Chip';
+import { OpenMatches } from '@/components/OpenMatches';
 import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
@@ -299,6 +300,9 @@ export default function ReserverScreen() {
               </Card>
             ))
         )}
+
+        {/* Matchs ouverts : des joueurs cherchent du monde — rejoindre est gratuit. */}
+        {state.serverUserId ? <OpenMatches /> : null}
 
         <View style={{ marginTop: spacing.lg }}>
           <Button

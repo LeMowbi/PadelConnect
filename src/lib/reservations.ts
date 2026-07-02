@@ -26,6 +26,8 @@ type Row = {
   booked_by_phone: string | null;
   coach_name: string | null; // cours : réservation créée par respond_lesson (acceptation coach)
   club_confirmed: boolean | null;
+  open_match: boolean | null; // match ouvert (45) — rejoignable par les autres joueurs
+  open_level: string | null;
   created_at: string | null;
 };
 
@@ -53,6 +55,8 @@ export function rowToReservation(row: Row): Reservation {
     bookedBy: row.booked_by_name ? { name: row.booked_by_name, phone: row.booked_by_phone ?? '' } : undefined,
     coachName: row.coach_name ?? undefined,
     clubConfirmed: row.club_confirmed ?? false,
+    openMatch: row.open_match ?? false,
+    openLevel: row.open_level ?? undefined,
     createdAt: Number.isFinite(createdTs) ? createdTs : Date.now(),
   };
 }
@@ -77,6 +81,8 @@ function reservationToRow(
     invited: r.invited,
     booked_by_name: bookedBy?.name ?? null,
     booked_by_phone: bookedBy?.phone ?? null,
+    open_match: r.openMatch ?? false,
+    open_level: r.openLevel ?? '',
     status: 'booked',
   };
 }

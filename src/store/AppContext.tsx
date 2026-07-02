@@ -151,6 +151,8 @@ export type Reservation = {
   bookedBy?: { name: string; phone: string }; // qui a réservé — visible côté club
   coachName?: string; // cours : nom du coach (créée par respond_lesson à son acceptation)
   clubConfirmed?: boolean; // le gérant a confirmé la réservation (visible par le joueur)
+  openMatch?: boolean; // match OUVERT (45) : visible dans « Matchs ouverts », rejoignable
+  openLevel?: string; // niveau souhaité du match ouvert (ex. « 3–4 », libre)
   createdAt: number;
 };
 
