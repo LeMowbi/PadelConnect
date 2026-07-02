@@ -1,6 +1,8 @@
 # Audit — actions serveur (sans terminal)
 
-## 0) NOUVEAU (2026-07-02, soir) — coller les migrations `42` et `43` (3 min) — ⏳ À FAIRE
+## 0) NOUVEAU (2026-07-02, soir) — SQL `42` à `45` + notify-club (5 min) — ⏳ À FAIRE
+
+### a. Coller les migrations `42`, `43`, `44` puis `45` (dans cet ordre)
 
 1. Dashboard Supabase → **SQL Editor** → **New query**.
 2. `supabase/42_club_coach_price.sql` (le club fixe le tarif du cours de ses coachs) :
@@ -8,7 +10,17 @@
 3. `supabase/43_padelconnect_tournaments.sql` (tournois officiels PadelConnect : créés par
    toi EN TANT QUE PadelConnect, validés par le club hôte dans son Espace Club) :
    copie **tout** → colle → **Run**.
+4. `supabase/44_leaderboard_cours.sql` (classement général des joueurs + annuaire des
+   coachs réservables pour l'écran « Réserver un cours ») : copie **tout** → colle → **Run**.
+5. `supabase/45_open_matches.sql` (MATCHS OUVERTS façon Playtomic : un joueur réserve son
+   terrain et les autres peuvent rejoindre les places restantes) : copie **tout** → colle → **Run**.
    Attendu à chaque fois : « Success. No rows returned ».
+
+### b. Redéployer `notify-club` (push « Un joueur a rejoint ton match 🎾 »)
+
+1. Dashboard → **Edge Functions** → **notify-club** → **Edit**.
+2. Remplace tout le code par `supabase/functions/notify-club/index.ts` du dépôt → **Deploy**.
+   (Le webhook `reservation_participants` existe déjà — rien d'autre à créer.)
 
 ---
 

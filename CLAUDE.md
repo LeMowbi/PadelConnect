@@ -96,7 +96,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `41` (voir dossier `supabase/`).
+  **SQL Editor → Run**. Migrations actuelles : `02` → `45` (voir dossier `supabase/`).
 - **Edge Function** `supabase/functions/notify-club/index.ts` (Deno) : envoie les push via
   l'API Expo. Déclenchée par des **Database Webhooks** (INSERT + UPDATE). Redéploiement **sans
   terminal** : Dashboard → Edge Functions → notify-club → Edit → coller le code → Deploy.
@@ -146,6 +146,22 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   sur la fiche, gérées ligne par ligne dans l'Espace Club). Store : `clubCovers`/`clubCourtPhotos`.
 - **Padelta d'abord** : `compareClubs` (data/clubs.ts) épingle Padelta en tête de toutes les
   listes joueurs (décision du porteur) ; les tris « Sponsorisé d'abord » restent prioritaires.
+- **Matchs ouverts (45, modèle Playtomic)** : terrain bloqué direct par le créateur, places
+  restantes rejoignables (`join_open_match` → participant 'accepted' + prénom dans `invited`,
+  push au créateur). GRATUIT pour tous — un futur Gold les ÉPINGLERA (jamais ne les verrouille).
+  UI : toggle dans le tunnel + section `src/components/OpenMatches.tsx` (onglet Réserver).
+- **Classement (44)** : par NIVEAU (seul signal anti-triche), départagé tournois officiels
+  gagnés puis parties jouées. `fetch_leaderboard`/`my_leaderboard_rank`, écran `/classement`.
+- **Tournois officiels PadelConnect (43)** : organizer_type 'operator' — créés par l'opérateur
+  EN TANT QUE PadelConnect, VALIDÉS par le club hôte dans son Espace Club (jamais en entrant
+  dans son planning sans accord). Présentation premium (bandeau doré) — futur canal FIP.
+- **Abonnement Gold (3 500 F/mois, Wave)** : GARDÉ POUR PLUS TARD (décision porteur) — statut
+  + avantages (badge, matchs épinglés, priorité tournois), jamais de verrou sur le cœur de l'app.
+- **Barre d'onglets** : groupe `(tabs)` (Accueil/Réserver/Tournois/Amis/Profil) ; les détails
+  glissent par-dessus. Espace opérateur en 4 onglets (Aperçu/Finances/Clubs/Demandes).
+- **Calendrier appareil** : `createEventInCalendarAsync` (fiche système pré-remplie, AUCUNE
+  permission — l'ancienne voie échouait sur iOS 17+). `CalendarPicker` maison pour les dates
+  de tournoi (grille mensuelle UTC).
 
 ## 10. État actuel / à faire
 
