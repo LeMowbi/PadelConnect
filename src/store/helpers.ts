@@ -4,6 +4,7 @@
 import type { CustomClub } from '@/data/clubs';
 import type { ClubConfig } from '@/lib/clubsServer';
 import type { ServerCompetitions } from '@/lib/competitionsServer';
+import { addWeeks, weekKeyOf } from '@/lib/days';
 import type { MyParticipation } from '@/lib/reservations';
 import type { AppState, CompResult, OfficialResult } from './AppContext';
 
@@ -13,10 +14,26 @@ export const clampLevel = (n: number) => Math.min(7, Math.max(1, Math.round(n * 
 export const LEVEL_STEP = 0.5; // bonus de niveau pour l’équipe vainqueure d’un tournoi officiel
 export const LEVEL_PENALTY = 0.25; // malus de niveau pour l’équipe classée dernière (facultatif)
 
+// Série en cours 🔥 : semaines calendaires CONSÉCUTIVES avec au moins une partie jouée, en
+// remontant depuis la semaine courante. Une semaine EN COURS sans partie ne casse pas la
+// série (elle n'est pas finie) : on regarde alors depuis la semaine précédente.
+export function weeklyStreak(playedStartsAt: number[], now: number): number {
+  if (playedStartsAt.length === 0) return 0;
+  const weeks = new Set(playedStartsAt.map((ts) => weekKeyOf(ts)));
+  const current = weekKeyOf(now);
+  let cursor = weeks.has(current) ? current : addWeeks(current, -1);
+  let streak = 0;
+  while (weeks.has(cursor)) {
+    streak += 1;
+    cursor = addWeeks(cursor, -1);
+  }
+  return streak;
+}
+
 // Traduit les messages d’erreur Supabase en français clair pour l’utilisateur.
 export function frAuthError(msg: string): string {
   const m = (msg || '').toLowerCase();
-  if (m.includes('email not confirmed')) return "Confirme d’abord ton e-mail — vérifie ta boîte mail (et tes spams).";
+  if (m.includes('email not confirmed')) return 'Confirme d’abord ton e-mail — vérifie ta boîte mail (et tes spams).';
   if (m.includes('invalid login')) return 'Identifiant ou mot de passe incorrect.';
   if (m.includes('already registered') || m.includes('already been registered')) return 'Cet e-mail a déjà un compte — connecte-toi.';
   if (m.includes('unable to validate email') || m.includes('invalid format')) return 'Adresse e-mail invalide — vérifie-la.';

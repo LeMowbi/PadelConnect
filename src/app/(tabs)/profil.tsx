@@ -259,6 +259,17 @@ export default function ProfilScreen() {
           <StatTile value={stats.tournamentsPlayed} label="Tournois joués" color={colors.purple} bg={colors.purpleSoft} />
           <StatTile value={stats.tournamentsWon} label="Tournois gagnés" color={colors.amberDark} bg={colors.amberSoft} />
         </View>
+        {/* Série en cours 🔥 : rétention douce — visible dès 2 semaines d'affilée avec ≥ 1 partie. */}
+        {stats.streakWeeks >= 2 ? (
+          <View style={styles.streak}>
+            <Txt variant="body" style={{ fontWeight: '700' }}>
+              🔥 En feu !
+            </Txt>
+            <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
+              {stats.streakWeeks} semaines d’affilée avec au moins une partie — continue la série.
+            </Txt>
+          </View>
+        ) : null}
         <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
           Les parties jouées se comptent toutes seules : une réservation passée = une partie.
         </Txt>
@@ -713,6 +724,15 @@ const styles = StyleSheet.create({
   },
   avatarImg: { width: '100%', height: '100%' },
   stats: { flexDirection: 'row', gap: spacing.sm },
+  streak: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.amberSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   trophyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   trophyHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },

@@ -96,6 +96,7 @@ import {
   mergeServerClubs,
   splitParticipations,
   uid,
+  weeklyStreak,
 } from './helpers';
 import { ACCENTS } from '@/theme';
 
@@ -248,7 +249,7 @@ export type AppState = {
 };
 
 // 3 chiffres, pas plus : parties jouées (auto), tournois joués, tournois gagnés.
-export type Stats = { played: number; tournamentsPlayed: number; tournamentsWon: number };
+export type Stats = { played: number; tournamentsPlayed: number; tournamentsWon: number; streakWeeks: number };
 
 export const COMMISSION_RATE = 0.1; // commission opérateur (10 %)
 const STORAGE_KEY = 'padelco_state_v4'; // v4 : modèle sans matchs ni victoires/défaites
@@ -438,10 +439,16 @@ type AppContextType = {
 const AppContext = createContext<AppContextType | null>(null);
 function computeStats(reservations: Reservation[], officialResults: OfficialResult[]): Stats {
   const now = Date.now();
+  const played = reservations.filter((r) => isPlayed(r, now));
   return {
-    played: reservations.filter((r) => isPlayed(r, now)).length,
+    played: played.length,
     tournamentsPlayed: officialResults.length,
     tournamentsWon: officialResults.filter((o) => o.result === 'win').length,
+    // Série en cours (semaines consécutives avec ≥ 1 partie) — affichée sur le profil.
+    streakWeeks: weeklyStreak(
+      played.map((r) => r.startsAt),
+      now,
+    ),
   };
 }
 
