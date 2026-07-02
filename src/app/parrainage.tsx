@@ -115,7 +115,6 @@ export default function ParrainageScreen() {
           <PopIn key={count == null ? 'loading' : count} style={{ flex: 1 }}>
             <StatTile value={count == null ? '—' : `${count}`} label="Amis rejoints" color={colors.signature} bg={colors.signatureSoft} />
           </PopIn>
-          <StatTile value="Illimité" label="Invitations à envoyer" color={colors.amberDark} bg={colors.amberSoft} />
         </View>
 
         <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>

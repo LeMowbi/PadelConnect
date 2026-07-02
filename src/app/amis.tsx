@@ -303,6 +303,7 @@ export default function AmisScreen() {
                     onPress={sendRequest}
                     disabled={sending}
                     pill
+                    full
                   />
                 </View>
               </PopIn>

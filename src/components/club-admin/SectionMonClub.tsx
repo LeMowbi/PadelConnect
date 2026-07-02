@@ -8,7 +8,7 @@ import { Button, Card, IconCircle, SectionHeader, Tag, Txt } from '@/components/
 import { ClubInfoCard } from '@/components/club-admin/ClubInfoCard';
 import { type Club } from '@/data/clubs';
 import { courtsFor, openSlotsFor } from '@/lib/availability';
-import { clubAddCoach, clubRemoveCoach, fetchClubCoaches, type ServerCoach } from '@/lib/coachesServer';
+import { clubAddCoach, clubRemoveCoach, clubSetCoachPrice, fetchClubCoaches, type ServerCoach } from '@/lib/coachesServer';
 import { MAX_CLUB_PHOTOS, useApp } from '@/store/AppContext';
 import { fcfa, initials } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
@@ -101,6 +101,29 @@ export function SectionMonClub({ club }: { club: Club }) {
       toast.show(`${c.name} n’est plus coach du club`);
     } else {
       toast.show('Retrait impossible — réessaie', { icon: 'alert-circle' });
+    }
+  };
+
+  // Tarif du cours fixé par le CLUB (42) — édition inline sur la ligne du coach.
+  const [priceEditing, setPriceEditing] = useState<string | null>(null);
+  const [priceDraft, setPriceDraft] = useState('');
+  const [savingPrice, setSavingPrice] = useState(false);
+  const saveCoachPrice = async (c: ServerCoach) => {
+    if (savingPrice) return;
+    const price = priceDraft.trim() === '' ? null : Number(priceDraft);
+    if (price !== null && (!Number.isFinite(price) || price < 1000 || price > 1000000)) {
+      toast.show('Tarif entre 1 000 et 1 000 000 FCFA (vide = non affiché)', { icon: 'alert-circle' });
+      return;
+    }
+    setSavingPrice(true);
+    const ok = await clubSetCoachPrice(c.userId, price);
+    setSavingPrice(false);
+    if (ok) {
+      setBookableCoaches((cur) => cur.map((x) => (x.userId === c.userId ? { ...x, price: price ?? undefined } : x)));
+      setPriceEditing(null);
+      toast.show(price === null ? 'Tarif retiré' : `Tarif du cours : ${fcfa(price)} ✓`);
+    } else {
+      toast.show('Enregistrement impossible — réessaie', { icon: 'alert-circle' });
     }
   };
 
@@ -449,25 +472,62 @@ export function SectionMonClub({ club }: { club: Club }) {
                   </Txt>
                 ) : (
                   bookableCoaches.map((c) => (
-                    <View key={c.userId} style={styles.listRow}>
-                      <IconCircle icon="school" color={colors.purple} bg={colors.purpleSoft} size={36} />
-                      <View style={{ flex: 1 }}>
-                        <Txt variant="body" style={{ fontWeight: '600' }}>
-                          {c.name}
-                        </Txt>
-                        <Txt variant="muted" numberOfLines={1}>
-                          {c.specialty || 'Coach'}
-                          {c.slots.length ? ` · ${c.slots.length} créneau${c.slots.length > 1 ? 'x' : ''}` : ' · pas encore de créneau'}
-                        </Txt>
+                    <View key={c.userId}>
+                      <View style={styles.listRow}>
+                        <IconCircle icon="school" color={colors.purple} bg={colors.purpleSoft} size={36} />
+                        <View style={{ flex: 1 }}>
+                          <Txt variant="body" style={{ fontWeight: '600' }} numberOfLines={1}>
+                            {c.name}
+                          </Txt>
+                          <Txt variant="muted" numberOfLines={1}>
+                            {c.specialty || 'Coach'}
+                            {c.slots.length ? ` · ${c.slots.length} créneau${c.slots.length > 1 ? 'x' : ''}` : ' · pas encore de créneau'}
+                          </Txt>
+                        </View>
+                        {/* Tarif du cours (fixé par le club) : tap = édition inline. */}
+                        <Pressable
+                          onPress={() => {
+                            setPriceEditing((cur) => (cur === c.userId ? null : c.userId));
+                            setPriceDraft(c.price ? String(c.price) : '');
+                          }}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Modifier le tarif du cours de ${c.name}`}
+                        >
+                          <Tag
+                            label={c.price ? fcfa(c.price) : 'Fixer le tarif'}
+                            tone={c.price ? 'green' : 'amber'}
+                            icon="pricetag-outline"
+                          />
+                        </Pressable>
+                        <Pressable
+                          onPress={() => void demoteCoach(c)}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Retirer le coach ${c.name}`}
+                        >
+                          <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                        </Pressable>
                       </View>
-                      <Pressable
-                        onPress={() => void demoteCoach(c)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Retirer le coach ${c.name}`}
-                      >
-                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                      </Pressable>
+                      {priceEditing === c.userId ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs }}>
+                          <TextInput
+                            value={priceDraft}
+                            onChangeText={setPriceDraft}
+                            placeholder="Tarif du cours (FCFA) — vide = non affiché"
+                            placeholderTextColor={colors.textMuted}
+                            keyboardType="numeric"
+                            style={[styles.input, { marginTop: 0, flex: 1 }]}
+                            accessibilityLabel={`Tarif du cours de ${c.name} en FCFA`}
+                          />
+                          <Button
+                            size="sm"
+                            label={savingPrice ? '…' : 'OK'}
+                            onPress={() => void saveCoachPrice(c)}
+                            disabled={savingPrice}
+                          />
+                        </View>
+                      ) : null}
                     </View>
                   ))
                 )}

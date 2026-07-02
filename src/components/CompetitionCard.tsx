@@ -37,7 +37,12 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
             tone={byClub ? 'blue' : 'green'}
             icon={byClub ? 'business' : 'person'}
           />
-          {comp.official ? <Tag label="Officiel" tone="amber" icon="shield-checkmark" /> : null}
+          {/* Officiel = compte pour le niveau ; sinon « Amical » (entre joueurs), dit explicitement. */}
+          {comp.official ? (
+            <Tag label="Officiel" tone="amber" icon="shield-checkmark" />
+          ) : (
+            <Tag label="Amical" tone="neutral" icon="happy-outline" />
+          )}
           {comp.status === 'pending' ? <Tag label="En attente" tone="coral" icon="hourglass-outline" /> : null}
           {comp.status === 'rejected' ? <Tag label="Refusé" tone="neutral" icon="close-circle-outline" /> : null}
         </View>
@@ -62,7 +67,7 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
       </View>
 
       <View style={styles.footer}>
-        <Txt variant="muted">
+        <Txt variant="muted" numberOfLines={1} style={{ flexShrink: 1 }}>
           {teams}/{comp.slots} équipes · {formatFee(comp.fee)}
         </Txt>
         {result ? (

@@ -450,7 +450,9 @@ export default function ProfilScreen() {
           <IconCircle icon="mail-outline" color={colors.purple} bg={colors.purpleSoft} />
           <View style={{ flex: 1 }}>
             <Txt variant="h3">Adresse e-mail</Txt>
-            <Txt variant="muted">{realEmail ? realEmail : 'Aucune — touche pour en ajouter une'}</Txt>
+            <Txt variant="muted" numberOfLines={1}>
+              {realEmail ? realEmail : 'Aucune — touche pour en ajouter une'}
+            </Txt>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
         </Card>

@@ -137,7 +137,14 @@ export function Button({
   const inner = (
     <>
       {icon ? <Ionicons name={icon} size={size === 'sm' ? 16 : 18} color={tone.fg} /> : null}
-      <Text style={[btn.label, size === 'sm' && { fontSize: font.size.sm }, { color: tone.fg }]}>{label}</Text>
+      {/* numberOfLines + flexShrink : un label dynamique long (nom de club, de joueur…) se
+          tronque proprement au lieu de déborder du cadre à hauteur fixe. */}
+      <Text
+        numberOfLines={1}
+        style={[btn.label, size === 'sm' && { fontSize: font.size.sm }, { color: tone.fg, flexShrink: 1, textAlign: 'center' }]}
+      >
+        {label}
+      </Text>
     </>
   );
 
@@ -370,7 +377,11 @@ function CountUp({ value, style }: { value: number; style: StyleProp<TextStyle> 
     Animated.timing(anim, { toValue: value, duration: 550, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
     return () => anim.removeListener(id);
   }, [value, anim]);
-  return <Text style={style}>{Math.round(display)}</Text>;
+  return (
+    <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={style}>
+      {Math.round(display)}
+    </Text>
+  );
 }
 
 // Tuile statistique : grand chiffre (Bricolage 800) + libellé discret.
@@ -390,7 +401,11 @@ export function StatTile({
       {typeof value === 'number' ? (
         <CountUp value={value} style={[stat.value, { color }]} />
       ) : (
-        <Text style={[stat.value, { color }]}>{value}</Text>
+        // Un montant FCFA à 7 chiffres tient dans la tuile (1/3 de largeur) : la police se
+        // réduit au besoin au lieu de déborder du cadre.
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={[stat.value, { color }]}>
+          {value}
+        </Text>
       )}
       <Txt variant="small" color={colors.textMuted} style={{ textAlign: 'center' }}>
         {label}

@@ -116,6 +116,13 @@ export async function clubAddCoach(
   return { status: row.status as 'ok' | 'already' | 'not_found' | 'forbidden', name: row.name ?? undefined };
 }
 
+// Le GÉRANT fixe le tarif du cours d’un de ses coachs (null = tarif non affiché). Même
+// colonne que la fiche coach → affiché à l’identique partout (fiche club, réservation, coach).
+export async function clubSetCoachPrice(userId: string, price: number | null): Promise<boolean> {
+  const { data, error } = await supabase.rpc('club_set_coach_price', { p_user_id: userId, p_price: price });
+  return !error && data === true;
+}
+
 // Le gérant retire un coach (désactivation — l’historique de cours est conservé).
 export async function clubRemoveCoach(userId: string): Promise<boolean> {
   const { data, error } = await supabase.rpc('club_remove_coach', { p_user_id: userId });

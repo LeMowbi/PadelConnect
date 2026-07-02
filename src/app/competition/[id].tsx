@@ -181,6 +181,12 @@ export default function CompetitionDetail() {
             icon={byClub ? 'business' : 'person'}
           />
         </View>
+        {/* Ce que « Officiel » veut dire, en clair — sinon le badge reste abstrait pour le joueur. */}
+        <Txt variant="small" color={colors.white} style={{ marginTop: spacing.sm, opacity: 0.85 }}>
+          {comp.official
+            ? 'Tournoi officiel : le résultat compte pour ton niveau PadelConnect.'
+            : 'Tournoi entre joueurs : amical — le résultat ne change pas ton niveau.'}
+        </Txt>
       </LinearGradient>
 
       {/* Chips d’info sous le héros */}
@@ -190,7 +196,7 @@ export default function CompetitionDetail() {
             <Txt variant="label" color={colors.purple}>
               Récompense
             </Txt>
-            <Txt variant="h3" color={colors.purple} style={{ marginTop: 2 }}>
+            <Txt variant="h3" color={colors.purple} numberOfLines={2} style={{ marginTop: 2 }}>
               {formatFee(comp.reward)}
             </Txt>
           </View>
@@ -525,7 +531,7 @@ export default function CompetitionDetail() {
               <View style={{ marginTop: spacing.sm }}>
                 <Button
                   size="sm"
-                  label={comp.organizerType === 'club' ? 'Contacter le club (règlement)' : "Contacter l’organisateur (règlement)"}
+                  label={comp.organizerType === 'club' ? 'Contacter le club (règlement)' : 'Contacter l’organisateur (règlement)'}
                   icon="logo-whatsapp"
                   variant="secondary"
                   onPress={contactForFee}

@@ -304,38 +304,45 @@ export default function ReservationsScreen() {
                   ) : null}
 
                   <Divider style={{ marginVertical: spacing.md }} />
-                  {/* Raccourcis contextuels : club + itinéraire + calendrier */}
+                  {/* Raccourcis contextuels : club + itinéraire + calendrier — chacun dans un
+                      flex:1 pour que la rangée tienne toujours dans la largeur (petits écrans). */}
                   <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm }}>
-                    <Button
-                      size="sm"
-                      label="Voir le club"
-                      icon="business-outline"
-                      variant="secondary"
-                      onPress={() => router.push(`/club/${r.clubId}`)}
-                      pill
-                      full
-                    />
-                    <Button
-                      size="sm"
-                      label="Itinéraire"
-                      icon="navigate-outline"
-                      variant="secondary"
-                      onPress={() => {
-                        const club = findClub(r.clubId, state.customClubs, state.clubInfo);
-                        if (club) openMaps(club);
-                      }}
-                      pill
-                      full
-                    />
-                    <Button
-                      size="sm"
-                      label="Calendrier"
-                      icon="calendar-outline"
-                      variant="secondary"
-                      onPress={() => void addToCalendar(r)}
-                      pill
-                      full
-                    />
+                    <View style={{ flex: 1 }}>
+                      <Button
+                        size="sm"
+                        label="Voir le club"
+                        icon="business-outline"
+                        variant="secondary"
+                        onPress={() => router.push(`/club/${r.clubId}`)}
+                        pill
+                        full
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Button
+                        size="sm"
+                        label="Itinéraire"
+                        icon="navigate-outline"
+                        variant="secondary"
+                        onPress={() => {
+                          const club = findClub(r.clubId, state.customClubs, state.clubInfo);
+                          if (club) openMaps(club);
+                        }}
+                        pill
+                        full
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Button
+                        size="sm"
+                        label="Calendrier"
+                        icon="calendar-outline"
+                        variant="secondary"
+                        onPress={() => void addToCalendar(r)}
+                        pill
+                        full
+                      />
+                    </View>
                   </View>
                   <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                     <View style={{ flex: 1 }}>
@@ -353,11 +360,41 @@ export default function ReservationsScreen() {
                       <Button size="sm" label="Annuler" icon="close" variant="danger" onPress={() => setCancelTarget(r)} pill />
                     ) : null}
                   </View>
-                  {owner && !canCancel ? (
-                    <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
-                      Annulation impossible (moins de 5h avant) — à voir directement avec le club.
-                    </Txt>
-                  ) : null}
+                  {owner && !canCancel
+                    ? (() => {
+                        // À moins de 5 h, l'annulation passe par le club (décision porteur) :
+                        // message ACTIONNABLE — un tap ouvre WhatsApp si le club a un numéro.
+                        const clubPhone = findClub(r.clubId, state.customClubs, state.clubInfo)?.contactPhone;
+                        const note = (
+                          <Txt variant="small" color={colors.textFaint} style={{ flexShrink: 1, textAlign: 'center' }}>
+                            Annulation impossible (moins de 5h avant) — à voir directement avec le club.
+                          </Txt>
+                        );
+                        return clubPhone ? (
+                          <Pressable
+                            onPress={() =>
+                              openWhatsApp(
+                                clubPhone,
+                                `Bonjour, je dois annuler ma réservation du ${dateKeyLabel(r.dateKey)} à ${r.time} (${r.court}) — désolé pour le contretemps.`,
+                              )
+                            }
+                            style={{ marginTop: spacing.sm, alignItems: 'center', gap: 2 }}
+                            accessibilityRole="button"
+                            accessibilityLabel="Contacter le club sur WhatsApp pour annuler"
+                          >
+                            {note}
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="logo-whatsapp" size={13} color={colors.signature} />
+                              <Txt variant="small" color={colors.signature} style={{ fontWeight: '600' }}>
+                                Contacter le club
+                              </Txt>
+                            </View>
+                          </Pressable>
+                        ) : (
+                          <View style={{ marginTop: spacing.sm, alignItems: 'center' }}>{note}</View>
+                        );
+                      })()
+                    : null}
                 </Card>
               </Reveal>
             );

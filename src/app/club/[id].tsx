@@ -560,7 +560,7 @@ export default function ClubDetail() {
               <View style={[styles.coachRow, { marginTop: i === 0 ? spacing.md : 0 }]}>
                 <IconCircle icon="school" color={colors.purple} bg={colors.purpleSoft} size={38} />
                 <View style={{ flex: 1 }}>
-                  <Txt variant="body" style={{ fontWeight: '600' }}>
+                  <Txt variant="body" numberOfLines={1} style={{ fontWeight: '600' }}>
                     {c.name}
                   </Txt>
                   <Txt variant="muted" numberOfLines={1}>
