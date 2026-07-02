@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { CalendarPicker, keyToTs } from '@/components/CalendarPicker';
 import { Chip } from '@/components/Chip';
 import { Screen } from '@/components/Screen';
 import { useToast } from '@/components/Toast';
@@ -8,7 +9,7 @@ import { Button, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { COMP_FORMATS } from '@/data/competitions';
 import { courtsFor, openSlotsFor } from '@/lib/availability';
-import { nextDays, type DayOption } from '@/lib/days';
+import { DAY_MS, dateKeyLabel, dayKey, nextDays, type DayOption } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { useTodayKey } from '@/lib/useTodayKey';
 import { useApp } from '@/store/AppContext';
@@ -84,6 +85,7 @@ export default function NouvelleCompetition() {
   const [fee, setFee] = useState('');
   const [day, setDay] = useState<DayOption | null>(null);
   const [endDay, setEndDay] = useState<DayOption | null>(null); // fin optionnelle (tournoi multi-jours)
+  const [endOpen, setEndOpen] = useState(false); // calendrier de fin affiché (« Plusieurs jours »)
   const [hostId, setHostId] = useState<string | null>(null);
   const [format, setFormat] = useState(COMP_FORMATS[2]);
   const [level, setLevel] = useState('Tous niveaux');
@@ -184,22 +186,19 @@ export default function NouvelleCompetition() {
 
       <View onLayout={(ev) => (datePos.current = ev.nativeEvent.layout.y)}>
         <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
-          Date
+          Date {day ? `— ${day.label}` : ''}
         </Txt>
-        <View style={styles.wrap}>
-          {dates.map((d) => (
-            <Chip
-              key={d.key}
-              label={d.label}
-              active={d.key === day?.key}
-              onPress={() => {
-                setDay(d);
-                if (endDay && endDay.key <= d.key) setEndDay(null); // fin devenue invalide → on réinitialise
-                if (errors.date) setErrors((cur) => ({ ...cur, date: undefined }));
-              }}
-            />
-          ))}
-        </View>
+        {/* Vrai calendrier mensuel (demande porteur) — remplace les 42 pastilles de jours. */}
+        <CalendarPicker
+          value={day?.key ?? null}
+          minKey={dates[0].key}
+          maxKey={dates[dates.length - 1].key}
+          onSelect={(key) => {
+            setDay({ key, label: dateKeyLabel(key), value: keyToTs(key) });
+            if (endDay && endDay.key <= key) setEndDay(null); // fin devenue invalide → on réinitialise
+            if (errors.date) setErrors((cur) => ({ ...cur, date: undefined }));
+          }}
+        />
         {errors.date ? (
           <Txt variant="small" color={colors.danger} style={{ marginTop: 4 }}>
             {errors.date}
@@ -208,20 +207,24 @@ export default function NouvelleCompetition() {
       </View>
 
       {/* Fin optionnelle — pour un tournoi sur plusieurs jours (ex. americano sur un week-end).
-          On ne propose que des jours STRICTEMENT après le début ; « 1 seul jour » remet à zéro. */}
+          Second calendrier borné STRICTEMENT après le début ; « 1 seul jour » remet à zéro. */}
       {day ? (
         <View style={{ marginTop: spacing.lg }}>
           <Txt variant="label" color={colors.textFaint}>
-            Fin (optionnel — plusieurs jours)
+            Fin (optionnel — plusieurs jours){endDay ? ` — ${endDay.label}` : ''}
           </Txt>
           <View style={styles.wrap}>
-            <Chip label="1 seul jour" active={!endDay} onPress={() => setEndDay(null)} />
-            {dates
-              .filter((d) => d.key > day.key)
-              .map((d) => (
-                <Chip key={d.key} label={d.label} active={d.key === endDay?.key} onPress={() => setEndDay(d)} />
-              ))}
+            <Chip label="1 seul jour" active={!endDay && !endOpen} onPress={() => (setEndDay(null), setEndOpen(false))} />
+            <Chip label="Plusieurs jours" active={!!endDay || endOpen} onPress={() => setEndOpen(true)} />
           </View>
+          {endOpen || endDay ? (
+            <CalendarPicker
+              value={endDay?.key ?? null}
+              minKey={dayKey(new Date(keyToTs(day.key) + DAY_MS))}
+              maxKey={dates[dates.length - 1].key}
+              onSelect={(key) => setEndDay({ key, label: dateKeyLabel(key), value: keyToTs(key) })}
+            />
+          ) : null}
         </View>
       ) : null}
 

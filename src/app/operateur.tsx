@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Share, StyleSheet, TextInput, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Screen } from '@/components/Screen';
+import { SegmentedControl } from '@/components/SegmentedControl';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt } from '@/components/ui';
 import { SkeletonLines } from '@/components/Skeleton';
@@ -24,6 +25,9 @@ import { addWeeks, dateKeyLabel, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
 import { colors, font, radius, shadows, spacing } from '@/theme';
+
+// Onglets de l'Espace opérateur — même motif que l'Espace Club (SegmentedControl).
+const OP_SECTIONS = ['Aperçu', 'Finances', 'Clubs', 'Demandes'] as const;
 
 export default function Operateur() {
   const router = useRouter();
@@ -50,6 +54,7 @@ export default function Operateur() {
     setTournamentFee,
   } = useApp();
   const toast = useToast();
+  const [section, setSection] = useState<(typeof OP_SECTIONS)[number]>('Aperçu');
 
   // Liste de TOUS les clubs (base + serveur) pour le sélecteur « Accès gérant ».
   const manageableList = useMemo(
@@ -373,458 +378,453 @@ export default function Operateur() {
 
   return (
     <Screen back title="Espace opérateur" subtitle="PadelConnect — suivi & commissions" refreshControl={refreshControl}>
-      <View style={styles.infoBanner}>
-        <Ionicons name="information-circle" size={17} color={colors.amberDark} />
-        <Txt variant="small" color={colors.amberDark} style={{ flex: 1 }}>
-          Chaque fin de semaine : envoie le décompte à chaque club par WhatsApp, il te règle par Wave, tu marques « Payé ».
-        </Txt>
-      </View>
+      {/* L'Espace opérateur en ONGLETS (demande porteur) : 13 sections empilées devenaient
+          illisibles — même motif que l'Espace Club (SegmentedControl + rappel inter-onglets). */}
+      <SegmentedControl options={OP_SECTIONS} value={section} onChange={setSection} />
 
-      {/* Actualité de l’accueil — éditorialisée par l’opérateur, visible par tous les joueurs */}
-      <View style={{ marginBottom: spacing.md }}>
-        <SectionHeader title="Actualité de l’accueil" />
-        <NewsEditor news={state.operatorNews} onPublish={setOperatorNews} onRemove={removeOperatorNews} />
-      </View>
-
-      {/* Relance : reste à encaisser TOUTES semaines passées (tap → la plus ancienne à traiter) */}
-      {unpaid.total > 0 && unpaid.oldest ? (
-        <Pressable onPress={() => setWeek(unpaid.oldest!)} style={styles.reminder}>
-          <Ionicons name="alarm-outline" size={16} color={colors.coral} />
-          <Txt variant="small" color={colors.text} style={{ flex: 1, fontWeight: '600' }}>
-            Reste à encaisser : {fcfa(unpaid.total)} sur {unpaid.weeksCount} semaine{unpaid.weeksCount > 1 ? 's' : ''} passée
-            {unpaid.weeksCount > 1 ? 's' : ''}.
+      {/* Rappel visible depuis les AUTRES onglets : demandes/signalements en attente. */}
+      {section !== 'Demandes' && pendingRequests + newSupport > 0 ? (
+        <Pressable
+          onPress={() => setSection('Demandes')}
+          style={styles.pendingPill}
+          accessibilityRole="button"
+          accessibilityLabel={`${pendingRequests + newSupport} demande${pendingRequests + newSupport > 1 ? 's' : ''} à traiter`}
+        >
+          <Ionicons name="hourglass-outline" size={14} color={colors.amberDark} />
+          <Txt variant="small" color={colors.amberDark} style={{ fontWeight: '700', flex: 1 }}>
+            {pendingRequests > 0 ? `${pendingRequests} demande${pendingRequests > 1 ? 's' : ''} de club` : ''}
+            {pendingRequests > 0 && newSupport > 0 ? ' · ' : ''}
+            {newSupport > 0 ? `${newSupport} signalement${newSupport > 1 ? 's' : ''}` : ''}
           </Txt>
-          <Ionicons name="chevron-forward" size={15} color={colors.coral} />
+          <Ionicons name="chevron-forward" size={14} color={colors.amberDark} />
         </Pressable>
       ) : null}
 
-      {/* Hero — commission cumulée depuis le lancement (chiffre vitrine) */}
-      <Card style={styles.hero}>
-        <Txt variant="label" color={colors.textFaint}>
-          Commission PadelConnect — cumulée
-        </Txt>
-        <Txt style={styles.heroValue}>{fcfa(allTimeCommission)}</Txt>
-        <Txt variant="small" color={colors.textMuted}>
-          {allTimePlayed} partie{allTimePlayed > 1 ? 's' : ''} jouée{allTimePlayed > 1 ? 's' : ''} · réglées par Wave (hors app)
-        </Txt>
-      </Card>
-
-      {/* Santé plateforme */}
-      <View style={styles.health}>
-        <StatTile value={activeClubsCount} label="Clubs actifs" color={colors.green} bg={colors.greenSoft} />
-        <StatTile
-          value={`${resThisWeek}${resThisWeek > resPrevWeek ? ' ▲' : resThisWeek < resPrevWeek ? ' ▼' : ''}`}
-          label="Résas / 7 j"
-          color={colors.green}
-          bg={colors.greenSoft}
-        />
-        {/* « (cette sem.) » et non « / 7 j » : semaine CALENDAIRE en cours (≠ fenêtre glissante
-            de « Résas / 7 j » juste à côté) — deux périodes différentes, à ne pas confondre. */}
-        <StatTile value={fcfa(thisWeekCommission)} label="Commission (cette sem.)" color={colors.amberDark} bg={colors.amberSoft} />
-      </View>
-
-      {/* Sélecteur de semaine ‹ › */}
-      <View style={styles.weekNav}>
-        <Pressable
-          onPress={() => setWeek(addWeeks(week, -1))}
-          hitSlop={8}
-          style={styles.weekArrow}
-          accessibilityRole="button"
-          accessibilityLabel="Semaine précédente"
-        >
-          <Ionicons name="chevron-back" size={18} color={colors.text} />
-        </Pressable>
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <Txt variant="h3" style={{ fontSize: 15 }}>
-            Semaine {weekLabel(week)}
+      {section === 'Finances' ? (
+        <View style={styles.infoBanner}>
+          <Ionicons name="information-circle" size={17} color={colors.amberDark} />
+          <Txt variant="small" color={colors.amberDark} style={{ flex: 1 }}>
+            Chaque fin de semaine : envoie le décompte à chaque club par WhatsApp, il te règle par Wave, tu marques « Payé ».
           </Txt>
-          {week === thisWeek ? (
-            <Txt variant="small" color={colors.textFaint}>
-              cette semaine
-            </Txt>
+        </View>
+      ) : null}
+
+      {section === 'Aperçu' ? (
+        <>
+          {/* Actualité de l’accueil — éditorialisée par l’opérateur, visible par tous les joueurs */}
+          <View style={{ marginBottom: spacing.md }}>
+            <SectionHeader title="Actualité de l’accueil" />
+            <NewsEditor news={state.operatorNews} onPublish={setOperatorNews} onRemove={removeOperatorNews} />
+          </View>
+        </>
+      ) : null}
+
+      {section === 'Finances' ? (
+        <>
+          {/* Relance : reste à encaisser TOUTES semaines passées (tap → la plus ancienne à traiter) */}
+          {unpaid.total > 0 && unpaid.oldest ? (
+            <Pressable onPress={() => setWeek(unpaid.oldest!)} style={styles.reminder}>
+              <Ionicons name="alarm-outline" size={16} color={colors.coral} />
+              <Txt variant="small" color={colors.text} style={{ flex: 1, fontWeight: '600' }}>
+                Reste à encaisser : {fcfa(unpaid.total)} sur {unpaid.weeksCount} semaine{unpaid.weeksCount > 1 ? 's' : ''} passée
+                {unpaid.weeksCount > 1 ? 's' : ''}.
+              </Txt>
+              <Ionicons name="chevron-forward" size={15} color={colors.coral} />
+            </Pressable>
           ) : null}
-        </View>
-        <Pressable
-          onPress={() => setWeek(addWeeks(week, 1))}
-          hitSlop={8}
-          style={[styles.weekArrow, week === thisWeek && { opacity: 0.3 }]}
-          disabled={week === thisWeek}
-          accessibilityRole="button"
-          accessibilityLabel="Semaine suivante"
-        >
-          <Ionicons name="chevron-forward" size={18} color={colors.text} />
-        </Pressable>
-      </View>
+        </>
+      ) : null}
 
-      <Card>
-        <Txt variant="label" color={colors.textFaint}>
-          Semaine {weekLabel(week)}
-        </Txt>
-        <View style={styles.totals}>
-          <StatTile value={totalCount} label="Parties jouées" color={colors.green} bg={colors.greenSoft} />
-          <StatTile value={fcfa(totalRevenue)} label="Volume" color={colors.green} bg={colors.greenSoft} />
-          <StatTile value={fcfa(totalDue)} label="Reste à encaisser" color={colors.amberDark} bg={colors.amberSoft} />
-        </View>
-        {weekUpcoming > 0 ? (
-          <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-            + {weekUpcoming} réservation{weekUpcoming > 1 ? 's' : ''} à venir cette semaine (à titre indicatif — facturée
-            {weekUpcoming > 1 ? 's' : ''} une fois jouée{weekUpcoming > 1 ? 's' : ''}).
-          </Txt>
-        ) : null}
-        <Button size="sm" variant="ghost" label="Exporter la semaine (tableau)" icon="download-outline" onPress={exportWeek} full />
-      </Card>
-
-      <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title="Par club" />
-        {rows.length === 0 ? (
-          <Card>
-            <Txt variant="muted">Aucune partie jouée sur la semaine {weekLabel(week)}.</Txt>
+      {section === 'Aperçu' ? (
+        <>
+          {/* Hero — commission cumulée depuis le lancement (chiffre vitrine) */}
+          <Card style={styles.hero}>
+            <Txt variant="label" color={colors.textFaint}>
+              Commission PadelConnect — cumulée
+            </Txt>
+            <Txt style={styles.heroValue}>{fcfa(allTimeCommission)}</Txt>
+            <Txt variant="small" color={colors.textMuted}>
+              {allTimePlayed} partie{allTimePlayed > 1 ? 's' : ''} jouée{allTimePlayed > 1 ? 's' : ''} · réglées par Wave (hors app)
+            </Txt>
           </Card>
-        ) : (
-          rows.map((r) => {
-            const st = statusOf(r.clubId);
-            return (
-              <Card key={r.clubId} style={{ marginBottom: spacing.md }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                  <IconCircle icon="wallet" color={colors.amberDark} bg={colors.amberSoft} />
-                  <View style={{ flex: 1 }}>
-                    <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
-                      {r.clubName}
-                    </Txt>
-                    <Txt variant="muted">
-                      {r.count} résa{r.count > 1 ? 's' : ''} · volume ≈ {fcfa(r.revenue)} · {Math.round(r.rate * 100)}%
-                    </Txt>
-                  </View>
-                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                    <Txt variant="price" style={{ fontSize: 15 }}>
-                      {fcfa(r.commission)}
-                    </Txt>
-                    <Tag
-                      label={st === 'paid' ? 'Payé ✓' : st === 'sent' ? 'Décompte envoyé' : 'À facturer'}
-                      tone={st === 'paid' ? 'green' : st === 'sent' ? 'amber' : 'neutral'}
-                    />
-                  </View>
-                </View>
-                <Divider style={{ marginVertical: spacing.md }} />
-                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                  <View style={{ flex: 1 }}>
-                    <Button
-                      size="sm"
-                      label="Envoyer le décompte"
-                      icon="logo-whatsapp"
-                      variant="secondary"
-                      onPress={() => sendHistory(r)}
-                      full
-                    />
-                  </View>
-                  {st === 'paid' ? (
-                    <Button
-                      size="sm"
-                      label="Annuler"
-                      icon="arrow-undo"
-                      variant="ghost"
-                      onPress={() => setPaymentStatus(r.clubId, week, 'sent')}
-                    />
-                  ) : (
-                    <Button
-                      size="sm"
-                      label="Marquer payé"
-                      icon="checkmark-circle"
-                      onPress={() => {
-                        hapticSuccess(); // accusé discret d’une tâche financière hebdomadaire
-                        setPaymentStatus(r.clubId, week, 'paid');
-                      }}
-                    />
-                  )}
-                </View>
+
+          {/* Santé plateforme */}
+          <View style={styles.health}>
+            <StatTile value={activeClubsCount} label="Clubs actifs" color={colors.green} bg={colors.greenSoft} />
+            <StatTile
+              value={`${resThisWeek}${resThisWeek > resPrevWeek ? ' ▲' : resThisWeek < resPrevWeek ? ' ▼' : ''}`}
+              label="Résas / 7 j"
+              color={colors.green}
+              bg={colors.greenSoft}
+            />
+            {/* « (cette sem.) » et non « / 7 j » : semaine CALENDAIRE en cours (≠ fenêtre glissante
+            de « Résas / 7 j » juste à côté) — deux périodes différentes, à ne pas confondre. */}
+            <StatTile value={fcfa(thisWeekCommission)} label="Commission (cette sem.)" color={colors.amberDark} bg={colors.amberSoft} />
+          </View>
+        </>
+      ) : null}
+
+      {section === 'Finances' ? (
+        <>
+          {/* Sélecteur de semaine ‹ › */}
+          <View style={styles.weekNav}>
+            <Pressable
+              onPress={() => setWeek(addWeeks(week, -1))}
+              hitSlop={8}
+              style={styles.weekArrow}
+              accessibilityRole="button"
+              accessibilityLabel="Semaine précédente"
+            >
+              <Ionicons name="chevron-back" size={18} color={colors.text} />
+            </Pressable>
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <Txt variant="h3" style={{ fontSize: 15 }}>
+                Semaine {weekLabel(week)}
+              </Txt>
+              {week === thisWeek ? (
+                <Txt variant="small" color={colors.textFaint}>
+                  cette semaine
+                </Txt>
+              ) : null}
+            </View>
+            <Pressable
+              onPress={() => setWeek(addWeeks(week, 1))}
+              hitSlop={8}
+              style={[styles.weekArrow, week === thisWeek && { opacity: 0.3 }]}
+              disabled={week === thisWeek}
+              accessibilityRole="button"
+              accessibilityLabel="Semaine suivante"
+            >
+              <Ionicons name="chevron-forward" size={18} color={colors.text} />
+            </Pressable>
+          </View>
+
+          <Card>
+            <Txt variant="label" color={colors.textFaint}>
+              Semaine {weekLabel(week)}
+            </Txt>
+            <View style={styles.totals}>
+              <StatTile value={totalCount} label="Parties jouées" color={colors.green} bg={colors.greenSoft} />
+              <StatTile value={fcfa(totalRevenue)} label="Volume" color={colors.green} bg={colors.greenSoft} />
+              <StatTile value={fcfa(totalDue)} label="Reste à encaisser" color={colors.amberDark} bg={colors.amberSoft} />
+            </View>
+            {weekUpcoming > 0 ? (
+              <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                + {weekUpcoming} réservation{weekUpcoming > 1 ? 's' : ''} à venir cette semaine (à titre indicatif — facturée
+                {weekUpcoming > 1 ? 's' : ''} une fois jouée{weekUpcoming > 1 ? 's' : ''}).
+              </Txt>
+            ) : null}
+            <Button size="sm" variant="ghost" label="Exporter la semaine (tableau)" icon="download-outline" onPress={exportWeek} full />
+          </Card>
+
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title="Par club" />
+            {rows.length === 0 ? (
+              <Card>
+                <Txt variant="muted">Aucune partie jouée sur la semaine {weekLabel(week)}.</Txt>
               </Card>
-            );
-          })
-        )}
-      </View>
+            ) : (
+              rows.map((r) => {
+                const st = statusOf(r.clubId);
+                return (
+                  <Card key={r.clubId} style={{ marginBottom: spacing.md }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                      <IconCircle icon="wallet" color={colors.amberDark} bg={colors.amberSoft} />
+                      <View style={{ flex: 1 }}>
+                        <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
+                          {r.clubName}
+                        </Txt>
+                        <Txt variant="muted">
+                          {r.count} résa{r.count > 1 ? 's' : ''} · volume ≈ {fcfa(r.revenue)} · {Math.round(r.rate * 100)}%
+                        </Txt>
+                      </View>
+                      <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                        <Txt variant="price" style={{ fontSize: 15 }}>
+                          {fcfa(r.commission)}
+                        </Txt>
+                        <Tag
+                          label={st === 'paid' ? 'Payé ✓' : st === 'sent' ? 'Décompte envoyé' : 'À facturer'}
+                          tone={st === 'paid' ? 'green' : st === 'sent' ? 'amber' : 'neutral'}
+                        />
+                      </View>
+                    </View>
+                    <Divider style={{ marginVertical: spacing.md }} />
+                    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                      <View style={{ flex: 1 }}>
+                        <Button
+                          size="sm"
+                          label="Envoyer le décompte"
+                          icon="logo-whatsapp"
+                          variant="secondary"
+                          onPress={() => sendHistory(r)}
+                          full
+                        />
+                      </View>
+                      {st === 'paid' ? (
+                        <Button
+                          size="sm"
+                          label="Annuler"
+                          icon="arrow-undo"
+                          variant="ghost"
+                          onPress={() => setPaymentStatus(r.clubId, week, 'sent')}
+                        />
+                      ) : (
+                        <Button
+                          size="sm"
+                          label="Marquer payé"
+                          icon="checkmark-circle"
+                          onPress={() => {
+                            hapticSuccess(); // accusé discret d’une tâche financière hebdomadaire
+                            setPaymentStatus(r.clubId, week, 'paid');
+                          }}
+                        />
+                      )}
+                    </View>
+                  </Card>
+                );
+              })
+            )}
+          </View>
 
-      {/* Commission propre à chaque club (accords négociés différents). */}
-      <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title="Commission par club" />
-        <CommissionRates
-          clubs={manageableList}
-          rates={state.clubCommission}
-          defaultRate={COMMISSION_RATE}
-          onSet={operatorSetClubCommission}
-          toast={toast}
-        />
-      </View>
+          {/* Commission propre à chaque club (accords négociés différents). */}
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title="Commission par club" />
+            <CommissionRates
+              clubs={manageableList}
+              rates={state.clubCommission}
+              defaultRate={COMMISSION_RATE}
+              onSet={operatorSetClubCommission}
+              toast={toast}
+            />
+          </View>
+        </>
+      ) : null}
 
-      {/* Tournoi OFFICIEL PadelConnect : créé EN TANT QUE PadelConnect (pas en entrant dans
+      {section === 'Aperçu' ? (
+        <>
+          {/* Tournoi OFFICIEL PadelConnect : créé EN TANT QUE PadelConnect (pas en entrant dans
           l'Espace Club d'un club) — le club hôte le VALIDE dans son espace (sa permission,
           dans l'app). Présentation premium côté joueurs (bandeau doré) — même canal demain
           pour des tournois officiels externes (FIP…). */}
-      <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title="Tournoi officiel PadelConnect" />
-        <Card
-          onPress={() => router.push('/competition/nouvelle?as=padelconnect')}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}
-        >
-          <IconCircle icon="trophy" color={colors.amberDark} bg={colors.amberSoft} />
-          <View style={{ flex: 1 }}>
-            <Txt variant="h3">Créer un tournoi officiel</Txt>
-            <Txt variant="small" color={colors.textMuted}>
-              Organisé par PadelConnect, validé par le club hôte dans son Espace Club. Bandeau doré côté joueurs, le résultat compte pour le
-              niveau.
-            </Txt>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-        </Card>
-      </View>
-
-      {/* Frais fixe des tournois organisés par des JOUEURS (commission PadelConnect). */}
-      <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title="Frais des tournois joueurs" />
-        <TournamentFee fee={state.tournamentFee} onSet={setTournamentFee} toast={toast} />
-      </View>
-
-      {/* Frais à encaisser (Wave) sur les tournois publiés par des joueurs. */}
-      <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title="Tournois joueurs — à encaisser" />
-        <TournamentFees
-          comps={playerTournamentsToBill}
-          payments={state.operatorPayments}
-          onSetPaid={(id, paid) => setPaymentStatus('tourn', id, paid ? 'paid' : 'tofacture')}
-        />
-      </View>
-
-      {/* Demandes reçues sur le SERVEUR — un gérant a utilisé « Inscrire mon club ». */}
-      <View style={{ marginTop: spacing.xl }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <SectionHeader title={`Demandes reçues · ${pendingRequests}`} />
-          <Pressable onPress={loadRequests} hitSlop={8} accessibilityLabel="Rafraîchir les demandes">
-            <Ionicons name="refresh" size={18} color={colors.textMuted} />
-          </Pressable>
-        </View>
-        {loadingReq ? (
-          <Card>
-            <SkeletonLines lines={3} />
-          </Card>
-        ) : reqError ? (
-          <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-            <Ionicons name="cloud-offline-outline" size={20} color={colors.coral} />
-            <Txt variant="muted" style={{ flex: 1 }}>
-              Impossible de charger les demandes (réseau ou session). Touche ⟳ pour réessayer.
-            </Txt>
-          </Card>
-        ) : requests.length === 0 ? (
-          <Card>
-            <Txt variant="muted">
-              Aucune demande pour l’instant. Quand un joueur inscrit son club (Profil → « Tu gères un club ? »), elle apparaît ici.
-            </Txt>
-          </Card>
-        ) : (
-          requests.map((r) => (
-            <Card key={r.id} style={{ marginBottom: spacing.sm }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                <IconCircle icon="business" color={colors.amberDark} bg={colors.amberSoft} size={40} />
-                <View style={{ flex: 1 }}>
-                  <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
-                    {r.name}
-                  </Txt>
-                  <Txt variant="muted">
-                    {[
-                      r.area,
-                      r.type,
-                      r.courts ? `${r.courts} terrain${r.courts > 1 ? 's' : ''}` : null,
-                      r.price_from ? `dès ${fcfa(r.price_from)}` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ') || 'Sans détail'}
-                  </Txt>
-                </View>
-                <Tag
-                  label={
-                    r.status === 'approved'
-                      ? 'Approuvé ✓'
-                      : r.status === 'rejected'
-                        ? 'Refusé'
-                        : r.status === 'contacted'
-                          ? 'Contacté'
-                          : 'Nouveau'
-                  }
-                  tone={
-                    r.status === 'approved' ? 'green' : r.status === 'rejected' ? 'neutral' : r.status === 'contacted' ? 'amber' : 'coral'
-                  }
-                />
-              </View>
-              {r.message ? (
-                <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm, fontStyle: 'italic' }}>
-                  « {r.message} »
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title="Tournoi officiel PadelConnect" />
+            <Card
+              onPress={() => router.push('/competition/nouvelle?as=padelconnect')}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}
+            >
+              <IconCircle icon="trophy" color={colors.amberDark} bg={colors.amberSoft} />
+              <View style={{ flex: 1 }}>
+                <Txt variant="h3">Créer un tournoi officiel</Txt>
+                <Txt variant="small" color={colors.textMuted}>
+                  Organisé par PadelConnect, validé par le club hôte dans son Espace Club. Bandeau doré côté joueurs, le résultat compte
+                  pour le niveau.
                 </Txt>
-              ) : null}
-              <Divider style={{ marginVertical: spacing.md }} />
-              <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
-                {r.contact_phone ? (
-                  <View style={{ flex: 1, minWidth: 140 }}>
-                    <Button
-                      size="sm"
-                      label="WhatsApp"
-                      icon="logo-whatsapp"
-                      variant="secondary"
-                      onPress={() => {
-                        openWhatsApp(
-                          r.contact_phone ?? '',
-                          `Bonjour 👋 PadelConnect à propos de l’inscription de « ${r.name} ». Es-tu dispo pour en parler ?`,
-                        );
-                        if (r.status === 'new') markRequest(r.id, 'contacted');
-                      }}
-                      full
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+            </Card>
+          </View>
+        </>
+      ) : null}
+
+      {section === 'Finances' ? (
+        <>
+          {/* Frais fixe des tournois organisés par des JOUEURS (commission PadelConnect). */}
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title="Frais des tournois joueurs" />
+            <TournamentFee fee={state.tournamentFee} onSet={setTournamentFee} toast={toast} />
+          </View>
+
+          {/* Frais à encaisser (Wave) sur les tournois publiés par des joueurs. */}
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title="Tournois joueurs — à encaisser" />
+            <TournamentFees
+              comps={playerTournamentsToBill}
+              payments={state.operatorPayments}
+              onSetPaid={(id, paid) => setPaymentStatus('tourn', id, paid ? 'paid' : 'tofacture')}
+            />
+          </View>
+        </>
+      ) : null}
+
+      {section === 'Demandes' ? (
+        <>
+          {/* Demandes reçues sur le SERVEUR — un gérant a utilisé « Inscrire mon club ». */}
+          <View style={{ marginTop: spacing.xl }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <SectionHeader title={`Demandes reçues · ${pendingRequests}`} />
+              <Pressable onPress={loadRequests} hitSlop={8} accessibilityLabel="Rafraîchir les demandes">
+                <Ionicons name="refresh" size={18} color={colors.textMuted} />
+              </Pressable>
+            </View>
+            {loadingReq ? (
+              <Card>
+                <SkeletonLines lines={3} />
+              </Card>
+            ) : reqError ? (
+              <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                <Ionicons name="cloud-offline-outline" size={20} color={colors.coral} />
+                <Txt variant="muted" style={{ flex: 1 }}>
+                  Impossible de charger les demandes (réseau ou session). Touche ⟳ pour réessayer.
+                </Txt>
+              </Card>
+            ) : requests.length === 0 ? (
+              <Card>
+                <Txt variant="muted">
+                  Aucune demande pour l’instant. Quand un joueur inscrit son club (Profil → « Tu gères un club ? »), elle apparaît ici.
+                </Txt>
+              </Card>
+            ) : (
+              requests.map((r) => (
+                <Card key={r.id} style={{ marginBottom: spacing.sm }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                    <IconCircle icon="business" color={colors.amberDark} bg={colors.amberSoft} size={40} />
+                    <View style={{ flex: 1 }}>
+                      <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
+                        {r.name}
+                      </Txt>
+                      <Txt variant="muted">
+                        {[
+                          r.area,
+                          r.type,
+                          r.courts ? `${r.courts} terrain${r.courts > 1 ? 's' : ''}` : null,
+                          r.price_from ? `dès ${fcfa(r.price_from)}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ') || 'Sans détail'}
+                      </Txt>
+                    </View>
+                    <Tag
+                      label={
+                        r.status === 'approved'
+                          ? 'Approuvé ✓'
+                          : r.status === 'rejected'
+                            ? 'Refusé'
+                            : r.status === 'contacted'
+                              ? 'Contacté'
+                              : 'Nouveau'
+                      }
+                      tone={
+                        r.status === 'approved'
+                          ? 'green'
+                          : r.status === 'rejected'
+                            ? 'neutral'
+                            : r.status === 'contacted'
+                              ? 'amber'
+                              : 'coral'
+                      }
                     />
                   </View>
-                ) : null}
-                {r.status === 'approved' ? (
-                  <Button size="sm" label="Rouvrir" icon="arrow-undo" variant="ghost" onPress={() => markRequest(r.id, 'contacted')} />
-                ) : (
-                  <>
-                    <Button size="sm" label="Approuver" icon="checkmark" onPress={() => setApproveTarget(r)} />
-                    {r.status !== 'rejected' ? (
-                      <Button size="sm" label="Écarter" icon="close" variant="ghost" onPress={() => markRequest(r.id, 'rejected')} />
+                  {r.message ? (
+                    <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm, fontStyle: 'italic' }}>
+                      « {r.message} »
+                    </Txt>
+                  ) : null}
+                  <Divider style={{ marginVertical: spacing.md }} />
+                  <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
+                    {r.contact_phone ? (
+                      <View style={{ flex: 1, minWidth: 140 }}>
+                        <Button
+                          size="sm"
+                          label="WhatsApp"
+                          icon="logo-whatsapp"
+                          variant="secondary"
+                          onPress={() => {
+                            openWhatsApp(
+                              r.contact_phone ?? '',
+                              `Bonjour 👋 PadelConnect à propos de l’inscription de « ${r.name} ». Es-tu dispo pour en parler ?`,
+                            );
+                            if (r.status === 'new') markRequest(r.id, 'contacted');
+                          }}
+                          full
+                        />
+                      </View>
                     ) : null}
-                  </>
-                )}
-              </View>
-              {r.contact_phone ? (
-                <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-                  {r.contact_phone}
-                </Txt>
-              ) : null}
-            </Card>
-          ))
-        )}
-      </View>
-
-      {/* Clubs serveur : pré-charger un club « Bientôt » et activer quand il est prêt. */}
-      <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title={`Clubs sur le serveur · ${serverClubs.length}`} />
-        <Card>
-          <Txt variant="small" color={colors.textMuted}>
-            Ajoute un club en « Bientôt » : il apparaît dans la liste des joueurs (non réservable) jusqu’à ce que tu l’actives.
-          </Txt>
-          <TextInput
-            value={ncName}
-            onChangeText={setNcName}
-            placeholder="Nom du club"
-            placeholderTextColor={colors.textMuted}
-            style={opStyles.clubInput}
-          />
-          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            <TextInput
-              value={ncArea}
-              onChangeText={setNcArea}
-              placeholder="Quartier"
-              placeholderTextColor={colors.textMuted}
-              style={[opStyles.clubInput, { flex: 1 }]}
-            />
-            <TextInput
-              value={ncPrice}
-              onChangeText={setNcPrice}
-              placeholder="Tarif dès (FCFA)"
-              placeholderTextColor={colors.textMuted}
-              keyboardType="numeric"
-              style={[opStyles.clubInput, { flex: 1 }]}
-            />
+                    {r.status === 'approved' ? (
+                      <Button size="sm" label="Rouvrir" icon="arrow-undo" variant="ghost" onPress={() => markRequest(r.id, 'contacted')} />
+                    ) : (
+                      <>
+                        <Button size="sm" label="Approuver" icon="checkmark" onPress={() => setApproveTarget(r)} />
+                        {r.status !== 'rejected' ? (
+                          <Button size="sm" label="Écarter" icon="close" variant="ghost" onPress={() => markRequest(r.id, 'rejected')} />
+                        ) : null}
+                      </>
+                    )}
+                  </View>
+                  {r.contact_phone ? (
+                    <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                      {r.contact_phone}
+                    </Txt>
+                  ) : null}
+                </Card>
+              ))
+            )}
           </View>
-          <Button
-            size="sm"
-            label={creatingClub ? 'Ajout…' : 'Ajouter en « Bientôt »'}
-            icon="add"
-            onPress={createComingSoon}
-            disabled={creatingClub || ncName.trim().length < 2}
-          />
-        </Card>
-        {serverClubs.map((c) => (
-          <Card key={c.id} style={{ marginTop: spacing.sm }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-              <IconCircle icon="business" color={colors.signature} bg={colors.signatureSoft} size={40} />
-              <View style={{ flex: 1 }}>
-                <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
-                  {c.name}
-                </Txt>
-                <Txt variant="muted" numberOfLines={1}>
-                  {c.area} · dès {fcfa(c.priceFrom)}
-                </Txt>
-              </View>
-              <Tag label={c.comingSoon ? 'Bientôt' : 'Actif'} tone={c.comingSoon ? 'purple' : 'green'} />
-            </View>
-            <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-              <View style={{ flex: 1 }}>
-                <Button
-                  size="sm"
-                  label={c.comingSoon ? 'Activer' : 'Mettre en attente'}
-                  icon={c.comingSoon ? 'checkmark' : 'time'}
-                  variant={c.comingSoon ? 'primary' : 'ghost'}
-                  onPress={() => toggleClubStatus(c.id, !!c.comingSoon)}
-                  full
+        </>
+      ) : null}
+
+      {section === 'Clubs' ? (
+        <>
+          {/* Clubs serveur : pré-charger un club « Bientôt » et activer quand il est prêt. */}
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title={`Clubs sur le serveur · ${serverClubs.length}`} />
+            <Card>
+              <Txt variant="small" color={colors.textMuted}>
+                Ajoute un club en « Bientôt » : il apparaît dans la liste des joueurs (non réservable) jusqu’à ce que tu l’actives.
+              </Txt>
+              <TextInput
+                value={ncName}
+                onChangeText={setNcName}
+                placeholder="Nom du club"
+                placeholderTextColor={colors.textMuted}
+                style={opStyles.clubInput}
+              />
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                <TextInput
+                  value={ncArea}
+                  onChangeText={setNcArea}
+                  placeholder="Quartier"
+                  placeholderTextColor={colors.textMuted}
+                  style={[opStyles.clubInput, { flex: 1 }]}
+                />
+                <TextInput
+                  value={ncPrice}
+                  onChangeText={setNcPrice}
+                  placeholder="Tarif dès (FCFA)"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="numeric"
+                  style={[opStyles.clubInput, { flex: 1 }]}
                 />
               </View>
               <Button
                 size="sm"
-                label="Supprimer"
-                icon="trash-outline"
-                variant="ghost"
-                onPress={() => setDeleteTarget({ id: c.id, name: c.name, server: true })}
+                label={creatingClub ? 'Ajout…' : 'Ajouter en « Bientôt »'}
+                icon="add"
+                onPress={createComingSoon}
+                disabled={creatingClub || ncName.trim().length < 2}
               />
-            </View>
-          </Card>
-        ))}
-      </View>
-
-      {/* Clubs de base embarqués (9) : Actif ⇄ Bientôt, ou retrait de l’app (réversible). */}
-      <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title={`Clubs de base · ${baseClubs.length}`} />
-        <Card>
-          <Txt variant="small" color={colors.textMuted}>
-            Mets un club en « Bientôt » s’il n’est pas encore prêt, ou retire-le de l’app : il disparaît alors pour tous les joueurs. Comme
-            ces 9 clubs sont intégrés à l’app, « Supprimer » = retrait réversible (tu peux les remettre ici).
-          </Txt>
-        </Card>
-        {baseClubs.map((c) => {
-          const status = state.clubStatus[c.id];
-          const comingSoon = status === 'coming_soon';
-          const hidden = status === 'hidden';
-          return (
-            <Card key={c.id} style={{ marginTop: spacing.sm }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                <IconCircle icon="business" color={colors.green} bg={colors.greenSoft} size={40} />
-                <View style={{ flex: 1 }}>
-                  <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
-                    {c.name}
-                  </Txt>
-                  <Txt variant="muted" numberOfLines={1}>
-                    {c.area}
-                  </Txt>
+            </Card>
+            {serverClubs.map((c) => (
+              <Card key={c.id} style={{ marginTop: spacing.sm }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                  <IconCircle icon="business" color={colors.signature} bg={colors.signatureSoft} size={40} />
+                  <View style={{ flex: 1 }}>
+                    <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
+                      {c.name}
+                    </Txt>
+                    <Txt variant="muted" numberOfLines={1}>
+                      {c.area} · dès {fcfa(c.priceFrom)}
+                    </Txt>
+                  </View>
+                  <Tag label={c.comingSoon ? 'Bientôt' : 'Actif'} tone={c.comingSoon ? 'purple' : 'green'} />
                 </View>
-                <Tag
-                  label={hidden ? 'Retiré' : comingSoon ? 'Bientôt' : 'Actif'}
-                  tone={hidden ? 'neutral' : comingSoon ? 'purple' : 'green'}
-                />
-              </View>
-              {hidden ? (
-                <Button
-                  size="sm"
-                  label="Remettre dans l’app"
-                  icon="refresh"
-                  variant="primary"
-                  disabled={baseBusy === c.id}
-                  onPress={() => restoreBaseClub(c.id)}
-                  full
-                />
-              ) : (
                 <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
                   <View style={{ flex: 1 }}>
                     <Button
                       size="sm"
-                      label={comingSoon ? 'Activer' : 'Mettre en attente'}
-                      icon={comingSoon ? 'checkmark' : 'time'}
-                      variant={comingSoon ? 'primary' : 'ghost'}
-                      disabled={baseBusy === c.id}
-                      onPress={() => toggleBaseStatus(c.id, comingSoon)}
+                      label={c.comingSoon ? 'Activer' : 'Mettre en attente'}
+                      icon={c.comingSoon ? 'checkmark' : 'time'}
+                      variant={c.comingSoon ? 'primary' : 'ghost'}
+                      onPress={() => toggleClubStatus(c.id, !!c.comingSoon)}
                       full
                     />
                   </View>
@@ -833,175 +833,254 @@ export default function Operateur() {
                     label="Supprimer"
                     icon="trash-outline"
                     variant="ghost"
-                    disabled={baseBusy === c.id}
-                    onPress={() => setDeleteTarget({ id: c.id, name: c.name, server: false })}
+                    onPress={() => setDeleteTarget({ id: c.id, name: c.name, server: true })}
                   />
                 </View>
-              )}
-            </Card>
-          );
-        })}
-      </View>
+              </Card>
+            ))}
+          </View>
 
-      {/* Accès gérant : promouvoir un joueur (par son numéro) en gérant d’un club. */}
-      <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title="Accès gérant" />
-        <ManagerAccess clubs={manageableList} onGrant={operatorGrantClubAccess} onRevoke={operatorRevokeClubAccess} toast={toast} />
-      </View>
-
-      {/* Santé de l’app — diagnostics self-hosted (erreurs + usage), lecture opérateur */}
-      <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title="Santé de l’app" />
-        <DiagnosticsCard />
-      </View>
-
-      {/* Signalements / messages d’aide envoyés par les joueurs (serveur). */}
-      <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title={`Signalements · ${newSupport}`} />
-        {support.length === 0 ? (
-          <Card>
-            <Txt variant="muted">
-              {supportError
-                ? 'Impossible de charger les signalements — vérifie ta connexion, puis tire pour rafraîchir.'
-                : 'Aucun message pour l’instant. Les signalements des joueurs (Profil → Aide & support) arrivent ici.'}
-            </Txt>
-          </Card>
-        ) : (
-          support.map((m) => (
-            <Card key={m.id} style={{ marginBottom: spacing.sm }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                <IconCircle icon="chatbubble-ellipses" color={colors.coral} bg={colors.coralSoft} size={40} />
-                <View style={{ flex: 1 }}>
-                  <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
-                    {m.name || 'Joueur'}
-                  </Txt>
-                  {m.contact_phone ? (
-                    <Txt variant="small" color={colors.textFaint}>
-                      {m.contact_phone}
-                    </Txt>
-                  ) : null}
-                </View>
-                <Tag
-                  label={m.status === 'resolved' ? 'Résolu ✓' : m.status === 'read' ? 'Lu' : 'Nouveau'}
-                  tone={m.status === 'resolved' ? 'green' : m.status === 'read' ? 'amber' : 'coral'}
-                />
-              </View>
-              <Txt variant="body" style={{ marginTop: spacing.sm }}>
-                {m.message}
+          {/* Clubs de base embarqués (9) : Actif ⇄ Bientôt, ou retrait de l’app (réversible). */}
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title={`Clubs de base · ${baseClubs.length}`} />
+            <Card>
+              <Txt variant="small" color={colors.textMuted}>
+                Mets un club en « Bientôt » s’il n’est pas encore prêt, ou retire-le de l’app : il disparaît alors pour tous les joueurs.
+                Comme ces 9 clubs sont intégrés à l’app, « Supprimer » = retrait réversible (tu peux les remettre ici).
               </Txt>
-              <Divider style={{ marginVertical: spacing.md }} />
-              <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
-                {m.contact_phone ? (
-                  <Button
-                    size="sm"
-                    label="WhatsApp"
-                    icon="logo-whatsapp"
-                    variant="secondary"
-                    onPress={() => {
-                      openWhatsApp(m.contact_phone ?? '', `Bonjour 👋 PadelConnect — à propos de ton message.`);
-                      if (m.status === 'new') markSupport(m.id, 'read');
-                    }}
-                  />
-                ) : null}
-                {m.status !== 'resolved' ? (
-                  <Button size="sm" label="Marquer résolu" icon="checkmark" onPress={() => markSupport(m.id, 'resolved')} />
-                ) : (
-                  <Button size="sm" label="Rouvrir" icon="arrow-undo" variant="ghost" onPress={() => markSupport(m.id, 'read')} />
-                )}
-              </View>
             </Card>
-          ))
-        )}
-      </View>
-
-      {/* Clubs en démo locale — flux gérant historique (sans serveur). À ne pas confondre
-          avec « Demandes reçues » ci-dessus, qui vient du serveur. */}
-      <View style={{ marginTop: spacing.xl }}>
-        {/* UNIQUEMENT les clubs démo LOCAUX (fromServer=false) : les clubs venus du serveur sont
-            déjà gérés via « Demandes reçues » / la liste publique, ne pas les compter deux fois. */}
-        <SectionHeader title={`Clubs démo (local) · ${demoClubs.length}`} />
-        {demoClubs.length === 0 ? (
-          <Card>
-            <Txt variant="muted">
-              Clubs créés en local depuis l’Espace Club (démo). Les vraies demandes d’inscription arrivent dans « Demandes reçues »
-              ci-dessus. Ici, « Activer » rend un club démo visible des joueurs.
-            </Txt>
-          </Card>
-        ) : (
-          demoClubs.map((c) => (
-            <Card key={c.id} style={{ marginBottom: spacing.sm }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                <IconCircle icon="business" color={colors.blue} bg={colors.blueSoft} size={40} />
-                <View style={{ flex: 1 }}>
-                  <Txt variant="h3" style={{ fontSize: 15 }}>
-                    {c.name}
-                  </Txt>
-                  <Txt variant="muted">
-                    {c.area} · {c.courts} terrain{c.courts > 1 ? 's' : ''} · dès {fcfa(c.priceFrom)}/session
-                  </Txt>
-                  {c.contactPhone ? (
-                    <Txt variant="small" color={colors.textFaint}>
-                      Contact : {c.contactPhone}
-                    </Txt>
-                  ) : null}
-                </View>
-                <Tag label={c.status === 'active' ? 'Actif' : 'En attente'} tone={c.status === 'active' ? 'green' : 'coral'} />
-              </View>
-              {c.status === 'pending' ? (
-                <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
-                  <View style={{ flex: 1 }}>
-                    <Button size="sm" label="Activer le club" icon="checkmark" onPress={() => approveClub(c.id)} full />
+            {baseClubs.map((c) => {
+              const status = state.clubStatus[c.id];
+              const comingSoon = status === 'coming_soon';
+              const hidden = status === 'hidden';
+              return (
+                <Card key={c.id} style={{ marginTop: spacing.sm }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                    <IconCircle icon="business" color={colors.green} bg={colors.greenSoft} size={40} />
+                    <View style={{ flex: 1 }}>
+                      <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
+                        {c.name}
+                      </Txt>
+                      <Txt variant="muted" numberOfLines={1}>
+                        {c.area}
+                      </Txt>
+                    </View>
+                    <Tag
+                      label={hidden ? 'Retiré' : comingSoon ? 'Bientôt' : 'Actif'}
+                      tone={hidden ? 'neutral' : comingSoon ? 'purple' : 'green'}
+                    />
                   </View>
-                  <Button size="sm" label="Refuser" icon="close" variant="danger" onPress={() => rejectClub(c.id)} />
-                </View>
-              ) : null}
-            </Card>
-          ))
-        )}
-      </View>
+                  {hidden ? (
+                    <Button
+                      size="sm"
+                      label="Remettre dans l’app"
+                      icon="refresh"
+                      variant="primary"
+                      disabled={baseBusy === c.id}
+                      onPress={() => restoreBaseClub(c.id)}
+                      full
+                    />
+                  ) : (
+                    <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                      <View style={{ flex: 1 }}>
+                        <Button
+                          size="sm"
+                          label={comingSoon ? 'Activer' : 'Mettre en attente'}
+                          icon={comingSoon ? 'checkmark' : 'time'}
+                          variant={comingSoon ? 'primary' : 'ghost'}
+                          disabled={baseBusy === c.id}
+                          onPress={() => toggleBaseStatus(c.id, comingSoon)}
+                          full
+                        />
+                      </View>
+                      <Button
+                        size="sm"
+                        label="Supprimer"
+                        icon="trash-outline"
+                        variant="ghost"
+                        disabled={baseBusy === c.id}
+                        onPress={() => setDeleteTarget({ id: c.id, name: c.name, server: false })}
+                      />
+                    </View>
+                  )}
+                </Card>
+              );
+            })}
+          </View>
 
-      {/* Boosts « Sponsorisé » — durée 7, 14 ou 30 jours, activés une fois le paiement Wave reçu. */}
-      <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title="Boosts « Sponsorisé »" />
-        <Card>
-          <Txt variant="muted" style={{ marginBottom: spacing.sm }}>
-            Un club t’a réglé son boost par Wave ? Active-le ici : il passe en tête de liste avec un badge doré.
-          </Txt>
-          {activeClubs(state.customClubs, state.clubInfo).map((c, i) => {
-            const on = state.boostedClubIds.includes(c.id);
-            const exp = state.boostExpiry[c.id];
-            return (
-              <View key={c.id}>
-                {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                  <View style={{ flex: 1 }}>
-                    <Txt variant="body" style={{ fontWeight: '600' }}>
-                      {c.name}
-                    </Txt>
-                    {on && exp ? (
-                      <Txt variant="small" color={colors.green} style={{ fontWeight: '600' }}>
-                        Sponsorisé · jusqu’au {new Date(exp).toLocaleDateString('fr-FR')}
+          {/* Accès gérant : promouvoir un joueur (par son numéro) en gérant d’un club. */}
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title="Accès gérant" />
+            <ManagerAccess clubs={manageableList} onGrant={operatorGrantClubAccess} onRevoke={operatorRevokeClubAccess} toast={toast} />
+          </View>
+        </>
+      ) : null}
+
+      {section === 'Aperçu' ? (
+        <>
+          {/* Santé de l’app — diagnostics self-hosted (erreurs + usage), lecture opérateur */}
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title="Santé de l’app" />
+            <DiagnosticsCard />
+          </View>
+        </>
+      ) : null}
+
+      {section === 'Demandes' ? (
+        <>
+          {/* Signalements / messages d’aide envoyés par les joueurs (serveur). */}
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title={`Signalements · ${newSupport}`} />
+            {support.length === 0 ? (
+              <Card>
+                <Txt variant="muted">
+                  {supportError
+                    ? 'Impossible de charger les signalements — vérifie ta connexion, puis tire pour rafraîchir.'
+                    : 'Aucun message pour l’instant. Les signalements des joueurs (Profil → Aide & support) arrivent ici.'}
+                </Txt>
+              </Card>
+            ) : (
+              support.map((m) => (
+                <Card key={m.id} style={{ marginBottom: spacing.sm }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                    <IconCircle icon="chatbubble-ellipses" color={colors.coral} bg={colors.coralSoft} size={40} />
+                    <View style={{ flex: 1 }}>
+                      <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
+                        {m.name || 'Joueur'}
                       </Txt>
+                      {m.contact_phone ? (
+                        <Txt variant="small" color={colors.textFaint}>
+                          {m.contact_phone}
+                        </Txt>
+                      ) : null}
+                    </View>
+                    <Tag
+                      label={m.status === 'resolved' ? 'Résolu ✓' : m.status === 'read' ? 'Lu' : 'Nouveau'}
+                      tone={m.status === 'resolved' ? 'green' : m.status === 'read' ? 'amber' : 'coral'}
+                    />
+                  </View>
+                  <Txt variant="body" style={{ marginTop: spacing.sm }}>
+                    {m.message}
+                  </Txt>
+                  <Divider style={{ marginVertical: spacing.md }} />
+                  <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
+                    {m.contact_phone ? (
+                      <Button
+                        size="sm"
+                        label="WhatsApp"
+                        icon="logo-whatsapp"
+                        variant="secondary"
+                        onPress={() => {
+                          openWhatsApp(m.contact_phone ?? '', `Bonjour 👋 PadelConnect — à propos de ton message.`);
+                          if (m.status === 'new') markSupport(m.id, 'read');
+                        }}
+                      />
+                    ) : null}
+                    {m.status !== 'resolved' ? (
+                      <Button size="sm" label="Marquer résolu" icon="checkmark" onPress={() => markSupport(m.id, 'resolved')} />
                     ) : (
-                      <Txt variant="small" color={colors.textFaint}>
-                        Non sponsorisé
-                      </Txt>
+                      <Button size="sm" label="Rouvrir" icon="arrow-undo" variant="ghost" onPress={() => markSupport(m.id, 'read')} />
                     )}
                   </View>
-                  {/* 7j / 14j / 30j toujours accessibles (on peut prolonger/changer la durée) ;
-                      « Arrêter » apparaît quand le boost est actif. */}
-                  <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
-                    <Button size="sm" label="7 j" variant="secondary" onPress={() => doBoost(c.id, 7)} />
-                    <Button size="sm" label="14 j" variant="secondary" onPress={() => doBoost(c.id, 14)} />
-                    <Button size="sm" label="30 j" onPress={() => doBoost(c.id, 30)} />
-                    {on ? <Button size="sm" label="Arrêter" icon="close" variant="ghost" onPress={() => doBoost(c.id, 0)} /> : null}
+                </Card>
+              ))
+            )}
+          </View>
+        </>
+      ) : null}
+
+      {section === 'Clubs' ? (
+        <>
+          {/* Clubs en démo locale — flux gérant historique (sans serveur). À ne pas confondre
+          avec « Demandes reçues » ci-dessus, qui vient du serveur. */}
+          <View style={{ marginTop: spacing.xl }}>
+            {/* UNIQUEMENT les clubs démo LOCAUX (fromServer=false) : les clubs venus du serveur sont
+            déjà gérés via « Demandes reçues » / la liste publique, ne pas les compter deux fois. */}
+            <SectionHeader title={`Clubs démo (local) · ${demoClubs.length}`} />
+            {demoClubs.length === 0 ? (
+              <Card>
+                <Txt variant="muted">
+                  Clubs créés en local depuis l’Espace Club (démo). Les vraies demandes d’inscription arrivent dans « Demandes reçues »
+                  ci-dessus. Ici, « Activer » rend un club démo visible des joueurs.
+                </Txt>
+              </Card>
+            ) : (
+              demoClubs.map((c) => (
+                <Card key={c.id} style={{ marginBottom: spacing.sm }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                    <IconCircle icon="business" color={colors.blue} bg={colors.blueSoft} size={40} />
+                    <View style={{ flex: 1 }}>
+                      <Txt variant="h3" style={{ fontSize: 15 }}>
+                        {c.name}
+                      </Txt>
+                      <Txt variant="muted">
+                        {c.area} · {c.courts} terrain{c.courts > 1 ? 's' : ''} · dès {fcfa(c.priceFrom)}/session
+                      </Txt>
+                      {c.contactPhone ? (
+                        <Txt variant="small" color={colors.textFaint}>
+                          Contact : {c.contactPhone}
+                        </Txt>
+                      ) : null}
+                    </View>
+                    <Tag label={c.status === 'active' ? 'Actif' : 'En attente'} tone={c.status === 'active' ? 'green' : 'coral'} />
                   </View>
-                </View>
-              </View>
-            );
-          })}
-        </Card>
-      </View>
+                  {c.status === 'pending' ? (
+                    <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+                      <View style={{ flex: 1 }}>
+                        <Button size="sm" label="Activer le club" icon="checkmark" onPress={() => approveClub(c.id)} full />
+                      </View>
+                      <Button size="sm" label="Refuser" icon="close" variant="danger" onPress={() => rejectClub(c.id)} />
+                    </View>
+                  ) : null}
+                </Card>
+              ))
+            )}
+          </View>
+
+          {/* Boosts « Sponsorisé » — durée 7, 14 ou 30 jours, activés une fois le paiement Wave reçu. */}
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title="Boosts « Sponsorisé »" />
+            <Card>
+              <Txt variant="muted" style={{ marginBottom: spacing.sm }}>
+                Un club t’a réglé son boost par Wave ? Active-le ici : il passe en tête de liste avec un badge doré.
+              </Txt>
+              {activeClubs(state.customClubs, state.clubInfo).map((c, i) => {
+                const on = state.boostedClubIds.includes(c.id);
+                const exp = state.boostExpiry[c.id];
+                return (
+                  <View key={c.id}>
+                    {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                      <View style={{ flex: 1 }}>
+                        <Txt variant="body" style={{ fontWeight: '600' }}>
+                          {c.name}
+                        </Txt>
+                        {on && exp ? (
+                          <Txt variant="small" color={colors.green} style={{ fontWeight: '600' }}>
+                            Sponsorisé · jusqu’au {new Date(exp).toLocaleDateString('fr-FR')}
+                          </Txt>
+                        ) : (
+                          <Txt variant="small" color={colors.textFaint}>
+                            Non sponsorisé
+                          </Txt>
+                        )}
+                      </View>
+                      {/* 7j / 14j / 30j toujours accessibles (on peut prolonger/changer la durée) ;
+                      « Arrêter » apparaît quand le boost est actif. */}
+                      <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+                        <Button size="sm" label="7 j" variant="secondary" onPress={() => doBoost(c.id, 7)} />
+                        <Button size="sm" label="14 j" variant="secondary" onPress={() => doBoost(c.id, 14)} />
+                        <Button size="sm" label="30 j" onPress={() => doBoost(c.id, 30)} />
+                        {on ? <Button size="sm" label="Arrêter" icon="close" variant="ghost" onPress={() => doBoost(c.id, 0)} /> : null}
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </Card>
+          </View>
+        </>
+      ) : null}
 
       {/* Confirmation d’approbation — action forte : crée le club + donne l’accès gérant. */}
       <BottomSheet
@@ -1069,6 +1148,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   hero: { ...shadows.e2, marginBottom: spacing.md, alignItems: 'flex-start', gap: 2 },
+  pendingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.amberSoft,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+  },
   approveBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
