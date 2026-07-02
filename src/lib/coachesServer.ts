@@ -88,6 +88,23 @@ export async function fetchClubCoaches(clubId: string): Promise<ServerCoach[] | 
   }));
 }
 
+// Coachs réservables de TOUS les clubs (44) — écran « Réserver un cours » de l'accueil.
+// Le nom du club est résolu côté app (les 9 clubs de base ne vivent pas en table).
+export async function fetchBookableCoaches(): Promise<(ServerCoach & { clubId: string })[] | null> {
+  const { data, error } = await supabase.rpc('fetch_bookable_coaches');
+  if (error) return null;
+  return (
+    (data ?? []) as { user_id: string; club_id: string; name: string; specialty: string; price: number | null; slots: string[] }[]
+  ).map((r) => ({
+    userId: r.user_id,
+    clubId: r.club_id,
+    name: r.name,
+    specialty: r.specialty,
+    price: r.price ?? undefined,
+    slots: r.slots ?? [],
+  }));
+}
+
 // Ma fiche coach — null si je ne suis pas coach actif (ou en cas d’échec réseau : undefined).
 export async function fetchMyCoachProfile(): Promise<CoachProfile | null | undefined> {
   const { data, error } = await supabase.rpc('my_coach_profile');

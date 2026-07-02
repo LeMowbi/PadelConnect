@@ -1,0 +1,127 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { Screen } from '@/components/Screen';
+import { SkeletonLines } from '@/components/Skeleton';
+import { Button, Card, Divider, Tag, Txt } from '@/components/ui';
+import { fetchLeaderboard, fetchMyRank, type LeaderboardRow } from '@/lib/leaderboard';
+import { usePullToRefresh } from '@/lib/usePullToRefresh';
+import { useApp } from '@/store/AppContext';
+import { colors, radius, spacing } from '@/theme';
+
+// CLASSEMENT GÉNÉRAL (modèle Playtomic adapté) : par NIVEAU — seul signal anti-triche du
+// projet (il n'évolue que par les tournois officiels) — départagé par tournois officiels
+// gagnés puis parties jouées. Top 50 + MA position toujours affichée, même hors du top.
+const MEDALS = ['🥇', '🥈', '🥉'];
+
+export default function ClassementScreen() {
+  const { state } = useApp();
+  // undefined = chargement ; null = échec réseau (≠ [] = classement vide), convention §8.
+  const [rows, setRows] = useState<LeaderboardRow[] | null | undefined>(undefined);
+  const [myRank, setMyRank] = useState<number | null>(null);
+  const load = async () => {
+    const [list, rank] = await Promise.all([fetchLeaderboard(50), fetchMyRank()]);
+    setRows((cur) => list ?? (cur === undefined ? null : cur)); // échec → on garde l'existant
+    if (rank != null) setMyRank(rank);
+  };
+  const { refreshControl } = usePullToRefresh(load);
+  useEffect(() => {
+    let alive = true;
+    void Promise.all([fetchLeaderboard(50), fetchMyRank()]).then(([list, rank]) => {
+      if (!alive) return;
+      setRows(list);
+      if (rank != null) setMyRank(rank);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const me = state.serverUserId;
+  const myRow = (rows ?? []).find((r) => r.userId === me);
+
+  return (
+    <Screen back title="Classement" subtitle="Les joueurs PadelConnect, par niveau" refreshControl={refreshControl}>
+      {/* Ma position — toujours visible, même 137ᵉ (objectif personnel avant tout). */}
+      {me && (myRank != null || myRow) ? (
+        <Card style={styles.meCard}>
+          <View style={styles.meRank}>
+            <Txt variant="h2" color={colors.onSignature}>
+              {myRank ?? (rows ?? []).findIndex((r) => r.userId === me) + 1}
+            </Txt>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Txt variant="h3">Ta position</Txt>
+            <Txt variant="small" color={colors.textMuted}>
+              Gagne un tournoi officiel (+0.50 de niveau) pour grimper.
+            </Txt>
+          </View>
+          <Tag label={`Niv. ${(myRow?.level ?? state.level).toFixed(2)}`} tone="green" />
+        </Card>
+      ) : null}
+
+      {rows === undefined ? (
+        <Card style={{ marginTop: spacing.lg }}>
+          <SkeletonLines lines={6} />
+        </Card>
+      ) : rows === null ? (
+        <Card style={{ marginTop: spacing.lg, alignItems: 'center', paddingVertical: spacing.lg }}>
+          <Ionicons name="cloud-offline-outline" size={24} color={colors.textFaint} />
+          <Txt variant="muted" style={{ marginTop: spacing.sm, textAlign: 'center' }}>
+            Impossible de charger le classement — vérifie ta connexion.
+          </Txt>
+          <View style={{ marginTop: spacing.md }}>
+            <Button size="sm" label="Réessayer" icon="refresh" variant="secondary" onPress={() => void load()} />
+          </View>
+        </Card>
+      ) : (
+        <Card style={{ marginTop: spacing.lg }}>
+          {rows.map((r, i) => {
+            const isMe = r.userId === me;
+            return (
+              <View key={r.userId}>
+                {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
+                <View style={[styles.row, isMe && styles.rowMe]}>
+                  <Txt variant="h3" style={styles.rank}>
+                    {MEDALS[i] ?? `${i + 1}`}
+                  </Txt>
+                  <View style={{ flex: 1 }}>
+                    <Txt variant="body" numberOfLines={1} style={{ fontWeight: isMe ? '800' : '600' }}>
+                      {r.name}
+                      {isMe ? ' (toi)' : ''}
+                    </Txt>
+                    <Txt variant="small" color={colors.textMuted} numberOfLines={1}>
+                      {r.wins > 0 ? `🏆 ${r.wins} tournoi${r.wins > 1 ? 's' : ''} gagné${r.wins > 1 ? 's' : ''} · ` : ''}
+                      {r.played} partie{r.played > 1 ? 's' : ''} jouée{r.played > 1 ? 's' : ''}
+                    </Txt>
+                  </View>
+                  <Tag label={`Niv. ${r.level.toFixed(2)}`} tone={i < 3 ? 'amber' : 'neutral'} />
+                </View>
+              </View>
+            );
+          })}
+        </Card>
+      )}
+      <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+        Le niveau n’évolue que par les tournois officiels (badge doré) — c’est ce qui rend ce classement fiable. À niveau égal :
+        tournois gagnés, puis parties jouées.
+      </Txt>
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  meCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
+  meRank: {
+    minWidth: 46,
+    height: 46,
+    borderRadius: radius.pill,
+    paddingHorizontal: 6,
+    backgroundColor: colors.signature,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rowMe: { backgroundColor: colors.signatureSoft, borderRadius: radius.md, padding: spacing.xs, margin: -spacing.xs },
+  rank: { minWidth: 30, textAlign: 'center' },
+});

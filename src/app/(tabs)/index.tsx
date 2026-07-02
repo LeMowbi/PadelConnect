@@ -22,14 +22,14 @@ import { isBirthdayToday, parseBirthDate, zodiacFor } from '@/lib/zodiac';
 import { SESSION_MS, isPlayed, useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
-// Accès rapide — 4 raccourcis UTILES sans onglet dédié : Réserver/Tournois/Amis/Profil
-// vivent désormais dans la barre du bas, les dupliquer ici serait du bruit.
+// Accès rapide — 4 raccourcis UTILES sans onglet dédié (demande porteur : ni Coachs-annuaire
+// ni Parrainage ici — les cours se réservent DANS l'app, et le parrainage vit dans Profil).
 type Action = { icon: keyof typeof Ionicons.glyphMap; label: string; route: string; tint: string; bg: string };
 const ACTIONS: Action[] = [
   { icon: 'list', label: 'Mes réservations', route: '/reservations', tint: colors.green, bg: colors.greenSoft },
   { icon: 'business', label: 'Clubs', route: '/clubs', tint: colors.signature, bg: colors.signatureSoft },
-  { icon: 'school', label: 'Coachs', route: '/coachs', tint: colors.purple, bg: colors.purpleSoft },
-  { icon: 'gift', label: 'Parrainage', route: '/parrainage', tint: colors.coral, bg: colors.coralSoft },
+  { icon: 'school', label: 'Réserver un cours', route: '/cours', tint: colors.purple, bg: colors.purpleSoft },
+  { icon: 'podium', label: 'Classement', route: '/classement', tint: colors.amberDark, bg: colors.amberSoft },
 ];
 
 const MONTHS_SHORT = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];

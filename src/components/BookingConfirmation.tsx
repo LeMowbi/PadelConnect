@@ -46,12 +46,10 @@ export function BookingConfirmation({
 
   const addToCalendar = async () => {
     const res = await addReservationToCalendar({ clubName, startsAt, court, area });
+    // « canceled » = l'utilisateur a refermé la fiche système lui-même : pas de toast d'erreur.
+    if (res === 'canceled') return;
     toast.show(
-      res === 'added'
-        ? 'Ajouté à ton calendrier ✓'
-        : res === 'denied'
-          ? 'Autorise le calendrier dans les réglages.'
-          : 'Calendrier indisponible sur cet appareil.',
+      res === 'added' ? 'Ajouté à ton calendrier ✓' : 'Calendrier indisponible sur cet appareil.',
       res === 'added' ? undefined : { icon: 'alert-circle' },
     );
   };

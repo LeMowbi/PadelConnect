@@ -249,12 +249,10 @@ export default function ReserverScreen() {
                   court: effectiveCourt!,
                   area: club.area,
                 });
+                // « canceled » = fiche système refermée par l'utilisateur : pas de toast d'erreur.
+                if (res === 'canceled') return;
                 toast.show(
-                  res === 'added'
-                    ? 'Ajouté à ton calendrier ✓'
-                    : res === 'denied'
-                      ? 'Autorise le calendrier dans les réglages.'
-                      : 'Calendrier indisponible sur cet appareil.',
+                  res === 'added' ? 'Ajouté à ton calendrier ✓' : 'Calendrier indisponible sur cet appareil.',
                   res === 'added' ? undefined : { icon: 'alert-circle' },
                 );
               }}

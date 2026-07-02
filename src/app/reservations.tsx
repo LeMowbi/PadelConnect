@@ -118,12 +118,10 @@ export default function ReservationsScreen() {
   const addToCalendar = async (r: Reservation) => {
     const club = findClub(r.clubId, state.customClubs, state.clubInfo);
     const res = await addReservationToCalendar({ clubName: r.clubName, startsAt: r.startsAt, court: r.court, area: club?.area ?? '' });
+    // « canceled » = l'utilisateur a refermé la fiche système lui-même : pas de toast d'erreur.
+    if (res === 'canceled') return;
     toast.show(
-      res === 'added'
-        ? 'Ajouté à ton calendrier ✓'
-        : res === 'denied'
-          ? 'Autorise le calendrier dans les réglages.'
-          : 'Calendrier indisponible sur cet appareil.',
+      res === 'added' ? 'Ajouté à ton calendrier ✓' : 'Calendrier indisponible sur cet appareil.',
       res === 'added' ? undefined : { icon: 'alert-circle' },
     );
   };

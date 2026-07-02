@@ -36,8 +36,12 @@ export default function CompetitionsScreen() {
 
   return (
     <Screen title="Tournois" subtitle="Défis avec récompenses — par les clubs ou les joueurs" refreshControl={refreshControl}>
-      <View style={{ marginTop: spacing.sm }}>
-        <Button label="Créer un tournoi" icon="add" onPress={() => router.push('/competition/nouvelle')} full />
+      <View style={{ marginTop: spacing.sm, flexDirection: 'row', gap: spacing.sm }}>
+        <View style={{ flex: 1 }}>
+          <Button label="Créer un tournoi" icon="add" onPress={() => router.push('/competition/nouvelle')} full />
+        </View>
+        {/* Classement général — l'enjeu des tournois officiels (le niveau) rendu visible. */}
+        <Button label="Classement" icon="podium" variant="secondary" onPress={() => router.push('/classement')} pill />
       </View>
 
       <SegmentedControl options={TABS} value={tab} onChange={setTab} />
