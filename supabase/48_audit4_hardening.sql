@@ -508,8 +508,11 @@ grant execute on function public.coach_update_profile(text, integer, text[]) to 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- 6) COACH DÉJÀ ACTIF DANS UN AUTRE CLUB : statut 'other_club' (≠ 'already' du même club)
 -- ══════════════════════════════════════════════════════════════════════════════
-create or replace function public.club_add_coach(p_club_id text, p_phone text, p_specialty text)
-returns table (status text, coach_id uuid, coach_name text)
+-- ⚠️ Les COLONNES de sortie doivent rester EXACTEMENT celles de la 38 (status, coach_id, name) :
+-- PostgreSQL refuse de changer le type de retour via create or replace. On garde donc `name`
+-- (et non `coach_name`) — c'est aussi le nom que lit le client (coachesServer.ts).
+create or replace function public.club_add_coach(p_club_id text, p_phone text, p_specialty text default '')
+returns table (status text, coach_id uuid, name text)
 language plpgsql
 security definer
 set search_path = public
