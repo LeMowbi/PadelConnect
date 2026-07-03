@@ -2,7 +2,16 @@
 // Exécute les VRAIES fonctions source (src/lib/slots.ts) :
 //   node --experimental-strip-types tests/slots.test.ts
 
-import { buildSlots, inferOpenClose, minutesToSlot, slotToMinutes, SESSION_MIN } from '../src/lib/slots.ts';
+import {
+  buildSlots,
+  closedSlot,
+  inferOpenClose,
+  isClosedSlot,
+  minutesToSlot,
+  slotTime,
+  slotToMinutes,
+  SESSION_MIN,
+} from '../src/lib/slots.ts';
 
 let failed = 0;
 const check = (cond: boolean, msg: string) => {
@@ -42,6 +51,22 @@ eq(buildSlots('10:00', '20:00'), ['10:00', '11:30', '13:00', '14:30', '16:00', '
 eq(buildSlots('20:00', '20:00'), [], 'Ouverture = fermeture → aucun créneau');
 eq(buildSlots('22:00', '08:00'), [], 'Fermeture avant ouverture → aucun créneau');
 eq(buildSlots('08:00', '09:00'), [], 'Plage trop courte pour une session → aucun créneau');
+
+// Marqueur « fermé » ('!HH:MM') : la config stocke la grille COMPLÈTE, créneaux fermés compris —
+// c'est ce qui rend les heures d'ouverture persistantes (rien ne se réinitialise) et un créneau
+// fermé rouvrable (pause déjeuner).
+check(isClosedSlot('!12:30') === true, "'!12:30' est marqué fermé");
+check(isClosedSlot('12:30') === false, "'12:30' est ouvert");
+check(slotTime('!12:30') === '12:30', 'slotTime retire la marque');
+check(slotTime('12:30') === '12:30', 'slotTime laisse un horaire ouvert intact');
+check(closedSlot('12:30') === '!12:30', 'closedSlot ajoute la marque');
+// Les heures se déduisent de la grille STOCKÉE, marques retirées : un créneau fermé en bord de
+// grille ne fait pas « rétrécir » la plage affichée au prochain passage.
+eq(
+  inferOpenClose(['08:00', '09:30', '!21:30'].map(slotTime)),
+  { open: '08:00', close: '23:00' },
+  'Créneau fermé en fin de grille : la fermeture déduite reste 23:00',
+);
 
 // Déduction ouverture/fermeture depuis des créneaux actifs (pré-remplissage des sélecteurs).
 eq(inferOpenClose(['08:00', '09:30', '11:00']), { open: '08:00', close: '12:30' }, 'Déduction : dernier créneau + une session');

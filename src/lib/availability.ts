@@ -4,6 +4,7 @@
 
 import { SAMPLE_SLOTS, compareClubs, defaultCourts, type Club } from '@/data/clubs';
 import { isTournamentPublic, type Competition } from '@/data/competitions';
+import { isClosedSlot } from '@/lib/slots';
 import type { BlockedSlot, Reservation } from '@/store/AppContext';
 
 // Occupation cross-joueur : créneaux pris par TOUS (vue serveur, sans identité). Sert à
@@ -20,9 +21,10 @@ export type AvailCtx = {
   blocked: BlockedSlot[]; // créneaux fermés hors app par les clubs
 };
 
-// Horaires ouverts par un club (sinon créneaux standards).
+// Horaires OUVERTS par un club (sinon créneaux standards). La config stocke la grille complète,
+// créneaux fermés préfixés « ! » (cf. src/lib/slots.ts) — on ne garde ici que les ouverts.
 export function openSlotsFor(club: Club, clubSlots: Record<string, string[]>): string[] {
-  return clubSlots[club.id] ?? SAMPLE_SLOTS;
+  return (clubSlots[club.id] ?? SAMPLE_SLOTS).filter((t) => !isClosedSlot(t));
 }
 
 // Terrains d’un club : ceux gérés par le club, sinon « Terrain 1…N » par défaut.

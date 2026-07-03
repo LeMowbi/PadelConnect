@@ -6,17 +6,19 @@ import { ClubPhoto } from '@/components/ClubPhoto';
 import { useToast } from '@/components/Toast';
 import { Button, Card, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
 import { ClubInfoCard } from '@/components/club-admin/ClubInfoCard';
-import { type Club } from '@/data/clubs';
+import { SAMPLE_SLOTS, type Club } from '@/data/clubs';
 import { courtsFor, openSlotsFor } from '@/lib/availability';
 import { clubAddCoach, clubRemoveCoach, clubSetCoachPrice, fetchClubCoaches, type ServerCoach } from '@/lib/coachesServer';
 import { isPlayed, MAX_CLUB_PHOTOS, useApp } from '@/store/AppContext';
 import { fcfa, initials } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
-import { buildSlots, inferOpenClose, minutesToSlot, slotToMinutes, SESSION_MIN } from '@/lib/slots';
+import { buildSlots, closedSlot, inferOpenClose, minutesToSlot, slotTime, slotToMinutes, SESSION_MIN } from '@/lib/slots';
 import { colors, radius, spacing } from '@/theme';
 
-// Réglage des heures d'ouverture par pas de 30 min ; bornes réalistes d'un club (05:00 → minuit).
-const STEP = 30;
+// Réglage des heures : l'OUVERTURE se décale par pas de 30 min (un club démarre à 8h00, un autre
+// à 8h30 → grilles décalées), la FERMETURE par session entière de 1h30 (le seul pas qui ajoute ou
+// retire réellement un créneau). Bornes réalistes d'un club : 05:00 → minuit.
+const OPEN_STEP = 30;
 const MIN_OPEN = 5 * 60; // 05:00
 const MAX_CLOSE = 24 * 60; // 24:00 (minuit)
 
@@ -24,6 +26,7 @@ const MAX_CLOSE = 24 * 60; // 24:00 (minuit)
 function TimeStepper({
   label,
   value,
+  stepLabel,
   onDec,
   onInc,
   canDec,
@@ -31,6 +34,7 @@ function TimeStepper({
 }: {
   label: string;
   value: string;
+  stepLabel: string;
   onDec: () => void;
   onInc: () => void;
   canDec: boolean;
@@ -47,7 +51,7 @@ function TimeStepper({
         hitSlop={8}
         style={[styles.stepBtn, !canDec && styles.stepBtnOff]}
         accessibilityRole="button"
-        accessibilityLabel={`${label} : reculer de 30 minutes`}
+        accessibilityLabel={`${label} : reculer ${stepLabel}`}
       >
         <Ionicons name="remove" size={18} color={canDec ? colors.signature : colors.textFaint} />
       </Pressable>
@@ -60,7 +64,7 @@ function TimeStepper({
         hitSlop={8}
         style={[styles.stepBtn, !canInc && styles.stepBtnOff]}
         accessibilityRole="button"
-        accessibilityLabel={`${label} : avancer de 30 minutes`}
+        accessibilityLabel={`${label} : avancer ${stepLabel}`}
       >
         <Ionicons name="add" size={18} color={canInc ? colors.signature : colors.textFaint} />
       </Pressable>
@@ -79,8 +83,6 @@ export function SectionMonClub({ club }: { club: Club }) {
     setClubCourtPhoto,
     addClubOffer,
     removeClubOffer,
-    addClubCoach,
-    removeClubCoach,
     setClubInfo,
   } = useApp();
   const toast = useToast();
@@ -89,27 +91,25 @@ export function SectionMonClub({ club }: { club: Club }) {
   const [offerKind, setOfferKind] = useState<'offre' | 'actu' | 'evenement'>('offre');
   const [offerTitle, setOfferTitle] = useState('');
   const [offerDetail, setOfferDetail] = useState('');
-  const [coachName, setCoachName] = useState('');
-  const [coachSpec, setCoachSpec] = useState('');
-  const [coachPhone, setCoachPhone] = useState('');
   const [courtName, setCourtName] = useState('');
 
   // Mêmes valeurs par défaut que côté joueur (créneaux standards, « Terrain 1…N ») tant que le
   // gérant n’a rien personnalisé → cohérence avec le planning et ce que les joueurs voient.
   const openSlots = openSlotsFor(club, state.clubSlots);
 
-  // Heures d’ouverture/fermeture (état local, pré-rempli depuis les créneaux actifs). Le gérant
-  // règle SA plage (chaque club ouvre à son heure) ; l’app la découpe en sessions de 1h30.
-  const [range, setRange] = useState(() => inferOpenClose(openSlots));
-  const openMin = slotToMinutes(range.open) ?? MIN_OPEN;
-  const closeMin = slotToMinutes(range.close) ?? MAX_CLOSE;
-  // Grille affichée = créneaux générés PAR la plage, plus les éventuels créneaux actifs hors
-  // plage (jamais masqués), triés — le gérant peut fermer/rouvrir chaque créneau à l’unité.
-  const grid = [...new Set([...buildSlots(range.open, range.close), ...openSlots])].sort();
+  // Heures d’ouverture/fermeture DÉRIVÉES de la grille stockée (créneaux fermés '!' compris) —
+  // aucun état local : les sélecteurs reflètent toujours la config réelle, rien ne se
+  // « réinitialise » en rouvrant l’écran, et un changement de club se répercute aussitôt.
+  const storedTimes = (state.clubSlots[club.id] ?? SAMPLE_SLOTS).map(slotTime);
+  const { open: openTime, close: closeTime } = inferOpenClose(storedTimes);
+  const openMin = slotToMinutes(openTime) ?? MIN_OPEN;
+  const closeMin = slotToMinutes(closeTime) ?? MAX_CLOSE;
+  // Grille affichée = créneaux générés par la plage + ceux de la config (legacy « ouverts seuls »
+  // inclus), triés — le gérant ferme/rouvre chaque créneau à l’unité.
+  const grid = [...new Set([...buildSlots(openTime, closeTime), ...storedTimes])].sort();
   const courts = courtsFor(club, state.clubCourts);
   const photos = state.clubPhotos[club.id] ?? [];
   const offers = state.clubOffers[club.id] ?? [];
-  const coaches = state.clubCoaches[club.id] ?? [];
   const boosted = state.boostedClubIds.includes(club.id);
   const cover = state.clubCovers[club.id];
   const courtPhotos = state.clubCourtPhotos[club.id] ?? {};
@@ -183,7 +183,7 @@ export function SectionMonClub({ club }: { club: Club }) {
     if (ok) {
       setBookableCoaches((cur) => cur.map((x) => (x.userId === c.userId ? { ...x, price: price ?? undefined } : x)));
       setPriceEditing(null);
-      toast.show(price === null ? 'Tarif retiré' : `Tarif du cours : ${fcfa(price)} ✓`);
+      toast.show(price === null ? 'Tarif retiré' : `Tarif de la session de cours : ${fcfa(price)} ✓`);
     } else {
       toast.show('Enregistrement impossible — réessaie', { icon: 'alert-circle' });
     }
@@ -216,24 +216,26 @@ export function SectionMonClub({ club }: { club: Club }) {
   };
 
   // Change la plage d’ouverture : régénère les créneaux de 1h30. On PRÉSERVE les créneaux que le
-  // gérant a fermés manuellement (pause déjeuner…) tant qu’ils restent dans la nouvelle plage, et
-  // on refuse de retirer un créneau qui porte une réservation à venir (comme toggleSlot).
+  // gérant a fermés manuellement (pause déjeuner…) tant qu’ils restent dans la nouvelle grille, et
+  // on refuse de retirer un créneau qui porte une réservation à venir (comme toggleSlot). On
+  // stocke la grille COMPLÈTE (fermés préfixés '!') : les sélecteurs se re-déduisent d’elle.
   const applyRange = (nextOpen: string, nextClose: string) => {
-    const closed = new Set(buildSlots(range.open, range.close).filter((t) => !openSlots.includes(t)));
-    const next = buildSlots(nextOpen, nextClose).filter((t) => !closed.has(t));
+    const closed = new Set(grid.filter((t) => !openSlots.includes(t)));
+    const next = buildSlots(nextOpen, nextClose);
     const now = Date.now();
     const dropped = openSlots.filter((t) => !next.includes(t));
     if (dropped.some((t) => state.reservations.some((r) => r.clubId === club.id && r.time === t && !isPlayed(r, now)))) {
       toast.show('Un créneau à retirer a des réservations à venir — annule-les d’abord.', { icon: 'alert-circle' });
       return;
     }
-    setRange({ open: nextOpen, close: nextClose });
-    setClubSlots(club.id, next);
+    setClubSlots(
+      club.id,
+      next.map((t) => (closed.has(t) ? closedSlot(t) : t)),
+    );
   };
 
   const toggleSlot = (t: string) => {
-    const set = new Set(openSlots);
-    if (set.has(t)) {
+    if (openSlots.includes(t)) {
       // Fermer un horaire qui porte encore une réservation À VENIR la rendrait invisible du
       // planning sans l'annuler → on refuse tant qu'elle n'est pas jouée (ou annule-la avant).
       const now = Date.now();
@@ -241,9 +243,14 @@ export function SectionMonClub({ club }: { club: Club }) {
         toast.show('Cet horaire a des réservations à venir — annule-les d’abord.', { icon: 'alert-circle' });
         return;
       }
-      set.delete(t);
-    } else set.add(t);
-    setClubSlots(club.id, [...set]);
+    }
+    // Réécrit la grille complète : `t` bascule ouvert ↔ fermé ('!t'), le reste est inchangé
+    // (une vieille config « ouverts seuls » est normalisée en grille complète au passage).
+    const willBeOpen = (x: string) => (x === t ? !openSlots.includes(x) : openSlots.includes(x));
+    setClubSlots(
+      club.id,
+      grid.map((x) => (willBeOpen(x) ? x : closedSlot(x))),
+    );
   };
   const addCourt = () => {
     const n = courtName.trim();
@@ -301,14 +308,6 @@ export function SectionMonClub({ club }: { club: Club }) {
     setOfferTitle('');
     setOfferDetail('');
   };
-  const submitCoach = () => {
-    if (coachName.trim().length < 2) return;
-    addClubCoach(club.id, coachName, coachSpec, coachPhone);
-    setCoachName('');
-    setCoachSpec('');
-    setCoachPhone('');
-  };
-
   // Checklist d’accueil : guide un club fraîchement rattaché vers une page complète.
   // Chaque ligne reflète l’état RÉEL ; la carte disparaît quand tout est fait.
   const checklist = [
@@ -524,8 +523,9 @@ export function SectionMonClub({ club }: { club: Club }) {
         <SectionHeader title="Coachs réservables" />
         <Card>
           <Txt variant="muted">
-            Le coach crée d’abord un compte PadelConnect normal, puis tu le déclares ici avec son numéro. Il choisit ensuite ses créneaux
-            dans son Espace Coach, et les joueurs réservent leurs cours dans l’app.
+            Le coach doit avoir l’application : il crée d’abord un compte PadelConnect normal, puis tu le déclares ici avec son numéro. Il
+            choisit ensuite ses créneaux dans son Espace Coach, les joueurs réservent leurs cours dans l’app — et c’est TOI qui fixes le
+            tarif de sa session (touche l’étiquette de prix sur sa ligne).
           </Txt>
           {!connected ? (
             <Txt variant="small" color={colors.amberDark} style={{ marginTop: spacing.sm }}>
@@ -608,11 +608,11 @@ export function SectionMonClub({ club }: { club: Club }) {
                           <TextInput
                             value={priceDraft}
                             onChangeText={setPriceDraft}
-                            placeholder="Tarif du cours (FCFA) — vide = non affiché"
+                            placeholder="Tarif d’une session de cours (FCFA) — vide = non affiché"
                             placeholderTextColor={colors.textMuted}
                             keyboardType="numeric"
                             style={[styles.input, { marginTop: 0, flex: 1 }]}
-                            accessibilityLabel={`Tarif du cours de ${c.name} en FCFA`}
+                            accessibilityLabel={`Tarif d’une session de cours de ${c.name} en FCFA`}
                           />
                           <Button
                             size="sm"
@@ -628,58 +628,6 @@ export function SectionMonClub({ club }: { club: Club }) {
               </View>
             </>
           )}
-        </Card>
-      </View>
-
-      {/* Coachs « fiche simple » (sans compte) — simple annuaire de contact sur la fiche club */}
-      <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title="Coachs (fiche simple)" />
-        <Card>
-          <Txt variant="muted">Pour un coach sans compte : simple fiche de contact (appel/WhatsApp) sur ta page.</Txt>
-          <TextInput
-            value={coachName}
-            onChangeText={setCoachName}
-            placeholder="Nom du coach"
-            placeholderTextColor={colors.textMuted}
-            style={styles.input}
-          />
-          <TextInput
-            value={coachSpec}
-            onChangeText={setCoachSpec}
-            placeholder="Spécialité (ex. Initiation, Compétition)"
-            placeholderTextColor={colors.textMuted}
-            style={styles.input}
-          />
-          <TextInput
-            value={coachPhone}
-            onChangeText={setCoachPhone}
-            placeholder="Téléphone (+225…)"
-            placeholderTextColor={colors.textMuted}
-            keyboardType="phone-pad"
-            style={styles.input}
-          />
-          <View style={{ marginTop: spacing.sm }}>
-            <Button size="sm" label="Ajouter le coach" icon="add" onPress={submitCoach} />
-          </View>
-          <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
-            {coaches.map((c) => (
-              <View key={c.id} style={styles.listRow}>
-                <IconCircle icon="person" color={colors.signature} bg={colors.greenSoft} size={36} />
-                <View style={{ flex: 1 }}>
-                  <Txt variant="body" style={{ fontWeight: '600' }}>
-                    {c.name}
-                  </Txt>
-                  <Txt variant="muted">
-                    {c.specialty}
-                    {c.phone ? ` · ${c.phone}` : ''}
-                  </Txt>
-                </View>
-                <Pressable onPress={() => removeClubCoach(club.id, c.id)} hitSlop={8}>
-                  <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                </Pressable>
-              </View>
-            ))}
-          </View>
         </Card>
       </View>
 
@@ -758,19 +706,23 @@ export function SectionMonClub({ club }: { club: Club }) {
           <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
             <TimeStepper
               label="Ouverture"
-              value={range.open}
-              canDec={openMin - STEP >= MIN_OPEN}
-              canInc={openMin + STEP + SESSION_MIN <= closeMin}
-              onDec={() => applyRange(minutesToSlot(openMin - STEP), range.close)}
-              onInc={() => applyRange(minutesToSlot(openMin + STEP), range.close)}
+              value={openTime}
+              stepLabel="de 30 minutes"
+              canDec={openMin - OPEN_STEP >= MIN_OPEN}
+              canInc={openMin + OPEN_STEP + SESSION_MIN <= closeMin}
+              onDec={() => applyRange(minutesToSlot(openMin - OPEN_STEP), closeTime)}
+              onInc={() => applyRange(minutesToSlot(openMin + OPEN_STEP), closeTime)}
             />
+            {/* La fermeture avance par SESSION entière (1h30) : c'est le seul pas qui ajoute ou
+                retire réellement un créneau — un pas de 30 min ne changerait souvent rien. */}
             <TimeStepper
               label="Fermeture"
-              value={range.close}
-              canDec={closeMin - STEP - SESSION_MIN >= openMin}
-              canInc={closeMin + STEP <= MAX_CLOSE}
-              onDec={() => applyRange(range.open, minutesToSlot(closeMin - STEP))}
-              onInc={() => applyRange(range.open, minutesToSlot(closeMin + STEP))}
+              value={closeTime}
+              stepLabel="d’une session (1h30)"
+              canDec={closeMin - SESSION_MIN - SESSION_MIN >= openMin}
+              canInc={closeMin + SESSION_MIN <= MAX_CLOSE}
+              onDec={() => applyRange(openTime, minutesToSlot(closeMin - SESSION_MIN))}
+              onInc={() => applyRange(openTime, minutesToSlot(closeMin + SESSION_MIN))}
             />
           </View>
           <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>

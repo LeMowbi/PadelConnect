@@ -6,8 +6,7 @@ import { Avatar } from '@/components/Avatar';
 import { ContactButtons } from '@/components/ContactButtons';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
-import { Card, Divider, EmptyState, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
-import { findClub } from '@/data/clubs';
+import { Card, Divider, EmptyState, IconCircle, Tag, Txt } from '@/components/ui';
 import { coachClubName, coaches, type Coach } from '@/data/coaches';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
@@ -64,9 +63,6 @@ export default function CoachsScreen() {
     .filter((c) => !state.hiddenCoachIds.includes(c.id)) // coachs retirés par leur club
     .sort((a, b) => b.levelValue - a.levelValue)
     .filter((c) => inRange(c.levelValue, tab));
-  const clubCoaches = Object.entries(state.clubCoaches).flatMap(([clubId, l]) =>
-    l.map((c) => ({ ...c, clubName: findClub(clubId, state.customClubs, state.clubInfo)?.name ?? 'Club' })),
-  );
 
   return (
     <Screen back title="Coachs" subtitle="Classés par niveau — contacte-les directement">
@@ -77,46 +73,18 @@ export default function CoachsScreen() {
         </Txt>
       </View>
 
-      {/* Le filtre de niveau ne porte que sur le seed `coaches` (les coachs de club n’ont pas de
-          niveau numérique) : on le masque tant que ce seed est vide, pour ne pas laisser croire
-          qu’il filtre la liste « Coachs ajoutés par les clubs » ci-dessous. */}
+      {/* Filtre de niveau (annuaire seed) — masqué tant que l'annuaire est vide. */}
       {coaches.length > 0 ? <SegmentedControl options={TABS} value={tab} onChange={setTab} /> : null}
 
-      {list.length === 0 && clubCoaches.length === 0 ? (
+      {list.length === 0 ? (
         <EmptyState
           icon="school-outline"
           title="Aucun coach dans cette catégorie"
-          text="Essaie un autre filtre de niveau ou reviens bientôt — de nouveaux coachs rejoignent PadelConnect régulièrement."
+          text="Essaie un autre filtre de niveau ou reviens bientôt — de nouveaux coachs rejoignent PadelConnect régulièrement. Les coachs réservables de chaque club sont sur la fiche du club."
         />
       ) : (
         list.map((c) => <CoachRow key={c.id} coach={c} />)
       )}
-
-      {clubCoaches.length > 0 ? (
-        <View style={{ marginTop: spacing.xl }}>
-          <SectionHeader title="Coachs ajoutés par les clubs" />
-          {clubCoaches.map((c) => (
-            <Card key={c.id} style={{ marginBottom: spacing.sm }}>
-              <View style={styles.row}>
-                <IconCircle icon="person" color={colors.blue} bg={colors.blueSoft} size={44} />
-                <View style={{ flex: 1 }}>
-                  <Txt variant="h3" numberOfLines={1}>
-                    {c.name}
-                  </Txt>
-                  <View style={styles.metaRow}>
-                    <Ionicons name="business-outline" size={13} color={colors.textMuted} />
-                    <Txt variant="small" color={colors.textMuted} numberOfLines={1} style={{ flex: 1 }}>
-                      {c.specialty} · {c.clubName}
-                    </Txt>
-                  </View>
-                </View>
-                <Tag label="Club" tone="blue" />
-              </View>
-              {c.phone ? <ContactButtons phone={c.phone} style={{ marginTop: spacing.md }} /> : null}
-            </Card>
-          ))}
-        </View>
-      ) : null}
     </Screen>
   );
 }

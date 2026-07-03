@@ -67,7 +67,6 @@ export const initialState: AppState = {
   compResults: {},
   clubPhotos: {},
   clubOffers: {},
-  clubCoaches: {},
   clubCovers: {}, // photo « de profil » par club (carte des listes)
   clubCourtPhotos: {}, // une photo par terrain, par club
   clubInfo: {},
@@ -105,7 +104,6 @@ export function clubConfigSlices(s: AppState, configs: Record<string, ClubConfig
   const clubSlots = { ...s.clubSlots };
   const clubCourts = { ...s.clubCourts };
   const clubOffers = { ...s.clubOffers };
-  const clubCoaches = { ...s.clubCoaches };
   const clubPhotos = { ...s.clubPhotos };
   const clubCovers = { ...s.clubCovers };
   const clubCourtPhotos = { ...s.clubCourtPhotos };
@@ -113,14 +111,13 @@ export function clubConfigSlices(s: AppState, configs: Record<string, ClubConfig
     if (c.slots) clubSlots[id] = c.slots;
     if (c.courts) clubCourts[id] = c.courts;
     if (c.offers) clubOffers[id] = c.offers;
-    if (c.coaches) clubCoaches[id] = c.coaches;
     if (c.photos) clubPhotos[id] = c.photos;
     if (c.coverUrl) clubCovers[id] = c.coverUrl;
     // Cover retirée par le gérant (serveur la renvoie absente) → on retire aussi le miroir.
     else if (id in clubCovers) delete clubCovers[id];
     if (c.courtPhotos) clubCourtPhotos[id] = c.courtPhotos;
   }
-  return { clubSlots, clubCourts, clubOffers, clubCoaches, clubPhotos, clubCovers, clubCourtPhotos };
+  return { clubSlots, clubCourts, clubOffers, clubPhotos, clubCovers, clubCourtPhotos };
 }
 
 // État ramené à « déconnecté » : identité + données serveur ET tout le périmètre personnel

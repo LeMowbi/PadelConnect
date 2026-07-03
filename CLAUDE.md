@@ -140,15 +140,23 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - **Photos club (38)** : `cover_url` = photo « de profil » (carte ClubCard + héros fiche ;
   `''` = retrait côté serveur) et `court_photos` = **une photo par terrain** (vignettes étiquetées
   sur la fiche, gérées ligne par ligne dans l'Espace Club). Store : `clubCovers`/`clubCourtPhotos`.
-- **Horaires modulables par club (50)** : chaque club règle SES heures via deux sélecteurs
-  « Ouverture / Fermeture » (pas de 30 min) dans l'Espace Club → `buildSlots` (`src/lib/slots.ts`,
-  PUR) découpe la plage en sessions de 1h30 (`SESSION_MIN`, un créneau ne déborde jamais la
-  fermeture). Le gérant peut ensuite fermer/rouvrir un créneau précis (pause déjeuner) à l'unité.
-  Stockage inchangé (`club_config.slots: string[]`, AUCUN SQL pour les horaires) ; les sélecteurs
-  se pré-remplissent depuis les créneaux via `inferOpenClose`. Les **plages tarifaires** ne sont
-  plus forcées à 07:00→24:00 : `validateTiers(tiers, openMin, closeMin)` exige une couverture des
-  HEURES D'OUVERTURE du club (bornes passées par `ClubInfoCard`). Fermer un créneau portant une
-  résa à venir est refusé (même garde qu'avant).
+- **Horaires modulables par club (50, réglés à l'audit 7)** : chaque club règle SES heures via
+  deux sélecteurs « Ouverture (pas de 30 min) / Fermeture (pas d'une session, 1h30) » dans
+  l'Espace Club → `buildSlots` (`src/lib/slots.ts`, PUR) découpe la plage en sessions de 1h30
+  (`SESSION_MIN`, un créneau ne déborde jamais la fermeture) — deux clubs peuvent avoir des
+  grilles décalées (8h→9h30 vs 8h30→10h). STOCKAGE : `club_config.slots` porte la grille
+  COMPLÈTE, un créneau fermé étant préfixé `!` (ex. `'!12:30'` = pause déjeuner) — les heures
+  se DÉRIVENT de la grille (`inferOpenClose`, aucun état local → plus de « réinitialisation »
+  au retour sur l'écran) et un créneau fermé reste rouvrable. `openSlotsFor` (availability.ts)
+  filtre les `!` ; côté serveur `'!12:30'` ne matche jamais `= any(slots)` → refusé d'office.
+  AUCUN SQL pour les horaires. Les **plages tarifaires** ne sont plus forcées à 07:00→24:00 :
+  `validateTiers(tiers, openMin, closeMin)` exige une couverture des HEURES D'OUVERTURE du club
+  (bornes passées par `ClubInfoCard`). Fermer un créneau portant une résa à venir est refusé.
+- **Coachs « fiche simple » RETIRÉS (audit 7, décision porteur)** : un coach doit AVOIR
+  l'application. Plus d'annuaire de contact sans compte dans l'Espace Club (`clubCoaches`
+  supprimé du store/`ClubConfig` ; `upsert_club_config` omet `p_coaches`, defaulted côté SQL).
+  Seuls restent les coachs RÉSERVABLES (comptes promus, table `coaches`) — dont le CLUB fixe le
+  tarif de la session via `club_set_coach_price` — et l'annuaire statique `src/data/coaches.ts`.
 - **Position Google Maps éditable (50)** : `mapsQuery` devient surchargeable par le gérant pour
   TOUS les clubs, fondateurs compris (le porteur peut renommer les fondateurs). Colonne
   `club_overrides.maps_query` + `upsert_club_override` (9ᵉ paramètre) ; `ClubInfo.mapsQuery` fusionné

@@ -221,7 +221,6 @@ export type AppState = {
   compResults: Record<string, CompResult>; // tournoi clôturé → équipe vainqueure
   clubPhotos: Record<string, string[]>;
   clubOffers: Record<string, { id: string; kind: 'offre' | 'actu' | 'evenement'; title: string; detail: string }[]>;
-  clubCoaches: Record<string, { id: string; name: string; specialty: string; phone?: string }[]>;
   clubCovers: Record<string, string>; // photo « de profil » du club (celle de la carte, avant d’ouvrir la fiche)
   clubCourtPhotos: Record<string, Record<string, string>>; // clubId → { nom du terrain: photo }
   clubInfo: Record<string, ClubInfo>; // surcharges gérant (nom, tarif, WhatsApp…)
@@ -340,8 +339,6 @@ type AppContextType = {
   removeClubPhoto: (clubId: string, uri: string) => void;
   addClubOffer: (clubId: string, kind: 'offre' | 'actu' | 'evenement', title: string, detail: string) => void;
   removeClubOffer: (clubId: string, id: string) => void;
-  addClubCoach: (clubId: string, name: string, specialty: string, phone: string) => void;
-  removeClubCoach: (clubId: string, id: string) => void;
   // Photo « de profil » du club (celle de la carte) — null = la retirer. false = échec upload/serveur.
   setClubCover: (clubId: string, uri: string | null) => Promise<boolean>;
   // Une photo PAR TERRAIN (montre le terrain sur la fiche) — null = la retirer.
@@ -1497,25 +1494,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const next = (s.clubOffers[clubId] ?? []).filter((o) => o.id !== id);
           if (s.serverUserId) void upsertClubConfig(clubId, { offers: next });
           return { ...s, clubOffers: { ...s.clubOffers, [clubId]: next } };
-        }),
-      addClubCoach: (clubId, name, specialty, phone) =>
-        setState((s) => {
-          const n = name.trim();
-          if (!n) return s;
-          // Normalise le téléphone en format international (+225) pour que le lien
-          // WhatsApp/appel fonctionne (sinon openWhatsApp échoue sur un numéro local).
-          const p = phone.trim();
-          const normPhone = p ? (p.startsWith('+') ? p : `+225 ${p}`) : undefined;
-          const existing = s.clubCoaches[clubId] ?? [];
-          const next = [{ id: uid(), name: n, specialty: specialty.trim() || 'Coach', phone: normPhone }, ...existing];
-          if (s.serverUserId) void upsertClubConfig(clubId, { coaches: next });
-          return { ...s, clubCoaches: { ...s.clubCoaches, [clubId]: next } };
-        }),
-      removeClubCoach: (clubId, id) =>
-        setState((s) => {
-          const next = (s.clubCoaches[clubId] ?? []).filter((c) => c.id !== id);
-          if (s.serverUserId) void upsertClubConfig(clubId, { coaches: next });
-          return { ...s, clubCoaches: { ...s.clubCoaches, [clubId]: next } };
         }),
       // Photo « de profil » du club : uploadée si locale (comme addClubPhoto), puis enregistrée
       // dans la config serveur. null = retirer ('' côté serveur — cf. 38_coaches_lessons.sql).

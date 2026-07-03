@@ -55,14 +55,14 @@ export async function upsertClubOverride(clubId: string, o: ClubOverride): Promi
   return !error && data === true;
 }
 
-// ─── Config de club partagée (horaires, terrains, offres, coachs, photos) ──────
+// ─── Config de club partagée (horaires, terrains, offres, photos) ──────
+// (Les coachs « fiche simple » sans compte ont été retirés — décision porteur : un coach doit
+// avoir l'application. Les coachs réservables vivent dans la table `coaches`, cf. coachesServer.)
 export type ClubOffer = { id: string; kind: 'offre' | 'actu' | 'evenement'; title: string; detail: string };
-export type ClubCoach = { id: string; name: string; specialty: string; phone?: string };
 export type ClubConfig = {
-  slots?: string[];
+  slots?: string[]; // grille complète du club — un créneau fermé est préfixé « ! » (cf. src/lib/slots.ts)
   courts?: string[];
   offers?: ClubOffer[];
-  coaches?: ClubCoach[];
   photos?: string[]; // photos GÉNÉRALES du club (galerie)
   coverUrl?: string; // photo « de profil » : celle de la carte, avant d’ouvrir la fiche
   courtPhotos?: Record<string, string>; // une photo PAR TERRAIN → { nom du terrain: url }
@@ -73,7 +73,6 @@ type ClubConfigRow = {
   slots: string[] | null;
   courts: string[] | null;
   offers: ClubOffer[] | null;
-  coaches: ClubCoach[] | null;
   photos: string[] | null;
   cover_url: string | null;
   court_photos: Record<string, string> | null;
@@ -90,7 +89,6 @@ export async function fetchClubConfigs(): Promise<Record<string, ClubConfig> | n
       slots: r.slots ?? undefined,
       courts: r.courts ?? undefined,
       offers: r.offers ?? undefined,
-      coaches: r.coaches ?? undefined,
       photos: r.photos ?? undefined,
       coverUrl: r.cover_url ?? undefined,
       courtPhotos: r.court_photos ?? undefined,
@@ -102,12 +100,13 @@ export async function fetchClubConfigs(): Promise<Record<string, ClubConfig> | n
 // Le gérant pousse SA config (mise à jour partielle : seuls les champs fournis changent).
 // Le serveur refuse si ce n’est pas son club. false si refusé/échec.
 export async function upsertClubConfig(clubId: string, c: ClubConfig): Promise<boolean> {
+  // p_coaches (fiches simples, retirées) est omis : le paramètre a un défaut null côté serveur,
+  // qui préserve la valeur existante — aucun changement de signature SQL nécessaire.
   const { data, error } = await supabase.rpc('upsert_club_config', {
     p_club_id: clubId,
     p_slots: c.slots ?? null,
     p_courts: c.courts ?? null,
     p_offers: c.offers ?? null,
-    p_coaches: c.coaches ?? null,
     p_photos: c.photos ?? null,
     p_cover_url: c.coverUrl ?? null,
     p_court_photos: c.courtPhotos ?? null,

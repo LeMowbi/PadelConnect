@@ -168,12 +168,11 @@ export default function ClubDetail() {
   // Tournois publics du club (les tournois joueur « en attente » de validation n’apparaissent pas).
   const clubComps = [...state.myCompetitions, ...seedCompetitions].filter((c) => c.clubId === club.id && isTournamentPublic(c));
   const courtCount = (state.clubCourts[club.id] ?? defaultCourts(club)).length;
-  const clubCoaches = [
-    ...coaches
-      .filter((c) => c.clubId === club.id && !state.hiddenCoachIds.includes(c.id))
-      .map((c) => ({ id: c.id, name: c.name, sub: c.level, phone: c.phone })),
-    ...(state.clubCoaches[club.id] ?? []).map((c) => ({ id: c.id, name: c.name, sub: c.specialty, phone: c.phone })),
-  ];
+  // Coachs de l'annuaire (fiches réelles gérées par le porteur) — les coachs déclarés par les
+  // clubs ont TOUS un compte (Espace Coach) et arrivent via serverCoaches, réservables dans l'app.
+  const clubCoaches = coaches
+    .filter((c) => c.clubId === club.id && !state.hiddenCoachIds.includes(c.id))
+    .map((c) => ({ id: c.id, name: c.name, sub: c.level, phone: c.phone }));
   // Source de vérité : les avis VÉRIFIÉS du serveur (un joueur ne peut noter qu’après avoir joué),
   // MOINS ceux des comptes que j’ai bloqués (modération UGC — ils n’apparaissent plus chez moi).
   const reviews = serverReviews.filter((r) => !blockedIds.includes(r.userId));

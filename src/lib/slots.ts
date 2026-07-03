@@ -3,8 +3,31 @@
 // en sessions de 1h30 (SESSION_MIN), sans chevauchement. Un créneau n’est gardé que s’il TIENT
 // ENTIÈREMENT avant la fermeture (début + durée ≤ fermeture). Fonctions PURES et testables
 // (aucun accès réseau/état) — chaque club a ainsi ses propres horaires, différents des autres.
+//
+// STOCKAGE (club_config.slots) : la grille COMPLÈTE du club, un créneau fermé étant préfixé
+// « ! » (ex. '!12:30' = pause déjeuner). Les heures d’ouverture/fermeture se déduisent ainsi
+// de la grille stockée — rien à mémoriser côté écran, rien ne se « réinitialise » — et un
+// créneau fermé reste rouvrable. Côté serveur, '!12:30' ne matche jamais un vrai horaire
+// ('12:30'), donc les gardes `= any(slots)` refusent d’office les créneaux fermés.
 
 export const SESSION_MIN = 90; // durée d’une session (1h30), comme partout dans l’app
+
+const CLOSED_PREFIX = '!';
+
+// Un créneau stocké est-il marqué fermé ?
+export function isClosedSlot(entry: string): boolean {
+  return entry.startsWith(CLOSED_PREFIX);
+}
+
+// 'HH:MM' d’un créneau stocké, marque « fermé » retirée le cas échéant.
+export function slotTime(entry: string): string {
+  return isClosedSlot(entry) ? entry.slice(CLOSED_PREFIX.length) : entry;
+}
+
+// Marque un horaire comme fermé (pour le stockage).
+export function closedSlot(time: string): string {
+  return CLOSED_PREFIX + time;
+}
 
 // Bornes par défaut quand un club n’a pas encore d’horaires personnalisés (pré-remplissage).
 export const DEFAULT_OPEN = '08:00';
