@@ -92,7 +92,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `51` (voir dossier `supabase/`).
+  **SQL Editor → Run**. Migrations actuelles : `02` → `52` (voir dossier `supabase/`).
 - **Edge Function** `supabase/functions/notify-club/index.ts` (Deno) : envoie les push via
   l'API Expo. Déclenchée par des **Database Webhooks** (INSERT + UPDATE). Redéploiement **sans
   terminal** : Dashboard → Edge Functions → notify-club → Edit → coller le code → Deploy.
@@ -121,7 +121,12 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   l'ouverture de l'espace opérateur).
 - **Commission** : l'opérateur la règle **librement** (0–100 %) ; il prévient le club lui-même.
 - **Tournois** : réels, cross-device (serveur, 26) ; blocage terrains/créneaux (27) ; approbation
-  club ; frais opérateur encaissés **après validation** du club (paiement Wave, notifié).
+  club ; frais opérateur encaissés **après validation** du club (paiement Wave, notifié). Le club
+  voit TOUTES les infos (dates, terrains, créneaux, frais, contact WhatsApp de l'organisateur)
+  AVANT de décider ; un refus porte un **motif** (52, `reject_reason`) montré à l'organisateur
+  (fiche + push), qui peut alors **supprimer** son tournoi refusé et le recréer. Les frais
+  opérateur sont annoncés à l'organisateur dans un encadré AVANT la création (dus seulement si
+  le club valide, rien s'il refuse).
 - **Clubs fondateurs** : les **9 clubs seed** portent `partner: true` → badge **« Partenaire »**
   (carte + fiche). Les clubs inscrits ensuite ne l'ont pas.
 - **Coachs** : annuaire de coachs partenaires (`src/data/coaches.ts` : type `Coach`, `getCoach`,

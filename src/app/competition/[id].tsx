@@ -232,12 +232,40 @@ export default function CompetitionDetail() {
           ) : null}
         </>
       ) : comp.status === 'rejected' ? (
-        <View style={styles.pendingBanner}>
-          <Ionicons name="close-circle-outline" size={16} color={colors.danger} />
-          <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
-            Ce tournoi n’a pas été retenu par {comp.clubName ?? 'le club hôte'}.
-          </Txt>
-        </View>
+        <>
+          <View style={styles.pendingBanner}>
+            <Ionicons name="close-circle-outline" size={16} color={colors.danger} />
+            <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
+              Ce tournoi n’a pas été retenu par {comp.clubName ?? 'le club hôte'}.
+              {comp.rejectReason ? ` Motif : « ${comp.rejectReason} »` : ''}
+            </Txt>
+          </View>
+          {/* L’organisateur supprime son tournoi refusé (et peut le recréer en tenant compte du
+              motif — ex. d’autres dates/créneaux proposés par le club). */}
+          {comp.createdByMe ? (
+            <View style={{ marginTop: spacing.sm, gap: spacing.sm }}>
+              {comp.rejectReason ? (
+                <Button
+                  label="Recréer en tenant compte du motif"
+                  icon="refresh"
+                  variant="secondary"
+                  onPress={() => router.push(comp.clubId ? `/competition/nouvelle?clubId=${comp.clubId}` : '/competition/nouvelle')}
+                  full
+                />
+              ) : null}
+              <Button
+                label="Supprimer ce tournoi"
+                icon="trash-outline"
+                variant="danger"
+                onPress={() => {
+                  void deleteCompetition(comp.id);
+                  router.back();
+                }}
+                full
+              />
+            </View>
+          ) : null}
+        </>
       ) : null}
 
       {/* Frais PadelConnect (Wave) — visible par l’ORGANISATEUR d’un tournoi joueur, pour qu’il

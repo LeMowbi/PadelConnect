@@ -318,7 +318,7 @@ type AppContextType = {
   setReserverView: (v: 'Par heure' | 'Par club') => void;
   addCompetition: (c: Omit<Competition, 'id' | 'createdByMe'>) => Promise<{ ok: boolean }>;
   approveCompetition: (id: string) => Promise<boolean>; // le club hôte valide un tournoi joueur (false = échec serveur)
-  rejectCompetition: (id: string) => Promise<boolean>; // le club hôte refuse un tournoi joueur (false = échec serveur)
+  rejectCompetition: (id: string, reason?: string) => Promise<boolean>; // le club hôte refuse (motif optionnel montré à l’organisateur)
   deleteCompetition: (id: string) => Promise<void>; // annulation / suppression (créateur ou club hôte)
   registerCompetition: (id: string, partner: string) => Promise<boolean>; // false = échec serveur
   unregisterCompetition: (id: string) => Promise<boolean>; // false = échec serveur
@@ -1196,14 +1196,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return true;
       },
       // Le club hôte refuse un tournoi joueur « en attente » → « refusé » (jamais publié).
-      rejectCompetition: async (id) => {
+      // Le motif (optionnel) est stocké côté serveur et montré à l’organisateur (fiche + push).
+      rejectCompetition: async (id, reason = '') => {
         const serverComp = state.myCompetitions.find((c) => c.id === id && c.server);
         if (serverComp) {
-          const ok = await rejectCompetitionRpc(id);
+          const ok = await rejectCompetitionRpc(id, reason);
           if (ok && state.serverUserId) await refreshCompetitions(state.serverUserId);
           return ok;
         }
-        setState((s) => ({ ...s, myCompetitions: s.myCompetitions.map((c) => (c.id === id ? { ...c, status: 'rejected' } : c)) }));
+        setState((s) => ({
+          ...s,
+          myCompetitions: s.myCompetitions.map((c) =>
+            c.id === id ? { ...c, status: 'rejected', rejectReason: reason.trim() || undefined } : c,
+          ),
+        }));
         return true;
       },
       deleteCompetition: async (id) => {

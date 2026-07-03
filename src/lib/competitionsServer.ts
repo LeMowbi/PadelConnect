@@ -34,6 +34,7 @@ type CompetitionRow = {
   loser: string | null;
   registered: number;
   teams: string[] | null;
+  reject_reason: string | null;
 };
 
 // Résultat de clôture figé côté serveur (rejoué dans le store sous compResults).
@@ -70,6 +71,7 @@ function rowToCompetition(r: CompetitionRow, myUserId: string): Competition {
     teamNames: r.teams ?? undefined,
     commission: r.commission,
     status,
+    rejectReason: r.reject_reason ?? undefined,
   };
 }
 
@@ -152,8 +154,10 @@ export async function approveCompetition(id: string): Promise<boolean> {
   return !error && data === true;
 }
 
-export async function rejectCompetition(id: string): Promise<boolean> {
-  const { data, error } = await supabase.rpc('reject_competition', { p_id: id });
+// Refus par le club hôte, avec un MOTIF optionnel (52) montré à l'organisateur pour qu'il
+// sache quoi changer (ex. « ces créneaux sont pris — possible du 12 au 14 après 18h »).
+export async function rejectCompetition(id: string, reason = ''): Promise<boolean> {
+  const { data, error } = await supabase.rpc('reject_competition', { p_id: id, p_reason: reason.trim() || null });
   return !error && data === true;
 }
 

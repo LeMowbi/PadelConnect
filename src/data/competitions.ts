@@ -38,6 +38,8 @@ export type Competition = {
   // Modération : un tournoi créé par un JOUEUR reste « pending » jusqu’à validation du
   // club hôte (« rejected » s’il est refusé). Club / seeds → visibles directement.
   status?: 'pending' | 'approved' | 'rejected';
+  // Motif de refus laissé par le club (52) — l’organisateur sait quoi changer avant de recréer.
+  rejectReason?: string;
 };
 
 // Tournoi visible publiquement (listes, accueil, fiche club) : ni « en attente », ni « refusé ».

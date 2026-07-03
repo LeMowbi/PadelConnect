@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
@@ -318,11 +319,19 @@ export default function NouvelleCompetition() {
         </>
       ) : null}
 
-      {/* Frais fixe PadelConnect (tournois joueurs) — transparence à l’organisateur. */}
+      {/* Frais fixe PadelConnect (tournois joueurs) — annoncés AVANT de valider la création,
+          bien en évidence (encadré), avec le bon circuit : Wave, après validation du club. */}
       {isPlayerTournament && state.tournamentFee > 0 ? (
-        <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
-          Frais d’organisation PadelConnect : {fcfa(state.tournamentFee)} (réglés au club, reversés à PadelConnect).
-        </Txt>
+        <View style={styles.feeBox}>
+          <Ionicons name="cash-outline" size={16} color={colors.amberDark} />
+          <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
+            Frais d’organisation PadelConnect :{' '}
+            <Txt variant="small" style={{ fontWeight: '700' }}>
+              {fcfa(state.tournamentFee)}
+            </Txt>{' '}
+            — dus UNIQUEMENT si le club valide ton tournoi, réglés à PadelConnect par Wave (on te contacte). Rien à payer s’il est refusé.
+          </Txt>
+        </View>
       ) : null}
 
       <View style={{ marginTop: spacing.xl }}>
@@ -340,6 +349,15 @@ export default function NouvelleCompetition() {
 
 const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  feeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.amberSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginTop: spacing.lg,
+  },
   input: {
     backgroundColor: colors.surface,
     borderWidth: 1,

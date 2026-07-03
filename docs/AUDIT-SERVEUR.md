@@ -11,10 +11,15 @@ Dernier audit avant la sortie stores. Côté serveur :
 2. Coller **`supabase/50_club_maps_query.sql`** (position Google Maps éditable — voir ci-dessous).
 3. Coller **`supabase/51_moderation.sql`** : signaler un avis / bloquer un joueur (exigé par les
    stores) + **confidentialité des matchs ouverts** (on ne stocke plus le numéro du créateur).
-4. **Edge Functions → notify-club → Edit** → recoller **tout** `supabase/functions/notify-club/index.ts`
-   → **Deploy** (la notif « Match validé » suit désormais exactement la règle du serveur).
+4. Coller **`supabase/52_tournoi_refus_commente.sql`** : quand tu (ou un club) refuses un tournoi
+   joueur, un **motif** peut être joint (« ces créneaux sont pris — possible du 12 au 14 après
+   18h ») — l'organisateur le voit sur sa fiche et dans la notification, puis peut supprimer son
+   tournoi refusé et le recréer.
+5. **Edge Functions → notify-club → Edit** → recoller **tout** `supabase/functions/notify-club/index.ts`
+   → **Deploy** (la notif « Match validé » suit désormais exactement la règle du serveur, et la
+   notif de refus de tournoi porte le motif).
 
-Aucun nouveau webhook. Ordre conseillé : 49 → 50 → 51, puis notify-club.
+Aucun nouveau webhook. Ordre conseillé : 49 → 50 → 51 → 52, puis notify-club.
 
 ---
 

@@ -1,31 +1,54 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 import { useToast } from '@/components/Toast';
 import { Button, Card, EmptyState, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
 import { type Club } from '@/data/clubs';
-import { isTournamentPublic, teamCount, type Competition } from '@/data/competitions';
+import { compDateLabel, formatFee, isTournamentPublic, teamCount, type Competition } from '@/data/competitions';
+import { openWhatsApp } from '@/lib/contact';
 import { dayKey } from '@/lib/days';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
-import { colors, spacing } from '@/theme';
+import { colors, radius, spacing } from '@/theme';
+
+// Ligne d'information compacte d'une demande de tournoi (icône + libellé + valeur).
+function ReqInfo({ icon, label, value }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; value: string }) {
+  return (
+    <View style={styles.reqInfoRow}>
+      <Ionicons name={icon} size={14} color={colors.textFaint} />
+      <Txt variant="small" color={colors.textFaint}>
+        {label}
+      </Txt>
+      <Txt variant="small" style={{ flex: 1, textAlign: 'right', fontWeight: '600' }} numberOfLines={2}>
+        {value}
+      </Txt>
+    </View>
+  );
+}
 
 export function SectionTournois({ club, comps, onCloseComp }: { club: Club; comps: Competition[]; onCloseComp: (id: string) => void }) {
   const router = useRouter();
   const { state, approveCompetition, rejectCompetition } = useApp();
   const toast = useToast();
   const [busyId, setBusyId] = useState<string | null>(null); // demande en cours de traitement (anti double-tap)
+  // Refus COMMENTÉ : « Refuser » ouvre d'abord un champ motif (ex. « ces créneaux sont pris —
+  // possible du 12 au 14 après 18h ») pour que l'organisateur sache quoi changer.
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   // Valider/refuser une demande : on ATTEND le serveur et on confirme (ou signale l’échec) —
   // avant, un échec réseau était totalement silencieux et le gérant croyait avoir publié.
-  const decide = async (id: string, approve: boolean) => {
+  const decide = async (id: string, approve: boolean, reason = '') => {
     if (busyId) return;
     setBusyId(id);
-    const ok = approve ? await approveCompetition(id) : await rejectCompetition(id);
+    const ok = approve ? await approveCompetition(id) : await rejectCompetition(id, reason);
     setBusyId(null);
     if (ok) {
       hapticSuccess();
-      toast.show(approve ? 'Tournoi validé — il est maintenant visible ✓' : 'Demande refusée.');
+      toast.show(approve ? 'Tournoi validé — il est maintenant visible ✓' : 'Demande refusée — l’organisateur est prévenu.');
+      setRejectingId(null);
+      setRejectReason('');
     } else {
       hapticWarning();
       // Deux causes possibles côté serveur : réseau, ou des réservations occupent déjà la plage (37).
@@ -61,31 +84,112 @@ export function SectionTournois({ club, comps, onCloseComp }: { club: Club; comp
                   <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
                     {c.title}
                   </Txt>
-                  <Txt variant="muted">
-                    par {c.organizer} · {c.date} · {c.slots} équipes
-                  </Txt>
+                  <Txt variant="muted">par {c.organizer}</Txt>
                 </View>
               </View>
-              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
-                <Button
-                  size="sm"
-                  label="Refuser"
-                  icon="close"
-                  variant="danger"
-                  disabled={busyId === c.id}
-                  onPress={() => decide(c.id, false)}
+
+              {/* TOUTES les infos AVANT de décider : dates, terrains, créneaux bloqués, format,
+                  frais d'inscription… — le gérant sait exactement ce qu'il accepte. */}
+              <View style={{ marginTop: spacing.md, gap: spacing.xs }}>
+                <ReqInfo icon="calendar-outline" label="Dates" value={compDateLabel(c)} />
+                <ReqInfo
+                  icon="tennisball-outline"
+                  label="Terrains bloqués"
+                  value={c.courtNames?.length ? c.courtNames.join(', ') : 'Tout le club'}
                 />
-                <View style={{ flex: 1 }}>
+                <ReqInfo
+                  icon="time-outline"
+                  label="Créneaux bloqués"
+                  value={c.timeSlots?.length ? c.timeSlots.join(' · ') : 'Toute la journée'}
+                />
+                <ReqInfo icon="people-outline" label="Capacité" value={`${c.slots} équipes`} />
+                <ReqInfo icon="git-network-outline" label="Format" value={c.format} />
+                <ReqInfo icon="podium-outline" label="Niveau" value={c.level} />
+                <ReqInfo icon="cash-outline" label="Inscription" value={formatFee(c.fee)} />
+                {c.reward.trim() ? <ReqInfo icon="gift-outline" label="Récompense" value={formatFee(c.reward)} /> : null}
+              </View>
+
+              {/* Contacter l'organisateur AVANT de valider (négocier une autre date, préciser…). */}
+              {c.organizerPhone ? (
+                <View style={{ marginTop: spacing.md }}>
                   <Button
                     size="sm"
-                    label={busyId === c.id ? 'Publication…' : 'Valider & publier'}
-                    icon="checkmark"
-                    disabled={busyId === c.id}
-                    onPress={() => decide(c.id, true)}
+                    label={`Contacter ${c.organizer}`}
+                    icon="logo-whatsapp"
+                    variant="secondary"
+                    onPress={() =>
+                      openWhatsApp(
+                        c.organizerPhone ?? '',
+                        `Bonjour, c’est ${club.name} (PadelConnect) au sujet de ta demande de tournoi « ${c.title} ».`,
+                      )
+                    }
                     full
                   />
                 </View>
-              </View>
+              ) : null}
+
+              {rejectingId === c.id ? (
+                <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
+                  <TextInput
+                    value={rejectReason}
+                    onChangeText={setRejectReason}
+                    placeholder="Motif (ex. ces créneaux sont pris — possible du 12 au 14 après 18h)"
+                    placeholderTextColor={colors.textMuted}
+                    multiline
+                    style={styles.reasonInput}
+                    accessibilityLabel="Motif du refus, montré à l’organisateur"
+                  />
+                  <Txt variant="small" color={colors.textFaint}>
+                    Le motif est montré à l’organisateur : dis-lui quand c’est possible, il pourra recréer son tournoi.
+                  </Txt>
+                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                    <Button
+                      size="sm"
+                      label="Annuler"
+                      variant="ghost"
+                      onPress={() => {
+                        setRejectingId(null);
+                        setRejectReason('');
+                      }}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Button
+                        size="sm"
+                        label={busyId === c.id ? 'Refus…' : 'Confirmer le refus'}
+                        icon="close"
+                        variant="danger"
+                        disabled={busyId === c.id}
+                        onPress={() => decide(c.id, false, rejectReason)}
+                        full
+                      />
+                    </View>
+                  </View>
+                </View>
+              ) : (
+                <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+                  <Button
+                    size="sm"
+                    label="Refuser"
+                    icon="close"
+                    variant="danger"
+                    disabled={busyId === c.id}
+                    onPress={() => {
+                      setRejectingId(c.id);
+                      setRejectReason('');
+                    }}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      size="sm"
+                      label={busyId === c.id ? 'Publication…' : 'Valider & publier'}
+                      icon="checkmark"
+                      disabled={busyId === c.id}
+                      onPress={() => decide(c.id, true)}
+                      full
+                    />
+                  </View>
+                </View>
+              )}
             </Card>
           ))}
         </View>
@@ -154,3 +258,19 @@ export function SectionTournois({ club, comps, onCloseComp }: { club: Club; comp
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  reqInfoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  reasonInput: {
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    color: colors.text,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: 14,
+    minHeight: 64,
+    textAlignVertical: 'top',
+  },
+});
