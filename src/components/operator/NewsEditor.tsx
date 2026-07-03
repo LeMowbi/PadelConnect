@@ -1,37 +1,41 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, Switch, TextInput, View } from 'react-native';
 import { Button, Card, Txt } from '@/components/ui';
 import { useToast } from '@/components/Toast';
 import { opStyles } from '@/components/operator/styles';
 import { colors, radius, spacing } from '@/theme';
 
-// Petit éditeur d’actu d’accueil : titre (obligatoire), sous-titre + lien (optionnels).
+// Petit éditeur d’actu d’accueil : titre (obligatoire), sous-titre + lien (optionnels),
+// et case « Envoyer aussi en notification » (47) — décochée par défaut, et re-décochée après
+// chaque publication : le push aux joueurs est un choix EXPLICITE, actu par actu.
 export function NewsEditor({
   news,
   onPublish,
   onRemove,
 }: {
   news: { title: string; subtitle?: string; link?: string } | null;
-  onPublish: (n: { title: string; subtitle?: string; link?: string }) => Promise<{ ok: boolean }>;
+  onPublish: (n: { title: string; subtitle?: string; link?: string; push?: boolean }) => Promise<{ ok: boolean }>;
   onRemove: () => void;
 }) {
   const toast = useToast();
   const [title, setTitle] = useState(news?.title ?? '');
   const [subtitle, setSubtitle] = useState(news?.subtitle ?? '');
   const [link, setLink] = useState(news?.link ?? '');
+  const [sendPush, setSendPush] = useState(false);
   const [saved, setSaved] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
   const publish = async () => {
     if (title.trim().length < 3 || publishing) return;
     setPublishing(true);
-    const { ok } = await onPublish({ title, subtitle, link });
+    const { ok } = await onPublish({ title, subtitle, link, push: sendPush });
     setPublishing(false);
     if (!ok) {
       toast.show('Publication impossible — réessaie', { icon: 'alert-circle' });
       return;
     }
+    if (sendPush) setSendPush(false); // choix par actu — jamais mémorisé
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -95,10 +99,28 @@ export function NewsEditor({
           </View>
         </View>
       ) : null}
+      {/* Push OPTIONNEL (47) : l'actu s'affiche toujours en bandeau ; la notification aux
+          joueurs, elle, ne part que si cette case est cochée AU moment de publier. */}
+      <View style={styles.pushRow}>
+        <View style={{ flex: 1 }}>
+          <Txt variant="body" style={{ fontWeight: '600' }}>
+            Envoyer aussi en notification
+          </Txt>
+          <Txt variant="small" color={colors.textMuted}>
+            Tous les joueurs reçoivent l’actu en push — à réserver aux annonces importantes.
+          </Txt>
+        </View>
+        <Switch
+          value={sendPush}
+          onValueChange={setSendPush}
+          trackColor={{ true: colors.signature, false: colors.border }}
+          thumbColor={colors.white}
+        />
+      </View>
       <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
         <Button
           size="sm"
-          label={publishing ? 'Publication…' : saved ? 'Publiée ✓' : 'Publier l’actu'}
+          label={publishing ? 'Publication…' : saved ? 'Publiée ✓' : sendPush ? 'Publier + notifier' : 'Publier l’actu'}
           icon={saved ? 'checkmark' : 'megaphone'}
           onPress={publish}
           disabled={title.trim().length < 3 || publishing}
@@ -125,6 +147,15 @@ export function NewsEditor({
 }
 
 const styles = StyleSheet.create({
+  pushRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.md,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
   // Réplique fidèle du bandeau d’accueil (index.tsx, styles.newsBanner/newsClose).
   preview: {
     flexDirection: 'row',

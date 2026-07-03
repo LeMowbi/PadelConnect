@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Reveal, staggerDelay } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
@@ -13,16 +13,7 @@ import { isPlayed, useApp, type Reservation } from '@/store/AppContext';
 import { addReservationToCalendar } from '@/lib/calendar';
 import { openWhatsApp } from '@/lib/contact';
 import { hapticSuccess } from '@/lib/haptics';
-import {
-  confirmMatchResult,
-  fetchMatchPlayers,
-  fetchMyMatchResults,
-  fetchResultsToConfirm,
-  submitMatchResult,
-  type MatchPlayer,
-  type MatchResult,
-  type ResultToConfirm,
-} from '@/lib/matchResults';
+import { fetchMyMatchScores, submitMatchScore, type MatchScore, type MatchSet } from '@/lib/matchResults';
 import { dateKeyLabel, dayKey } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
 import { APP_DOMAIN } from '@/lib/referrals';
@@ -34,6 +25,33 @@ const FIVE_H = 5 * 3600000;
 const PAST_PREVIEW = 5; // passées : 5 dernières + « Voir tout »
 const MONTHS = ['JANV.', 'FÉVR.', 'MARS', 'AVR.', 'MAI', 'JUIN', 'JUIL.', 'AOÛT', 'SEPT.', 'OCT.', 'NOV.', 'DÉC.'];
 
+// Brouillon de saisie du score : 3 sets max, champs texte vides (jamais muté — les mises à
+// jour recréent le tableau).
+const EMPTY_SETS: { me: string; them: string }[] = [
+  { me: '', them: '' },
+  { me: '', them: '' },
+  { me: '', them: '' },
+];
+
+// Transforme le brouillon en sets valides, ou explique ce qui manque (helper pur).
+function parseSetDrafts(drafts: { me: string; them: string }[]): { sets: MatchSet[]; error: string | null; iWin: boolean } {
+  const sets: MatchSet[] = [];
+  for (let i = 0; i < drafts.length; i++) {
+    const { me, them } = drafts[i];
+    if (me === '' && them === '') continue; // set non joué
+    if (me === '' || them === '') return { sets: [], error: `Complète les deux scores du set ${i + 1}.`, iWin: false };
+    const m = Number(me);
+    const t = Number(them);
+    if (m > 30 || t > 30) return { sets: [], error: `Score de set trop grand (set ${i + 1}).`, iWin: false };
+    if (m === t) return { sets: [], error: `Un set ne peut pas finir à égalité (set ${i + 1}).`, iWin: false };
+    sets.push({ me: m, them: t });
+  }
+  if (sets.length === 0) return { sets: [], error: 'Saisis au moins un set (ex. 6 – 3).', iWin: false };
+  const mine = sets.filter((s) => s.me > s.them).length;
+  if (mine * 2 === sets.length) return { sets: [], error: 'Match nul impossible — ajoute le set décisif.', iWin: false };
+  return { sets, error: null, iWin: mine * 2 > sets.length };
+}
+
 export default function ReservationsScreen() {
   const router = useRouter();
   const { state, myReservations, cancelReservation, respondInvitation, cancelMyLesson, refreshLessons } = useApp();
@@ -44,29 +62,24 @@ export default function ReservationsScreen() {
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null); // confirmation avant annulation
   const [cancellingLesson, setCancellingLesson] = useState<string | null>(null); // garde anti double-tap
 
-  // SCORE DE MATCH (46, modèle Playtomic) : un joueur saisit qui a gagné, un AUTRE joueur du
-  // match confirme (ou conteste) — la victoire confirmée vaut +3 pts au classement.
-  const [results, setResults] = useState<Record<string, MatchResult>>({}); // par id de réservation
-  const [toConfirm, setToConfirm] = useState<ResultToConfirm[]>([]); // saisis par un autre, à confirmer
-  const [scoreTarget, setScoreTarget] = useState<Reservation | null>(null); // fiche « Qui a gagné ? »
-  // undefined = chargement ; null = échec réseau (convention §8).
-  const [scorePlayers, setScorePlayers] = useState<MatchPlayer[] | null | undefined>(undefined);
-  const [scoreWinners, setScoreWinners] = useState<string[]>([]);
+  // SCORE DE MATCH (46) : chaque joueur saisit les sets de SON point de vue, l'app désigne
+  // le vainqueur automatiquement dès que deux saisies concordent (+3 pts au classement).
+  const [scores, setScores] = useState<Record<string, MatchScore>>({}); // par id de réservation
+  const [scoreTarget, setScoreTarget] = useState<Reservation | null>(null); // fiche « Le score du match »
+  // 3 sets max, chaque champ saisi en texte (clavier numérique) — '' = set non joué.
+  const [setDrafts, setSetDrafts] = useState<{ me: string; them: string }[]>(EMPTY_SETS);
   const [scoreSending, setScoreSending] = useState(false); // garde anti double-tap
-  const [respondingResult, setRespondingResult] = useState<string | null>(null); // idem (confirmation)
 
-  const loadResults = async () => {
-    const [mine2, pending] = await Promise.all([fetchMyMatchResults(), fetchResultsToConfirm()]);
-    if (mine2) setResults(Object.fromEntries(mine2.map((m) => [m.reservationId, m])));
-    if (pending) setToConfirm(pending);
+  const loadScores = async () => {
+    const list = await fetchMyMatchScores();
+    if (list) setScores(Object.fromEntries(list.map((m) => [m.reservationId, m])));
   };
   useEffect(() => {
     if (!state.serverUserId) return;
     let alive = true;
-    void Promise.all([fetchMyMatchResults(), fetchResultsToConfirm()]).then(([mine2, pending]) => {
-      if (!alive) return;
-      if (mine2) setResults(Object.fromEntries(mine2.map((m) => [m.reservationId, m])));
-      if (pending) setToConfirm(pending);
+    void fetchMyMatchScores().then((list) => {
+      if (!alive || !list) return;
+      setScores(Object.fromEntries(list.map((m) => [m.reservationId, m])));
     });
     return () => {
       alive = false;
@@ -75,7 +88,7 @@ export default function ReservationsScreen() {
 
   // Tirer pour rafraîchir : resynchronise mes réservations, mes cours ET les scores de match.
   const { refreshControl } = usePullToRefresh(async () => {
-    await Promise.all([refreshLessons(), loadResults()]);
+    await Promise.all([refreshLessons(), loadScores()]);
   });
 
   const now = Date.now();
@@ -168,43 +181,41 @@ export default function ReservationsScreen() {
     );
   };
 
-  // Ouvre la fiche « Qui a gagné ? » et charge les joueurs identifiés du match (comptes réels).
+  // Ouvre la fiche « Le score du match » (saisie vierge à chaque ouverture).
   const openScore = (r: Reservation) => {
     setScoreTarget(r);
-    setScorePlayers(undefined);
-    setScoreWinners([]);
-    void fetchMatchPlayers(r.id).then((ps) => setScorePlayers(ps));
+    setSetDrafts(EMPTY_SETS);
   };
 
+  const parsed = parseSetDrafts(setDrafts);
   const sendScore = async () => {
-    if (!scoreTarget || scoreWinners.length === 0 || scoreSending) return;
+    if (!scoreTarget || parsed.error || scoreSending) return;
     setScoreSending(true);
-    const res = await submitMatchResult(scoreTarget.id, scoreWinners);
+    const res = await submitMatchScore(scoreTarget.id, parsed.sets);
     setScoreSending(false);
     setScoreTarget(null);
-    if (res === 'ok') {
+    if (res === 'validated') {
       hapticSuccess();
-      toast.show('Score enregistré — un joueur du match doit le confirmer ✓');
-      void loadResults();
-    } else if (res === 'exists') toast.show('Le score de ce match est déjà enregistré.');
-    else if (res === 'no_players')
-      toast.show('Ajoute un partenaire (compte PadelConnect) à la réservation pour compter la victoire.', { icon: 'alert-circle' });
-    else toast.show('Enregistrement impossible — réessaie', { icon: 'alert-circle' });
+      toast.show('Score validé ✓ — le match compte au classement');
+    } else if (res === 'waiting') {
+      toast.show('Score enregistré — dès qu’un autre joueur saisit le même score, le match est validé ✓');
+    } else if (res === 'conflict') {
+      toast.show('Ton score ne correspond pas à celui déjà saisi — vérifiez ensemble.', { icon: 'alert-circle' });
+    } else if (res === 'no_players') {
+      toast.show('Ajoute un partenaire (compte PadelConnect) à la réservation pour compter le score.', { icon: 'alert-circle' });
+      return;
+    } else {
+      toast.show('Enregistrement impossible — réessaie', { icon: 'alert-circle' });
+      return;
+    }
+    void loadScores();
   };
 
-  // Confirmer (ou contester) le score saisi par un autre joueur du match.
-  const respondResult = async (item: ResultToConfirm, agree: boolean) => {
-    if (respondingResult) return;
-    setRespondingResult(item.resultId);
-    const ok = await confirmMatchResult(item.resultId, agree);
-    setRespondingResult(null);
-    if (ok) {
-      if (agree) hapticSuccess();
-      setToConfirm((cur) => cur.filter((c) => c.resultId !== item.resultId));
-      toast.show(agree ? 'Score confirmé ✓' : 'Score contesté — il ne comptera pas.');
-      void loadResults();
-    } else toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
-  };
+  // Matchs récents où un AUTRE joueur a saisi son score et pas moi → invitation à saisir.
+  const scorePrompts = past.filter((r) => {
+    const s = scores[r.id];
+    return !!s && !s.mine && !s.validated && r.startsAt > now - 14 * 86400000;
+  });
 
   return (
     <Screen
@@ -247,52 +258,39 @@ export default function ReservationsScreen() {
         </View>
       ) : null}
 
-      {/* Scores à confirmer — un joueur du match a saisi le résultat, à moi de valider. */}
-      {toConfirm.length > 0 ? (
+      {/* Scores à saisir — un autre joueur du match a mis son score, il manque le mien
+          (dès que deux saisies concordent, l'app valide le match automatiquement). */}
+      {scorePrompts.length > 0 ? (
         <View style={{ marginTop: spacing.sm }}>
-          <SectionHeader title={`Scores à confirmer · ${toConfirm.length}`} />
-          {toConfirm.map((item) => (
-            <Card key={item.resultId} style={{ marginBottom: spacing.sm }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                <View style={{ flex: 1 }}>
-                  <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
-                    {item.clubName}
-                  </Txt>
-                  <Txt variant="muted">
-                    {item.dateLabel} · {item.time}
-                  </Txt>
+          <SectionHeader title={`Scores à saisir · ${scorePrompts.length}`} />
+          {scorePrompts.map((r) => {
+            const s = scores[r.id];
+            return (
+              <Card key={r.id} style={{ marginBottom: spacing.sm }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <View style={{ flex: 1 }}>
+                    <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
+                      {r.clubName}
+                    </Txt>
+                    <Txt variant="muted">
+                      {dateKeyLabel(r.dateKey)} · {r.time} · {r.court}
+                    </Txt>
+                  </View>
+                  <Tag label="Score" tone="amber" icon="trophy-outline" />
                 </View>
-                <Tag label="Score" tone="amber" icon="trophy-outline" />
-              </View>
-              <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
-                {item.submittedName} a noté la victoire de {item.winnerNames} — c’est bien ça ?
-              </Txt>
-              <Divider style={{ marginVertical: spacing.md }} />
-              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                <View style={{ flex: 1 }}>
-                  <Button
-                    size="sm"
-                    label="C’est exact"
-                    icon="checkmark"
-                    onPress={() => void respondResult(item, true)}
-                    disabled={respondingResult !== null}
-                    full
-                  />
-                </View>
-                <Button
-                  size="sm"
-                  label="Contester"
-                  icon="close"
-                  variant="ghost"
-                  onPress={() => void respondResult(item, false)}
-                  disabled={respondingResult !== null}
-                />
-              </View>
-              <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-                Sans réponse sous 48 h, le score est validé automatiquement.
-              </Txt>
-            </Card>
-          ))}
+                <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
+                  {s.conflict
+                    ? 'Les scores déjà saisis ne correspondent pas — mets le tien pour départager.'
+                    : `${s.enteredNames || 'Un joueur'} a mis ${s.score} — saisis ton score pour valider le match.`}
+                </Txt>
+                <Divider style={{ marginVertical: spacing.md }} />
+                <Button size="sm" label="Mettre mon score" icon="trophy-outline" onPress={() => openScore(r)} full />
+                <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                  Sans autre saisie sous 48 h, le score déjà mis est validé automatiquement.
+                </Txt>
+              </Card>
+            );
+          })}
         </View>
       ) : null}
 
@@ -606,14 +604,15 @@ export default function ReservationsScreen() {
                       </Txt>
                       <Txt variant="muted">
                         {dateKeyLabel(r.dateKey)} · {r.time} · {r.court}
+                        {scores[r.id]?.score ? ` · ${scores[r.id].score}` : ''}
                       </Txt>
                     </View>
                     {(() => {
-                      // Badge résultat (46) : Victoire (confirmée), en attente, contestée — sinon « Jouée ».
-                      const res = results[r.id];
-                      if (res?.status === 'confirmed' && res.iWon) return <Tag label="Victoire" tone="amber" icon="trophy" />;
-                      if (res?.status === 'pending') return <Tag label="Score en attente" tone="purple" icon="hourglass-outline" />;
-                      if (res?.status === 'disputed') return <Tag label="Score contesté" tone="coral" />;
+                      // Badge résultat (46) : Victoire (score validé) / en attente / discordant — sinon « Jouée ».
+                      const s = scores[r.id];
+                      if (s?.validated && s.mine && s.iWon) return <Tag label="Victoire" tone="amber" icon="trophy" />;
+                      if (s?.conflict) return <Tag label="Scores différents" tone="coral" />;
+                      if (s && !s.validated) return <Tag label="Score en attente" tone="purple" icon="hourglass-outline" />;
                       return <Tag label="Jouée" tone="blue" />;
                     })()}
                   </View>
@@ -630,13 +629,13 @@ export default function ReservationsScreen() {
                         Rejouer ici
                       </Txt>
                     </Pressable>
-                    {/* Saisie du score (46) : matchs récents (≤ 14 jours, fenêtre serveur) sans
-                        résultat — ou au résultat contesté (ressaisie possible). */}
-                    {state.serverUserId && (!results[r.id] || results[r.id].status === 'disputed') && r.startsAt > now - 14 * 86400000 ? (
+                    {/* Saisie du score (46) : matchs récents (≤ 14 jours, fenêtre serveur) —
+                        je peux saisir mon score, ou le corriger tant que rien n'est validé. */}
+                    {state.serverUserId && r.startsAt > now - 14 * 86400000 && (!scores[r.id]?.mine || !scores[r.id].validated) ? (
                       <Pressable onPress={() => openScore(r)} style={styles.replayBtn}>
                         <Ionicons name="trophy-outline" size={13} color={colors.signature} />
                         <Txt variant="small" color={colors.signature} style={{ fontWeight: '600' }}>
-                          Qui a gagné ?
+                          {scores[r.id]?.mine ? 'Corriger mon score' : 'Mettre le score'}
                         </Txt>
                       </Pressable>
                     ) : null}
@@ -690,68 +689,81 @@ export default function ReservationsScreen() {
         </View>
       </BottomSheet>
 
-      {/* Saisie du score (46) : coche le ou les vainqueurs parmi les joueurs IDENTIFIÉS du
-          match — un autre joueur devra confirmer (anti-triche : rien ne se déclare seul). */}
+      {/* Saisie du score (46) : chaque joueur saisit les sets de SON point de vue — l'app
+          désigne le vainqueur automatiquement dès que deux saisies concordent. */}
       <BottomSheet
         visible={scoreTarget !== null}
-        title="Qui a gagné ce match ?"
+        title="Le score du match"
         subtitle={scoreTarget ? `${scoreTarget.clubName} — ${dateKeyLabel(scoreTarget.dateKey)} à ${scoreTarget.time}` : undefined}
         onClose={() => setScoreTarget(null)}
       >
-        {scorePlayers === undefined ? (
-          <Txt variant="body" color={colors.textMuted}>
-            Chargement des joueurs du match…
+        <Txt variant="body" color={colors.textMuted}>
+          Saisis les sets de TON point de vue (ton équipe d’abord). Dès qu’un autre joueur du match saisit le même score, le match est
+          validé automatiquement — une victoire vaut +3 pts au classement.
+        </Txt>
+        {scoreTarget && scores[scoreTarget.id] && !scores[scoreTarget.id].mine && scores[scoreTarget.id].score ? (
+          <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+            Déjà saisi par {scores[scoreTarget.id].enteredNames || 'un joueur'} : {scores[scoreTarget.id].score} (vu du vainqueur).
           </Txt>
-        ) : scorePlayers === null ? (
-          <Txt variant="body" color={colors.textMuted}>
-            Impossible de charger les joueurs — vérifie ta connexion et réessaie.
-          </Txt>
-        ) : scorePlayers.length < 2 ? (
-          <Txt variant="body" color={colors.textMuted}>
-            Il faut au moins un partenaire avec un compte PadelConnect rattaché à cette réservation (invité, ou ayant rejoint le match) pour
-            compter une victoire — sinon personne ne peut confirmer le score.
-          </Txt>
-        ) : (
-          <>
-            <Txt variant="body" color={colors.textMuted}>
-              Coche le ou les vainqueurs — un autre joueur du match confirmera (+3 pts au classement par victoire).
-            </Txt>
-            <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
-              {scorePlayers.map((p) => {
-                const on = scoreWinners.includes(p.userId);
-                return (
-                  <Pressable
-                    key={p.userId}
-                    onPress={() => setScoreWinners((cur) => (on ? cur.filter((id) => id !== p.userId) : [...cur, p.userId]))}
-                    style={[styles.playerRow, on && styles.playerRowOn]}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: on }}
-                  >
-                    <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={on ? colors.signature : colors.textFaint} />
-                    <Txt variant="body" style={{ fontWeight: on ? '700' : '500', flex: 1 }} numberOfLines={1}>
-                      {p.name}
-                      {p.userId === state.serverUserId ? ' (toi)' : ''}
-                    </Txt>
-                  </Pressable>
-                );
-              })}
-            </View>
-            {scoreWinners.length >= scorePlayers.length ? (
-              <Txt variant="small" color={colors.coral} style={{ marginTop: spacing.sm }}>
-                Tout le monde ne peut pas gagner — décoche les perdants.
+        ) : null}
+        <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
+          {setDrafts.map((d, i) => (
+            <View key={i} style={styles.setRow}>
+              <Txt variant="body" style={{ fontWeight: '600', width: 52 }}>
+                Set {i + 1}
               </Txt>
-            ) : null}
-            <View style={{ marginTop: spacing.lg }}>
-              <Button
-                label={scoreSending ? 'Enregistrement…' : 'Enregistrer le score'}
-                icon="trophy"
-                onPress={() => void sendScore()}
-                disabled={scoreWinners.length === 0 || scoreWinners.length >= scorePlayers.length || scoreSending}
-                full
+              <TextInput
+                value={d.me}
+                onChangeText={(t) => setSetDrafts((cur) => cur.map((s, j) => (j === i ? { ...s, me: t.replace(/\D/g, '') } : s)))}
+                placeholder="—"
+                placeholderTextColor={colors.textFaint}
+                keyboardType="number-pad"
+                maxLength={2}
+                style={styles.setInput}
+                accessibilityLabel={`Set ${i + 1}, jeux de ton équipe`}
               />
+              <Txt variant="body" color={colors.textMuted}>
+                –
+              </Txt>
+              <TextInput
+                value={d.them}
+                onChangeText={(t) => setSetDrafts((cur) => cur.map((s, j) => (j === i ? { ...s, them: t.replace(/\D/g, '') } : s)))}
+                placeholder="—"
+                placeholderTextColor={colors.textFaint}
+                keyboardType="number-pad"
+                maxLength={2}
+                style={styles.setInput}
+                accessibilityLabel={`Set ${i + 1}, jeux des adversaires`}
+              />
+              {i === 0 ? (
+                <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
+                  nous – eux
+                </Txt>
+              ) : (
+                <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
+                  optionnel
+                </Txt>
+              )}
             </View>
-          </>
-        )}
+          ))}
+        </View>
+        {/* Verdict EN DIRECT : le joueur voit ce que sa saisie veut dire avant d'envoyer. */}
+        <Txt
+          variant="small"
+          color={parsed.error ? colors.textFaint : parsed.iWin ? colors.signature : colors.coral}
+          style={{ marginTop: spacing.sm, fontWeight: '600' }}
+        >
+          {parsed.error ?? (parsed.iWin ? '→ Victoire de ton équipe 🏆' : '→ Défaite de ton équipe')}
+        </Txt>
+        <View style={{ marginTop: spacing.lg }}>
+          <Button
+            label={scoreSending ? 'Enregistrement…' : 'Enregistrer mon score'}
+            icon="trophy"
+            onPress={() => void sendScore()}
+            disabled={parsed.error !== null || scoreSending}
+            full
+          />
+        </View>
       </BottomSheet>
     </Screen>
   );
@@ -796,13 +808,17 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     paddingVertical: 2,
   },
-  playerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    padding: spacing.sm,
+  setRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  setInput: {
+    width: 56,
+    height: 44,
     borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
     backgroundColor: colors.surfaceAlt,
+    color: colors.text,
+    textAlign: 'center',
+    fontSize: 17,
+    fontWeight: '700',
   },
-  playerRowOn: { backgroundColor: colors.signatureSoft },
 });

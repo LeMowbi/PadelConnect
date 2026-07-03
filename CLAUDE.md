@@ -92,12 +92,12 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `46` (voir dossier `supabase/`).
+  **SQL Editor → Run**. Migrations actuelles : `02` → `47` (voir dossier `supabase/`).
 - **Edge Function** `supabase/functions/notify-club/index.ts` (Deno) : envoie les push via
   l'API Expo. Déclenchée par des **Database Webhooks** (INSERT + UPDATE). Redéploiement **sans
   terminal** : Dashboard → Edge Functions → notify-club → Edit → coller le code → Deploy.
   Webhooks à brancher (voir `docs/PUSH-SETUP.md`) : `reservations`, `reservation_participants`,
-  `competitions`, **`friend_requests`**, **`lessons`**, **`match_results`**.
+  `competitions`, **`friend_requests`**, **`lessons`**, **`match_results`**, **`operator_news`**.
 - **Convention réseau** : un fetch serveur renvoie `null` en cas d'échec réseau (≠ `[]`/`{}` =
   succès vide). Les appelants font `x ?? s.existant` ou `if (!x) return` pour ne pas écraser le
   miroir local hors-ligne.
@@ -150,12 +150,18 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   le niveau, plafonné à 7 et auto-déclaré, ne peut pas servir de rang) : 100 = tournoi officiel
   gagné (winner_user_id ancré), 10 = tournoi officiel joué, 3 = victoire de match confirmée,
   2 = partie jouée. `fetch_leaderboard`/`my_leaderboard_rank`, écran `/classement`.
-- **Score de match (46, modèle Playtomic)** : après un match fini, un joueur saisit les
-  vainqueurs parmi les joueurs IDENTIFIÉS de la résa (créateur + participants acceptés) ; un
-  AUTRE joueur confirme/conteste (`submit_match_result`/`confirm_match_result`) ; validation
-  auto sous 48 h sans réponse ; ≥ 2 comptes rattachés requis ; fenêtre 14 jours ; contesté =
-  ne compte pas (ressaisie possible). UI dans « Mes réservations » (`src/lib/matchResults.ts`),
-  push via webhook **`match_results`** (INSERT + UPDATE).
+- **Score de match (46)** : CHAQUE joueur du match saisit les sets de SON point de vue
+  (`submit_match_score`) ; l'app calcule la forme CANONIQUE (score vu du vainqueur) et
+  **désigne le vainqueur automatiquement** dès que 2 saisies concordent — pas de bouton
+  « confirmer ». Validation auto d'une saisie unique sous 48 h ; saisies discordantes =
+  match non compté (chacun corrige, y compris un 3ᵉ joueur qui conteste 2 saisies complices) ;
+  ≥ 2 comptes rattachés requis ; fenêtre 14 jours ; seuls les joueurs AYANT SAISI marquent
+  les +3. UI dans « Mes réservations » (`src/lib/matchResults.ts`), push via webhook
+  **`match_results`** (INSERT + UPDATE).
+- **Push d'actu (47)** : case « Envoyer aussi en notification » dans l'éditeur d'actu
+  opérateur (OPTIONNEL, décochée par défaut, jamais mémorisée) → colonne `operator_news.push`
+  lue par notify-club via le webhook **`operator_news`** (INSERT + UPDATE, garde anti-doublon
+  sur news_id). Tap sur la notif → accueil (kind 'news').
 - **Tournois officiels PadelConnect (43)** : organizer_type 'operator' — créés par l'opérateur
   EN TANT QUE PadelConnect, VALIDÉS par le club hôte dans son Espace Club (jamais en entrant
   dans son planning sans accord). Présentation premium (bandeau doré) — futur canal FIP.

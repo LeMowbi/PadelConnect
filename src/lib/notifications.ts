@@ -128,6 +128,9 @@ function routeForNotification(data: NotificationData | null | undefined): string
       return '/club-admin';
     case 'tournament':
       return data.id ? `/competition/${data.id}` : '/competitions';
+    case 'news':
+      // Actu publiée par l'opérateur (47) → l'accueil, où le bandeau l'affiche en haut.
+      return '/';
     default:
       return null;
   }

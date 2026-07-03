@@ -16,10 +16,12 @@ export async function fetchOperatorNews(): Promise<OperatorNews | null | undefin
 }
 
 // Publie / met à jour l’actu (opérateur). true si le serveur a accepté.
-export async function setOperatorNewsServer(news: OperatorNews): Promise<boolean> {
+// `push` (47) : case cochée à la publication → notify-club (webhook operator_news) envoie
+// AUSSI l’actu en notification à tous les joueurs. Décochée = bandeau d’accueil seulement.
+export async function setOperatorNewsServer(news: OperatorNews, push: boolean): Promise<boolean> {
   const { error } = await supabase
     .from('operator_news')
-    .upsert({ key: 'home', news_id: news.id, title: news.title, subtitle: news.subtitle ?? null, link: news.link ?? null });
+    .upsert({ key: 'home', news_id: news.id, title: news.title, subtitle: news.subtitle ?? null, link: news.link ?? null, push });
   return !error;
 }
 

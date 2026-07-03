@@ -18,9 +18,11 @@
 //   • lessons UPDATE (→ accepted) → notif à l'ÉLÈVE (cours accepté, terrain réservé) — le club
 //     reçoit la notif « nouvelle réservation » via le webhook reservations, automatiquement.
 //   • lessons UPDATE (→ declined) → notif à l'ÉLÈVE (cours refusé, aucun terrain réservé).
-//   • match_results INSERT / UPDATE (→ pending) → notif aux AUTRES joueurs du match (score à
-//     confirmer — l'UPDATE couvre la ressaisie après contestation).
-//   • match_results UPDATE (→ confirmed / disputed) → notif au joueur qui avait SAISI le score.
+//   • match_results INSERT / UPDATE (une SAISIE de score par joueur, 46) → selon l'état du
+//     match : « Score à saisir » aux autres joueurs (1ʳᵉ saisie), « Match validé » (saisies
+//     concordantes) ou « Vos scores ne correspondent pas » (discordantes) aux autres saisisseurs.
+//   • operator_news INSERT / UPDATE (47, si la case « push » était cochée et que l'actu change)
+//     → notif de l'ACTU à tous les joueurs.
 // L'envoi passe par l'API Push d'Expo (pas besoin de gérer APNs soi-même : Expo route vers
 // Apple/Google). Les webhooks « reservations », « reservation_participants », « competitions »
 // et « lessons » doivent écouter INSERT **et** UPDATE (cf. docs/PUSH-SETUP.md).
@@ -41,7 +43,10 @@ type Notif = {
   title: string;
   body: string;
   // 'club_reservation' / 'club_tournament' = push destiné au GÉRANT → l'app ouvre l'Espace Club.
-  data?: { kind: 'friend_request' | 'reservation' | 'club_reservation' | 'tournament' | 'club_tournament' | 'lesson'; id?: string };
+  data?: {
+    kind: 'friend_request' | 'reservation' | 'club_reservation' | 'tournament' | 'club_tournament' | 'lesson' | 'news';
+    id?: string;
+  };
 };
 
 Deno.serve(async (req) => {
@@ -300,49 +305,77 @@ Deno.serve(async (req) => {
         body: `${clubRow?.name ?? 'Ton club'} t’a déclaré coach — règle tes disponibilités dans ton Espace Coach.`,
         data: { kind: 'lesson' }, // route vers /coach-admin (même écran que les demandes de cours)
       });
-    } else if (
-      table === 'match_results' &&
-      record.status === 'pending' &&
-      (type === 'INSERT' || (type === 'UPDATE' && oldRecord.status !== 'pending'))
-    ) {
-      // SCORE DE MATCH saisi (46) — ou RESSAISI après contestation (UPDATE disputed → pending) :
-      // prévenir les AUTRES joueurs du match pour qu'ils confirment (48 h avant auto-validation).
+    } else if (table === 'match_results' && (type === 'INSERT' || type === 'UPDATE')) {
+      // SCORE DE MATCH (46) : chaque joueur saisit ses sets, l'app valide quand les saisies
+      // concordent. Après CHAQUE saisie/correction on regarde l'état global du match :
+      //   • 1ʳᵉ saisie → inviter les AUTRES joueurs à mettre la leur (48 h avant auto-validation) ;
+      //   • saisies concordantes (2+) → « Match validé » aux autres saisisseurs ;
+      //   • saisies discordantes → « Vos scores ne correspondent pas » aux autres saisisseurs.
       const { data: resa } = await supabase
         .from('reservations')
         .select('user_id, club_name, date_label, time')
         .eq('id', record.reservation_id)
         .maybeSingle();
-      const { data: parts } = await supabase
-        .from('reservation_participants')
-        .select('user_id, status')
-        .eq('reservation_id', record.reservation_id);
-      const others = [resa?.user_id, ...(parts ?? []).filter((p) => p.status === 'accepted').map((p) => p.user_id as string)].filter(
-        (id): id is string => Boolean(id) && id !== record.submitted_by,
-      );
-      if (others.length > 0) {
-        const { data: toks } = await supabase.from('profiles').select('expo_push_token').in('id', others);
+      const { data: entries } = await supabase.from('match_results').select('user_id, canon').eq('reservation_id', record.reservation_id);
+      const all = entries ?? [];
+      const canons = new Set(all.map((e) => e.canon as string));
+      const otherEntrants = all.map((e) => e.user_id as string).filter((id) => id !== record.user_id);
+      const when = `du ${resa?.date_label ?? ''} à ${resa?.time ?? ''} (${resa?.club_name ?? ''})`;
+      if (canons.size > 1) {
+        // Discordance → prévenir les autres saisisseurs (chacun peut corriger sa saisie).
+        const { data: toks } = await supabase.from('profiles').select('expo_push_token').in('id', otherEntrants);
         notifs.push({
           targets: (toks ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
-          title: 'Score à confirmer 🎾',
-          body: `${await userName(record.submitted_by)} a noté le résultat de votre match du ${resa?.date_label ?? ''} à ${resa?.time ?? ''} (${resa?.club_name ?? ''}) — confirme-le dans Mes réservations.`,
+          title: 'Vos scores ne correspondent pas 🤔',
+          body: `Le score saisi pour votre match ${when} diffère du tien — vérifiez ensemble dans Mes réservations.`,
           data: { kind: 'reservation', id: record.reservation_id },
         });
+      } else if (all.length >= 2) {
+        // Concordance → match validé automatiquement : prévenir les autres saisisseurs.
+        const { data: toks } = await supabase.from('profiles').select('expo_push_token').in('id', otherEntrants);
+        notifs.push({
+          targets: (toks ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
+          title: 'Match validé ✅',
+          body: `Le score de votre match ${when} concorde (${record.canon ?? ''}) — il compte au classement.`,
+          data: { kind: 'reservation', id: record.reservation_id },
+        });
+      } else {
+        // Première saisie → inviter les AUTRES joueurs du match (créateur + acceptés) à saisir.
+        const { data: parts } = await supabase
+          .from('reservation_participants')
+          .select('user_id, status')
+          .eq('reservation_id', record.reservation_id);
+        const others = [resa?.user_id, ...(parts ?? []).filter((p) => p.status === 'accepted').map((p) => p.user_id as string)].filter(
+          (id): id is string => Boolean(id) && id !== record.user_id,
+        );
+        if (others.length > 0) {
+          const { data: toks } = await supabase.from('profiles').select('expo_push_token').in('id', others);
+          notifs.push({
+            targets: (toks ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
+            title: 'Score à saisir 🎾',
+            body: `${await userName(record.user_id)} a mis le score de votre match ${when} — saisis le tien pour le valider.`,
+            data: { kind: 'reservation', id: record.reservation_id },
+          });
+        }
       }
     } else if (
-      table === 'match_results' &&
-      type === 'UPDATE' &&
-      (record.status === 'confirmed' || record.status === 'disputed') &&
-      oldRecord.status === 'pending'
+      table === 'operator_news' &&
+      record.push === true &&
+      (type === 'INSERT' || (type === 'UPDATE' && (record.news_id !== oldRecord.news_id || oldRecord.push !== true)))
     ) {
-      // Verdict d'un joueur du match → prévenir celui qui avait SAISI le score.
+      // ACTU opérateur publiée AVEC la case « Envoyer une notification » cochée (47) → push à
+      // TOUS les joueurs. Garde anti-doublon : on n'envoie que si l'actu change réellement
+      // (nouvel id) ou si le push vient d'être activé — jamais deux fois la même.
+      const { data: players } = await supabase
+        .from('profiles')
+        .select('expo_push_token')
+        .or('role.eq.player,role.is.null')
+        .not('expo_push_token', 'is', null);
       notifs.push({
-        targets: await userToken(record.submitted_by),
-        title: record.status === 'confirmed' ? 'Score confirmé ✅' : 'Score contesté',
-        body:
-          record.status === 'confirmed'
-            ? 'Un joueur du match a confirmé le score — la victoire compte au classement.'
-            : 'Un joueur du match a contesté le score — il ne comptera pas. Vous pouvez le ressaisir ensemble.',
-        data: { kind: 'reservation', id: record.reservation_id },
+        targets: (players ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
+        title: record.title ?? 'Actu PadelConnect 📣',
+        body: record.subtitle ?? 'Ouvre l’app pour découvrir la nouveauté.',
+        data: { kind: 'news' },
       });
     }
 

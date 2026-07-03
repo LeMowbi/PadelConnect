@@ -107,9 +107,9 @@ export default function ClassementScreen() {
         </Card>
       )}
       <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.md }}>
-        Les points se gagnent en JOUANT : 100 pour un tournoi officiel gagné (badge doré), 10 pour y participer, 3 par victoire de match
-        confirmée par un partenaire (saisis le score dans « Mes réservations »), 2 par partie jouée. Tout est vérifié — rien ne se déclare
-        tout seul.
+        Les points se gagnent en JOUANT : 100 pour un tournoi officiel gagné (badge doré), 10 pour y participer, 3 par match gagné (chaque
+        joueur saisit le score dans « Mes réservations », l’app valide dès que les saisies concordent), 2 par partie jouée. Tout est vérifié
+        — rien ne se déclare tout seul.
       </Txt>
     </Screen>
   );

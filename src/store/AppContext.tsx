@@ -432,7 +432,8 @@ type AppContextType = {
   unblockSlot: (clubId: string, dateKey: string, time: string, court: string) => void;
   // ok = false quand l’écriture SERVEUR a échoué (réseau/session) : l’actu reste alors visible
   // seulement sur le téléphone de l’opérateur — l’appelant doit le dire honnêtement.
-  setOperatorNews: (news: { title: string; subtitle?: string; link?: string }) => Promise<{ ok: boolean }>;
+  // `push` (47) : true = notify-club envoie AUSSI l’actu en notification à tous les joueurs.
+  setOperatorNews: (news: { title: string; subtitle?: string; link?: string; push?: boolean }) => Promise<{ ok: boolean }>;
   removeOperatorNews: () => void; // retire l’actu d’accueil publiée
   dismissNews: (id: string) => void;
   resetAll: () => void;
@@ -1909,7 +1910,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const unchanged = !!prev && prev.title === title && prev.subtitle === subtitle && prev.link === link;
         const next = { id: unchanged ? prev.id : uid(), title, subtitle, link };
         setState((s) => ({ ...s, operatorNews: next })); // affichage immédiat côté opérateur
-        const ok = state.serverUserId ? await setOperatorNewsServer(next) : true;
+        const ok = state.serverUserId ? await setOperatorNewsServer(next, news.push === true) : true;
         return { ok };
       },
       removeOperatorNews: () =>
