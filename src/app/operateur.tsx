@@ -399,6 +399,22 @@ export default function Operateur() {
           <Ionicons name="chevron-forward" size={14} color={colors.amberDark} />
         </Pressable>
       ) : null}
+      {/* Même rappel pour les FINANCES : des semaines passées restent à encaisser. */}
+      {section !== 'Finances' && unpaid.total > 0 ? (
+        <Pressable
+          onPress={() => setSection('Finances')}
+          style={styles.pendingPill}
+          accessibilityRole="button"
+          accessibilityLabel={`Reste à encaisser ${fcfa(unpaid.total)}`}
+        >
+          <Ionicons name="alarm-outline" size={14} color={colors.amberDark} />
+          <Txt variant="small" color={colors.amberDark} style={{ fontWeight: '700', flex: 1 }}>
+            Reste à encaisser : {fcfa(unpaid.total)} ({unpaid.weeksCount} semaine{unpaid.weeksCount > 1 ? 's' : ''} passée
+            {unpaid.weeksCount > 1 ? 's' : ''})
+          </Txt>
+          <Ionicons name="chevron-forward" size={14} color={colors.amberDark} />
+        </Pressable>
+      ) : null}
 
       {section === 'Finances' ? (
         <View style={styles.infoBanner}>
@@ -992,7 +1008,7 @@ export default function Operateur() {
       {section === 'Clubs' ? (
         <>
           {/* Clubs en démo locale — flux gérant historique (sans serveur). À ne pas confondre
-          avec « Demandes reçues » ci-dessus, qui vient du serveur. */}
+          avec « Demandes reçues » (onglet Demandes), qui vient du serveur. */}
           <View style={{ marginTop: spacing.xl }}>
             {/* UNIQUEMENT les clubs démo LOCAUX (fromServer=false) : les clubs venus du serveur sont
             déjà gérés via « Demandes reçues » / la liste publique, ne pas les compter deux fois. */}
@@ -1000,8 +1016,8 @@ export default function Operateur() {
             {demoClubs.length === 0 ? (
               <Card>
                 <Txt variant="muted">
-                  Clubs créés en local depuis l’Espace Club (démo). Les vraies demandes d’inscription arrivent dans « Demandes reçues »
-                  ci-dessus. Ici, « Activer » rend un club démo visible des joueurs.
+                  Clubs créés en local depuis l’Espace Club (démo). Les vraies demandes d’inscription arrivent dans l’onglet « Demandes ».
+                  Ici, « Activer » rend un club démo visible des joueurs.
                 </Txt>
               </Card>
             ) : (

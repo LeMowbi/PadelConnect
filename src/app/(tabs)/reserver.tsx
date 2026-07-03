@@ -29,7 +29,9 @@ const PRIME_TIMES = new Set(['16:30', '18:00', '19:30']);
 export default function ReserverScreen() {
   const router = useRouter();
   const { state, setReserverView } = useApp();
-  const { refreshControl } = usePullToRefresh();
+  // Tirer pour rafraîchir : resynchronise la session ET les matchs ouverts (remontés via key).
+  const [openMatchesKey, setOpenMatchesKey] = useState(0);
+  const { refreshControl } = usePullToRefresh(async () => setOpenMatchesKey((n) => n + 1));
 
   // todayKey : recalcule la liste après minuit (retour premier plan) — sinon « AUJ. »
   // resterait collé à la veille et la journée paraîtrait terminée au réveil.
@@ -302,7 +304,7 @@ export default function ReserverScreen() {
         )}
 
         {/* Matchs ouverts : des joueurs cherchent du monde — rejoindre est gratuit. */}
-        {state.serverUserId ? <OpenMatches /> : null}
+        {state.serverUserId ? <OpenMatches key={openMatchesKey} /> : null}
 
         <View style={{ marginTop: spacing.lg }}>
           <Button

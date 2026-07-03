@@ -118,6 +118,22 @@ Deno.serve(async (req) => {
         body: `${record.booked_by_name ?? 'Un joueur'} a annulé son créneau du ${record.date_label ?? ''} à ${record.time ?? ''} (${record.court ?? ''}).`,
         data: { kind: 'club_reservation', id: record.id },
       });
+      // Et prévenir les PARTICIPANTS (amis invités / joueurs qui avaient rejoint un match
+      // ouvert) : sans ça, le match disparaît en silence de leurs réservations.
+      const { data: parts } = await supabase
+        .from('reservation_participants')
+        .select('user_id, status')
+        .eq('reservation_id', record.id);
+      const partIds = (parts ?? []).filter((p) => p.status !== 'declined').map((p) => p.user_id as string);
+      if (partIds.length > 0) {
+        const { data: toks } = await supabase.from('profiles').select('expo_push_token').in('id', partIds);
+        notifs.push({
+          targets: (toks ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
+          title: 'Match annulé',
+          body: `Le match du ${record.date_label ?? ''} à ${record.time ?? ''} (${record.club_name ?? ''}) a été annulé par son créateur.`,
+          data: { kind: 'reservation', id: record.id },
+        });
+      }
     } else if (table === 'reservation_participants' && type === 'INSERT' && record.status === 'accepted') {
       // MATCH OUVERT (45) : quelqu'un vient de REJOINDRE — join_open_match insère directement
       // 'accepted' (≠ 'invited') → on prévient le CRÉATEUR du match, pas le nouveau venu.
@@ -160,8 +176,14 @@ Deno.serve(async (req) => {
         body: 'Un ami a accepté de jouer avec toi.',
         data: { kind: 'reservation', id: record.reservation_id },
       });
-    } else if (table === 'competitions' && type === 'INSERT' && record.status === 'pending' && record.organizer_type === 'joueur') {
-      // Tournoi créé par un JOUEUR → en attente : prévenir le club hôte (à valider).
+    } else if (
+      table === 'competitions' &&
+      type === 'INSERT' &&
+      record.status === 'pending' &&
+      (record.organizer_type === 'joueur' || record.organizer_type === 'operator')
+    ) {
+      // Tournoi créé par un JOUEUR ou par PADELCONNECT (43) → en attente : prévenir le club
+      // hôte (c'est lui qui valide — sa permission, dans l'app).
       notifs.push({
         targets: await clubManagerTokens(record.club_id),
         title: 'Nouvelle demande de tournoi 🏆',

@@ -26,7 +26,8 @@ export function OpenMatches() {
   };
   useEffect(() => {
     let alive = true;
-    void fetchOpenMatches().then((ms) => alive && setMatches(ms));
+    // Même règle que load() : un échec tardif n'écrase pas une liste déjà rechargée.
+    void fetchOpenMatches().then((ms) => alive && setMatches((cur) => ms ?? (cur === undefined ? null : cur)));
     // Retour au premier plan : les matchs ouverts bougent vite (places prises entre-temps).
     const sub = AppState.addEventListener('change', (st) => st === 'active' && void load());
     return () => {

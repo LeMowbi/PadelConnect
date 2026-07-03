@@ -207,8 +207,10 @@ export default function NouvelleCompetition() {
       </View>
 
       {/* Fin optionnelle — pour un tournoi sur plusieurs jours (ex. americano sur un week-end).
-          Second calendrier borné STRICTEMENT après le début ; « 1 seul jour » remet à zéro. */}
-      {day ? (
+          Second calendrier borné STRICTEMENT après le début ; « 1 seul jour » remet à zéro.
+          Masqué si le début est le DERNIER jour de la fenêtre (aucune fin possible) ; la clé
+          `key={day.key}` remonte le calendrier quand le début change (mois recalé sur la borne). */}
+      {day && day.key < dates[dates.length - 1].key ? (
         <View style={{ marginTop: spacing.lg }}>
           <Txt variant="label" color={colors.textFaint}>
             Fin (optionnel — plusieurs jours){endDay ? ` — ${endDay.label}` : ''}
@@ -219,6 +221,7 @@ export default function NouvelleCompetition() {
           </View>
           {endOpen || endDay ? (
             <CalendarPicker
+              key={day.key}
               value={endDay?.key ?? null}
               minKey={dayKey(new Date(keyToTs(day.key) + DAY_MS))}
               maxKey={dates[dates.length - 1].key}

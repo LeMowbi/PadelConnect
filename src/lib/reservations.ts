@@ -81,8 +81,9 @@ function reservationToRow(
     invited: r.invited,
     booked_by_name: bookedBy?.name ?? null,
     booked_by_phone: bookedBy?.phone ?? null,
-    open_match: r.openMatch ?? false,
-    open_level: r.openLevel ?? '',
+    // Colonnes 45 envoyées SEULEMENT pour un match ouvert : une réservation normale reste
+    // insérable même si la migration 45 n'est pas encore collée (colonnes inconnues sinon).
+    ...(r.openMatch ? { open_match: true, open_level: r.openLevel ?? '' } : {}),
     status: 'booked',
   };
 }
