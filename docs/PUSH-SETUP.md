@@ -9,11 +9,42 @@ Apple à la main — Expo route vers Apple (APNs) et Google (FCM).
 
 Exécuter **`supabase/16_push_token.sql`** (ajoute la colonne `expo_push_token`).
 
-## 2. Identifiants push (RIEN à faire — automatique)
+## 2. Clé de notifications Apple (APNs) — ⚠️ OBLIGATOIRE, à faire UNE FOIS (10 min, sans terminal)
 
-**Aucune manipulation, aucun terminal.** La clé APNs (iOS) est **créée et gérée automatiquement
-par EAS au moment du build** (l'assistant lance les builds). Les builds #27+ l'ont déjà en place.
-(Android/FCM : à configurer plus tard, le jour d'une sortie Play Store.)
+**Correction importante (2026-07-03)** : contrairement à ce que disait ce guide, la clé APNs
+n'est PAS créée automatiquement — nos builds tournent en mode non-interactif, qui SAUTE cette
+étape. Vérifié en direct via l'API Expo : `pushKey: null` → **Apple refuse toutes les
+notifications** (la fonction dit « ok », Expo transmet, Apple jette). Tant que cette clé
+n'existe pas, AUCUN push n'arrive sur iPhone (actus, réservations, demandes d'ami…).
+
+### a. Créer la clé chez Apple (5 clics, dans le navigateur)
+
+1. Va sur **developer.apple.com** → connecte-toi → **Account**.
+2. **Certificates, Identifiers & Profiles** → menu **Keys** → bouton **+** (Create a key).
+3. **Key Name** : `PadelConnect Push` → coche **Apple Push Notifications service (APNs)** →
+   **Continue** → **Register**.
+4. **Download** : tu obtiens un fichier **`AuthKey_XXXXXXXXXX.p8`** (garde-le précieusement,
+   Apple ne le redonne JAMAIS) et note le **Key ID** affiché (10 caractères).
+
+### b. Donner la clé à Expo (dans le navigateur aussi)
+
+1. Va sur **expo.dev** → connecte-toi avec le compte **padelconnect-ci** → projet
+   **padelconnect** → menu **Credentials**.
+2. Onglet/section **iOS** → application **ci.padelco.app** → bloc **Push Key** →
+   **Add a Push Key** (ou « Upload »).
+3. Renseigne : le fichier **.p8** téléchargé, le **Key ID** noté, et le **Team ID Apple**
+   (`R77YWZ9487`).
+4. Enregistre. **Effet immédiat, sans nouveau build ni mise à jour de l'app** : les jetons déjà
+   enregistrés par les téléphones se mettent à recevoir les notifications.
+
+### c. Vérifier (1 min)
+
+Publie une actu (nouveau texte, case « notification » cochée) → elle doit arriver sur ton
+téléphone, app fermée. Sinon, dis-le à l'assistant : il revérifiera `pushKey` via l'API Expo.
+
+> **Android (pour la sortie Google Play)** : même principe côté Google — il faudra ajouter les
+> identifiants **FCM** dans la même page Credentials, section Android, au moment du build
+> Android. Sinon aucun push n'arrivera sur les téléphones Android.
 
 ## 3. Déployer la fonction d'envoi (SANS terminal — Dashboard)
 

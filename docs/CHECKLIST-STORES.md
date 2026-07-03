@@ -82,6 +82,14 @@ npx eas-cli submit --platform ios --profile production
       `assetlinks.json` et un `_redirects` mis à jour — un ami **Android** est enfin envoyé vers
       **Google Play**, plus vers l'App Store iPhone). ⚠️ Redéployer `site/` **en entier**.
 
+### c-bis. ⚠️ BLOQUANT — Clé de notifications Apple (APNs) absente
+- [ ] **Aucun push n'arrive sur iPhone tant que ce n'est pas fait** (vérifié : `pushKey: null`
+      chez Expo — Apple jette toutes les notifications). Créer la clé APNs sur developer.apple.com
+      et l'ajouter sur expo.dev → guide pas-à-pas : **`docs/PUSH-SETUP.md` §2** (10 min, sans
+      terminal, effet immédiat sans nouveau build).
+- [ ] Au moment du build **Android** : ajouter aussi les identifiants **FCM** (même page
+      Credentials d'expo.dev, section Android) — même symptôme sinon.
+
 ### d. Sécuriser les notifications (recommandé fort avant lancement)
 - [ ] Poser un **`WEBHOOK_SECRET`** sur `notify-club` et sur **tous** les webhooks — étapes exactes
       dans `docs/AUDIT-SERVEUR.md` §3. Sans lui, n'importe qui connaissant l'URL peut déclencher des
