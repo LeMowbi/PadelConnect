@@ -2,9 +2,16 @@
 // le store garde un MIROIR local (lectures synchrones rapides + résilience hors-ligne).
 // On écrit ici, puis on met à jour le miroir dans AppContext.
 
-import { slotTimestamp } from './days';
+import { dayKey, slotTimestamp } from './days';
 import { supabase } from './supabase';
 import type { BlockedSlot, Invited, Reservation } from '@/store/AppContext';
+
+// Borne basse du miroir de réservations : on ne rapatrie que ~6 mois d'historique + le futur.
+// Sans borne, le miroir re-télécharge tout l'historique de tous les clubs à chaque retour au
+// premier plan (et, au-delà du plafond PostgREST de 1000 lignes, des créneaux futurs
+// tomberaient silencieusement → dispo faussée). L'agrégat « depuis le lancement » de l'Espace
+// opérateur devra devenir une RPC serveur si l'historique dépasse cette fenêtre.
+const MIRROR_WINDOW_MS = 180 * 86400000;
 
 // Occupation d’un créneau (sans identité) — alimente la disponibilité cross-joueur.
 export type SlotOccupancy = { clubId: string; dateKey: string; time: string; court: string };
@@ -159,7 +166,12 @@ export async function setClubConfirmedRow(id: string, value: boolean): Promise<b
 // celles de son club / toutes. On exclut les annulées (status='cancelled') : elles ne
 // comptent ni dans la liste joueur ni dans la base de commission. Trié par date de créneau.
 export async function fetchReservations(): Promise<{ ok: boolean; reservations: Reservation[] }> {
-  const { data, error } = await supabase.from('reservations').select('*').eq('status', 'booked').order('starts_at', { ascending: true });
+  const { data, error } = await supabase
+    .from('reservations')
+    .select('*')
+    .eq('status', 'booked')
+    .gte('starts_at', Date.now() - MIRROR_WINDOW_MS) // récent + futur seulement (cf. MIRROR_WINDOW_MS)
+    .order('starts_at', { ascending: true });
   if (error) return { ok: false, reservations: [] };
   return { ok: true, reservations: (data ?? []).map((r) => rowToReservation(r as Row)) };
 }
@@ -242,7 +254,10 @@ export async function respondInvitation(reservationId: string, accept: boolean):
 // d’échec réseau (≠ tableau vide = « aucun créneau pris ») → l’appelant garde l’occupation
 // connue au lieu de la vider et d’afficher de fausses dispos.
 export async function fetchOccupancy(): Promise<SlotOccupancy[] | null> {
-  const { data, error } = await supabase.from('slot_occupancy').select('*');
+  // Seuls les jours À VENIR intéressent la disponibilité (l'app ne lit l'occupation que pour
+  // les 7 prochains jours) : on borne à aujourd'hui pour ne pas rapatrier tout le passé — et
+  // ne pas heurter le plafond de 1000 lignes qui, atteint, fausserait les dispos.
+  const { data, error } = await supabase.from('slot_occupancy').select('*').gte('date_key', dayKey(new Date()));
   if (error) return null;
   return (data ?? []).map((o: { club_id: string; date_key: string; time: string; court: string }) => ({
     clubId: o.club_id,

@@ -306,52 +306,75 @@ Deno.serve(async (req) => {
         data: { kind: 'lesson' }, // route vers /coach-admin (même écran que les demandes de cours)
       });
     } else if (table === 'match_results' && (type === 'INSERT' || type === 'UPDATE')) {
-      // SCORE DE MATCH (46) : chaque joueur saisit ses sets, l'app valide quand les saisies
-      // concordent. Après CHAQUE saisie/correction on regarde l'état global du match :
-      //   • 1ʳᵉ saisie → inviter les AUTRES joueurs à mettre la leur (48 h avant auto-validation) ;
-      //   • saisies concordantes (2+) → « Match validé » aux autres saisisseurs ;
-      //   • saisies discordantes → « Vos scores ne correspondent pas » aux autres saisisseurs.
-      const { data: resa } = await supabase
-        .from('reservations')
-        .select('user_id, club_name, date_label, time')
-        .eq('id', record.reservation_id)
-        .maybeSingle();
-      const { data: entries } = await supabase.from('match_results').select('user_id, canon').eq('reservation_id', record.reservation_id);
-      const all = entries ?? [];
-      const canons = new Set(all.map((e) => e.canon as string));
-      const otherEntrants = all.map((e) => e.user_id as string).filter((id) => id !== record.user_id);
-      const when = `du ${resa?.date_label ?? ''} à ${resa?.time ?? ''} (${resa?.club_name ?? ''})`;
-      if (canons.size > 1) {
-        // Discordance → prévenir les autres saisisseurs (chacun peut corriger sa saisie).
-        const { data: toks } = await supabase.from('profiles').select('expo_push_token').in('id', otherEntrants);
-        notifs.push({
-          targets: (toks ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
-          title: 'Vos scores ne correspondent pas 🤔',
-          body: `Le score saisi pour votre match ${when} diffère du tien — vérifiez ensemble dans Mes réservations.`,
-          data: { kind: 'reservation', id: record.reservation_id },
-        });
-      } else if (all.length >= 2) {
-        // Concordance → match validé automatiquement : prévenir les autres saisisseurs.
-        const { data: toks } = await supabase.from('profiles').select('expo_push_token').in('id', otherEntrants);
-        notifs.push({
-          targets: (toks ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
-          title: 'Match validé ✅',
-          body: `Le score de votre match ${when} concorde (${record.canon ?? ''}) — il compte au classement.`,
-          data: { kind: 'reservation', id: record.reservation_id },
-        });
+      // SCORE DE MATCH (46/48) : chaque joueur saisit ses sets ; l'app valide quand un CAMP
+      // gagnant et un CAMP perdant s'accordent sur le score (règle serveur, cf. 48). On ne
+      // notifie que sur les vraies TRANSITIONS (sinon 3ᵉ/4ᵉ saisie et re-soumissions spamment) :
+      //   • bascule vers « validé »   → « Match validé » aux autres saisisseurs ;
+      //   • bascule vers « discordant » → « Vos scores ne correspondent pas » aux autres saisisseurs ;
+      //   • toute PREMIÈRE saisie d'un match → « Score à saisir » aux joueurs qui n'ont pas saisi.
+      // Re-soumission à l'identique (canon + i_won inchangés) : on ne fait rien.
+      if (type === 'UPDATE' && record.canon === oldRecord.canon && record.i_won === oldRecord.i_won) {
+        // saisie inchangée → aucun push
       } else {
-        // Première saisie → inviter les AUTRES joueurs du match (créateur + acceptés) à saisir.
-        const { data: parts } = await supabase
-          .from('reservation_participants')
-          .select('user_id, status')
+        const { data: resa } = await supabase
+          .from('reservations')
+          .select('user_id, club_name, date_label, time')
+          .eq('id', record.reservation_id)
+          .maybeSingle();
+        const { data: entries } = await supabase
+          .from('match_results')
+          .select('user_id, canon, i_won')
           .eq('reservation_id', record.reservation_id);
-        const others = [resa?.user_id, ...(parts ?? []).filter((p) => p.status === 'accepted').map((p) => p.user_id as string)].filter(
-          (id): id is string => Boolean(id) && id !== record.user_id,
-        );
-        if (others.length > 0) {
-          const { data: toks } = await supabase.from('profiles').select('expo_push_token').in('id', others);
+        const all = (entries ?? []) as { user_id: string; canon: string; i_won: boolean }[];
+        const when = `du ${resa?.date_label ?? ''} à ${resa?.time ?? ''} (${resa?.club_name ?? ''})`;
+        const otherEntrants = all.map((e) => e.user_id).filter((id) => id !== record.user_id);
+        // Classe un ensemble de saisies (même règle que la 48 : validé = 1 canon, ≤2 « je gagne »,
+        // au moins un « je perds »). Le cas « saisie unique validée à 48 h » n'est pas déclenché
+        // par un webhook (aucune écriture à T+48 h) — on ne notifie donc que les transitions ici.
+        const classify = (es: { canon: string; i_won: boolean }[]) => {
+          const canons = new Set(es.map((e) => e.canon));
+          const w = es.filter((e) => e.i_won).length;
+          const l = es.filter((e) => !e.i_won).length;
+          const conflict = canons.size > 1 || w > 2;
+          return { conflict, validated: !conflict && canons.size === 1 && w >= 1 && w <= 2 && l >= 1, n: es.length };
+        };
+        // État AVANT cette écriture : on retire (INSERT) ou on restaure (UPDATE) la ligne de ce joueur.
+        const before =
+          type === 'UPDATE'
+            ? all.map((e) => (e.user_id === record.user_id ? { canon: oldRecord.canon, i_won: oldRecord.i_won } : e))
+            : all.filter((e) => e.user_id !== record.user_id);
+        const after = classify(all);
+        const prev = classify(before);
+        const tokensFor = async (ids: string[]) => {
+          if (ids.length === 0) return [] as string[];
+          const { data: toks } = await supabase.from('profiles').select('expo_push_token').in('id', ids);
+          return (toks ?? []).map((t) => t.expo_push_token as string).filter(Boolean);
+        };
+        if (after.validated && !prev.validated) {
           notifs.push({
-            targets: (toks ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
+            targets: await tokensFor(otherEntrants),
+            title: 'Match validé ✅',
+            body: `Le score de votre match ${when} concorde (${record.canon ?? ''}) — il compte au classement.`,
+            data: { kind: 'reservation', id: record.reservation_id },
+          });
+        } else if (after.conflict && !prev.conflict) {
+          notifs.push({
+            targets: await tokensFor(otherEntrants),
+            title: 'Vos scores ne correspondent pas 🤔',
+            body: `Le score saisi pour votre match ${when} diffère du tien — vérifiez ensemble dans Mes réservations.`,
+            data: { kind: 'reservation', id: record.reservation_id },
+          });
+        } else if (after.n === 1) {
+          // Première saisie du match → inviter les AUTRES joueurs (créateur + acceptés) à saisir.
+          const { data: parts } = await supabase
+            .from('reservation_participants')
+            .select('user_id, status')
+            .eq('reservation_id', record.reservation_id);
+          const others = [resa?.user_id, ...(parts ?? []).filter((p) => p.status === 'accepted').map((p) => p.user_id as string)].filter(
+            (id): id is string => Boolean(id) && id !== record.user_id,
+          );
+          notifs.push({
+            targets: await tokensFor(others),
             title: 'Score à saisir 🎾',
             body: `${await userName(record.user_id)} a mis le score de votre match ${when} — saisis le tien pour le valider.`,
             data: { kind: 'reservation', id: record.reservation_id },
@@ -385,28 +408,39 @@ Deno.serve(async (req) => {
     );
     if (messages.length === 0) return new Response('no targets', { status: 200 });
 
-    const pushRes = await fetch(EXPO_PUSH, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(messages),
-    });
-
-    // On LIT la réponse d'Expo : les jetons d'appareils désinstallés (DeviceNotRegistered) sont
-    // purgés en base → on n'accumule pas de jetons morts et on cesse d'envoyer dans le vide.
-    try {
-      const json = await pushRes.json();
-      const tickets = Array.isArray(json?.data) ? json.data : [];
-      const dead: string[] = [];
-      tickets.forEach((t: { status?: string; details?: { error?: string } }, i: number) => {
-        if (t?.status === 'error' && t?.details?.error === 'DeviceNotRegistered' && messages[i]?.to) {
-          dead.push(messages[i].to);
-        }
-      });
-      if (dead.length > 0) {
-        await supabase.from('profiles').update({ expo_push_token: null }).in('expo_push_token', dead);
+    // Expo REFUSE un lot de plus de 100 notifications (PUSH_TOO_MANY_NOTIFICATIONS) : un push
+    // d'actu à tous les joueurs (47) échouerait en bloc. On envoie par tranches de 100 et on
+    // agrège les tickets (index aligné sur `messages`) pour purger les jetons morts ensuite.
+    const CHUNK = 100;
+    const tickets: { status?: string; details?: { error?: string } }[] = [];
+    for (let i = 0; i < messages.length; i += CHUNK) {
+      const slice = messages.slice(i, i + CHUNK);
+      try {
+        const pushRes = await fetch(EXPO_PUSH, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(slice),
+        });
+        const json = await pushRes.json();
+        const data = Array.isArray(json?.data) ? json.data : [];
+        // Réaligne : une tranche sans `data` (erreur) laisse des trous → on comble pour garder
+        // l'index messages[i] ↔ tickets[i] exact lors de la purge DeviceNotRegistered.
+        for (let j = 0; j < slice.length; j++) tickets.push(data[j] ?? {});
+      } catch {
+        for (let j = 0; j < slice.length; j++) tickets.push({});
       }
-    } catch {
-      // réponse illisible : on ignore (best-effort, ne bloque pas la fonction).
+    }
+
+    // Jetons d'appareils désinstallés (DeviceNotRegistered) → purgés en base (on cesse d'envoyer
+    // dans le vide et on n'accumule pas de jetons morts).
+    const dead: string[] = [];
+    tickets.forEach((t, i) => {
+      if (t?.status === 'error' && t?.details?.error === 'DeviceNotRegistered' && messages[i]?.to) {
+        dead.push(messages[i].to);
+      }
+    });
+    if (dead.length > 0) {
+      await supabase.from('profiles').update({ expo_push_token: null }).in('expo_push_token', dead);
     }
 
     return new Response('ok', { status: 200 });

@@ -11,6 +11,7 @@ export type LeaderboardRow = {
   level: number; // affiché à titre d'info (force) — le rang, ce sont les points
   wins: number; // tournois officiels gagnés
   matchWins: number; // victoires de match confirmées (score saisi + validé)
+  offPlayed: number; // tournois officiels JOUÉS (participations, valent ×10 pts)
   played: number; // parties jouées
   points: number; // le RANG : gagné dans l'app, infalsifiable, sans plafond
 };
@@ -25,6 +26,7 @@ export async function fetchLeaderboard(limit = 50): Promise<LeaderboardRow[] | n
       level: number;
       wins: number;
       match_wins: number;
+      off_played: number;
       played: number;
       points: number;
     }[]
@@ -34,6 +36,7 @@ export async function fetchLeaderboard(limit = 50): Promise<LeaderboardRow[] | n
     level: Number(r.level),
     wins: r.wins,
     matchWins: r.match_wins ?? 0,
+    offPlayed: r.off_played ?? 0,
     played: r.played,
     points: r.points ?? 0,
   }));

@@ -96,6 +96,9 @@ export default function CoachAdmin() {
     } else if (res === 'conflict') {
       hapticWarning();
       toast.show('Le terrain a été pris entre-temps — impossible d’accepter ce créneau', { icon: 'alert-circle' });
+    } else if (res === 'busy') {
+      hapticWarning();
+      toast.show('Tu as déjà un cours accepté à ce créneau — refuse ou déplace l’autre d’abord', { icon: 'alert-circle' });
     } else if (res === 'gone') {
       toast.show('Cette demande n’est plus valable (créneau passé ou annulée)', { icon: 'alert-circle' });
     } else {
@@ -285,13 +288,22 @@ function CoachSettings({
   const [price, setPrice] = useState(profile.price ? String(profile.price) : '');
   const [slots, setSlots] = useState<string[]>(profile.slots);
   const [saving, setSaving] = useState(false);
+  const [priceError, setPriceError] = useState<string | null>(null);
 
   const toggleSlot = (t: string) => setSlots((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t].sort()));
 
   const save = async () => {
     if (saving) return;
+    const p = Number(price.replace(/\D/g, '')) || null;
+    // Mêmes bornes que le serveur (48) et que le tarif fixé par le club (42) : hors bornes, le
+    // serveur refuserait en silence → on le dit d'avance au lieu d'un « impossible » trompeur.
+    if (p !== null && (p < 1000 || p > 1000000)) {
+      setPriceError('Tarif entre 1 000 et 1 000 000 FCFA (ou vide = non affiché).');
+      return;
+    }
+    setPriceError(null);
     setSaving(true);
-    await onSave(specialty.trim(), Number(price.replace(/\D/g, '')) || null, slots);
+    await onSave(specialty.trim(), p, slots);
     setSaving(false);
   };
 
@@ -308,13 +320,21 @@ function CoachSettings({
       />
       <TextInput
         value={price}
-        onChangeText={setPrice}
+        onChangeText={(t) => {
+          setPrice(t);
+          setPriceError(null);
+        }}
         placeholder="Tarif indicatif du cours (FCFA, optionnel)"
         placeholderTextColor={colors.textMuted}
         keyboardType="numeric"
         style={styles.input}
         accessibilityLabel="Tarif indicatif du cours"
       />
+      {priceError ? (
+        <Txt variant="small" color={colors.coral} style={{ marginTop: spacing.xs }}>
+          {priceError}
+        </Txt>
+      ) : null}
       <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
         Mes créneaux de cours (horaires ouverts par le club)
       </Txt>

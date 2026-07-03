@@ -9,7 +9,7 @@ import { ClubInfoCard } from '@/components/club-admin/ClubInfoCard';
 import { type Club } from '@/data/clubs';
 import { courtsFor, openSlotsFor } from '@/lib/availability';
 import { clubAddCoach, clubRemoveCoach, clubSetCoachPrice, fetchClubCoaches, type ServerCoach } from '@/lib/coachesServer';
-import { MAX_CLUB_PHOTOS, useApp } from '@/store/AppContext';
+import { isPlayed, MAX_CLUB_PHOTOS, useApp } from '@/store/AppContext';
 import { fcfa, initials } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
 import { colors, radius, spacing } from '@/theme';
@@ -83,7 +83,9 @@ export function SectionMonClub({ club }: { club: Club }) {
       const cs = await fetchClubCoaches(club.id);
       if (cs) setBookableCoaches(cs);
     } else if (res.status === 'already') {
-      toast.show(`${res.name ?? 'Ce joueur'} est déjà coach`, { icon: 'information-circle' });
+      toast.show(`${res.name ?? 'Ce joueur'} est déjà coach de ${club.name}`, { icon: 'information-circle' });
+    } else if (res.status === 'other_club') {
+      toast.show(`${res.name ?? 'Ce joueur'} est déjà coach d’un autre club — il doit d’abord y être retiré`, { icon: 'alert-circle' });
     } else if (res.status === 'not_found') {
       toast.show('Aucun compte PadelConnect avec ce numéro — il doit d’abord créer son compte', { icon: 'alert-circle' });
     } else if (res.status === 'forbidden') {
@@ -155,8 +157,16 @@ export function SectionMonClub({ club }: { club: Club }) {
 
   const toggleSlot = (t: string) => {
     const set = new Set(openSlots);
-    if (set.has(t)) set.delete(t);
-    else set.add(t);
+    if (set.has(t)) {
+      // Fermer un horaire qui porte encore une réservation À VENIR la rendrait invisible du
+      // planning sans l'annuler → on refuse tant qu'elle n'est pas jouée (ou annule-la avant).
+      const now = Date.now();
+      if (state.reservations.some((r) => r.clubId === club.id && r.time === t && !isPlayed(r, now))) {
+        toast.show('Cet horaire a des réservations à venir — annule-les d’abord.', { icon: 'alert-circle' });
+        return;
+      }
+      set.delete(t);
+    } else set.add(t);
     setClubSlots(club.id, [...set]);
   };
   const addCourt = () => {
@@ -167,6 +177,13 @@ export function SectionMonClub({ club }: { club: Club }) {
   };
   const removeCourt = (n: string) => {
     if (courts.length <= 1) return; // garder au moins un terrain
+    // Retirer un terrain qui a des réservations À VENIR les rendrait invisibles du planning ET
+    // rouvrirait le créneau à la réservation → double occupation physique. On refuse.
+    const now = Date.now();
+    if (state.reservations.some((r) => r.clubId === club.id && r.court === n && !isPlayed(r, now))) {
+      toast.show(`« ${n} » a des réservations à venir — annule-les ou attends qu’elles soient jouées.`, { icon: 'alert-circle' });
+      return;
+    }
     setClubCourts(
       club.id,
       courts.filter((c) => c !== n),

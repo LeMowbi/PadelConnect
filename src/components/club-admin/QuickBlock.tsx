@@ -27,8 +27,8 @@ export function QuickBlock({
   courts: string[];
   dayHasTournament: (dateKey: string) => boolean;
   courtStatus: (dateKey: string, time: string, court: string) => CourtStatus;
-  onBlock: (dateKey: string, time: string, court: string, reason: string, ts: number) => boolean;
-  onUnblock: (dateKey: string, time: string, court: string) => void;
+  onBlock: (dateKey: string, time: string, court: string, reason: string, ts: number) => Promise<boolean>;
+  onUnblock: (dateKey: string, time: string, court: string) => Promise<boolean>;
 }) {
   const [day, setDay] = useState(days[0]);
   const [time, setTime] = useState<string | null>(null);
@@ -190,7 +190,7 @@ export function QuickBlock({
                     label="Débloquer"
                     icon="lock-open"
                     onPress={() => {
-                      onUnblock(day.key, time, confirmUnblock);
+                      void onUnblock(day.key, time, confirmUnblock);
                       setConfirmUnblock(null);
                     }}
                     full
@@ -213,11 +213,13 @@ export function QuickBlock({
                     key={reason}
                     label={reason}
                     onPress={() => {
-                      if (!onBlock(day.key, time, court, reason, tsOf(time))) {
-                        setError('Impossible de bloquer ce créneau.');
-                        return;
-                      }
-                      reset();
+                      void onBlock(day.key, time, court, reason, tsOf(time)).then((ok) => {
+                        if (!ok) {
+                          setError('Impossible de bloquer ce créneau.');
+                          return;
+                        }
+                        reset();
+                      });
                     }}
                   />
                 ))}

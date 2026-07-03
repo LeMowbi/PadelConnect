@@ -29,9 +29,12 @@ const PRIME_TIMES = new Set(['16:30', '18:00', '19:30']);
 export default function ReserverScreen() {
   const router = useRouter();
   const { state, setReserverView } = useApp();
-  // Tirer pour rafraîchir : resynchronise la session ET les matchs ouverts (remontés via key).
-  const [openMatchesKey, setOpenMatchesKey] = useState(0);
-  const { refreshControl } = usePullToRefresh(async () => setOpenMatchesKey((n) => n + 1));
+  // Tirer pour rafraîchir : resynchronise la session ET les matchs ouverts. `refreshToken` est
+  // juste passé en prop (PAS en `key`) : remonter OpenMatches réinitialiserait son état à
+  // `undefined` et ferait disparaître la section hors-ligne (échec réseau → null → rien affiché,
+  // en violation de la convention §8) et clignoter la section à chaque pull en ligne.
+  const [refreshToken, setRefreshToken] = useState(0);
+  const { refreshControl } = usePullToRefresh(async () => setRefreshToken((n) => n + 1));
 
   // todayKey : recalcule la liste après minuit (retour premier plan) — sinon « AUJ. »
   // resterait collé à la veille et la journée paraîtrait terminée au réveil.
@@ -48,7 +51,12 @@ export default function ReserverScreen() {
   const grid = useMemo(() => slotGrid({ clubs: visibleClubs, clubSlots: state.clubSlots }), [visibleClubs, state.clubSlots]);
   // Le soir, quand TOUS les créneaux réellement proposés du jour sont passés, on ouvre sur Demain.
   const todayOver = useMemo(() => !grid.some((t) => slotTimestamp(days[0].key, t) > Date.now()), [grid, days]);
-  const [day, setDay] = useState(todayOver ? days[1] : days[0]);
+  // On ne stocke QUE la clé du jour choisi et on dérive l’objet à chaque rendu (motif
+  // SectionReservations.tsx) : sinon, après une nuit en arrière-plan, `days` est recalé par
+  // useTodayKey mais `day` reste figé sur l’ancien objet (veille) → plus aucune pastille
+  // sélectionnée et un EmptyState « Plus de créneaux » affiché à tort.
+  const [selDayKey, setSelDayKey] = useState<string | null>(null);
+  const day = days.find((d) => d.key === selDayKey) ?? (todayOver ? days[1] : days[0]);
   const [slot, setSlot] = useState<string | null>(null); // créneau choisi (vue « Par heure » guidée)
   // La dernière vue utilisée est mémorisée (l’écran rouvre comme tu l’avais laissé).
   const view = state.reserverView;
@@ -56,7 +64,7 @@ export default function ReserverScreen() {
   const [sheet, setSheet] = useState<{ club: Club; time: string } | null>(null);
   const pickDay = (d: DayOption) => {
     hapticLight(); // tap léger à chaque étape du tunnel (jour → créneau → terrain)
-    setDay(d);
+    setSelDayKey(d.key);
     setSlot(null);
   };
   const pickSlot = (time: string) => {
@@ -64,41 +72,60 @@ export default function ReserverScreen() {
     setSlot(time);
   };
 
-  const ctx: AvailCtx = {
-    clubs: visibleClubs,
-    clubSlots: state.clubSlots,
-    clubCourts: state.clubCourts,
-    reservations: state.reservations,
-    occupancy: state.occupancy,
-    comps: [...seedCompetitions, ...state.myCompetitions],
-    blocked: state.blockedSlots,
-  };
-
-  const rows = grid
-    .map((time) => {
-      const ts = slotTimestamp(day.key, time);
-      return { time, ts, clubs: clubsFreeAt(day.key, time, ts, ctx) };
-    })
-    .filter((r) => r.ts > Date.now()); // on masque les heures déjà passées
-  const selectedRow = rows.find((r) => r.time === slot) ?? null;
+  // Contexte de disponibilité mémoïsé (balayé par les deux vues ci-dessous, pour tous les
+  // clubs × créneaux) : sans ça, il était recréé à chaque rendu, invalidant toute mémoïsation
+  // en aval — motif déjà appliqué dans reserver/[clubId].tsx.
+  const ctx = useMemo<AvailCtx>(
+    () => ({
+      clubs: visibleClubs,
+      clubSlots: state.clubSlots,
+      clubCourts: state.clubCourts,
+      reservations: state.reservations,
+      occupancy: state.occupancy,
+      comps: [...seedCompetitions, ...state.myCompetitions],
+      blocked: state.blockedSlots,
+    }),
+    [visibleClubs, state.clubSlots, state.clubCourts, state.reservations, state.occupancy, state.myCompetitions, state.blockedSlots],
+  );
 
   // Priorité d’affichage des clubs : Padelta (règle porteur) → mes FAVORIS (l’habitué
   // re-réserve en un geste) → le reste en ordre alphabétique (ordre d’activeClubs).
   const favIds = state.favoriteClubIds;
   const clubRank = (c: Club) => (isFeaturedClub(c.id) ? 0 : favIds.includes(c.id) ? 1 : 2);
 
+  // Vue « Par heure » : mémoïsée et calculée SEULEMENT quand elle est active (coûteux — balaye
+  // tous les clubs par créneau) ; recalculée si le contexte de dispo, le jour ou la grille bougent.
+  const rows = useMemo(() => {
+    if (view !== 'Par heure') return [];
+    return grid
+      .map((time) => {
+        const ts = slotTimestamp(day.key, time);
+        return { time, ts, clubs: clubsFreeAt(day.key, time, ts, ctx) };
+      })
+      .filter((r) => r.ts > Date.now()); // on masque les heures déjà passées
+  }, [view, grid, day.key, ctx]);
+  const selectedRow = rows.find((r) => r.time === slot) ?? null;
+
   // Vue « Par club » : pour chaque club, ses créneaux encore libres ce jour. Les clubs
   // « Bientôt » (pas encore réservables) sont exclus, comme dans la vue « Par heure ».
-  const byClub = visibleClubs
-    .filter((club) => !club.comingSoon)
-    .map((club) => ({
-      club,
-      slots: openSlotsFor(club, state.clubSlots)
-        .map((time) => ({ time, ts: slotTimestamp(day.key, time) }))
-        .filter((s) => s.ts > Date.now() && freeCourts(club, day.key, s.time, ctx).length > 0),
-    }))
-    // Tri STABLE par priorité : à rang égal, l’ordre alphabétique de visibleClubs est conservé.
-    .sort((a, b) => clubRank(a.club) - clubRank(b.club));
+  // Mémoïsée et calculée SEULEMENT quand elle est active, même motif que `rows` ci-dessus.
+  const byClub = useMemo(() => {
+    if (view !== 'Par club') return [];
+    return (
+      visibleClubs
+        .filter((club) => !club.comingSoon)
+        .map((club) => ({
+          club,
+          slots: openSlotsFor(club, state.clubSlots)
+            .map((time) => ({ time, ts: slotTimestamp(day.key, time) }))
+            .filter((s) => s.ts > Date.now() && freeCourts(club, day.key, s.time, ctx).length > 0),
+        }))
+        // Tri STABLE par priorité : à rang égal, l’ordre alphabétique de visibleClubs est conservé.
+        .sort((a, b) => clubRank(a.club) - clubRank(b.club))
+    );
+    // clubRank est une fonction pure de favIds (isFeaturedClub est stable) : favIds suffit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, visibleClubs, state.clubSlots, day.key, ctx, favIds]);
 
   const open = (club: Club, time: string) => {
     hapticLight(); // aligné sur pickDay/pickSlot : tout le tunnel « Réserver » émet un tap léger
@@ -106,7 +133,7 @@ export default function ReserverScreen() {
   };
 
   const isToday = day.key === days[0].key;
-  const goTomorrow = () => setDay(days[1]);
+  const goTomorrow = () => setSelDayKey(days[1].key);
   const noSlotsByClub = !byClub.some((b) => b.slots.length > 0);
 
   return (
@@ -304,7 +331,7 @@ export default function ReserverScreen() {
         )}
 
         {/* Matchs ouverts : des joueurs cherchent du monde — rejoindre est gratuit. */}
-        {state.serverUserId ? <OpenMatches key={openMatchesKey} /> : null}
+        {state.serverUserId ? <OpenMatches refreshToken={refreshToken} /> : null}
 
         <View style={{ marginTop: spacing.lg }}>
           <Button

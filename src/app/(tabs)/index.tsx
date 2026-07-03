@@ -743,15 +743,18 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {/* Tournois */}
-        <Reveal delay={140}>
-          <View style={styles.section}>
-            <SectionHeader title="Tournois à venir" actionLabel="Tout voir" onAction={() => go('/competitions')} />
-            {competitions.map((c) => (
-              <CompetitionCard key={c.id} comp={c} />
-            ))}
-          </View>
-        </Reveal>
+        {/* Tournois — section masquée si aucun tournoi à venir (même règle que « Ton prochain
+            match » ci-dessus : pas d’en-tête suivi de vide). */}
+        {competitions.length > 0 ? (
+          <Reveal delay={140}>
+            <View style={styles.section}>
+              <SectionHeader title="Tournois à venir" actionLabel="Tout voir" onAction={() => go('/competitions')} />
+              {competitions.map((c) => (
+                <CompetitionCard key={c.id} comp={c} />
+              ))}
+            </View>
+          </Reveal>
+        ) : null}
       </Reveal>
     </Screen>
   );

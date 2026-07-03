@@ -22,7 +22,7 @@ import { hapticSuccess } from '@/lib/haptics';
 import { COMMISSION_RATE, isPlayed, useApp, type ServerClubRequest, type ServerSupportMessage } from '@/store/AppContext';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { addWeeks, dateKeyLabel, weekKeyOf, weekLabel } from '@/lib/days';
-import { fcfa } from '@/lib/format';
+import { fcfa, pctLabel } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
 import { colors, font, radius, shadows, spacing } from '@/theme';
 
@@ -188,7 +188,7 @@ export default function Operateur() {
     setLoadingReq(true);
     const { ok, requests: rows } = await fetchRequestsRef.current();
     setReqError(!ok);
-    setRequests(rows);
+    if (ok) setRequests(rows); // §8 : un échec réseau ne remplace pas la liste déjà chargée par []
     setLoadingReq(false);
   }, []);
   // Chargement initial : on n’appelle setState que DANS le callback async (après await),
@@ -198,7 +198,7 @@ export default function Operateur() {
     fetchRequestsRef.current().then(({ ok, requests: rows }) => {
       if (!alive) return;
       setReqError(!ok);
-      setRequests(rows);
+      if (ok) setRequests(rows); // §8 : garder la liste existante si le fetch échoue
       setLoadingReq(false);
     });
     return () => {
@@ -340,7 +340,7 @@ export default function Operateur() {
       `*PadelConnect — Décompte semaine ${weekLabel(week)}*\n${row.clubName}\n\n` +
       `Parties jouées : ${row.count}\n` +
       `Volume estimé : ${fcfa(row.revenue)}\n` +
-      `Commission PadelConnect (${Math.round(row.rate * 100)}%) : *${fcfa(row.commission)}*\n` +
+      `Commission PadelConnect (${pctLabel(row.rate)}%) : *${fcfa(row.commission)}*\n` +
       `À régler par Wave 🙏\n\n` +
       `Détail :\n${lines}`;
     const phone = (findClub(row.clubId, state.customClubs, state.clubInfo) as { contactPhone?: string } | undefined)?.contactPhone ?? '';
@@ -350,7 +350,7 @@ export default function Operateur() {
     openWhatsApp(phone, message);
     // Ne JAMAIS rétrograder un statut déjà « payé » : un renvoi du décompte (justificatif,
     // relance) à un club déjà réglé ne doit pas faire regonfler « Reste à encaisser ».
-    if (statusOf(row.clubId) !== 'paid') setPaymentStatus(row.clubId, week, 'sent');
+    if (statusOf(row.clubId) !== 'paid') void setPaymentStatus(row.clubId, week, 'sent');
   };
 
   // Export de TOUTE la semaine (tableau CSV, séparateur « ; ») à partager (comptabilité).
@@ -364,7 +364,7 @@ export default function Operateur() {
       .map((r) => {
         const st = statusOf(r.clubId);
         const label = st === 'paid' ? 'Payé' : st === 'sent' ? 'Décompte envoyé' : 'À facturer';
-        return `${r.clubName};${r.count};${r.revenue};${Math.round(r.rate * 100)};${r.commission};${label}`;
+        return `${r.clubName};${r.count};${r.revenue};${pctLabel(r.rate)};${r.commission};${label}`;
       })
       .join('\n');
     const total = `TOTAL;${totalCount};${totalRevenue};;${totalCommission};`;
@@ -551,7 +551,7 @@ export default function Operateur() {
                           {r.clubName}
                         </Txt>
                         <Txt variant="muted">
-                          {r.count} résa{r.count > 1 ? 's' : ''} · volume ≈ {fcfa(r.revenue)} · {Math.round(r.rate * 100)}%
+                          {r.count} résa{r.count > 1 ? 's' : ''} · volume ≈ {fcfa(r.revenue)} · {pctLabel(r.rate)}%
                         </Txt>
                       </View>
                       <View style={{ alignItems: 'flex-end', gap: 4 }}>
@@ -582,17 +582,24 @@ export default function Operateur() {
                           label="Annuler"
                           icon="arrow-undo"
                           variant="ghost"
-                          onPress={() => setPaymentStatus(r.clubId, week, 'sent')}
+                          onPress={() =>
+                            void setPaymentStatus(r.clubId, week, 'sent').then(({ ok }) => {
+                              if (!ok) toast.show('Changement impossible — réessaie', { icon: 'alert-circle' });
+                            })
+                          }
                         />
                       ) : (
                         <Button
                           size="sm"
                           label="Marquer payé"
                           icon="checkmark-circle"
-                          onPress={() => {
-                            hapticSuccess(); // accusé discret d’une tâche financière hebdomadaire
-                            setPaymentStatus(r.clubId, week, 'paid');
-                          }}
+                          onPress={() =>
+                            void setPaymentStatus(r.clubId, week, 'paid').then(({ ok }) => {
+                              if (ok)
+                                hapticSuccess(); // accusé APRÈS confirmation serveur (pas avant)
+                              else toast.show('Changement impossible — réessaie', { icon: 'alert-circle' });
+                            })
+                          }
                         />
                       )}
                     </View>
@@ -656,7 +663,7 @@ export default function Operateur() {
             <TournamentFees
               comps={playerTournamentsToBill}
               payments={state.operatorPayments}
-              onSetPaid={(id, paid) => setPaymentStatus('tourn', id, paid ? 'paid' : 'tofacture')}
+              onSetPaid={(id, paid) => void setPaymentStatus('tourn', id, paid ? 'paid' : 'tofacture')}
             />
           </View>
         </>
@@ -676,7 +683,9 @@ export default function Operateur() {
               <Card>
                 <SkeletonLines lines={3} />
               </Card>
-            ) : reqError ? (
+            ) : reqError && requests.length === 0 ? (
+              // Erreur affichée SEULEMENT si on n'a aucune liste chargée : un refresh raté ne doit
+              // pas effacer les demandes déjà à l'écran (§8, comme le handler des signalements).
               <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
                 <Ionicons name="cloud-offline-outline" size={20} color={colors.coral} />
                 <Txt variant="muted" style={{ flex: 1 }}>

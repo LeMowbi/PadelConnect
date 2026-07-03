@@ -367,9 +367,10 @@ type AppContextType = {
   // Recharge les notes moyennes (après dépôt/suppression d’un avis — sinon les cartes des
   // listes garderaient l’ancienne moyenne jusqu’au prochain retour au premier plan).
   refreshClubRatings: () => Promise<void>;
-  setClubInfo: (clubId: string, patch: ClubInfo) => void;
+  // ok = false si l’écriture SERVEUR échoue (l’appelant affiche un toast honnête au lieu d’un « ✓ »).
+  setClubInfo: (clubId: string, patch: ClubInfo) => Promise<{ ok: boolean }>;
   setBoost: (clubId: string, days: number) => Promise<{ ok: boolean }>; // days > 0 active (expiration), 0 désactive — serveur
-  setPaymentStatus: (clubId: string, weekKey: string, status: 'tofacture' | 'sent' | 'paid') => void;
+  setPaymentStatus: (clubId: string, weekKey: string, status: 'tofacture' | 'sent' | 'paid') => Promise<{ ok: boolean }>;
   requestClub: (input: {
     name: string;
     area: string;
@@ -428,13 +429,13 @@ type AppContextType = {
   setManagedClub: (id: string) => void;
   setClubSlots: (clubId: string, slots: string[]) => void;
   setClubCourts: (clubId: string, courts: string[]) => void;
-  blockSlot: (b: BlockedSlot, startsAt: number) => boolean;
-  unblockSlot: (clubId: string, dateKey: string, time: string, court: string) => void;
+  blockSlot: (b: BlockedSlot, startsAt: number) => Promise<boolean>;
+  unblockSlot: (clubId: string, dateKey: string, time: string, court: string) => Promise<boolean>;
   // ok = false quand l’écriture SERVEUR a échoué (réseau/session) : l’actu reste alors visible
   // seulement sur le téléphone de l’opérateur — l’appelant doit le dire honnêtement.
   // `push` (47) : true = notify-club envoie AUSSI l’actu en notification à tous les joueurs.
   setOperatorNews: (news: { title: string; subtitle?: string; link?: string; push?: boolean }) => Promise<{ ok: boolean }>;
-  removeOperatorNews: () => void; // retire l’actu d’accueil publiée
+  removeOperatorNews: () => Promise<{ ok: boolean }>; // retire l’actu d’accueil publiée (attend le serveur)
   dismissNews: (id: string) => void;
   resetAll: () => void;
 };
@@ -1603,14 +1604,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!rt || sessionEpochRef.current !== epoch) return; // null = échec réseau → on garde
         setState((s) => ({ ...s, clubRatings: rt }));
       },
-      setClubInfo: (clubId, patch) =>
-        setState((s) => {
-          const merged = { ...s.clubInfo[clubId], ...patch };
-          // Le gérant connecté pousse sa page au serveur (visible par tous). Le serveur refuse
-          // si ce n’est pas son club (gérant d’un autre club / joueur) — la modif reste alors locale.
-          if (s.serverUserId) void upsertClubOverride(clubId, merged);
-          return { ...s, clubInfo: { ...s.clubInfo, [clubId]: merged } };
-        }),
+      // Le gérant connecté pousse sa page au serveur (visible par tous). On ATTEND le serveur et
+      // on n’applique le miroir local qu’au succès : sinon un « Enregistré ✓ » mentait hors-ligne
+      // (la modif n’était que locale et se rétablissait silencieusement au prochain chargement).
+      setClubInfo: async (clubId, patch) => {
+        const merged = { ...state.clubInfo[clubId], ...patch };
+        if (state.serverUserId) {
+          const ok = await upsertClubOverride(clubId, merged);
+          if (!ok) return { ok: false };
+        }
+        setState((s) => ({ ...s, clubInfo: { ...s.clubInfo, [clubId]: { ...s.clubInfo[clubId], ...patch } } }));
+        return { ok: true };
+      },
       // Boost piloté côté SERVEUR → visible par tous les joueurs. On écrit d’abord au serveur
       // (réservé à l’opérateur), puis on met à jour le miroir local au succès.
       setBoost: async (clubId, days) => {
@@ -1635,17 +1640,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
         return { ok: true };
       },
-      setPaymentStatus: (clubId, weekKey, status) => {
+      // Persistance SERVEUR (opérateur) : le statut « Payé / envoyé » survit à une réinstallation
+      // ou à un 2ᵉ appareil. On ATTEND le serveur et n’applique le miroir qu’au succès : sinon un
+      // échec réseau faisait revenir en silence le statut à « À facturer » (accusé mensonger).
+      setPaymentStatus: async (clubId, weekKey, status) => {
         const k = `${clubId}:${weekKey}`;
-        // Persistance SERVEUR (opérateur) : le statut « Payé / envoyé » survit à une réinstallation
-        // ou à un 2ᵉ appareil (sinon des sommes déjà réglées réapparaissaient « à facturer »).
-        if (state.serverUserId) void setOperatorPaymentRpc(k, status);
+        if (state.serverUserId) {
+          const ok = await setOperatorPaymentRpc(k, status);
+          if (!ok) return { ok: false };
+        }
         setState((s) => {
           const next = { ...s.operatorPayments };
           if (status === 'tofacture') delete next[k];
           else next[k] = status;
           return { ...s, operatorPayments: next };
         });
+        return { ok: true };
       },
       requestClub: ({ name, area, type, courts, priceFrom, contactPhone }) =>
         setState((s) => {
@@ -1865,7 +1875,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }),
       // Fermer un créneau hors app. Garde-fous : jamais dans le passé, jamais par-dessus
       // une réservation PadelConnect, jamais en double.
-      blockSlot: (b, startsAt) => {
+      blockSlot: async (b, startsAt) => {
         if (startsAt <= Date.now()) return false;
         const sameSlot = (x: { clubId: string; dateKey: string; time: string; court: string }) =>
           x.clubId === b.clubId && x.dateKey === b.dateKey && x.time === b.time && x.court === b.court;
@@ -1881,19 +1891,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const compBlocked = competitionBlockedCourts(b.clubId, b.dateKey, b.time, comps);
         if (compBlocked === 'all' || compBlocked.includes(b.court)) return false;
         // Persistance SERVEUR : le blocage devient RÉEL (visible par tous, empêche vraiment la
-        // réservation via le trigger) et survit à la réinstallation. Optimiste + réconcilié au fetch.
-        if (state.serverUserId) void blockSlotRow(b);
+        // réservation via le trigger) et survit à la réinstallation. On ATTEND le serveur et
+        // n’applique le miroir qu’au succès : sinon le gérant croyait le créneau fermé alors que
+        // le serveur avait refusé (ex. déjà réservé) — il aurait pu accepter un joueur en double.
+        if (state.serverUserId) {
+          const ok = await blockSlotRow(b);
+          if (!ok) return false;
+        }
         setState((s) => ({ ...s, blockedSlots: [...s.blockedSlots, b] }));
         return true;
       },
-      unblockSlot: (clubId, dateKey, time, court) => {
-        if (state.serverUserId) void unblockSlotRow(clubId, dateKey, time, court);
+      unblockSlot: async (clubId, dateKey, time, court) => {
+        if (state.serverUserId) {
+          const ok = await unblockSlotRow(clubId, dateKey, time, court);
+          if (!ok) return false;
+        }
         setState((s) => ({
           ...s,
           blockedSlots: s.blockedSlots.filter(
             (x) => !(x.clubId === clubId && x.dateKey === dateKey && x.time === time && x.court === court),
           ),
         }));
+        return true;
       },
       // L’opérateur publie/met à jour l’actu d’accueil. On ne régénère l’id (ce qui la
       // fait RÉAPPARAÎTRE chez les joueurs qui l’avaient fermée) QUE si le contenu change.
@@ -1913,11 +1932,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const ok = state.serverUserId ? await setOperatorNewsServer(next, news.push === true) : true;
         return { ok };
       },
-      removeOperatorNews: () =>
-        setState((s) => {
-          if (s.serverUserId) void clearOperatorNewsServer();
-          return { ...s, operatorNews: null };
-        }),
+      // Retrait de l’actu d’accueil : on ATTEND le serveur et on ne vide le miroir qu’au succès —
+      // sinon, hors-ligne, l’actu « retirée » restait publiée pour tous et réapparaissait au
+      // prochain fetch, sans que l’opérateur le sache (l’appel réseau était noyé dans l’updater).
+      removeOperatorNews: async () => {
+        if (state.serverUserId) {
+          const ok = await clearOperatorNewsServer();
+          if (!ok) return { ok: false };
+        }
+        setState((s) => ({ ...s, operatorNews: null }));
+        return { ok: true };
+      },
       dismissNews: (id) => setState((s) => ({ ...s, dismissedNewsId: id })),
       resetAll: () => {
         // Réinitialisation TOTALE : on coupe la session serveur, on efface les rappels et

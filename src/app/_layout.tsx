@@ -74,13 +74,14 @@ function RootNav() {
   const toast = useToast();
 
   // Sans compte → onboarding obligatoire ; avec compte → on quitte l’onboarding.
-  // reset-password est une route PUBLIQUE : l’utilisateur qui clique le lien « mot de passe
-  // oublié » est par définition déconnecté — sans cette exemption, le garde le renverrait vers
-  // l’onboarding avant qu’il puisse saisir son nouveau mot de passe.
+  // reset-password, legal et decouvrir sont des routes PUBLIQUES : reset-password parce que
+  // l’utilisateur qui clique le lien « mot de passe oublié » est par définition déconnecté ;
+  // legal et decouvrir parce que l’onboarding lui-même y renvoie (lien « CGU & confidentialité »,
+  // aperçu des clubs) — sans cette exemption, un visiteur sans compte ne pourrait jamais les lire.
   useEffect(() => {
     if (!hydrated) return;
     const onboarding = segments[0] === 'onboarding';
-    const publicRoute = onboarding || segments[0] === 'reset-password';
+    const publicRoute = onboarding || ['reset-password', 'legal', 'decouvrir'].includes(segments[0] ?? '');
     if (!state.account && !publicRoute) router.replace('/onboarding');
     else if (state.account && onboarding) router.replace('/');
   }, [hydrated, state.account, segments, router]);

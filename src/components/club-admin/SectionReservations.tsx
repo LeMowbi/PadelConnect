@@ -211,15 +211,18 @@ export function SectionReservations({
             if (blk) return { state: 'blocked', label: blk.reason };
             return { state: 'free' };
           }}
-          onBlock={(dKey, time, court, reason, ts) => {
-            const ok = blockSlot({ clubId: club.id, dateKey: dKey, time, court, reason }, ts);
+          onBlock={async (dKey, time, court, reason, ts) => {
+            const ok = await blockSlot({ clubId: club.id, dateKey: dKey, time, court, reason }, ts);
             if (ok) hapticSuccess();
             else hapticWarning();
             return ok;
           }}
-          onUnblock={(dKey, time, court) => {
-            unblockSlot(club.id, dKey, time, court);
-            hapticSuccess(); // déblocage toujours positif pour le gérant (le créneau redevient réservable)
+          onUnblock={async (dKey, time, court) => {
+            const ok = await unblockSlot(club.id, dKey, time, court);
+            if (ok)
+              hapticSuccess(); // le créneau redevient réservable
+            else hapticWarning();
+            return ok;
           }}
         />
       ) : null}

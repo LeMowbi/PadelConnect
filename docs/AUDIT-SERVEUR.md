@@ -1,5 +1,26 @@
 # Audit — actions serveur (sans terminal)
 
+## 0-BIS) AUDIT n°4 (2026-07-03) — coller SQL `48` + redéployer notify-club (3 min) — ⏳ À FAIRE
+
+Un audit complet (workflow multi-agents) a trouvé des correctifs. Côté serveur, **une seule
+migration à coller** et **notify-club à redéployer** :
+
+1. Dashboard Supabase → **SQL Editor** → **New query** → ouvre `supabase/48_audit4_hardening.sql`
+   du dépôt → copie **tout** → colle → **Run**. Attendu : « Success. No rows returned ».
+   (Elle corrige d'un coup : les **tournois officiels PadelConnect** qui échouaient toujours à la
+   création — contrainte trop stricte ; le **classement infalsifiable** — un perdant ne peut plus
+   se déclarer vainqueur ; la **double-réservation de coach** ; le fait de **quitter/fermer un
+   match ouvert** ; et quelques bornes anti-triche. Idempotente, rejouable sans risque.)
+2. Dashboard → **Edge Functions** → **notify-club** → **Edit** → recolle **tout**
+   `supabase/functions/notify-club/index.ts` → **Deploy** (moins de push en double, envoi d'actu
+   en tranches pour ne plus échouer au-delà de ~100 joueurs).
+   (Aucun NOUVEAU webhook à créer ici — ceux de la section 0 suffisent.)
+
+⚠️ Si tu n'as pas ENCORE fait la section 0 ci-dessous (SQL 42→47 + webhooks match_results et
+operator_news), fais-la D'ABORD, puis colle la 48.
+
+---
+
 ## 0) NOUVEAU (2026-07-02/03) — SQL `42` à `47` + notify-club + 2 webhooks (8 min) — ⏳ À FAIRE
 
 ### a. Coller les migrations `42`, `43`, `44`, `45`, `46` puis `47` (dans cet ordre)

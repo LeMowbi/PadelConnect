@@ -95,6 +95,7 @@ export default function ClassementScreen() {
                     </Txt>
                     <Txt variant="small" color={colors.textMuted} numberOfLines={1}>
                       {r.wins > 0 ? `🏆 ${r.wins} tournoi${r.wins > 1 ? 's' : ''} gagné${r.wins > 1 ? 's' : ''} · ` : ''}
+                      {r.offPlayed > 0 ? `${r.offPlayed} officiel${r.offPlayed > 1 ? 's' : ''} joué${r.offPlayed > 1 ? 's' : ''} · ` : ''}
                       {r.matchWins > 0 ? `${r.matchWins} victoire${r.matchWins > 1 ? 's' : ''} · ` : ''}
                       {r.played} partie{r.played > 1 ? 's' : ''} · niv. {r.level.toFixed(1)}
                     </Txt>
@@ -106,7 +107,7 @@ export default function ClassementScreen() {
           })}
         </Card>
       )}
-      <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+      <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.md }}>
         Les points se gagnent en JOUANT : 100 pour un tournoi officiel gagné (badge doré), 10 pour y participer, 3 par match gagné (chaque
         joueur saisit le score dans « Mes réservations », l’app valide dès que les saisies concordent), 2 par partie jouée. Tout est vérifié
         — rien ne se déclare tout seul.

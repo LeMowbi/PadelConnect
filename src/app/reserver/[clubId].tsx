@@ -18,7 +18,7 @@ import { addReservationToCalendar } from '@/lib/calendar';
 import { openWhatsApp } from '@/lib/contact';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { courtsFor, freeCourts, hasFullDayCompetition, openSlotsFor, type AvailCtx } from '@/lib/availability';
-import { dateKeyLabel, nextDays, slotTimestamp, type DayOption } from '@/lib/days';
+import { dateKeyLabel, nextDays, slotTimestamp } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
 import { minPrice, priceForSlot, priceTiersFor } from '@/lib/pricing';
 import { useTodayKey } from '@/lib/useTodayKey';
@@ -40,10 +40,16 @@ export default function ReserverScreen() {
   // jour où ce créneau est encore à venir (aujourd’hui, sinon demain) — sans ça, le choix du
   // jour remettait le créneau à zéro et la pré-sélection promise n’était jamais tenue.
   const presetTime = typeof params.time === 'string' && params.time ? params.time : undefined;
-  const [day, setDay] = useState<DayOption | null>(
-    dates.find((d) => d.key === params.dateKey) ??
-      (presetTime ? (dates.find((d) => slotTimestamp(d.key, presetTime) > Date.now()) ?? null) : null),
+  // On ne stocke QUE la clé du jour choisi et on dérive l’objet à chaque rendu (motif
+  // SectionReservations.tsx / reserver/index.tsx) : sinon, après une nuit en arrière-plan,
+  // `dates` est recalé par useTodayKey mais `day` resterait figé sur l’ancien objet (veille).
+  const [selDayKey, setSelDayKey] = useState<string | null>(
+    (
+      dates.find((d) => d.key === params.dateKey) ??
+      (presetTime ? (dates.find((d) => slotTimestamp(d.key, presetTime) > Date.now()) ?? null) : null)
+    )?.key ?? null,
   );
+  const day = dates.find((d) => d.key === selDayKey) ?? null;
   const [slot, setSlot] = useState<string | null>(presetTime ?? null);
   const [court, setCourt] = useState<string | null>(null);
   // Participants : toi + jusqu’à 3 invités (amis ou nom libre).
@@ -330,7 +336,7 @@ export default function ReserverScreen() {
               label={d.label}
               active={d.key === day?.key}
               onPress={() => {
-                setDay(d);
+                setSelDayKey(d.key);
                 setSlot(null);
                 setCourt(null);
               }}

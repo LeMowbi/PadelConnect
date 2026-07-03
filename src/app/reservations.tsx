@@ -13,7 +13,7 @@ import { isPlayed, useApp, type Reservation } from '@/store/AppContext';
 import { addReservationToCalendar } from '@/lib/calendar';
 import { openWhatsApp } from '@/lib/contact';
 import { hapticSuccess } from '@/lib/haptics';
-import { fetchMyMatchScores, submitMatchScore, type MatchScore, type MatchSet } from '@/lib/matchResults';
+import { fetchMyMatchScores, leaveOpenMatch, setMatchOpen, submitMatchScore, type MatchScore, type MatchSet } from '@/lib/matchResults';
 import { dateKeyLabel, dayKey } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
 import { APP_DOMAIN } from '@/lib/referrals';
@@ -70,6 +70,13 @@ export default function ReservationsScreen() {
   const [setDrafts, setSetDrafts] = useState<{ me: string; them: string }[]>(EMPTY_SETS);
   const [scoreSending, setScoreSending] = useState(false); // garde anti double-tap
 
+  // MATCHS OUVERTS (48) : quitter un match rejoint, ou (créateur) le fermer/rouvrir aux
+  // nouveaux. Le serveur fait foi (retour au premier plan) ; ici on reflète l'action
+  // immédiatement en local : `leftIds` masque un match quitté, `openOverride` bascule le libellé.
+  const [leftIds, setLeftIds] = useState<string[]>([]);
+  const [openOverride, setOpenOverride] = useState<Record<string, boolean>>({});
+  const [matchBusy, setMatchBusy] = useState<string | null>(null);
+
   const loadScores = async () => {
     const list = await fetchMyMatchScores();
     if (list) setScores(Object.fromEntries(list.map((m) => [m.reservationId, m])));
@@ -105,7 +112,7 @@ export default function ReservationsScreen() {
   const isPending = (r: Reservation) => state.pendingInvitationIds.includes(r.id);
   const upcomingAll = mine.filter((r) => !isPlayed(r, now)).sort((a, b) => a.startsAt - b.startsAt);
   const pendingInvites = upcomingAll.filter(isPending);
-  const upcoming = upcomingAll.filter((r) => !isPending(r));
+  const upcoming = upcomingAll.filter((r) => !isPending(r) && !leftIds.includes(r.id));
   const past = mine.filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt);
   const pastShown = past.slice(0, pastShownCount);
 
@@ -211,10 +218,36 @@ export default function ReservationsScreen() {
     void loadScores();
   };
 
-  // Matchs récents où un AUTRE joueur a saisi son score et pas moi → invitation à saisir.
+  // Quitter un match ouvert qu'on a rejoint : place réellement libérée côté serveur (48).
+  const leaveMatch = async (r: Reservation) => {
+    if (matchBusy) return;
+    setMatchBusy(r.id);
+    const ok = await leaveOpenMatch(r.id);
+    setMatchBusy(null);
+    if (ok) {
+      setLeftIds((cur) => [...cur, r.id]);
+      toast.show('Tu as quitté le match — ta place est libérée.');
+    } else toast.show('Impossible de quitter — réessaie', { icon: 'alert-circle' });
+  };
+  // Le créateur ferme / rouvre son match aux nouveaux joueurs (les places prises restent).
+  const toggleMatchOpen = async (r: Reservation) => {
+    if (matchBusy) return;
+    const current = openOverride[r.id] ?? !!r.openMatch;
+    setMatchBusy(r.id);
+    const ok = await setMatchOpen(r.id, !current);
+    setMatchBusy(null);
+    if (ok) {
+      setOpenOverride((cur) => ({ ...cur, [r.id]: !current }));
+      toast.show(!current ? 'Match rouvert aux joueurs' : 'Match fermé aux nouveaux joueurs');
+    } else toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
+  };
+
+  // Matchs où un AUTRE joueur a saisi son score et pas moi → invitation à saisir. Pas de coupe
+  // à 14 jours ici : dès qu'une saisie existe (donc `s` défini), la contestation reste ouverte
+  // côté serveur (48) — la fenêtre de 14 j ne borne que la toute PREMIÈRE saisie.
   const scorePrompts = past.filter((r) => {
     const s = scores[r.id];
-    return !!s && !s.mine && !s.validated && r.startsAt > now - 14 * 86400000;
+    return !!s && !s.mine && !s.validated;
   });
 
   return (
@@ -485,6 +518,37 @@ export default function ReservationsScreen() {
                       <Button size="sm" label="Annuler" icon="close" variant="danger" onPress={() => setCancelTarget(r)} pill />
                     ) : null}
                   </View>
+                  {/* Matchs ouverts (48) : le créateur ferme/rouvre aux nouveaux ; un joueur qui a
+                      rejoint peut quitter (sa place se libère). Rien pour une résa classique. */}
+                  {owner && r.openMatch ? (
+                    <View style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        label={
+                          matchBusy === r.id
+                            ? '…'
+                            : (openOverride[r.id] ?? true)
+                              ? 'Fermer aux nouveaux joueurs'
+                              : 'Rouvrir le match aux joueurs'
+                        }
+                        icon={(openOverride[r.id] ?? true) ? 'lock-closed-outline' : 'lock-open-outline'}
+                        onPress={() => void toggleMatchOpen(r)}
+                        disabled={matchBusy !== null}
+                      />
+                    </View>
+                  ) : !owner && r.openMatch && r.bookedBy ? (
+                    <View style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        label={matchBusy === r.id ? '…' : 'Je ne peux plus venir'}
+                        icon="exit-outline"
+                        onPress={() => void leaveMatch(r)}
+                        disabled={matchBusy !== null}
+                      />
+                    </View>
+                  ) : null}
                   {owner && !canCancel
                     ? (() => {
                         // À moins de 5 h, l'annulation passe par le club (décision porteur) :
@@ -631,7 +695,9 @@ export default function ReservationsScreen() {
                     </Pressable>
                     {/* Saisie du score (46) : matchs récents (≤ 14 jours, fenêtre serveur) —
                         je peux saisir mon score, ou le corriger tant que rien n'est validé. */}
-                    {state.serverUserId && r.startsAt > now - 14 * 86400000 && (!scores[r.id]?.mine || !scores[r.id].validated) ? (
+                    {state.serverUserId &&
+                    (r.startsAt > now - 14 * 86400000 || !!scores[r.id]) &&
+                    (!scores[r.id]?.mine || !scores[r.id].validated) ? (
                       <Pressable onPress={() => openScore(r)} style={styles.replayBtn}>
                         <Ionicons name="trophy-outline" size={13} color={colors.signature} />
                         <Txt variant="small" color={colors.signature} style={{ fontWeight: '600' }}>
@@ -750,7 +816,7 @@ export default function ReservationsScreen() {
         {/* Verdict EN DIRECT : le joueur voit ce que sa saisie veut dire avant d'envoyer. */}
         <Txt
           variant="small"
-          color={parsed.error ? colors.textFaint : parsed.iWin ? colors.signature : colors.coral}
+          color={parsed.error ? colors.textMuted : parsed.iWin ? colors.signature : colors.coral}
           style={{ marginTop: spacing.sm, fontWeight: '600' }}
         >
           {parsed.error ?? (parsed.iWin ? '→ Victoire de ton équipe 🏆' : '→ Défaite de ton équipe')}

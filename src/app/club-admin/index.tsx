@@ -440,8 +440,12 @@ export default function ClubAdmin() {
                             icon="lock-open"
                             variant="secondary"
                             onPress={() => {
-                              unblockSlot(club.id, selectedCell.dateKey, selectedCell.time, c);
-                              toast.show('Créneau rouvert');
+                              void unblockSlot(club.id, selectedCell.dateKey, selectedCell.time, c).then((ok) =>
+                                toast.show(
+                                  ok ? 'Créneau rouvert' : 'Impossible de rouvrir — réessaie',
+                                  ok ? undefined : { icon: 'alert-circle' },
+                                ),
+                              );
                             }}
                           />
                         </>
@@ -473,14 +477,15 @@ export default function ClubAdmin() {
                             key={reason}
                             label={reason}
                             onPress={() => {
-                              const ok = blockSlot(
+                              setBlockingCourt(null);
+                              void blockSlot(
                                 { clubId: club.id, dateKey: selectedCell.dateKey, time: selectedCell.time, court: c, reason },
                                 cellTs,
-                              );
-                              setBlockingCourt(null);
-                              toast.show(
-                                ok ? 'Créneau bloqué' : 'Impossible de bloquer ce créneau',
-                                ok ? undefined : { icon: 'alert-circle' },
+                              ).then((ok) =>
+                                toast.show(
+                                  ok ? 'Créneau bloqué' : 'Impossible de bloquer ce créneau',
+                                  ok ? undefined : { icon: 'alert-circle' },
+                                ),
                               );
                             }}
                           />

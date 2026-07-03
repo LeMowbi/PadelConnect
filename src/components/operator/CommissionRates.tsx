@@ -3,6 +3,7 @@ import { TextInput, View } from 'react-native';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, Txt } from '@/components/ui';
 import { opStyles } from '@/components/operator/styles';
+import { pctLabel } from '@/lib/format';
 import { colors, spacing } from '@/theme';
 
 // Commission par club : l’opérateur fixe le % négocié avec chaque club (repli sur le défaut).
@@ -46,8 +47,8 @@ export function CommissionRates({
   return (
     <Card>
       <Txt variant="small" color={colors.textMuted}>
-        Par défaut {Math.round(defaultRate * 100)} %. Tu peux fixer un taux différent pour chaque club selon ton accord (préviens le club
-        avant) — il s’applique aussitôt au décompte.
+        Par défaut {pctLabel(defaultRate)} %. Tu peux fixer un taux différent pour chaque club selon ton accord (préviens le club avant) —
+        il s’applique aussitôt au décompte.
       </Txt>
       <Button
         size="sm"
@@ -59,7 +60,7 @@ export function CommissionRates({
       />
       {open
         ? clubs.map((c, i) => {
-            const current = Math.round((rates[c.id] ?? defaultRate) * 100);
+            const current = pctLabel(rates[c.id] ?? defaultRate);
             const custom = rates[c.id] !== undefined;
             return (
               <View key={c.id}>

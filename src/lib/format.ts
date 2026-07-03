@@ -9,6 +9,14 @@ export function perPlayer(sessionPrice: number): string {
   return fcfa(Math.round(sessionPrice / 4 / 100) * 100);
 }
 
+// Pourcentage d'une commission (0–1) en libellé exact : entier sans décimale, sinon une
+// décimale à la virgule (« 12,5 »). Évite l'incohérence d'un taux affiché arrondi (Math.round)
+// alors que le MONTANT est calculé au taux réel — décompte WhatsApp et export CSV compris.
+export function pctLabel(rate: number): string {
+  const p = rate * 100;
+  return Number.isInteger(p) ? `${p}` : p.toFixed(1).replace('.', ',');
+}
+
 // Libellé du niveau de jeu (1.0 → 7.0).
 export function levelLabel(n: number): string {
   if (n < 2.5) return 'Débutant';

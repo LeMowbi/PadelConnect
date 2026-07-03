@@ -59,3 +59,16 @@ export async function submitMatchScore(reservationId: string, sets: MatchSet[]):
   if (error) return 'error';
   return data === 'validated' || data === 'waiting' || data === 'conflict' || data === 'no_players' ? data : 'error';
 }
+
+// Quitter un match ouvert qu'on avait rejoint (48) : ma place est réellement libérée (retirée
+// de `invited`, players décrémenté) → un autre joueur peut la reprendre. Réservé au participant.
+export async function leaveOpenMatch(reservationId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('leave_open_match', { p_id: reservationId });
+  return !error && data === true;
+}
+
+// Le créateur ouvre / ferme son match aux nouveaux joueurs (48) — les places déjà prises restent.
+export async function setMatchOpen(reservationId: string, open: boolean): Promise<boolean> {
+  const { data, error } = await supabase.rpc('set_match_open', { p_id: reservationId, p_open: open });
+  return !error && data === true;
+}

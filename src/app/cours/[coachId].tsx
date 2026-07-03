@@ -16,7 +16,7 @@ import { activeClubs, findClub } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { freeCourts, hasFullDayCompetition, openSlotsFor, type AvailCtx } from '@/lib/availability';
 import { fetchClubCoaches, type ServerCoach } from '@/lib/coachesServer';
-import { dateKeyLabel, nextDays, slotTimestamp, type DayOption } from '@/lib/days';
+import { dateKeyLabel, nextDays, slotTimestamp } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { priceForSlot } from '@/lib/pricing';
@@ -61,7 +61,11 @@ export default function CoursScreen() {
   const todayKey = useTodayKey();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const dates = useMemo(() => nextDays(7), [todayKey]);
-  const [day, setDay] = useState<DayOption | null>(null);
+  // On ne stocke QUE la clé du jour choisi et on dérive l’objet à chaque rendu (motif
+  // SectionReservations.tsx / reserver/index.tsx) : sinon, après une nuit en arrière-plan,
+  // `dates` est recalé par useTodayKey mais `day` resterait figé sur l’ancien objet (veille).
+  const [selDayKey, setSelDayKey] = useState<string | null>(null);
+  const day = dates.find((d) => d.key === selDayKey) ?? null;
   const [slot, setSlot] = useState<string | null>(null);
   const [court, setCourt] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -248,7 +252,7 @@ export default function CoursScreen() {
               label={d.label}
               active={d.key === day?.key}
               onPress={() => {
-                setDay(d);
+                setSelDayKey(d.key);
                 setSlot(null);
                 setCourt(null);
               }}

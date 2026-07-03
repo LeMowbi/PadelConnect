@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, SectionHeader, Tag, Txt } from '@/components/ui';
@@ -12,7 +12,7 @@ const PREVIEW = 4; // liste repliée par défaut (l'onglet Réserver reste centr
 
 // MATCHS OUVERTS (45, modèle Playtomic) : des joueurs ont réservé leur terrain et cherchent
 // du monde — un tap et tu es de la partie (place prise immédiatement, créateur prévenu).
-export function OpenMatches() {
+export function OpenMatches({ refreshToken }: { refreshToken?: number } = {}) {
   const { state, refreshSession } = useApp();
   const toast = useToast();
   // undefined = chargement ; null = échec réseau (≠ [] = aucun match), convention §8.
@@ -35,6 +35,20 @@ export function OpenMatches() {
       sub.remove();
     };
   }, []);
+  // Tiré-pour-rafraîchir depuis l'écran parent (Réserver) : PAS de remontage via `key` — juste
+  // ce token qui déclenche un load(). load() garde déjà l'existant en cas d'échec (§8), donc un
+  // pull hors-ligne ne fait plus disparaître la section, et en ligne il n'y a plus de clignotement.
+  const skipFirst = useRef(true); // le premier chargement est déjà fait par l'effet de montage
+  useEffect(() => {
+    if (refreshToken === undefined) return;
+    if (skipFirst.current) {
+      skipFirst.current = false;
+      return;
+    }
+    void load();
+    // load() est redéfini à chaque rendu mais son comportement est stable (mêmes setState) —
+    // seul refreshToken doit déclencher un nouvel appel.
+  }, [refreshToken]);
 
   const join = async (m: OpenMatch) => {
     if (joining) return;

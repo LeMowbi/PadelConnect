@@ -16,7 +16,7 @@ export function NewsEditor({
 }: {
   news: { title: string; subtitle?: string; link?: string } | null;
   onPublish: (n: { title: string; subtitle?: string; link?: string; push?: boolean }) => Promise<{ ok: boolean }>;
-  onRemove: () => void;
+  onRemove: () => Promise<{ ok: boolean }>;
 }) {
   const toast = useToast();
   const [title, setTitle] = useState(news?.title ?? '');
@@ -133,10 +133,17 @@ export function NewsEditor({
             label="Retirer l’actu de l’accueil"
             icon="trash-outline"
             onPress={() => {
-              onRemove();
-              setTitle('');
-              setSubtitle('');
-              setLink('');
+              // On ATTEND le serveur : on ne vide les champs qu'au vrai succès (sinon, hors-ligne,
+              // l'actu resterait publiée pour tous alors que l'éditeur semble vidé).
+              void onRemove().then(({ ok }) => {
+                if (!ok) {
+                  toast.show('Retrait impossible — vérifie ta connexion', { icon: 'alert-circle' });
+                  return;
+                }
+                setTitle('');
+                setSubtitle('');
+                setLink('');
+              });
             }}
             full
           />

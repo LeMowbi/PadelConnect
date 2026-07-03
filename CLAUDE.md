@@ -93,7 +93,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `47` (voir dossier `supabase/`).
+  **SQL Editor → Run**. Migrations actuelles : `02` → `48` (voir dossier `supabase/`).
 - **Edge Function** `supabase/functions/notify-club/index.ts` (Deno) : envoie les push via
   l'API Expo. Déclenchée par des **Database Webhooks** (INSERT + UPDATE). Redéploiement **sans
   terminal** : Dashboard → Edge Functions → notify-club → Edit → coller le code → Deploy.
@@ -151,14 +151,25 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   le niveau, plafonné à 7 et auto-déclaré, ne peut pas servir de rang) : 100 = tournoi officiel
   gagné (winner_user_id ancré), 10 = tournoi officiel joué, 3 = victoire de match confirmée,
   2 = partie jouée. `fetch_leaderboard`/`my_leaderboard_rank`, écran `/classement`.
-- **Score de match (46)** : CHAQUE joueur du match saisit les sets de SON point de vue
-  (`submit_match_score`) ; l'app calcule la forme CANONIQUE (score vu du vainqueur) et
-  **désigne le vainqueur automatiquement** dès que 2 saisies concordent — pas de bouton
-  « confirmer ». Validation auto d'une saisie unique sous 48 h ; saisies discordantes =
-  match non compté (chacun corrige, y compris un 3ᵉ joueur qui conteste 2 saisies complices) ;
-  ≥ 2 comptes rattachés requis ; fenêtre 14 jours ; seuls les joueurs AYANT SAISI marquent
-  les +3. UI dans « Mes réservations » (`src/lib/matchResults.ts`), push via webhook
-  **`match_results`** (INSERT + UPDATE).
+- **Score de match (46, durci en 48)** : CHAQUE joueur du match saisit les sets de SON point de
+  vue (`submit_match_score`) ; l'app calcule la forme CANONIQUE (score vu du vainqueur) et
+  **désigne le vainqueur automatiquement**. RÈGLE ANTI-TRICHE (48) : un match n'est validé que
+  si un camp PERDANT reconnaît le score (une saisie « j'ai perdu » en miroir), OU si une saisie
+  UNIQUE reste 48 h sans réponse ; tout match où > 2 comptes revendiquent la victoire est GELÉ.
+  Deux « je gagne » identiques ne valident donc jamais (un perdant ne peut pas se créditer). Les
+  +3 ne comptent que si la résa est encore 'booked' (pas « pas venu »). Contestation ouvrable
+  au-delà de 14 j dès qu'une 1ʳᵉ saisie existe (la fenêtre 14 j ne borne que la 1ʳᵉ saisie).
+  UI « Mes réservations » (`src/lib/matchResults.ts`), push via webhook **`match_results`**.
+- **Durcissements audit n°4 (48)** : contrainte `competitions.organizer_type` élargie à
+  'operator' (les tournois officiels PadelConnect fonctionnent enfin) ; garde d'insertion des
+  réservations RÉORDONNÉE (passe avant la garde de disponibilité) + refus des créneaux passés +
+  plafond serveur ; `respond_invitation` libère la place d'un match ouvert ; `leave_open_match`
+  / `set_match_open` (quitter / fermer un match) ; `respond_lesson` refuse la double-résa coach
+  ('busy') et refuse proprement un conflit ; `coach_update_profile` borné [1000,1000000] ;
+  `club_add_coach` renvoie 'other_club' (coach déjà pris ailleurs). Côté client : écritures
+  gérant/opérateur honnêtes (attendent le serveur : infos club, blocage créneau, « payé »,
+  retrait d'actu), jour recalé après minuit, `pctLabel` (pourcentage exact), routes /legal &
+  /decouvrir publiques, écran auth-callback, bornes de requêtes (occupation, réservations).
 - **Push d'actu (47)** : case « Envoyer aussi en notification » dans l'éditeur d'actu
   opérateur (OPTIONNEL, décochée par défaut, jamais mémorisée) → colonne `operator_news.push`
   lue par notify-club via le webhook **`operator_news`** (INSERT + UPDATE, garde anti-doublon

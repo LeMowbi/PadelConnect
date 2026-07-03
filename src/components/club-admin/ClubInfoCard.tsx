@@ -21,7 +21,13 @@ function emptyTiers(club: Club): TierRow[] {
 }
 
 // Infos éditables du club (nom, quartier, description, type, tarifs par plage, WhatsApp).
-export function ClubInfoCard({ club, onSave }: { club: Club & { contactPhone?: string }; onSave: (patch: ClubInfo) => void }) {
+export function ClubInfoCard({
+  club,
+  onSave,
+}: {
+  club: Club & { contactPhone?: string };
+  onSave: (patch: ClubInfo) => Promise<{ ok: boolean }>;
+}) {
   const [name, setName] = useState(club.name);
   const [area, setArea] = useState(club.area);
   const [blurb, setBlurb] = useState(club.blurb);
@@ -30,6 +36,7 @@ export function ClubInfoCard({ club, onSave }: { club: Club & { contactPhone?: s
   const [tiers, setTiers] = useState<TierRow[]>(emptyTiers(club));
   const [phone, setPhone] = useState(club.contactPhone ?? '');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [tierError, setTierError] = useState<string | null>(null);
 
   const setTier = (i: number, patch: Partial<TierRow>) => {
@@ -58,7 +65,10 @@ export function ClubInfoCard({ club, onSave }: { club: Club & { contactPhone?: s
       return;
     }
     setTierError(null);
-    onSave({
+    // On ATTEND le serveur : « Enregistré ✓ » ne s’affiche qu’au vrai succès (sinon, hors-ligne,
+    // l’accusé mentait et la page se rétablissait silencieusement au prochain chargement).
+    setSaving(true);
+    void onSave({
       name: name.trim(),
       area: area.trim(),
       blurb: blurb.trim(),
@@ -66,9 +76,15 @@ export function ClubInfoCard({ club, onSave }: { club: Club & { contactPhone?: s
       priceFrom: Number(price),
       priceTiers: built.length ? built : undefined,
       contactPhone: phone.trim() || undefined,
+    }).then(({ ok }) => {
+      setSaving(false);
+      if (!ok) {
+        setTierError('Enregistrement impossible — vérifie ta connexion et réessaie.');
+        return;
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
     });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
   };
 
   return (
@@ -173,11 +189,11 @@ export function ClubInfoCard({ club, onSave }: { club: Club & { contactPhone?: s
       <View style={{ marginTop: spacing.md }}>
         <Button
           size="sm"
-          label={saved ? 'Enregistré ✓' : 'Enregistrer les infos'}
+          label={saving ? 'Enregistrement…' : saved ? 'Enregistré ✓' : 'Enregistrer les infos'}
           icon={saved ? 'checkmark-circle' : 'save-outline'}
           variant={saved ? 'secondary' : 'primary'}
           onPress={save}
-          disabled={!ready}
+          disabled={!ready || saving}
           full
         />
       </View>

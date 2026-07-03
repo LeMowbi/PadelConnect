@@ -125,12 +125,12 @@ export async function clubAddCoach(
   clubId: string,
   phone: string,
   specialty: string,
-): Promise<{ status: 'ok' | 'already' | 'not_found' | 'forbidden' | 'error'; name?: string }> {
+): Promise<{ status: 'ok' | 'already' | 'other_club' | 'not_found' | 'forbidden' | 'error'; name?: string }> {
   const { data, error } = await supabase.rpc('club_add_coach', { p_club_id: clubId, p_phone: phone, p_specialty: specialty });
   if (error) return { status: 'error' };
   const row = ((data ?? []) as { status: string; coach_id: string | null; name: string | null }[])[0];
   if (!row) return { status: 'error' };
-  return { status: row.status as 'ok' | 'already' | 'not_found' | 'forbidden', name: row.name ?? undefined };
+  return { status: row.status as 'ok' | 'already' | 'other_club' | 'not_found' | 'forbidden', name: row.name ?? undefined };
 }
 
 // Le GÉRANT fixe le tarif du cours d’un de ses coachs (null = tarif non affiché). Même
@@ -174,11 +174,11 @@ export async function requestLesson(input: {
 }
 
 // LE COACH répond. 'ok' = accepté (réservation créée) ; 'conflict' = terrain parti entre-temps.
-export async function respondLesson(id: string, accept: boolean): Promise<'ok' | 'declined' | 'conflict' | 'gone' | 'error'> {
+export async function respondLesson(id: string, accept: boolean): Promise<'ok' | 'declined' | 'conflict' | 'busy' | 'gone' | 'error'> {
   const { data, error } = await supabase.rpc('respond_lesson', { p_id: id, p_accept: accept });
   if (error) return 'error';
   const s = data as string;
-  return s === 'ok' || s === 'declined' || s === 'conflict' || s === 'gone' ? s : 'error';
+  return s === 'ok' || s === 'declined' || s === 'conflict' || s === 'busy' || s === 'gone' ? s : 'error';
 }
 
 // L’élève annule sa demande EN ATTENTE (un cours accepté = une réservation → annulation normale).
