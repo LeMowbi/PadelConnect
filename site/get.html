@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Télécharger PadelConnect</title>
+    <meta name="description" content="Réserve un terrain de padel à Abidjan en 2 minutes avec PadelConnect." />
+    <style>
+      :root { --vert: #00544d; --creme: #f4f1e8; --or: #c9a24b; --texte: #14241f; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+        background: var(--creme); color: var(--texte);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        padding: 24px;
+      }
+      .card { max-width: 420px; width: 100%; text-align: center; }
+      .logo {
+        width: 72px; height: 72px; border-radius: 20px; background: var(--vert); color: #fff;
+        display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;
+        font-size: 34px; font-weight: 700;
+      }
+      h1 { font-size: 24px; margin: 0 0 8px; }
+      p { color: #4a5a54; margin: 0 0 28px; line-height: 1.5; }
+      a.btn {
+        display: block; text-decoration: none; border-radius: 14px; padding: 15px 20px;
+        font-size: 16px; font-weight: 600; margin: 12px 0;
+      }
+      a.ios { background: var(--vert); color: #fff; }
+      a.android { background: #fff; color: var(--vert); border: 1.5px solid var(--vert); }
+      .note { font-size: 13px; color: #7a8a84; margin-top: 20px; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="logo">P</div>
+      <h1>PadelConnect</h1>
+      <p>Réserve un terrain de padel à Abidjan en 2 minutes. Installe l'app pour continuer.</p>
+      <a class="btn ios" id="ios" href="https://apps.apple.com/app/id6785261310">Télécharger sur l'App Store</a>
+      <a class="btn android" id="android" href="https://play.google.com/store/apps/details?id=ci.padelco.app">Télécharger sur Google Play</a>
+      <p class="note">Choisis le store correspondant à ton téléphone.</p>
+    </main>
+    <script>
+      // Redirection automatique vers le BON store selon l'appareil (les deux boutons restent
+      // affichés en repli si la détection échoue). L'app installée intercepte le lien AVANT
+      // d'atteindre cette page (Universal Links iOS / App Links Android).
+      (function () {
+        var ua = navigator.userAgent || '';
+        var isAndroid = /Android/i.test(ua);
+        var isIOS = /iPhone|iPad|iPod/i.test(ua) || (/(Mac)/i.test(ua) && 'ontouchend' in document);
+        var target = isAndroid ? document.getElementById('android').href : isIOS ? document.getElementById('ios').href : null;
+        if (target) window.location.replace(target);
+      })();
+    </script>
+  </body>
+</html>

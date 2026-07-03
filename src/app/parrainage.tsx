@@ -9,14 +9,13 @@ import { Screen } from '@/components/Screen';
 import { useToast } from '@/components/Toast';
 import { Button, Card, IconCircle, StatTile, Txt } from '@/components/ui';
 import { openWhatsApp } from '@/lib/contact';
-import { fetchReferralCount, inviteUrl, referralCodeForUser } from '@/lib/referrals';
+import { DOWNLOAD_URL, fetchReferralCount, inviteUrl, referralCodeForUser } from '@/lib/referrals';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
 // Lien d’invitation : Universal Link padelconnectci.com/invite/CODE — ouvre DIRECTEMENT l’app si
-// installée (code pré-rempli), sinon la page redirige vers l’App Store. Repli sans code : App Store.
-const APP_STORE_URL = 'https://apps.apple.com/app/id6785261310';
+// installée (code pré-rempli), sinon la page d’atterrissage route vers le bon store (iOS/Android).
 
 // Parrainage : chaque joueur connecté a un CODE unique. Son filleul le saisit à
 // l’inscription → le lien parrain→filleul est créé côté serveur, et le compteur ci-dessous
@@ -50,8 +49,9 @@ export default function ParrainageScreen() {
     };
   }, [state.serverUserId]);
 
-  // Avec un code : lien direct qui ouvre l’app (code auto-rempli). Sans code : simple App Store.
-  const link = myCode ? inviteUrl(myCode) : APP_STORE_URL;
+  // Avec un code : lien direct qui ouvre l’app (code auto-rempli). Sans code : page de
+  // téléchargement qui envoie l’ami vers le bon store selon son appareil (iOS ou Android).
+  const link = myCode ? inviteUrl(myCode) : DOWNLOAD_URL;
   const message =
     `Rejoins-moi sur PadelConnect 🎾 — on réserve un terrain de padel à Abidjan en 2 minutes.` +
     (myCode ? `\nMon code de parrainage : ${myCode}` : '') +

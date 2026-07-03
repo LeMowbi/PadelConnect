@@ -326,17 +326,27 @@ Deno.serve(async (req) => {
           .select('user_id, canon, i_won')
           .eq('reservation_id', record.reservation_id);
         const all = (entries ?? []) as { user_id: string; canon: string; i_won: boolean }[];
+        // Joueurs identifiés (créateur + participants 'accepted') → vainqueurs légitimes max =
+        // floor(joueurs/2), STRICTEMENT comme la SQL 49. Chargé une fois, réutilisé plus bas.
+        const { data: parts } = await supabase
+          .from('reservation_participants')
+          .select('user_id, status')
+          .eq('reservation_id', record.reservation_id);
+        const acceptedParts = (parts ?? []).filter((p) => p.status === 'accepted');
+        const wn = Math.floor((1 + acceptedParts.length) / 2);
         const when = `du ${resa?.date_label ?? ''} à ${resa?.time ?? ''} (${resa?.club_name ?? ''})`;
         const otherEntrants = all.map((e) => e.user_id).filter((id) => id !== record.user_id);
-        // Classe un ensemble de saisies (même règle que la 48 : validé = 1 canon, ≤2 « je gagne »,
-        // au moins un « je perds »). Le cas « saisie unique validée à 48 h » n'est pas déclenché
-        // par un webhook (aucune écriture à T+48 h) — on ne notifie donc que les transitions ici.
+        // Classe un ensemble de saisies (même règle que la SQL 49) : validé = 1 canon, 1 ≤ « je
+        // gagne » ≤ floor(joueurs/2), ET au moins un « je perds » (le camp perdant reconnaît). La
+        // porte « saisie unique à 48 h » n'est PAS déclenchée par un webhook (aucune écriture à
+        // T+48 h) — on ne notifie donc « validé » que via le miroir perdant, jamais deux « je
+        // gagne » seuls (anti-triche §9, aligné sur submit_match_score).
         const classify = (es: { canon: string; i_won: boolean }[]) => {
           const canons = new Set(es.map((e) => e.canon));
           const w = es.filter((e) => e.i_won).length;
           const l = es.filter((e) => !e.i_won).length;
-          const conflict = canons.size > 1 || w > 2;
-          return { conflict, validated: !conflict && canons.size === 1 && w >= 1 && w <= 2 && l >= 1, n: es.length };
+          const conflict = canons.size > 1 || w > wn;
+          return { conflict, validated: !conflict && canons.size === 1 && w >= 1 && w <= wn && l >= 1, n: es.length };
         };
         // État AVANT cette écriture : on retire (INSERT) ou on restaure (UPDATE) la ligne de ce joueur.
         const before =
@@ -368,11 +378,7 @@ Deno.serve(async (req) => {
           // VRAIE première saisie du match (cette écriture a créé la 1ʳᵉ entrée) → inviter les
           // AUTRES joueurs à saisir. Le test prev.n === 0 évite de re-pousser « Score à saisir »
           // quand l'unique saisisseur CORRIGE simplement son score (before garde sa ligne, n=1).
-          const { data: parts } = await supabase
-            .from('reservation_participants')
-            .select('user_id, status')
-            .eq('reservation_id', record.reservation_id);
-          const others = [resa?.user_id, ...(parts ?? []).filter((p) => p.status === 'accepted').map((p) => p.user_id as string)].filter(
+          const others = [resa?.user_id, ...acceptedParts.map((p) => p.user_id as string)].filter(
             (id): id is string => Boolean(id) && id !== record.user_id,
           );
           notifs.push({

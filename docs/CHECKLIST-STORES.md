@@ -57,6 +57,36 @@ npx eas-cli submit --platform ios --profile production
 - [ ] **Gating serveur** des rôles (opérateur / gérant) à la place des codes 4 chiffres et du geste secret de démo.
 - [ ] **Relecture sécurité** par un expert.
 
+## 6-BIS. Corrections de l'audit n°6 (à faire avant la 1ʳᵉ soumission)
+
+### a. Serveur (Dashboard Supabase, sans terminal)
+- [ ] Coller **`supabase/50_club_maps_query.sql`** (position Maps éditable) — voir `docs/AUDIT-SERVEUR.md` §0-QUATER.
+- [ ] Re-coller **`supabase/49_audit5_hardening.sql`** (il a été corrigé : anti-triche du score
+      renforcé — deux « je gagne » ne valident plus un match sans qu'un perdant reconnaisse le score).
+- [ ] Coller **`supabase/51_moderation.sql`** (signaler un avis / bloquer un joueur + confidentialité
+      des matchs ouverts).
+- [ ] **Edge Function `notify-club`** → **Edit** → recoller tout `supabase/functions/notify-club/index.ts`
+      → **Deploy** (la notif « Match validé » suit désormais la même règle que le serveur).
+
+### b. Modération du contenu (exigé par Apple Guideline 1.2 et Google Play)
+- [x] Bouton **« Signaler »** et **« Bloquer »** sur chaque avis d'un autre joueur, et masquage des
+      matchs ouverts des comptes bloqués — livré dans l'app (SQL 51). ✅
+- [ ] Le mentionner à la revue (App Store Connect → « App Review Information » / Play → politique UGC) :
+      *l'app permet de signaler tout avis et de bloquer son auteur ; les signalements sont traités sous 24 h.*
+
+### c. Liens universels Android (App Links) + page de téléchargement
+- [ ] Récupérer l'**empreinte SHA-256** de la clé de signature de l'app dans **Play Console → Test
+      et publication → Intégrité de l'application → Signature de l'app** (clé de signature d'app).
+- [ ] La coller dans **`site/assetlinks.json`** (remplacer `REMPLACER_PAR_EMPREINTE_SHA256_…`).
+- [ ] **Redéployer le dossier `site/`** sur Cloudflare Pages (il contient maintenant `get.html`,
+      `assetlinks.json` et un `_redirects` mis à jour — un ami **Android** est enfin envoyé vers
+      **Google Play**, plus vers l'App Store iPhone). ⚠️ Redéployer `site/` **en entier**.
+
+### d. Sécuriser les notifications (recommandé fort avant lancement)
+- [ ] Poser un **`WEBHOOK_SECRET`** sur `notify-club` et sur **tous** les webhooks — étapes exactes
+      dans `docs/AUDIT-SERVEUR.md` §3. Sans lui, n'importe qui connaissant l'URL peut déclencher des
+      notifications. À faire une fois, avant d'ouvrir au public.
+
 ## 7. Note importante — Expo Go
 L'app utilise **Expo SDK 56** (récent). L'**Expo Go public de l'App Store ne le supporte pas encore** :
 pour faire tester sur iPhone avant publication, privilégier **TestFlight** (build `production`/`preview`)

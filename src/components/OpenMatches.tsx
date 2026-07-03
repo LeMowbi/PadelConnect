@@ -5,6 +5,7 @@ import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, SectionHeader, Tag, Txt } from '@/components/ui';
 import { dateKeyLabel } from '@/lib/days';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
+import { fetchBlockedUserIds } from '@/lib/moderation';
 import { fetchOpenMatches, joinOpenMatch, type OpenMatch } from '@/lib/openMatches';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
@@ -20,6 +21,7 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
   const [matches, setMatches] = useState<OpenMatch[] | null | undefined>(undefined);
   const [showAll, setShowAll] = useState(false);
   const [joining, setJoining] = useState<string | null>(null); // garde anti double-tap
+  const [blockedIds, setBlockedIds] = useState<string[]>([]); // matchs des comptes bloqués masqués
 
   const load = async () => {
     const ms = await fetchOpenMatches();
@@ -31,11 +33,13 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
     void fetchOpenMatches().then((ms) => alive && setMatches((cur) => ms ?? (cur === undefined ? null : cur)));
     // Retour au premier plan : les matchs ouverts bougent vite (places prises entre-temps).
     const sub = AppState.addEventListener('change', (st) => st === 'active' && void load());
+    // Comptes bloqués → leurs matchs ouverts sont masqués (modération UGC, App Store 1.2).
+    if (state.serverUserId) void fetchBlockedUserIds().then((ids) => alive && ids && setBlockedIds(ids));
     return () => {
       alive = false;
       sub.remove();
     };
-  }, []);
+  }, [state.serverUserId]);
   // Tiré-pour-rafraîchir depuis l'écran parent (Réserver) : PAS de remontage via `key` — juste
   // ce token qui déclenche un load(). load() garde déjà l'existant en cas d'échec (§8), donc un
   // pull hors-ligne ne fait plus disparaître la section, et en ligne il n'y a plus de clignotement.
@@ -82,9 +86,12 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
   // Chargement ou hors-ligne sans donnée : rien (pas de section fantôme).
   if (matches === undefined || matches === null) return null;
 
+  // On masque les matchs des comptes que j'ai bloqués (modération UGC — prénom du créateur affiché).
+  const visible = matches.filter((m) => !blockedIds.includes(m.creatorId));
+
   // AUCUN match ouvert : la section reste VISIBLE avec le mode d'emploi — sinon la
   // fonctionnalité est introuvable tant que personne n'a créé le premier match (retour porteur).
-  if (matches.length === 0) {
+  if (visible.length === 0) {
     return (
       <View style={{ marginTop: spacing.lg }}>
         <SectionHeader title="Matchs ouverts" />
@@ -102,12 +109,12 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
   }
 
   // Sur l'écran dédié (full), on montre TOUT ; en section d'accueil, un aperçu repliable.
-  const shown = full || showAll ? matches : matches.slice(0, PREVIEW);
+  const shown = full || showAll ? visible : visible.slice(0, PREVIEW);
   const me = state.serverUserId;
 
   return (
     <View style={{ marginTop: spacing.lg }}>
-      <SectionHeader title={`Matchs ouverts · ${matches.length}`} />
+      <SectionHeader title={`Matchs ouverts · ${visible.length}`} />
       <Card>
         <Txt variant="small" color={colors.textMuted}>
           Des joueurs ont déjà leur terrain et cherchent du monde — rejoins, c’est gratuit.
@@ -153,11 +160,11 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
             </View>
           );
         })}
-        {!full && matches.length > PREVIEW ? (
+        {!full && visible.length > PREVIEW ? (
           <Button
             size="sm"
             variant="ghost"
-            label={showAll ? 'Réduire' : `Voir tous les matchs ouverts (${matches.length})`}
+            label={showAll ? 'Réduire' : `Voir tous les matchs ouverts (${visible.length})`}
             icon={showAll ? 'chevron-up' : 'chevron-down'}
             onPress={() => setShowAll((v) => !v)}
           />

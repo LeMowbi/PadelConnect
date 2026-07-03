@@ -22,10 +22,15 @@
 -- Règle (identique en submit, lecture, classement) sur les saisies d'une réservation —
 -- n = nb saisies, dc = canons distincts, w = « je gagne », l = « je perds », pc = nb de
 -- joueurs identifiés (créateur + participants 'accepted'), wn = floor(pc/2) vainqueurs max :
---   • conflit (gelé) si dc > 1  OU  w > wn ;
---   • VALIDÉ si dc = 1 ET 1 ≤ w ≤ wn ET ( 48 h depuis la 1ʳᵉ saisie  OU  un perdant en miroir
---     l ≥ 1 ). Ainsi un 2v2 dont les 2 vainqueurs saisissent (w=2, wn=2) se valide à 48 h ;
---     un 1v1 (wn=1) refuse toujours deux « je gagne » (anti-triche).
+--   • conflit (gelé) si dc > 1  OU  w > wn (plus de vainqueurs qu'un camp ne peut en avoir) ;
+--   • VALIDÉ si dc = 1 ET
+--       – soit UNE seule saisie « je gagne » restée 48 h sans réponse (n = 1, w = 1),
+--       – soit un camp PERDANT reconnaît le score (l ≥ 1) avec 1 ≤ w ≤ wn.
+-- ANTI-TRICHE (invariant CLAUDE.md §9) : DEUX « je gagne » sans aucun perdant ne valident
+-- JAMAIS — sinon, faute d'ÉQUIPES stockées, deux perdants complices recopiant le score se
+-- créditeraient chacun +3. La porte « 48 h » est donc réservée à une saisie UNIQUE ; dès qu'il
+-- y a 2 saisies gagnantes, il FAUT un « j'ai perdu » en miroir. Un 1v1 (wn=1) refuse toujours
+-- deux « je gagne » (w=2 > wn=1 → conflit).
 create or replace function public.submit_match_score(p_reservation_id uuid, p_sets jsonb)
 returns text
 language plpgsql
@@ -101,8 +106,12 @@ begin
     into v_n, v_dc, v_w, v_l, v_first
     from public.match_results where reservation_id = p_reservation_id;
   if v_dc > 1 or v_w > v_wn then return 'conflict'; end if;
-  if v_dc = 1 and v_w >= 1 and v_w <= v_wn
-     and ((v_first < now() - interval '48 hours') or (v_l >= 1)) then
+  -- Validé si : UNE seule saisie gagnante restée 48 h sans réponse, OU un perdant en miroir.
+  -- Deux « je gagne » sans perdant (v_l = 0, v_n > 1) ne valident jamais (anti-triche §9).
+  if v_dc = 1 and (
+       (v_n = 1 and v_w = 1 and v_first < now() - interval '48 hours')
+       or (v_w >= 1 and v_w <= v_wn and v_l >= 1)
+     ) then
     return 'validated';
   end if;
   return 'waiting';
@@ -123,10 +132,13 @@ as $$
   select mr.reservation_id,
          count(*)::int as entries,
          (count(distinct mr.canon) = 1
-          and count(*) filter (where mr.i_won) >= 1
-          and count(*) filter (where mr.i_won) <= floor(pc.n / 2.0)
-          and (min(mr.created_at) < now() - interval '48 hours'
-               or count(*) filter (where not mr.i_won) >= 1)) as validated,
+          and (
+            (count(*) = 1 and count(*) filter (where mr.i_won) = 1
+             and min(mr.created_at) < now() - interval '48 hours')
+            or (count(*) filter (where mr.i_won) >= 1
+                and count(*) filter (where mr.i_won) <= floor(pc.n / 2.0)
+                and count(*) filter (where not mr.i_won) >= 1)
+          )) as validated,
          (count(distinct mr.canon) > 1 or count(*) filter (where mr.i_won) > floor(pc.n / 2.0)) as conflict,
          bool_or(mr.user_id = auth.uid()) as mine,
          bool_or(mr.user_id = auth.uid() and mr.i_won) as i_won,
@@ -161,6 +173,7 @@ stable
 as $$
   with mstats as ( -- agrégats de score par réservation + nb de joueurs identifiés
     select mr.reservation_id,
+           count(*) n,
            count(*) filter (where mr.i_won) w,
            count(*) filter (where not mr.i_won) l,
            count(distinct mr.canon) dc,
@@ -174,8 +187,10 @@ as $$
       from public.match_results mr
       join public.reservations rr on rr.id = mr.reservation_id and rr.status = 'booked'
       join mstats a on a.reservation_id = mr.reservation_id
-     where mr.i_won and a.dc = 1 and a.w >= 1 and a.w <= floor(a.pc / 2.0)
-       and ((a.first_at < now() - interval '48 hours') or (a.l >= 1))
+     where mr.i_won and a.dc = 1 and (
+             (a.n = 1 and a.w = 1 and a.first_at < now() - interval '48 hours')
+             or (a.w >= 1 and a.w <= floor(a.pc / 2.0) and a.l >= 1)
+           )
   ),
   base as (
     select p.id,
@@ -219,6 +234,7 @@ stable
 as $$
   with mstats as (
     select mr.reservation_id,
+           count(*) n,
            count(*) filter (where mr.i_won) w,
            count(*) filter (where not mr.i_won) l,
            count(distinct mr.canon) dc,
@@ -232,8 +248,10 @@ as $$
       from public.match_results mr
       join public.reservations rr on rr.id = mr.reservation_id and rr.status = 'booked'
       join mstats a on a.reservation_id = mr.reservation_id
-     where mr.i_won and a.dc = 1 and a.w >= 1 and a.w <= floor(a.pc / 2.0)
-       and ((a.first_at < now() - interval '48 hours') or (a.l >= 1))
+     where mr.i_won and a.dc = 1 and (
+             (a.n = 1 and a.w = 1 and a.first_at < now() - interval '48 hours')
+             or (a.w >= 1 and a.w <= floor(a.pc / 2.0) and a.l >= 1)
+           )
   ),
   base as (
     select p.id,

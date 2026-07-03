@@ -4,10 +4,14 @@
 
 import { supabase } from './supabase';
 
-// Domaine de l’app (Universal Links) : un lien /invite/CODE ouvre DIRECTEMENT l’app si elle est
-// installée (le code se pré-remplit à l’inscription), sinon la page redirige vers l’App Store.
+// Domaine de l’app (Universal Links / App Links) : un lien /invite/CODE ouvre DIRECTEMENT l’app
+// si elle est installée (le code se pré-remplit à l’inscription), sinon la page d’atterrissage
+// route l’ami vers le BON store selon son appareil (App Store iOS ou Google Play Android).
 export const APP_DOMAIN = 'https://padelconnectci.com';
 export const inviteUrl = (code: string) => `${APP_DOMAIN}/invite/${code}`;
+// Lien de téléchargement générique (sans code) : la page /get détecte iOS/Android et renvoie vers
+// le bon store — on ne code plus l’App Store Apple en dur (l’app sort aussi sur Google Play).
+export const DOWNLOAD_URL = `${APP_DOMAIN}/get`;
 
 // Code lisible dérivé du userId Supabase (12 hex en MAJUSCULES → 48 bits, collision
 // négligeable). Déterministe → régénérable sans stockage côté app ; stocké côté serveur

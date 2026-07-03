@@ -18,6 +18,7 @@ import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { isPlayed, useApp } from '@/store/AppContext';
 import { fetchClubCoaches, type ServerCoach } from '@/lib/coachesServer';
 import { deleteMyReview, fetchClubReviews, replyToReview, submitReview, type ServerReview } from '@/lib/reviewsServer';
+import { blockUser, fetchBlockedUserIds, reportReview } from '@/lib/moderation';
 import { openWhatsApp } from '@/lib/contact';
 import { hapticSuccess } from '@/lib/haptics';
 import { fcfa, initials } from '@/lib/format';
@@ -71,6 +72,7 @@ export default function ClubDetail() {
   const [replying, setReplying] = useState(false); // garde anti double-tap : publier la réponse
   const [removing, setRemoving] = useState(false); // garde anti double-tap : supprimer mon avis
   const [serverCoaches, setServerCoaches] = useState<ServerCoach[]>([]); // coachs réservables (serveur)
+  const [blockedIds, setBlockedIds] = useState<string[]>([]); // comptes que j'ai bloqués → avis masqués
   const { width: winW } = useWindowDimensions();
 
   // Avis VÉRIFIÉS du serveur : chargés à l’ouverture (effet) et rechargés après chaque action
@@ -115,10 +117,28 @@ export default function ClubDetail() {
       });
     // Coachs réservables du club (serveur) : chargés à l’ouverture, comme les avis.
     if (clubId) void fetchClubCoaches(clubId).then((cs) => alive && cs && setServerCoaches(cs));
+    // Ma liste de comptes bloqués → les avis de ces joueurs sont masqués (modération UGC).
+    if (state.serverUserId) void fetchBlockedUserIds().then((ids) => alive && ids && setBlockedIds(ids));
     return () => {
       alive = false;
     };
-  }, [clubId]);
+  }, [clubId, state.serverUserId]);
+
+  // Signaler un avis (envoi à la modération) ou bloquer son auteur (ses avis disparaissent
+  // aussitôt de ma vue) — actions requises par l'App Store (Guideline 1.2) sur tout contenu UGC.
+  const reportReviewItem = async (reviewId: string) => {
+    const ok = await reportReview(reviewId);
+    setToast({ text: ok ? 'Avis signalé — merci, on le vérifie.' : 'Signalement impossible — réessaie.', tone: ok ? 'success' : 'error' });
+  };
+  const blockReviewAuthor = async (userId: string, author: string) => {
+    const ok = await blockUser(userId);
+    if (ok) {
+      setBlockedIds((cur) => (cur.includes(userId) ? cur : [...cur, userId]));
+      setToast({ text: `${author} bloqué — tu ne verras plus ses avis.`, tone: 'success' });
+    } else {
+      setToast({ text: 'Blocage impossible — réessaie.', tone: 'error' });
+    }
+  };
 
   if (!club) {
     return (
@@ -154,8 +174,9 @@ export default function ClubDetail() {
       .map((c) => ({ id: c.id, name: c.name, sub: c.level, phone: c.phone })),
     ...(state.clubCoaches[club.id] ?? []).map((c) => ({ id: c.id, name: c.name, sub: c.specialty, phone: c.phone })),
   ];
-  // Source de vérité : les avis VÉRIFIÉS du serveur (un joueur ne peut noter qu’après avoir joué).
-  const reviews = serverReviews;
+  // Source de vérité : les avis VÉRIFIÉS du serveur (un joueur ne peut noter qu’après avoir joué),
+  // MOINS ceux des comptes que j’ai bloqués (modération UGC — ils n’apparaissent plus chez moi).
+  const reviews = serverReviews.filter((r) => !blockedIds.includes(r.userId));
   // Liste repliée : on n’affiche que les premiers avis, avec un bouton « Voir tout ».
   const REVIEWS_PREVIEW = 3;
   const reviewsShown = showAllReviews ? reviews : reviews.slice(0, REVIEWS_PREVIEW);
@@ -817,6 +838,21 @@ export default function ClubDetail() {
                       />
                     </View>
                   )
+                ) : null}
+
+                {/* Modération UGC (App Store 1.2) : signaler l'avis ou bloquer son auteur —
+                    proposé sur les avis des AUTRES joueurs, à tout compte connecté. */}
+                {state.serverUserId && state.serverUserId !== r.userId ? (
+                  <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                    <Button size="sm" label="Signaler" variant="ghost" icon="flag-outline" onPress={() => void reportReviewItem(r.id)} />
+                    <Button
+                      size="sm"
+                      label="Bloquer"
+                      variant="ghost"
+                      icon="ban-outline"
+                      onPress={() => void blockReviewAuthor(r.userId, r.author)}
+                    />
+                  </View>
                 ) : null}
               </Card>
             ))}

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, Animated, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Txt } from './ui';
 import { colors, radius, shadows, spacing } from '@/theme';
@@ -29,6 +29,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     (msg, opts) => {
       setMessage(msg);
       setIcon(opts?.icon ?? 'checkmark-circle');
+      // Le toast est le SEUL canal de confirmation/erreur de l'app : on l'annonce aux lecteurs
+      // d'écran (VoiceOver/TalkBack), sinon un utilisateur non-voyant ne sait pas si son action
+      // a réussi ou échoué (la View d'affichage est en pointerEvents="none", invisible pour eux).
+      AccessibilityInfo.announceForAccessibility(msg);
       if (timer.current) clearTimeout(timer.current);
       slide.setValue(8);
       Animated.parallel([
@@ -55,7 +59,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           pointerEvents="none"
           style={[styles.wrap, { opacity, bottom: insets.bottom + spacing.xl, transform: [{ translateY: slide }] }]}
         >
-          <View style={[styles.toast, icon === 'alert-circle' && styles.toastDanger]}>
+          <View
+            style={[styles.toast, icon === 'alert-circle' && styles.toastDanger]}
+            accessible
+            accessibilityLiveRegion={icon === 'alert-circle' ? 'assertive' : 'polite'}
+          >
             <Ionicons name={icon} size={18} color={colors.white} />
             <Txt color={colors.white} style={{ flex: 1 }}>
               {message}

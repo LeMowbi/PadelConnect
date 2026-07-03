@@ -13,6 +13,7 @@ import { findPlayerByPhone } from '@/lib/friends';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { openWhatsApp } from '@/lib/contact';
 import { contactsSupported, pickContact } from '@/lib/contactsPicker';
+import { DOWNLOAD_URL } from '@/lib/referrals';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
@@ -127,10 +128,7 @@ export default function AmisScreen() {
   };
 
   const invite = () =>
-    openWhatsApp(
-      phone,
-      'Rejoins-moi sur PadelConnect 🎾 — on réserve un terrain de padel à Abidjan en 2 minutes. https://apps.apple.com/app/id6785261310',
-    );
+    openWhatsApp(phone, `Rejoins-moi sur PadelConnect 🎾 — on réserve un terrain de padel à Abidjan en 2 minutes. ${DOWNLOAD_URL}`);
 
   // Le numéro change → la recherche précédente n’est plus valable.
   const onPhone = (t: string) => {

@@ -3,7 +3,13 @@
 # vers le fichier placé à la racine — Apple voit exactement la bonne URL.
 /.well-known/apple-app-site-association  /apple-app-site-association  200
 
-# Utilisateur SANS l'app : un lien /invite/CODE ou /club/ID ouvert dans le navigateur → page de
-# téléchargement App Store. (Avec l'app installée, iOS ouvre directement l'app AVANT la redirection.)
-/invite/*  https://apps.apple.com/app/id6785261310  302
-/club/*  https://apps.apple.com/app/id6785261310  302
+# Android App Links exige /.well-known/assetlinks.json servi tel quel (même astuce que ci-dessus).
+/.well-known/assetlinks.json  /assetlinks.json  200
+
+# Utilisateur SANS l'app : un lien /invite/CODE ou /club/ID ouvert dans le navigateur → page
+# d'atterrissage /get qui envoie vers le BON store selon l'appareil (App Store iOS OU Google Play
+# Android). On RÉÉCRIT (200) au lieu de rediriger vers Apple en dur — sinon un ami Android tombait
+# sur l'App Store iOS et ne pouvait pas installer l'app. (Avec l'app installée, iOS/Android ouvre
+# directement l'app AVANT d'atteindre cette page, via Universal Links / App Links.)
+/invite/*  /get.html  200
+/club/*  /get.html  200

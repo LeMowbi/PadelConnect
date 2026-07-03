@@ -92,7 +92,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `50` (voir dossier `supabase/`).
+  **SQL Editor → Run**. Migrations actuelles : `02` → `51` (voir dossier `supabase/`).
 - **Edge Function** `supabase/functions/notify-club/index.ts` (Deno) : envoie les push via
   l'API Expo. Déclenchée par des **Database Webhooks** (INSERT + UPDATE). Redéploiement **sans
   terminal** : Dashboard → Edge Functions → notify-club → Edit → coller le code → Deploy.
@@ -164,15 +164,28 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   le niveau, plafonné à 7 et auto-déclaré, ne peut pas servir de rang) : 100 = tournoi officiel
   gagné (winner_user_id ancré), 10 = tournoi officiel joué, 3 = victoire de match confirmée,
   2 = partie jouée. `fetch_leaderboard`/`my_leaderboard_rank`, écran `/classement`.
-- **Score de match (46, durci en 48)** : CHAQUE joueur du match saisit les sets de SON point de
-  vue (`submit_match_score`) ; l'app calcule la forme CANONIQUE (score vu du vainqueur) et
-  **désigne le vainqueur automatiquement**. RÈGLE ANTI-TRICHE (48) : un match n'est validé que
-  si un camp PERDANT reconnaît le score (une saisie « j'ai perdu » en miroir), OU si une saisie
-  UNIQUE reste 48 h sans réponse ; tout match où > 2 comptes revendiquent la victoire est GELÉ.
-  Deux « je gagne » identiques ne valident donc jamais (un perdant ne peut pas se créditer). Les
-  +3 ne comptent que si la résa est encore 'booked' (pas « pas venu »). Contestation ouvrable
+- **Score de match (46, durci en 48, réglé en 49/audit 6)** : CHAQUE joueur du match saisit les
+  sets de SON point de vue (`submit_match_score`) ; l'app calcule la forme CANONIQUE (score vu du
+  vainqueur) et **désigne le vainqueur automatiquement**. RÈGLE ANTI-TRICHE : un match n'est validé
+  que si un camp PERDANT reconnaît le score (une saisie « j'ai perdu » en miroir), OU si une saisie
+  UNIQUE reste 48 h sans réponse ; le plafond de « je gagne » est `floor(joueurs/2)` (2 pour un
+  2v2, 1 pour un 1v1) — au-delà, GELÉ. **Deux « je gagne » identiques ne valident donc jamais**
+  (invariant restauré à l'audit 6 : la 49 avait par erreur laissé un 2v2 double se valider à 48 h,
+  ce qui permettait à deux perdants complices de se créditer +3 — voir `submit_match_score`,
+  `fetch_my_match_scores`, `fetch_leaderboard`, `my_leaderboard_rank` et notify-club, tous alignés).
+  Les +3 ne comptent que si la résa est encore 'booked' (pas « pas venu »). Contestation ouvrable
   au-delà de 14 j dès qu'une 1ʳᵉ saisie existe (la fenêtre 14 j ne borne que la 1ʳᵉ saisie).
   UI « Mes réservations » (`src/lib/matchResults.ts`), push via webhook **`match_results`**.
+- **Modération UGC (51, audit 6)** : tout avis d'un autre joueur porte « Signaler » / « Bloquer »
+  (`src/lib/moderation.ts` → `report_review` / `block_user`) ; les avis et matchs ouverts des
+  comptes bloqués sont masqués localement (`fetch_blocked_users`). Requis par l'App Store (1.2) et
+  Google Play. Confidentialité (51) : le téléphone du créateur d'un **match ouvert** n'est plus
+  stocké (trigger `strip_open_match_phone`) — il était récoltable en rejoignant chaque match.
+- **Liens de téléchargement multi-plateformes (audit 6)** : l'app sort sur iOS ET Android. Les
+  partages d'invitation/parrainage pointent vers `padelconnectci.com/get` (`DOWNLOAD_URL`), page
+  qui route vers l'App Store ou Google Play selon l'appareil ; `/invite/*` et `/club/*` réécrivent
+  vers cette page (site `_redirects`). App Links Android déclarés (`app.json` `intentFilters` +
+  `site/assetlinks.json`, empreinte SHA-256 à compléter par le porteur).
 - **Durcissements audit n°4 (48)** : contrainte `competitions.organizer_type` élargie à
   'operator' (les tournois officiels PadelConnect fonctionnent enfin) ; garde d'insertion des
   réservations RÉORDONNÉE (passe avant la garde de disponibilité) + refus des créneaux passés +

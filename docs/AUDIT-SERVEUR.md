@@ -1,11 +1,29 @@
 # Audit — actions serveur (sans terminal)
 
+## 0-QUINQUIES) AUDIT n°6 (2026-07-03) — recoller `49`, coller `50` + `51`, redéployer notify-club — ⏳ À FAIRE
+
+Dernier audit avant la sortie stores. Côté serveur :
+
+1. **Recoller `supabase/49_audit5_hardening.sql`** (corrigé) : l'anti-triche du score est renforcé —
+   **deux « je gagne » ne valident plus jamais un match** sans qu'un camp perdant reconnaisse le
+   score (sinon deux perdants complices se créditaient chacun +3). Idempotente : la recoller est sans
+   risque même si tu l'avais déjà passée.
+2. Coller **`supabase/50_club_maps_query.sql`** (position Google Maps éditable — voir ci-dessous).
+3. Coller **`supabase/51_moderation.sql`** : signaler un avis / bloquer un joueur (exigé par les
+   stores) + **confidentialité des matchs ouverts** (on ne stocke plus le numéro du créateur).
+4. **Edge Functions → notify-club → Edit** → recoller **tout** `supabase/functions/notify-club/index.ts`
+   → **Deploy** (la notif « Match validé » suit désormais exactement la règle du serveur).
+
+Aucun nouveau webhook. Ordre conseillé : 49 → 50 → 51, puis notify-club.
+
+---
+
 ## 0-QUATER) Horaires modulables + position Maps (2026-07-03) — coller SQL `50` (1 min) — ⏳ À FAIRE
 
-Nouvelle demande : chaque club règle **ses propres horaires d'ouverture** (l'app découpe la plage
-en créneaux de 1h30) et peut **corriger sa position Google Maps** — y compris les 9 clubs
-fondateurs (utile quand tu renommes un club). Les horaires ne demandent **aucune** action serveur
-(déjà stockés dans `club_config.slots`). La position Maps, elle, ajoute **une seule** migration :
+Chaque club règle **ses propres horaires d'ouverture** (l'app découpe la plage en créneaux de 1h30)
+et peut **corriger sa position Google Maps** — y compris les 9 clubs fondateurs (utile quand tu
+renommes un club). Les horaires ne demandent **aucune** action serveur (déjà stockés dans
+`club_config.slots`). La position Maps, elle, ajoute **une seule** migration :
 
 1. Dashboard Supabase → **SQL Editor** → **New query** → ouvre `supabase/50_club_maps_query.sql`
    du dépôt → copie **tout** → colle → **Run** (« Success. No rows returned »). Elle ajoute la

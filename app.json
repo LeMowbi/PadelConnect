@@ -13,9 +13,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "ci.padelco.app",
       "buildNumber": "44",
-      "associatedDomains": [
-        "applinks:padelconnectci.com"
-      ],
+      "associatedDomains": ["applinks:padelconnectci.com"],
       "config": {
         "usesNonExemptEncryption": false
       }
@@ -28,7 +26,26 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "padelconnectci.com",
+              "pathPrefix": "/invite"
+            },
+            {
+              "scheme": "https",
+              "host": "padelconnectci.com",
+              "pathPrefix": "/club"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "output": "single",

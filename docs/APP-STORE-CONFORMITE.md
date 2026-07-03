@@ -64,6 +64,19 @@ Les textes demandés à l'utilisateur sont déjà rédigés (Réglages → app) 
 Déjà dans l'app : **Profil → Supprimer mon compte** (efface le compte et les données côté serveur,
 immédiat et définitif). Rien à faire.
 
+## 4-BIS. Modération du contenu généré par les joueurs (obligatoire — Apple Guideline 1.2 ✅)
+
+L'app affiche du contenu écrit par les joueurs (avis de club, prénom dans les matchs ouverts). Elle
+fournit désormais les contrôles exigés par Apple et Google Play :
+- **Signaler** un avis inapproprié (bouton sur chaque avis d'un autre joueur → table `review_reports`,
+  lue par l'opérateur pour modérer **sous 24 h**).
+- **Bloquer** l'auteur (ses avis et ses matchs ouverts disparaissent aussitôt de la vue du joueur).
+- Les **CGU** (dans l'app) interdisent déjà le contenu abusif.
+
+À la soumission, indique dans **App Review Information** (Apple) et la **politique UGC** (Play) :
+*« L'app permet de signaler tout avis et de bloquer son auteur ; les signalements sont traités sous
+24 h. »* Rien d'autre à coder — c'est en place (SQL 51).
+
 ## 5. Divers à cocher dans App Store Connect
 
 - **Age Rating** : questionnaire → l'app n'a pas de contenu sensible → classement **4+**.
