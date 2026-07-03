@@ -21,7 +21,9 @@
 -- ─── 1) SCORE DE MATCH : validation par nombre de joueurs ────────────────────
 -- Règle (identique en submit, lecture, classement) sur les saisies d'une réservation —
 -- n = nb saisies, dc = canons distincts, w = « je gagne », l = « je perds », pc = nb de
--- joueurs identifiés (créateur + participants 'accepted'), wn = floor(pc/2) vainqueurs max :
+-- COMPTES identifiés (créateur + participants 'accepted'), wn = least(2, pc-1) vainqueurs max
+-- (padel : 2 vainqueurs au plus, et jamais tous les comptes — un 2v2 où seuls 3 joueurs ont
+-- l'app garde donc ses 2 « je gagne » légitimes ; un 1v1 (pc=2) reste à wn=1) :
 --   • conflit (gelé) si dc > 1  OU  w > wn (plus de vainqueurs qu'un camp ne peut en avoir) ;
 --   • VALIDÉ si dc = 1 ET
 --       – soit UNE seule saisie « je gagne » restée 48 h sans réponse (n = 1, w = 1),
@@ -73,7 +75,7 @@ begin
   if not (v_uid = any (v_players)) then return 'error'; end if;
   v_pc := array_length(v_players, 1);
   if v_pc < 2 then return 'no_players'; end if;
-  v_wn := floor(v_pc / 2.0); -- vainqueurs légitimes maximum (2 pour un 2v2, 1 pour un 1v1)
+  v_wn := least(2, v_pc - 1); -- vainqueurs max : 2 (padel), jamais tous les comptes (1v1 → 1)
   if jsonb_typeof(p_sets) <> 'array'
      or jsonb_array_length(p_sets) < 1 or jsonb_array_length(p_sets) > 3 then
     return 'error';
@@ -136,10 +138,10 @@ as $$
             (count(*) = 1 and count(*) filter (where mr.i_won) = 1
              and min(mr.created_at) < now() - interval '48 hours')
             or (count(*) filter (where mr.i_won) >= 1
-                and count(*) filter (where mr.i_won) <= floor(pc.n / 2.0)
+                and count(*) filter (where mr.i_won) <= least(2, pc.n - 1)
                 and count(*) filter (where not mr.i_won) >= 1)
           )) as validated,
-         (count(distinct mr.canon) > 1 or count(*) filter (where mr.i_won) > floor(pc.n / 2.0)) as conflict,
+         (count(distinct mr.canon) > 1 or count(*) filter (where mr.i_won) > least(2, pc.n - 1)) as conflict,
          bool_or(mr.user_id = auth.uid()) as mine,
          bool_or(mr.user_id = auth.uid() and mr.i_won) as i_won,
          case when count(distinct mr.canon) = 1 then min(mr.canon) end as score,
@@ -189,7 +191,7 @@ as $$
       join mstats a on a.reservation_id = mr.reservation_id
      where mr.i_won and a.dc = 1 and (
              (a.n = 1 and a.w = 1 and a.first_at < now() - interval '48 hours')
-             or (a.w >= 1 and a.w <= floor(a.pc / 2.0) and a.l >= 1)
+             or (a.w >= 1 and a.w <= least(2, a.pc - 1) and a.l >= 1)
            )
   ),
   base as (
@@ -250,7 +252,7 @@ as $$
       join mstats a on a.reservation_id = mr.reservation_id
      where mr.i_won and a.dc = 1 and (
              (a.n = 1 and a.w = 1 and a.first_at < now() - interval '48 hours')
-             or (a.w >= 1 and a.w <= floor(a.pc / 2.0) and a.l >= 1)
+             or (a.w >= 1 and a.w <= least(2, a.pc - 1) and a.l >= 1)
            )
   ),
   base as (

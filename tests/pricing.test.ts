@@ -99,9 +99,15 @@ check(
   validateTiers([tier('08:00', '16:00'), tier('16:00', '23:00')], 8 * 60, 23 * 60).ok === true,
   'Club 08:00→23:00 : deux plages jointes → OK',
 );
+// Une plage ENGLOBANTE (plus large que l'amplitude) est acceptée : les configs héritées
+// (07:00→24:00 d'avant les horaires modulables) restent enregistrables telles quelles.
 check(
-  validateTiers([tier('07:00', '24:00')], 8 * 60, 23 * 60).ok === false,
-  'Club 08:00→23:00 : plage 07:00→24:00 hors amplitude → bloqué',
+  validateTiers([tier('07:00', '24:00')], 8 * 60, 23 * 60).ok === true,
+  'Club 08:00→23:00 : plage englobante 07:00→24:00 → OK (héritage accepté)',
+);
+check(
+  validateTiers([tier('09:00', '23:00')], 8 * 60, 23 * 60).ok === false,
+  'Club 08:00→23:00 : première plage commence après l’ouverture → bloqué',
 );
 check(
   validateTiers([tier('08:00', '22:00')], 8 * 60, 23 * 60).ok === false,

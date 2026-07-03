@@ -9,6 +9,9 @@
 alter table public.club_overrides add column if not exists maps_query text;
 
 -- La signature change (un paramètre en plus) → on DROP l'ancienne fonction avant de la recréer.
+-- `p_maps_query default null` : les builds ANTÉRIEURS (appel à 8 paramètres) continuent de
+-- fonctionner. Les bornes de prix de la 40 sont CONSERVÉES (un tarif hors bornes rendrait le
+-- club irréservable : chaque réservation serait rejetée par reservations_price_guard).
 drop function if exists public.upsert_club_override(text, text, text, text, text, integer, jsonb, text);
 
 create or replace function public.upsert_club_override(
@@ -20,7 +23,7 @@ create or replace function public.upsert_club_override(
   p_price_from integer,
   p_price_tiers jsonb,
   p_contact_phone text,
-  p_maps_query text
+  p_maps_query text default null
 )
 returns boolean
 language plpgsql
@@ -33,6 +36,17 @@ begin
     where p.id = auth.uid() and (p.managed_club_id = p_club_id or p.role = 'operator')
   ) then
     return false; -- seul le gérant de CE club (ou l'opérateur) peut modifier sa page
+  end if;
+  -- Bornes de vraisemblance (mêmes que reservations_price_guard, cf. 40) sur le tarif de base…
+  if p_price_from is not null and (p_price_from < 1000 or p_price_from > 1000000) then
+    return false;
+  end if;
+  -- …et sur chaque plage tarifaire fournie.
+  if p_price_tiers is not null and exists (
+    select 1 from jsonb_array_elements(p_price_tiers) t
+    where coalesce((t->>'price')::integer, 0) < 1000 or (t->>'price')::integer > 1000000
+  ) then
+    return false;
   end if;
   insert into public.club_overrides
       (club_id, name, area, blurb, type, price_from, price_tiers, contact_phone, maps_query, updated_at)

@@ -38,8 +38,11 @@ export type PriceTier = { start: string; end: string; price: number; label?: str
 export const CITY = 'Abidjan';
 
 // Lien Google Maps fiable (n’invente pas de coordonnées : recherche par nom).
+// Ceinture de sécurité : si mapsQuery manque (vieille surcharge serveur sans la colonne),
+// on recherche « nom + quartier » plutôt que d’ouvrir Maps sur une requête vide.
 export function mapsUrl(club: Club): string {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(club.mapsQuery)}`;
+  const q = club.mapsQuery || `${club.name} ${club.area} Abidjan`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 }
 
 // Liste volontairement triée par ORDRE ALPHABÉTIQUE — aucun classement, aucun
@@ -254,7 +257,11 @@ export function setClubStatusMap(m: Record<string, 'active' | 'coming_soon' | 'h
 
 function applyInfo(club: Club, overrides?: ClubOverrides): Club & { contactPhone?: string } {
   const patch = overrides?.[club.id];
-  const merged = patch ? { ...club, ...patch } : club;
+  // Un champ ABSENT côté serveur (undefined) ne doit JAMAIS écraser la valeur de base : un
+  // spread avec { mapsQuery: undefined } remplacerait la position seed par undefined (« Voir
+  // sur la carte » chercherait littéralement « undefined » dans Google Maps).
+  const clean = patch ? (Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) as typeof patch) : undefined;
+  const merged = clean ? { ...club, ...clean } : club;
   // Statut opérateur : 'coming_soon' → « Bientôt » (non réservable) ; 'active' force réservable.
   const status = clubStatusMap[club.id];
   if (status === 'coming_soon') return { ...merged, comingSoon: true };

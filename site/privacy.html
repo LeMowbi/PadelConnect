@@ -41,11 +41,11 @@
         <h2>Les données que nous collectons</h2>
         <ul>
           <li><strong>Compte</strong> : adresse e-mail, mot de passe (chiffré), prénom, nom, numéro de téléphone, date de naissance et sexe (facultatifs), niveau de jeu.</li>
-          <li><strong>Activité</strong> : réservations, participations, tournois, avis publiés, amis, parrainage.</li>
+          <li><strong>Activité</strong> : réservations, participations, tournois, avis publiés, amis, parrainage, matchs ouverts, scores de match saisis, points de classement, demandes de cours avec un coach (et fiche coach si un club t'a promu).</li>
           <li><strong>Photo</strong> (facultative, avec ton accord) : photo de profil, et pour les gérants, photos du club.</li>
           <li><strong>Contacts</strong> (facultatif, avec ton accord) : lorsque tu choisis d'ajouter un ami depuis tes contacts, nous lisons uniquement le contact que <em>tu</em> sélectionnes (nom et numéro) pour t'aider à l'inviter. Nous ne copions jamais ton carnet d'adresses.</li>
           <li><strong>Notifications</strong> : un identifiant technique d'appareil (jeton de notification) pour t'envoyer les alertes liées à tes réservations, invitations et tournois.</li>
-          <li><strong>Diagnostics techniques</strong> : rapports d'erreur/plantage et statistiques d'usage agrégées (écrans consultés, actions), sans identifiant personnel, uniquement pour corriger les bugs et améliorer le service.</li>
+          <li><strong>Diagnostics techniques</strong> : rapports d'erreur/plantage et événements d'usage (écrans consultés, actions), enregistrés <em>sans identifiant personnel</em> (jamais rattachés à ton compte), uniquement pour corriger les bugs et améliorer le service.</li>
         </ul>
         <p>Nous n'utilisons aucune donnée de localisation GPS. Les liens vers Google Maps se contentent d'ouvrir une recherche par nom.</p>
       </div>
@@ -64,21 +64,28 @@
       </div>
 
       <div class="card">
-        <h2>Où sont stockées tes données</h2>
+        <h2>Où sont stockées tes données — et qui voit quoi</h2>
         <p>
-          Tes données sont hébergées sur un serveur sécurisé fourni par <strong>Supabase</strong> et ne sont visibles que
-          par toi. Un club ne voit que les réservations qui le concernent ; l'opérateur de PadelConnect n'accède qu'au
-          strict nécessaire au suivi du service.
+          Tes données sont hébergées sur un serveur sécurisé fourni par <strong>Supabase</strong>. Tes
+          <strong> coordonnées</strong> (e-mail, téléphone) ne sont jamais montrées aux autres joueurs. En revanche,
+          certaines informations sont <strong>visibles par la communauté</strong>, car c'est le but de ces
+          fonctionnalités : ton nom sur les avis que tu publies, ton prénom (et l'initiale de ton nom) au classement
+          avec tes points, et ton prénom sur les matchs ouverts que tu crées ou rejoins. Un club ne voit que les
+          réservations qui le concernent ; l'opérateur de PadelConnect n'accède qu'au strict nécessaire au suivi du
+          service. Tu peux signaler tout avis inapproprié et bloquer son auteur directement dans l'app (traitement
+          sous 24 h).
         </p>
       </div>
 
       <div class="card">
         <h2>Tes droits & la suppression de compte</h2>
         <p>
-          Tu peux supprimer ton compte et l'ensemble de tes données à tout moment, directement dans l'application :
-          <strong>Profil → « Supprimer mon compte »</strong> (action définitive et immédiate). Tu peux aussi nous écrire
+          Tu peux supprimer ton compte et l'ensemble de tes données (photo de profil comprise) à tout moment,
+          directement dans l'application : <strong>Profil → « Supprimer mon compte »</strong> (action définitive et
+          immédiate — tes réservations à venir sont annulées et les clubs concernés prévenus). Tu peux aussi nous écrire
           pour exercer tes droits d'accès, de rectification ou de suppression. Le traitement respecte la réglementation
-          ivoirienne (ARTCI) sur les données personnelles.
+          ivoirienne (ARTCI) sur les données personnelles. L'application est réservée aux personnes de 13 ans ou plus
+          (accord d'un parent ou tuteur pour les mineurs).
         </p>
       </div>
 

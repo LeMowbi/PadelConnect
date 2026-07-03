@@ -19,6 +19,7 @@ import { activeClubs, clubs as baseClubs, findClub, manageableClubs } from '@/da
 import { isTournamentPublic } from '@/data/competitions';
 import { canAccessOperator } from '@/lib/access';
 import { hapticSuccess } from '@/lib/haptics';
+import { fetchReviewReports, operatorDeleteReview, operatorDismissReport, type ReviewReport } from '@/lib/moderation';
 import { COMMISSION_RATE, isPlayed, useApp, type ServerClubRequest, type ServerSupportMessage } from '@/store/AppContext';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { addWeeks, dateKeyLabel, weekKeyOf, weekLabel } from '@/lib/days';
@@ -164,7 +165,45 @@ export default function Operateur() {
       alive = false;
     };
   }, []);
-  const { refreshControl } = usePullToRefresh(loadSupport);
+  // AVIS SIGNALÉS (53) : la modération promise aux joueurs (« vérifié sous 24 h ») se traite
+  // ici — retirer l'avis ou classer le signalement. Même conventions que les signalements :
+  // erreur réseau ≠ « rien à modérer », chargement au montage + pull-to-refresh.
+  const [reports, setReports] = useState<ReviewReport[]>([]);
+  const [reportsError, setReportsError] = useState(false);
+  const [reportBusy, setReportBusy] = useState<string | null>(null); // anti double-tap
+  const loadReports = useCallback(async () => {
+    const rows = await fetchReviewReports();
+    setReportsError(rows === null);
+    if (rows) setReports(rows);
+  }, []);
+  useEffect(() => {
+    let alive = true;
+    void fetchReviewReports().then((rows) => {
+      if (!alive) return;
+      setReportsError(rows === null);
+      if (rows) setReports(rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const moderateReport = async (r: ReviewReport, removeReview: boolean) => {
+    if (reportBusy) return;
+    setReportBusy(r.reportId);
+    const ok = removeReview ? await operatorDeleteReview(r.reviewId) : await operatorDismissReport(r.reportId);
+    setReportBusy(null);
+    if (ok) {
+      // Retirer l'avis efface TOUS ses signalements (cascade) ; classer n'efface que celui-ci.
+      setReports((cur) => cur.filter((x) => (removeReview ? x.reviewId !== r.reviewId : x.reportId !== r.reportId)));
+      toast.show(removeReview ? 'Avis retiré — le signaleur a été entendu ✓' : 'Signalement classé (avis conservé).');
+    } else {
+      toast.show('Action impossible — réessaie.', { icon: 'alert-circle' });
+    }
+  };
+
+  const { refreshControl } = usePullToRefresh(async () => {
+    await Promise.all([loadSupport(), loadReports()]);
+  });
   const markSupport = async (id: string, status: ServerSupportMessage['status']) => {
     const prev = support.find((m) => m.id === id)?.status;
     setSupport((cur) => cur.map((m) => (m.id === id ? { ...m, status } : m)));
@@ -392,19 +431,21 @@ export default function Operateur() {
           illisibles — même motif que l'Espace Club (SegmentedControl + rappel inter-onglets). */}
       <SegmentedControl options={OP_SECTIONS} value={section} onChange={setSection} />
 
-      {/* Rappel visible depuis les AUTRES onglets : demandes/signalements en attente. */}
-      {section !== 'Demandes' && pendingRequests + newSupport > 0 ? (
+      {/* Rappel visible depuis les AUTRES onglets : demandes/signalements/avis en attente. */}
+      {section !== 'Demandes' && pendingRequests + newSupport + reports.length > 0 ? (
         <Pressable
           onPress={() => setSection('Demandes')}
           style={styles.pendingPill}
           accessibilityRole="button"
-          accessibilityLabel={`${pendingRequests + newSupport} demande${pendingRequests + newSupport > 1 ? 's' : ''} à traiter`}
+          accessibilityLabel={`${pendingRequests + newSupport + reports.length} demande${pendingRequests + newSupport + reports.length > 1 ? 's' : ''} à traiter`}
         >
           <Ionicons name="hourglass-outline" size={14} color={colors.amberDark} />
           <Txt variant="small" color={colors.amberDark} style={{ fontWeight: '700', flex: 1 }}>
             {pendingRequests > 0 ? `${pendingRequests} demande${pendingRequests > 1 ? 's' : ''} de club` : ''}
-            {pendingRequests > 0 && newSupport > 0 ? ' · ' : ''}
+            {pendingRequests > 0 && newSupport + reports.length > 0 ? ' · ' : ''}
             {newSupport > 0 ? `${newSupport} signalement${newSupport > 1 ? 's' : ''}` : ''}
+            {newSupport > 0 && reports.length > 0 ? ' · ' : ''}
+            {reports.length > 0 ? `${reports.length} avis signalé${reports.length > 1 ? 's' : ''}` : ''}
           </Txt>
           <Ionicons name="chevron-forward" size={14} color={colors.amberDark} />
         </Pressable>
@@ -966,6 +1007,68 @@ export default function Operateur() {
 
       {section === 'Demandes' ? (
         <>
+          {/* AVIS SIGNALÉS (modération UGC, App Store 1.2) : retirer l'avis ou classer. */}
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title={`Avis signalés · ${reports.length}`} />
+            {reports.length === 0 ? (
+              <Card>
+                <Txt variant="muted">
+                  {reportsError
+                    ? 'Impossible de charger les avis signalés — vérifie ta connexion, puis tire pour rafraîchir.'
+                    : 'Aucun avis signalé. Quand un joueur signale un avis (fiche club), il arrive ici — à traiter sous 24 h.'}
+                </Txt>
+              </Card>
+            ) : (
+              reports.map((r) => (
+                <Card key={r.reportId} style={{ marginBottom: spacing.sm }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                    <IconCircle icon="flag" color={colors.danger} bg={colors.dangerSoft} size={40} />
+                    <View style={{ flex: 1 }}>
+                      <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
+                        Avis de {r.authorName} · {r.rating}★
+                      </Txt>
+                      <Txt variant="small" color={colors.textFaint} numberOfLines={1}>
+                        {findClub(r.clubId, state.customClubs, state.clubInfo)?.name ?? r.clubId}
+                      </Txt>
+                    </View>
+                  </View>
+                  {r.reviewText ? (
+                    <Txt variant="body" style={{ marginTop: spacing.sm }}>
+                      « {r.reviewText} »
+                    </Txt>
+                  ) : (
+                    <Txt variant="muted" style={{ marginTop: spacing.sm }}>
+                      (Avis sans texte — note seule.)
+                    </Txt>
+                  )}
+                  {r.reason ? (
+                    <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
+                      Motif du signalement : {r.reason}
+                    </Txt>
+                  ) : null}
+                  <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+                    <Button
+                      size="sm"
+                      label={reportBusy === r.reportId ? '…' : 'Retirer l’avis'}
+                      icon="trash-outline"
+                      variant="danger"
+                      disabled={reportBusy !== null}
+                      onPress={() => void moderateReport(r, true)}
+                    />
+                    <Button
+                      size="sm"
+                      label="Classer (avis OK)"
+                      icon="checkmark"
+                      variant="secondary"
+                      disabled={reportBusy !== null}
+                      onPress={() => void moderateReport(r, false)}
+                    />
+                  </View>
+                </Card>
+              ))
+            )}
+          </View>
+
           {/* Signalements / messages d’aide envoyés par les joueurs (serveur). */}
           <View style={{ marginTop: spacing.xl }}>
             <SectionHeader title={`Signalements · ${newSupport}`} />

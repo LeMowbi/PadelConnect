@@ -19,12 +19,22 @@ export function minPrice(club: Club): number {
 
 // Prix d’un créneau « HH:MM » : la plage qui le contient, sinon le tarif unique.
 // Le repli `minPrice` est une CEINTURE DE SÉCURITÉ silencieuse : grâce à
-// validateTiers (à l’enregistrement), une saisie valide couvre 07:00→24:00 sans
-// trou, donc ce repli n’est en pratique jamais atteint.
+// validateTiers (à l’enregistrement), une saisie valide couvre les heures
+// d’ouverture du club sans trou, donc ce repli n’est en pratique jamais atteint.
+// Comparaison NUMÉRIQUE (pas lexicographique) : une heure non paddée (« 9:00 »)
+// serait sinon mal classée face à « 16:00 ».
 export function priceForSlot(club: Club, time: string): number {
   const tiers = priceTiersFor(club);
   if (tiers.length) {
-    const match = tiers.find((t) => time >= t.start && time < t.end);
+    const tm = timeToMinutes(time);
+    const match =
+      tm === null
+        ? undefined
+        : tiers.find((t) => {
+            const s = timeToMinutes(t.start);
+            const e = timeToMinutes(t.end);
+            return s !== null && e !== null && tm >= s && tm < e;
+          });
     return match ? match.price : minPrice(club);
   }
   return club.priceFrom;
@@ -106,14 +116,25 @@ export function validateTiers(
     }
   }
 
+  // Couverture AU MOINS égale à l'amplitude d'ouverture : une plage qui déborde avant
+  // l'ouverture ou après la fermeture est inoffensive (priceForSlot ne matche que les créneaux
+  // réellement ouverts) — exiger l'égalité stricte bloquait toute config héritée (ex. plages
+  // 07:00→24:00 enregistrées avant les horaires modulables) dès que la grille dérivait d'autres
+  // bornes, y compris pour enregistrer un simple changement de WhatsApp ou de position Maps.
   const sorted = parsed.slice().sort((a, b) => a.s! - b.s!);
   const first = sorted[0];
   const last = sorted[sorted.length - 1];
-  if (first.s !== openMin) {
-    return { ok: false, error: `Tes plages doivent couvrir ${range}. La première commence à ${first.t.start} au lieu de ${fmt(openMin)}.` };
+  if (first.s! > openMin) {
+    return {
+      ok: false,
+      error: `Tes plages doivent couvrir ${range}. La première commence à ${first.t.start}, après l'ouverture (${fmt(openMin)}).`,
+    };
   }
-  if (last.e !== closeMin) {
-    return { ok: false, error: `Tes plages doivent couvrir ${range}. La dernière finit à ${last.t.end} au lieu de ${fmt(closeMin)}.` };
+  if (last.e! < closeMin) {
+    return {
+      ok: false,
+      error: `Tes plages doivent couvrir ${range}. La dernière finit à ${last.t.end}, avant la fermeture (${fmt(closeMin)}).`,
+    };
   }
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1];

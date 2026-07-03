@@ -7,6 +7,11 @@ import { createClient } from '@supabase/supabase-js';
 // l’app) — la vraie sécurité vient des règles Row Level Security côté serveur.
 const SUPABASE_URL = 'https://bqeoqcqvqrqcrvkccxij.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_n2_mCCNviA-fbtpSZiz2ew_mnEqGeG_';
+// Clé AsyncStorage où auth-js persiste la session (« sb-<ref>-auth-token »). La déconnexion
+// HORS-LIGNE doit pouvoir l'effacer directement : auth-js ne retire PAS la session locale
+// quand la révocation serveur échoue (réseau coupé) — le compte « ressusciterait » sinon au
+// prochain lancement, y compris sur un téléphone prêté.
+export const SUPABASE_AUTH_STORAGE_KEY = 'sb-bqeoqcqvqrqcrvkccxij-auth-token';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {

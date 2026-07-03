@@ -83,7 +83,7 @@ import { uploadAvatar } from '@/lib/avatar';
 import { clearOperatorNewsServer, fetchOperatorNews, setOperatorNewsServer } from '@/lib/operatorNews';
 import { fetchClubRatings, type ClubRating } from '@/lib/reviewsServer';
 import { track } from '@/lib/diagnostics';
-import { phoneToAuthEmail, supabase } from '@/lib/supabase';
+import { phoneToAuthEmail, supabase, SUPABASE_AUTH_STORAGE_KEY } from '@/lib/supabase';
 import {
   clampLevel,
   clubConfigSlices,
@@ -1031,7 +1031,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             .eq('id', outgoing)
             .then(() => {});
         sessionEpochRef.current += 1; // invalide toute requête en vol du compte sortant
-        supabase.auth.signOut().catch(() => {});
+        // HORS-LIGNE, auth-js n'efface PAS la session locale quand la révocation serveur échoue
+        // (signOut résout avec { error } sans retirer la session) : le compte « ressusciterait »
+        // au prochain lancement. En cas d'échec, on efface la session persistée NOUS-MÊMES —
+        // le refresh token restera simplement non révoqué côté serveur, sans session locale.
+        void supabase.auth.signOut().then(({ error }) => {
+          if (error) void AsyncStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY).catch(() => {});
+        });
         void syncMatchReminders([], false); // on efface les rappels locaux du compte sortant
         // Anti-fuite de photo entre comptes sur le même appareil : une clé orpheline (inscription
         // jamais confirmée) ne doit pas être reprise par le PROCHAIN compte connecté ici.

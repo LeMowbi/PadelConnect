@@ -191,6 +191,28 @@ Deno.serve(async (req) => {
         data: { kind: 'reservation', id: record.reservation_id },
       });
     } else if (
+      table === 'reservation_participants' &&
+      type === 'UPDATE' &&
+      record.status === 'declined' &&
+      oldRecord.status === 'accepted'
+    ) {
+      // Un joueur QUITTE un match ouvert (leave_open_match → declined) → prévenir le créateur :
+      // une place se relibère, il peut chercher quelqu'un d'autre. (Un simple refus d'invitation
+      // part de 'invited', pas de 'accepted' — cette branche ne concerne que les départs réels.)
+      const { data: resa } = await supabase
+        .from('reservations')
+        .select('user_id, open_match, club_name, date_label, time')
+        .eq('id', record.reservation_id)
+        .maybeSingle();
+      if (resa?.open_match) {
+        notifs.push({
+          targets: await userToken(resa?.user_id ?? ''),
+          title: 'Un joueur a quitté ton match',
+          body: `${await userName(record.user_id)} a quitté ton match du ${resa?.date_label ?? ''} à ${resa?.time ?? ''} (${resa?.club_name ?? ''}) — une place se libère.`,
+          data: { kind: 'reservation', id: record.reservation_id },
+        });
+      }
+    } else if (
       table === 'competitions' &&
       type === 'INSERT' &&
       record.status === 'pending' &&
@@ -309,11 +331,25 @@ Deno.serve(async (req) => {
     ) {
       // Un club vient de PROMOUVOIR (ou re-promouvoir) ce compte en coach → on le lui annonce,
       // sinon il ne découvre son Espace Coach que par hasard en rouvrant son profil.
+      // Les 9 clubs FONDATEURS ne sont pas dans la table `clubs` (embarqués dans l'app) : on
+      // garde leur nom ici pour ne pas dire « Ton club » (miroir de src/data/clubs.ts).
+      const FOUNDER_NAMES: Record<string, string> = {
+        'abidjan-padel': 'Abidjan Padel',
+        'district-club': 'District Club',
+        'elite-club': 'Elite Club',
+        'ivoire-padel': 'Ivoire Padel Club',
+        'padel-magic': 'Padel Magic',
+        'padel-palmeraie': 'Padel Palmeraie',
+        'padel-zone-4': 'Padel Zone 4',
+        padelta: 'Padelta',
+        padelhouse: 'PadelHouse',
+      };
       const { data: clubRow } = await supabase.from('clubs').select('name').eq('id', record.club_id).maybeSingle();
+      const promoClub = clubRow?.name ?? FOUNDER_NAMES[record.club_id as string] ?? 'Ton club';
       notifs.push({
         targets: await userToken(record.user_id),
         title: 'Tu es maintenant coach 🎾',
-        body: `${clubRow?.name ?? 'Ton club'} t’a déclaré coach — règle tes disponibilités dans ton Espace Coach.`,
+        body: `${promoClub} t’a déclaré coach — règle tes disponibilités dans ton Espace Coach.`,
         data: { kind: 'lesson' }, // route vers /coach-admin (même écran que les demandes de cours)
       });
     } else if (table === 'match_results' && (type === 'INSERT' || type === 'UPDATE')) {
@@ -344,7 +380,9 @@ Deno.serve(async (req) => {
           .select('user_id, status')
           .eq('reservation_id', record.reservation_id);
         const acceptedParts = (parts ?? []).filter((p) => p.status === 'accepted');
-        const wn = Math.floor((1 + acceptedParts.length) / 2);
+        // Vainqueurs max = least(2, comptes-1), STRICTEMENT comme la SQL 49 (padel : 2 au plus,
+        // jamais tous les comptes — un 2v2 où seuls 3 joueurs ont l'app garde ses 2 « je gagne »).
+        const wn = Math.min(2, acceptedParts.length);
         const when = `du ${resa?.date_label ?? ''} à ${resa?.time ?? ''} (${resa?.club_name ?? ''})`;
         const otherEntrants = all.map((e) => e.user_id).filter((id) => id !== record.user_id);
         // Classe un ensemble de saisies (même règle que la SQL 49) : validé = 1 canon, 1 ≤ « je
