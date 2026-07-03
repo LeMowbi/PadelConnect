@@ -25,12 +25,13 @@ import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
 // Accès rapide — 4 raccourcis UTILES sans onglet dédié (demande porteur : ni Coachs-annuaire
 // ni Parrainage ici — les cours se réservent DANS l'app, et le parrainage vit dans Profil).
+// Le classement a sa propre carte podium plus bas → ici on met « Matchs ouverts » (écran dédié).
 type Action = { icon: keyof typeof Ionicons.glyphMap; label: string; route: string; tint: string; bg: string };
 const ACTIONS: Action[] = [
   { icon: 'list', label: 'Mes réservations', route: '/reservations', tint: colors.green, bg: colors.greenSoft },
-  { icon: 'business', label: 'Clubs', route: '/clubs', tint: colors.signature, bg: colors.signatureSoft },
+  { icon: 'people', label: 'Matchs ouverts', route: '/matchs-ouverts', tint: colors.coral, bg: colors.coralSoft },
   { icon: 'school', label: 'Réserver un cours', route: '/cours', tint: colors.purple, bg: colors.purpleSoft },
-  { icon: 'podium', label: 'Classement', route: '/classement', tint: colors.amberDark, bg: colors.amberSoft },
+  { icon: 'business', label: 'Clubs', route: '/clubs', tint: colors.signature, bg: colors.signatureSoft },
 ];
 
 const MONTHS_SHORT = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];

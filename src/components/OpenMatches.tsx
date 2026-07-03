@@ -13,7 +13,7 @@ const PREVIEW = 4; // liste repliée par défaut (l'onglet Réserver reste centr
 
 // MATCHS OUVERTS (45, modèle Playtomic) : des joueurs ont réservé leur terrain et cherchent
 // du monde — un tap et tu es de la partie (place prise immédiatement, créateur prévenu).
-export function OpenMatches({ refreshToken }: { refreshToken?: number } = {}) {
+export function OpenMatches({ refreshToken, full = false }: { refreshToken?: number; full?: boolean } = {}) {
   const { state, refreshSession } = useApp();
   const toast = useToast();
   // undefined = chargement ; null = échec réseau (≠ [] = aucun match), convention §8.
@@ -101,7 +101,8 @@ export function OpenMatches({ refreshToken }: { refreshToken?: number } = {}) {
     );
   }
 
-  const shown = showAll ? matches : matches.slice(0, PREVIEW);
+  // Sur l'écran dédié (full), on montre TOUT ; en section d'accueil, un aperçu repliable.
+  const shown = full || showAll ? matches : matches.slice(0, PREVIEW);
   const me = state.serverUserId;
 
   return (
@@ -152,7 +153,7 @@ export function OpenMatches({ refreshToken }: { refreshToken?: number } = {}) {
             </View>
           );
         })}
-        {matches.length > PREVIEW ? (
+        {!full && matches.length > PREVIEW ? (
           <Button
             size="sm"
             variant="ghost"
