@@ -216,7 +216,8 @@ Deno.serve(async (req) => {
     } else if (table === 'competitions' && type === 'UPDATE' && record.status === 'rejected' && oldRecord.status === 'pending') {
       // Le club a REFUSÉ un tournoi joueur en attente → prévenir l'organisateur (sinon il reste
       // dans le flou). Le MOTIF laissé par le club (52) est joint : il sait quoi changer.
-      const reason = typeof record.reject_reason === 'string' && record.reject_reason.trim() ? ` Motif : ${record.reject_reason.trim()}` : '';
+      const reason =
+        typeof record.reject_reason === 'string' && record.reject_reason.trim() ? ` Motif : ${record.reject_reason.trim()}` : '';
       notifs.push({
         targets: await userToken(record.organizer_id),
         title: 'Tournoi non retenu',
@@ -406,11 +407,10 @@ Deno.serve(async (req) => {
       // l'actu en base porte bien push=true et le même news_id que le webhook.
       const { data: live } = await supabase.from('operator_news').select('news_id, title, subtitle, push').eq('key', 'home').maybeSingle();
       if (live && live.push === true && live.news_id === record.news_id) {
-        const { data: players } = await supabase
-          .from('profiles')
-          .select('expo_push_token')
-          .or('role.eq.player,role.is.null')
-          .not('expo_push_token', 'is', null);
+        // TOUS les comptes (joueurs, gérants ET opérateur) : le bandeau d'accueil est visible par
+        // tous, et l'opérateur reçoit ainsi sa propre actu — c'est sa confirmation d'envoi (sinon
+        // il publie et ne voit jamais rien partir sur SON téléphone).
+        const { data: players } = await supabase.from('profiles').select('expo_push_token').not('expo_push_token', 'is', null);
         notifs.push({
           targets: (players ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
           title: live.title ?? 'Actu PadelConnect 📣',
