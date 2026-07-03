@@ -89,6 +89,9 @@ export const initialState: AppState = {
   clubSlots: {},
   clubCourts: {},
   blockedSlots: [],
+  // Comptes que J'AI bloqués (modération UGC) : miroir persisté — un échec réseau au montage
+  // d'un écran ne fait plus réapparaître les avis / matchs ouverts d'un compte bloqué.
+  blockedUserIds: [],
   // Aucune actu d’accueil par défaut : le bandeau n’apparaît QUE si l’opérateur en publie une
   // (synchronisée serveur, visible par tous). Évite un bandeau de démo qui s’affiche puis
   // disparaît au chargement quand aucune actu n’est réellement publiée.
@@ -150,6 +153,7 @@ export function loggedOutState(s: AppState): AppState {
     compRegistrations: {},
     compResults: {},
     officialResults: [],
+    blockedUserIds: [], // liste liée au compte → purgée à la déconnexion
   };
 }
 

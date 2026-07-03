@@ -101,25 +101,41 @@ export async function insertReservation(
   input: Omit<Reservation, 'id' | 'createdAt' | 'bookedBy' | 'userId'>,
   userId: string,
   bookedBy?: { name: string; phone: string },
-): Promise<{ ok: boolean; reservation?: Reservation; conflict?: boolean }> {
+): Promise<{ ok: boolean; reservation?: Reservation; conflict?: boolean; past?: boolean; limit?: boolean }> {
   const { data, error } = await supabase
     .from('reservations')
     .insert(reservationToRow(input, userId, bookedBy))
     .select()
     .single();
   // 23505 = créneau déjà pris (contrainte unique) ; 23514 = fermé hors app ou réservé à un
-  // tournoi (barrière serveur, cf. 27_blocked_slots.sql). Dans les deux cas : indisponible.
+  // tournoi (barrière serveur, cf. 27_blocked_slots.sql) ; P0001 = refus des gardes serveur
+  // (créneau passé, plafond de résas, créneau '!fermé', terrain retiré, prix hors bornes —
+  // cf. 48/53). TOUS ces refus sont des « indisponible/refusé », pas des pannes réseau : les
+  // afficher « Connexion impossible » ferait réessayer l'utilisateur en boucle pour rien.
+  // Deux refus P0001 ont leur message dédié : créneau passé (horloge du téléphone en retard
+  // de +15 min sur le serveur) et plafond de résas à venir (miroir local périmé) — les
+  // afficher « terrain pris » inviterait à changer de terrain pour rien.
   if (error) {
     const code = (error as { code?: string }).code;
-    return { ok: false, conflict: code === '23505' || code === '23514' };
+    const msg = (error as { message?: string }).message ?? '';
+    if (code === 'P0001' && msg.includes('must be in the future')) return { ok: false, past: true };
+    if (code === 'P0001' && msg.includes('too many upcoming')) return { ok: false, limit: true };
+    return { ok: false, conflict: code === '23505' || code === '23514' || code === 'P0001' };
   }
   return { ok: true, reservation: rowToReservation(data as Row) };
 }
 
 // ─── Créneaux fermés hors app (blocked_slots serveur) ──────────────────────────
-// null = échec réseau → l’appelant garde l’existant.
+// null = échec réseau → l’appelant garde l’existant. BORNÉ à aujourd'hui-et-après (les
+// fermetures passées ne servent plus à l'affichage) et plafonné : la table n'est jamais
+// purgée, sans borne le téléchargement grossissait à chaque retour au premier plan.
 export async function fetchBlockedSlots(): Promise<BlockedSlot[] | null> {
-  const { data, error } = await supabase.from('blocked_slots').select('club_id, date_key, time, court, reason');
+  const { data, error } = await supabase
+    .from('blocked_slots')
+    .select('club_id, date_key, time, court, reason')
+    .gte('date_key', dayKey(new Date()))
+    .order('date_key', { ascending: true })
+    .limit(1000);
   if (error) return null;
   return (data ?? []).map((r: { club_id: string; date_key: string; time: string; court: string; reason: string | null }) => ({
     clubId: r.club_id,
@@ -166,12 +182,16 @@ export async function setClubConfirmedRow(id: string, value: boolean): Promise<b
 // celles de son club / toutes. On exclut les annulées (status='cancelled') : elles ne
 // comptent ni dans la liste joueur ni dans la base de commission. Trié par date de créneau.
 export async function fetchReservations(): Promise<{ ok: boolean; reservations: Reservation[] }> {
+  // Tri DESCENDANT + plafond explicite : si le périmètre dépasse le cap PostgREST (1000 lignes,
+  // possible pour l'opérateur), la troncature retire les plus ANCIENNES — un tri ascendant
+  // aurait silencieusement perdu les résas récentes/futures (finances et plannings faussés).
   const { data, error } = await supabase
     .from('reservations')
     .select('*')
     .eq('status', 'booked')
     .gte('starts_at', Date.now() - MIRROR_WINDOW_MS) // récent + futur seulement (cf. MIRROR_WINDOW_MS)
-    .order('starts_at', { ascending: true });
+    .order('starts_at', { ascending: false })
+    .limit(1000);
   if (error) return { ok: false, reservations: [] };
   return { ok: true, reservations: (data ?? []).map((r) => rowToReservation(r as Row)) };
 }
@@ -181,11 +201,15 @@ export async function fetchReservations(): Promise<{ ok: boolean; reservations: 
 // pour que le club soit prévenu qu’un créneau s’est libéré. Trié du plus récent au plus ancien.
 // Convention réseau (CLAUDE.md §8) : `null` en cas d’échec (≠ [] = aucune annulation).
 export async function fetchCancelledReservations(): Promise<Reservation[] | null> {
+  // Fenêtre 180 j + plafond : l'historique complet grossit sans fin et n'est jamais affiché
+  // au-delà des entrées récentes — sans borne, tout repasse sur le réseau à chaque ouverture.
   const { data, error } = await supabase
     .from('reservations')
     .select('*')
     .eq('status', 'cancelled')
-    .order('starts_at', { ascending: false });
+    .gte('starts_at', Date.now() - MIRROR_WINDOW_MS)
+    .order('starts_at', { ascending: false })
+    .limit(500);
   if (error) return null;
   return (data ?? []).map((r) => rowToReservation(r as Row));
 }
@@ -194,7 +218,14 @@ export async function fetchCancelledReservations(): Promise<Reservation[] | null
 // de son club. Trace conservée (status='no_show' posé par mark_no_show). Plus récent d’abord.
 // Convention réseau : `null` en cas d’échec (≠ [] = aucune absence).
 export async function fetchNoShowReservations(): Promise<Reservation[] | null> {
-  const { data, error } = await supabase.from('reservations').select('*').eq('status', 'no_show').order('starts_at', { ascending: false });
+  // Même fenêtre/plafond que les annulations (l'écran n'affiche que le récent).
+  const { data, error } = await supabase
+    .from('reservations')
+    .select('*')
+    .eq('status', 'no_show')
+    .gte('starts_at', Date.now() - MIRROR_WINDOW_MS)
+    .order('starts_at', { ascending: false })
+    .limit(500);
   if (error) return null;
   return (data ?? []).map((r) => rowToReservation(r as Row));
 }
@@ -224,10 +255,13 @@ export async function fetchReliability(userIds: string[]): Promise<Record<string
 // Réservation PARTAGÉE : rattache les amis invités (par leur numéro) à la réservation.
 // La résolution numéro → compte se fait côté serveur (fonction SECURITY DEFINER), donc on
 // n’expose jamais les profils. Les non-inscrits sont simplement ignorés.
-export async function linkParticipants(reservationId: string, phones: string[]): Promise<void> {
+// false = le rattachement a échoué (réseau) : les invités ne recevront ni push ni la résa
+// chez eux — l'appelant doit le dire (la réservation elle-même, elle, reste valide).
+export async function linkParticipants(reservationId: string, phones: string[]): Promise<boolean> {
   const clean = phones.map((p) => p.trim()).filter((p) => p.replace(/\D/g, '').length >= 8);
-  if (clean.length === 0) return;
-  await supabase.rpc('link_participants', { p_reservation_id: reservationId, p_phones: clean });
+  if (clean.length === 0) return true;
+  const { error } = await supabase.rpc('link_participants', { p_reservation_id: reservationId, p_phones: clean });
+  return !error;
 }
 
 // Les réservations où JE suis invité (participant), AVEC le statut de mon invitation.
@@ -257,7 +291,15 @@ export async function fetchOccupancy(): Promise<SlotOccupancy[] | null> {
   // Seuls les jours À VENIR intéressent la disponibilité (l'app ne lit l'occupation que pour
   // les 7 prochains jours) : on borne à aujourd'hui pour ne pas rapatrier tout le passé — et
   // ne pas heurter le plafond de 1000 lignes qui, atteint, fausserait les dispos.
-  const { data, error } = await supabase.from('slot_occupancy').select('*').gte('date_key', dayKey(new Date()));
+  // Ordre EXPLICITE + plafond : au cap PostgREST (1000 lignes), une troncature silencieuse
+  // sans ordre pourrait retirer n'importe quels jours — on garde les plus PROCHES (ceux que
+  // l'app affiche), les jours lointains tronqués n'étant pas montrés.
+  const { data, error } = await supabase
+    .from('slot_occupancy')
+    .select('*')
+    .gte('date_key', dayKey(new Date()))
+    .order('date_key', { ascending: true })
+    .limit(1000);
   if (error) return null;
   return (data ?? []).map((o: { club_id: string; date_key: string; time: string; court: string }) => ({
     clubId: o.club_id,

@@ -1,6 +1,38 @@
 # Audit — actions serveur (sans terminal)
 
-## 0-QUINQUIES) AUDIT n°6 (2026-07-03) — recoller `49`, coller `50` + `51`, redéployer notify-club — ⏳ À FAIRE
+## 0-SEXIES) AUDIT n°7 (2026-07-03) — recoller `49`, coller `50` → `53`, redéployer notify-club — ⏳ À FAIRE
+
+Le plus gros audit du projet (125 vérifications croisées) avant la sortie stores. Cette section
+REMPLACE le 0-QUINQUIES ci-dessous (mêmes étapes + la nouvelle `53`). Dans **SQL Editor**, colle
+et **Run** dans CET ORDRE (chaque fichier est idempotent — le recoller est sans risque) :
+
+1. **Recoller `supabase/49_audit5_hardening.sql`** (re-corrigé à l'audit n°7) : anti-triche du
+   score verrouillé (deux « je gagne » ne valident jamais un match) **et** le classement sait
+   maintenant dire « non classé » (l'écran n'affiche plus un ancien rang périmé).
+2. Coller **`supabase/50_club_maps_query.sql`** (position Google Maps éditable).
+3. Coller **`supabase/51_moderation.sql`** (signaler un avis / bloquer un joueur — exigé stores).
+4. Coller **`supabase/52_tournoi_refus_commente.sql`** (motif de refus d'un tournoi).
+5. Coller **`supabase/53_audit7_hardening.sql`** — la grosse migration de l'audit n°7 :
+   - un joueur **bloqué** ne peut plus t'envoyer de demande d'ami ni rejoindre tes matchs ;
+   - **suppression de compte** complète (photo effacée, résas à venir annulées, clubs prévenus) ;
+   - le serveur refuse une résa sur un **créneau fermé** ou un **terrain retiré** ;
+   - plus de **double occupation** tournoi-vs-tournoi ni tournoi-vs-créneau bloqué ;
+   - désinscription d'un tournoi **refusée une fois qu'il a commencé** (anti-esquive du −0.25) ;
+   - `delete_club` nettoie TOUT (avis, boosts, coachs, demandes de cours) ;
+   - les **signalements d'avis** arrivent dans ton Espace opérateur (onglet Demandes) ;
+   - un cours de coach ne peut plus être « ouvert » en match ouvert ;
+   - le **jeton de notification** suit le compte connecté (bascule de compte sur un téléphone) ;
+   - les lectures « communauté » (matchs ouverts, classement, coachs, tournois) exigent un compte.
+6. **Edge Functions → notify-club → Edit** → recoller **tout**
+   `supabase/functions/notify-club/index.ts` → **Deploy** (nom du club fondateur dans le push
+   « Tu es coach », push « un joueur a quitté ton match », règle de score alignée).
+
+Aucun nouveau webhook. Ordre : **49 → 50 → 51 → 52 → 53, puis notify-club**.
+⚠️ À coller AVANT d'installer le build #46 (la 50 change une fonction que l'app appelle).
+
+---
+
+## 0-QUINQUIES) AUDIT n°6 (2026-07-03) — recoller `49`, coller `50` + `51`, redéployer notify-club — ✅ REMPLACÉ PAR LE 0-SEXIES
 
 Dernier audit avant la sortie stores. Côté serveur :
 

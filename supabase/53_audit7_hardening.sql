@@ -707,3 +707,50 @@ revoke execute on function public.fetch_my_match_scores() from public, anon;
 revoke execute on function public.send_friend_request(text) from public, anon;
 revoke execute on function public.fetch_friend_requests() from public, anon;
 revoke execute on function public.join_open_match(uuid) from public, anon;
+
+-- ─── 12) JETON PUSH = APPAREIL (bascule de compte sur un même téléphone) ───────
+-- Enregistre le jeton Expo pour LE compte connecté et le RETIRE de tout autre profil qui le
+-- portait encore : sans cela, après un changement de compte, le téléphone continuait de
+-- recevoir les notifications (demandes d'ami, réservations…) de l'ANCIEN compte.
+-- SECURITY DEFINER : la RLS n'autorise pas un utilisateur à toucher le profil d'autrui.
+drop function if exists public.register_push_token(text);
+create or replace function public.register_push_token(p_token text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null or coalesce(trim(p_token), '') = '' then
+    return;
+  end if;
+  update public.profiles set expo_push_token = null
+    where expo_push_token = p_token and id <> auth.uid();
+  update public.profiles set expo_push_token = p_token where id = auth.uid();
+end;
+$$;
+revoke execute on function public.register_push_token(text) from public, anon;
+grant execute on function public.register_push_token(text) to authenticated;
+
+-- ─── 13) UN COURS DE COACH NE S'OUVRE PAS EN MATCH OUVERT ──────────────────────
+-- La réservation d'un cours (coach_name renseigné, créée par respond_lesson) appartient à
+-- l'élève : sans cette garde, il pouvait l'« ouvrir aux joueurs » — des inconnus rejoignaient
+-- un cours que le coach n'a jamais accepté de donner à 4, et le trigger de confidentialité 51
+-- effaçait au passage le téléphone de l'élève que le club utilise pour le joindre.
+create or replace function public.set_match_open(p_id uuid, p_open boolean)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.reservations
+    set open_match = p_open
+    where id = p_id and user_id = auth.uid() and status = 'booked'
+      and coalesce(coach_name, '') = ''; -- jamais sur un cours de coach
+  return found;
+end;
+$$;
+
+grant execute on function public.set_match_open(uuid, boolean) to authenticated;
+revoke execute on function public.set_match_open(uuid, boolean) from public, anon;

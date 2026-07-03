@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, View } from 'react-native';
+import { BottomSheet } from '@/components/BottomSheet';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, SectionHeader, Tag, Txt } from '@/components/ui';
 import { dateKeyLabel } from '@/lib/days';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
-import { fetchBlockedUserIds } from '@/lib/moderation';
 import { fetchOpenMatches, joinOpenMatch, type OpenMatch } from '@/lib/openMatches';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
@@ -15,13 +15,16 @@ const PREVIEW = 4; // liste repliée par défaut (l'onglet Réserver reste centr
 // MATCHS OUVERTS (45, modèle Playtomic) : des joueurs ont réservé leur terrain et cherchent
 // du monde — un tap et tu es de la partie (place prise immédiatement, créateur prévenu).
 export function OpenMatches({ refreshToken, full = false }: { refreshToken?: number; full?: boolean } = {}) {
-  const { state, refreshSession } = useApp();
+  const { state, refreshSession, submitSupportMessage, blockUserAccount } = useApp();
   const toast = useToast();
   // undefined = chargement ; null = échec réseau (≠ [] = aucun match), convention §8.
   const [matches, setMatches] = useState<OpenMatch[] | null | undefined>(undefined);
   const [showAll, setShowAll] = useState(false);
   const [joining, setJoining] = useState<string | null>(null); // garde anti double-tap
-  const [blockedIds, setBlockedIds] = useState<string[]>([]); // matchs des comptes bloqués masqués
+  // Modération UGC (App Store 1.2) : chaque match d'un AUTRE joueur porte « Signaler / Bloquer »
+  // (le prénom du créateur est un contenu joueur) — feuille ouverte par le bouton « ⋯ » de la ligne.
+  const [moderating, setModerating] = useState<OpenMatch | null>(null);
+  const [moderationBusy, setModerationBusy] = useState(false); // garde anti double-tap (2 actions)
 
   const load = async () => {
     const ms = await fetchOpenMatches();
@@ -33,8 +36,6 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
     void fetchOpenMatches().then((ms) => alive && setMatches((cur) => ms ?? (cur === undefined ? null : cur)));
     // Retour au premier plan : les matchs ouverts bougent vite (places prises entre-temps).
     const sub = AppState.addEventListener('change', (st) => st === 'active' && void load());
-    // Comptes bloqués → leurs matchs ouverts sont masqués (modération UGC, App Store 1.2).
-    if (state.serverUserId) void fetchBlockedUserIds().then((ids) => alive && ids && setBlockedIds(ids));
     return () => {
       alive = false;
       sub.remove();
@@ -83,11 +84,41 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
     if (res === 'full' || res === 'gone') void load(); // liste périmée → on la corrige
   };
 
+  // Signaler le match à l'opérateur : passe par le canal support existant (section
+  // « Signalements » de l'espace opérateur, même circuit que l'aide) — pas de nouveau SQL.
+  const reportMatch = async (m: OpenMatch) => {
+    if (moderationBusy) return;
+    setModerationBusy(true);
+    const res = await submitSupportMessage(
+      `[Signalement match ouvert] Match de ${m.creatorName} — ${m.clubName}, ${dateKeyLabel(m.dateKey)} à ${m.time}. Contenu inapproprié à vérifier.`,
+    );
+    setModerationBusy(false);
+    setModerating(null);
+    toast.show(
+      res.ok ? 'Match signalé — merci, on le vérifie.' : 'Signalement impossible — réessaie.',
+      res.ok ? undefined : { icon: 'alert-circle' },
+    );
+  };
+  // Bloquer le créateur : ses matchs ouverts (et ses avis) disparaissent aussitôt de ma vue —
+  // via le miroir du store (persisté), pas un état local qu'un échec réseau réinitialiserait.
+  const blockCreator = async (m: OpenMatch) => {
+    if (moderationBusy) return;
+    setModerationBusy(true);
+    const ok = await blockUserAccount(m.creatorId);
+    setModerationBusy(false);
+    setModerating(null);
+    toast.show(
+      ok ? `${m.creatorName} bloqué — tu ne verras plus ses matchs.` : 'Blocage impossible — réessaie.',
+      ok ? undefined : { icon: 'alert-circle' },
+    );
+  };
+
   // Chargement ou hors-ligne sans donnée : rien (pas de section fantôme).
   if (matches === undefined || matches === null) return null;
 
-  // On masque les matchs des comptes que j'ai bloqués (modération UGC — prénom du créateur affiché).
-  const visible = matches.filter((m) => !blockedIds.includes(m.creatorId));
+  // On masque les matchs des comptes que j'ai bloqués (modération UGC — prénom du créateur
+  // affiché). Miroir du STORE : persisté, chargé en session et au premier plan (convention §8).
+  const visible = matches.filter((m) => !state.blockedUserIds.includes(m.creatorId));
 
   // AUCUN match ouvert : la section reste VISIBLE avec le mode d'emploi — sinon la
   // fonctionnalité est introuvable tant que personne n'a créé le premier match (retour porteur).
@@ -156,6 +187,16 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
                     disabled={!!joining}
                   />
                 )}
+                {!mine && me ? (
+                  <Pressable
+                    onPress={() => setModerating(m)}
+                    hitSlop={13}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Signaler ce match ou bloquer ${m.creatorName}`}
+                  >
+                    <Ionicons name="ellipsis-vertical" size={16} color={colors.textFaint} />
+                  </Pressable>
+                ) : null}
               </View>
             </View>
           );
@@ -170,6 +211,37 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
           />
         ) : null}
       </Card>
+
+      {/* Feuille Signaler / Bloquer — modération UGC exigée là où le contenu apparaît */}
+      <BottomSheet
+        visible={moderating !== null}
+        title="Signaler ou bloquer"
+        subtitle={moderating ? `Match de ${moderating.creatorName} — ${moderating.clubName}` : undefined}
+        onClose={() => setModerating(null)}
+      >
+        <Txt variant="body" color={colors.textMuted}>
+          Un contenu te semble déplacé ? Signale le match (vérifié sous 24 h) ou bloque son créateur : ses matchs ouverts et ses avis
+          disparaîtront de ton app.
+        </Txt>
+        <View style={{ gap: spacing.sm, marginTop: spacing.lg }}>
+          <Button
+            label="Signaler ce match"
+            icon="flag-outline"
+            variant="secondary"
+            onPress={() => moderating && void reportMatch(moderating)}
+            disabled={moderationBusy}
+            full
+          />
+          <Button
+            label={moderating ? `Bloquer ${moderating.creatorName}` : 'Bloquer'}
+            icon="hand-left-outline"
+            variant="danger"
+            onPress={() => moderating && void blockCreator(moderating)}
+            disabled={moderationBusy}
+            full
+          />
+        </View>
+      </BottomSheet>
     </View>
   );
 }

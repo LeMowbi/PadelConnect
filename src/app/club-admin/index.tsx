@@ -355,9 +355,7 @@ export default function ClubAdmin() {
         </Pressable>
       ) : null}
 
-      {section === 'Réservations' ? (
-        <SectionReservations key={club.id} club={club} comps={comps} onSelectCell={setSelectedCell} />
-      ) : null}
+      {section === 'Réservations' ? <SectionReservations key={club.id} club={club} comps={comps} onSelectCell={setSelectedCell} /> : null}
 
       {section === 'Mon club' ? <SectionMonClub key={club.id} club={club} /> : null}
 
@@ -525,8 +523,11 @@ export default function ClubAdmin() {
             onDelete={
               closingComp.createdByMe
                 ? () => {
-                    deleteCompetition(closingComp.id);
-                    setClosingId(null);
+                    // Écriture honnête : on attend le serveur avant de fermer la feuille.
+                    void deleteCompetition(closingComp.id).then((ok) => {
+                      toast.show(ok ? 'Tournoi annulé' : 'Annulation impossible — réessaie.', ok ? undefined : { icon: 'alert-circle' });
+                      if (ok) setClosingId(null);
+                    });
                   }
                 : undefined
             }

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { CalendarPicker, keyToTs } from '@/components/CalendarPicker';
 import { Chip } from '@/components/Chip';
@@ -10,6 +10,7 @@ import { Button, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { COMP_FORMATS } from '@/data/competitions';
 import { courtsFor, openSlotsFor } from '@/lib/availability';
+import { fetchTournamentFee } from '@/lib/competitionsServer';
 import { DAY_MS, dateKeyLabel, dayKey, nextDays, type DayOption } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { useTodayKey } from '@/lib/useTodayKey';
@@ -108,6 +109,16 @@ export default function NouvelleCompetition() {
   const toggleTime = (t: string) => setTimes((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
 
   const isPlayerTournament = !asClub && !asPadel;
+
+  // Frais d’organisation PadelConnect : state.tournamentFee est chargé UNE FOIS par session —
+  // on le rafraîchit à l’ouverture de l’écran pour afficher le montant réel (le porteur peut
+  // le changer entre deux ouvertures). null = échec réseau → on garde la valeur affichée.
+  const [orgFee, setOrgFee] = useState(state.tournamentFee);
+  useEffect(() => {
+    void fetchTournamentFee().then((amount) => {
+      if (amount != null) setOrgFee(amount);
+    });
+  }, []);
 
   const create = async () => {
     if (submitting) return;
@@ -321,13 +332,13 @@ export default function NouvelleCompetition() {
 
       {/* Frais fixe PadelConnect (tournois joueurs) — annoncés AVANT de valider la création,
           bien en évidence (encadré), avec le bon circuit : Wave, après validation du club. */}
-      {isPlayerTournament && state.tournamentFee > 0 ? (
+      {isPlayerTournament && orgFee > 0 ? (
         <View style={styles.feeBox}>
           <Ionicons name="cash-outline" size={16} color={colors.amberDark} />
           <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
             Frais d’organisation PadelConnect :{' '}
             <Txt variant="small" style={{ fontWeight: '700' }}>
-              {fcfa(state.tournamentFee)}
+              {fcfa(orgFee)}
             </Txt>{' '}
             — dus UNIQUEMENT si le club valide ton tournoi, réglés à PadelConnect par Wave (on te contacte). Rien à payer s’il est refusé.
           </Txt>

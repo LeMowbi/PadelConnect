@@ -10,50 +10,52 @@ Apple exige une **URL publique** qui ouvre la politique de confidentialité. Ell
 
 Une fois le dossier `site/` déployé sur **Cloudflare Pages** avec le domaine **padelconnectci.com**,
 l'URL à utiliser sera :
+
 ```
 https://padelconnectci.com/privacy.html
 ```
 
-**Où la coller :** App Store Connect → ton app → **App Privacy** → *Privacy Policy URL* ; et aussi
+**Où la coller :** App Store Connect → ton app → **App Privacy** → _Privacy Policy URL_ ; et aussi
 dans la fiche de l'app (App Information → Privacy Policy URL). Même URL côté Google Play plus tard.
 
 ## 2. « App Privacy » — les étiquettes de confidentialité (à remplir une fois)
 
-App Store Connect → **App Privacy** → *Get Started*. Réponds exactement ceci (c'est le
+App Store Connect → **App Privacy** → _Get Started_. Réponds exactement ceci (c'est le
 fonctionnement réel de l'app aujourd'hui) :
 
 **Suivi (Tracking) :** **NON** — l'app ne suit pas l'utilisateur entre apps/sites, aucun SDK
 publicitaire. → « Data is **not** used to track you ».
 
-**Données collectées** (pour chacune : *Linked to the user* = OUI ; *Used for tracking* = NON ;
-*Purpose* = **App Functionality**) :
+**Données collectées** (pour chacune : _Linked to the user_ = OUI ; _Used for tracking_ = NON ;
+_Purpose_ = **App Functionality**) :
 
-| Catégorie Apple            | Donnée                          | Pourquoi |
-|----------------------------|---------------------------------|----------|
-| **Contact Info**           | Email address                   | Compte / connexion |
-| **Contact Info**           | Phone number                    | Le club te recontacte pour tes réservations |
-| **Contact Info**           | Name                            | Affichage du profil |
-| **User Content**           | Photos                          | Photo de profil / de club (facultatif) |
-| **User Content**           | Other user content              | Avis, messages de support |
-| **Identifiers**            | User ID                         | Identifier ton compte |
-| **Contacts**               | Contacts                        | Retrouver un ami par son numéro (contact choisi par toi) |
-| **Health & Fitness** / autre | *(rien)*                      | — |
+| Catégorie Apple              | Donnée             | Pourquoi                                                 |
+| ---------------------------- | ------------------ | -------------------------------------------------------- |
+| **Contact Info**             | Email address      | Compte / connexion                                       |
+| **Contact Info**             | Phone number       | Le club te recontacte pour tes réservations              |
+| **Contact Info**             | Name               | Affichage du profil                                      |
+| **User Content**             | Photos             | Photo de profil / de club (facultatif)                   |
+| **User Content**             | Other user content | Avis, messages de support                                |
+| **Identifiers**              | User ID            | Identifier ton compte                                    |
+| **Contacts**                 | Contacts           | Retrouver un ami par son numéro (contact choisi par toi) |
+| **Health & Fitness** / autre | _(rien)_           | —                                                        |
 
 - **Sensitive Info / Location / Financial / Browsing history** : **rien** (l'app n'utilise pas le
   GPS, ne fait aucun paiement, n'a pas de navigateur).
 
-**Données collectées mais NON reliées à l'identité** (*Not Linked to You*, *Used for tracking* =
-NON, *Purpose* = App Functionality / Analytics) — journal de diagnostics self-hosted dans Supabase,
+**Données collectées mais NON reliées à l'identité** (_Not Linked to You_, _Used for tracking_ =
+NON, _Purpose_ = App Functionality / Analytics) — journal de diagnostics self-hosted dans Supabase,
 sans identifiant utilisateur :
 
-| Catégorie Apple            | Donnée                          | Pourquoi |
-|----------------------------|---------------------------------|----------|
-| **Diagnostics**            | Crash Data                      | Détecter et corriger les bugs |
-| **Usage Data**             | Product Interaction             | Compter inscriptions / réservations / tournois |
+| Catégorie Apple | Donnée              | Pourquoi                                       |
+| --------------- | ------------------- | ---------------------------------------------- |
+| **Diagnostics** | Crash Data          | Détecter et corriger les bugs                  |
+| **Usage Data**  | Product Interaction | Compter inscriptions / réservations / tournois |
 
 ## 3. Autorisations (déjà en place dans l'app ✅)
 
 Les textes demandés à l'utilisateur sont déjà rédigés (Réglages → app) :
+
 - **Photos** : « …pour votre photo de profil et les photos de votre club ».
 - **Contacts** : « …uniquement pour t'aider à retrouver et inviter tes amis par leur numéro ».
 - **Calendrier** : « …ajoute tes réservations à ton calendrier, avec ton accord ».
@@ -68,14 +70,19 @@ immédiat et définitif). Rien à faire.
 
 L'app affiche du contenu écrit par les joueurs (avis de club, prénom dans les matchs ouverts). Elle
 fournit désormais les contrôles exigés par Apple et Google Play :
-- **Signaler** un avis inapproprié (bouton sur chaque avis d'un autre joueur → table `review_reports`,
-  lue par l'opérateur pour modérer **sous 24 h**).
+
+- **Signaler** un avis inapproprié (bouton sur chaque avis d'un autre joueur) → les signalements
+  arrivent dans **ton Espace opérateur, onglet Demandes → « Avis signalés »** (SQL 53), où tu
+  peux **retirer l'avis** ou le **classer** — c'est là que tu tiens la promesse « sous 24 h ».
+- **Signaler / Bloquer** aussi sur les **matchs ouverts** (bouton « ⋮ » sur chaque match d'un
+  autre joueur — le signalement arrive dans « Signalements » de l'Espace opérateur).
 - **Bloquer** l'auteur (ses avis et ses matchs ouverts disparaissent aussitôt de la vue du joueur).
-- Les **CGU** (dans l'app) interdisent déjà le contenu abusif.
+- Les **CGU** (dans l'app) posent la règle **tolérance zéro** (retrait sans préavis, suspension).
 
 À la soumission, indique dans **App Review Information** (Apple) et la **politique UGC** (Play) :
-*« L'app permet de signaler tout avis et de bloquer son auteur ; les signalements sont traités sous
-24 h. »* Rien d'autre à coder — c'est en place (SQL 51).
+_« L'app permet de signaler tout contenu joueur (avis, matchs ouverts) et de bloquer son auteur ;
+les signalements sont traités sous 24 h. »_ Rien d'autre à coder — c'est en place (SQL 51 + 53).
+⚠️ Pense à ouvrir l'Espace opérateur **chaque jour** au début : c'est toi le modérateur.
 
 ## 5. Divers à cocher dans App Store Connect
 
@@ -87,7 +94,7 @@ fournit désormais les contrôles exigés par Apple et Google Play :
 
 ## 6. Récapitulatif — ce qu'il te reste à faire
 
-1. Héberger `docs/privacy.html` et récupérer son URL.
+1. Héberger `site/privacy.html` (dossier `site/`, déployé sur Cloudflare Pages) et récupérer son URL.
 2. Coller l'URL dans **App Store Connect → App Privacy** + **App Information**.
 3. Remplir les étiquettes **App Privacy** avec le tableau du §2 (Tracking = NON).
 4. Répondre aux questions Age Rating / Export Compliance (§5).

@@ -9,6 +9,14 @@ export function perPlayer(sessionPrice: number): string {
   return fcfa(Math.round(sessionPrice / 4 / 100) * 100);
 }
 
+// Part par joueur sur l'EFFECTIF RÉEL du match (2, 3 ou 4 joueurs), arrondie à la centaine.
+// À utiliser dans les messages envoyés aux partenaires (« Prévois X chacun ») : diviser par 4
+// une session jouée à 2 annoncerait la moitié de la vraie part. perPlayer reste pour les
+// libellés explicitement « à 4 » (fiche club, estimation avant d'avoir l'équipe).
+export function perPlayerOf(sessionPrice: number, playerCount: number): string {
+  return fcfa(Math.round(sessionPrice / Math.max(1, playerCount) / 100) * 100);
+}
+
 // Pourcentage d'une commission (0–1) en libellé exact : entier sans décimale, sinon une
 // décimale à la virgule (« 12,5 »). Évite l'incohérence d'un taux affiché arrondi (Math.round)
 // alors que le MONTANT est calculé au taux réel — décompte WhatsApp et export CSV compris.

@@ -56,6 +56,20 @@ export default function CoursScreen() {
       alive = false;
     };
   }, [clubId]);
+  // Réessayer après un échec réseau (bouton dédié) — même motif que retryReviews de
+  // club/[id].tsx : squelette réaffiché pendant la relance (loadFailed repassé à false).
+  const retryCoaches = () => {
+    if (!clubId) return;
+    setLoadFailed(false);
+    void fetchClubCoaches(clubId).then((list) => {
+      if (list) {
+        setCoaches(list);
+        setLoadFailed(false);
+      } else {
+        setLoadFailed(true);
+      }
+    });
+  };
 
   // todayKey : la liste se recale après minuit (retour premier plan) — cf. reserver/index.tsx.
   const todayKey = useTodayKey();
@@ -90,7 +104,8 @@ export default function CoursScreen() {
             <Txt variant="muted" style={{ marginTop: spacing.sm, textAlign: 'center' }}>
               Impossible de charger le coach — vérifie ta connexion.
             </Txt>
-            <View style={{ marginTop: spacing.md }}>
+            <View style={{ marginTop: spacing.md, flexDirection: 'row', gap: spacing.sm }}>
+              <Button size="sm" label="Réessayer" icon="refresh" onPress={retryCoaches} />
               <Button size="sm" label="Retour à la fiche club" variant="secondary" onPress={() => router.back()} />
             </View>
           </Card>

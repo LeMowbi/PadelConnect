@@ -156,8 +156,17 @@ export function SectionMonClub({ club }: { club: Club }) {
     setPromoting(false);
   };
 
+  // Confirmation légère « en place » avant retrait (motif : amis.tsx, « Retirer … de tes amis ? »)
+  // + garde anti double-tap par userId (le retrait refuse définitivement les demandes de cours
+  // en attente du coach côté serveur — irréversible — même si sa fiche reste re-promouvable).
+  const [confirmDemoteId, setConfirmDemoteId] = useState<string | null>(null);
+  const [demoting, setDemoting] = useState<string | null>(null);
   const demoteCoach = async (c: ServerCoach) => {
+    if (demoting) return;
+    setConfirmDemoteId(null);
+    setDemoting(c.userId);
     const ok = await clubRemoveCoach(c.userId);
+    setDemoting(null);
     if (ok) {
       setBookableCoaches((cur) => cur.filter((x) => x.userId !== c.userId));
       toast.show(`${c.name} n’est plus coach du club`);
@@ -219,7 +228,7 @@ export function SectionMonClub({ club }: { club: Club }) {
   // gérant a fermés manuellement (pause déjeuner…) tant qu’ils restent dans la nouvelle grille, et
   // on refuse de retirer un créneau qui porte une réservation à venir (comme toggleSlot). On
   // stocke la grille COMPLÈTE (fermés préfixés '!') : les sélecteurs se re-déduisent d’elle.
-  const applyRange = (nextOpen: string, nextClose: string) => {
+  const applyRange = async (nextOpen: string, nextClose: string) => {
     const closed = new Set(grid.filter((t) => !openSlots.includes(t)));
     const next = buildSlots(nextOpen, nextClose);
     const now = Date.now();
@@ -228,13 +237,27 @@ export function SectionMonClub({ club }: { club: Club }) {
       toast.show('Un créneau à retirer a des réservations à venir — annule-les d’abord.', { icon: 'alert-circle' });
       return;
     }
-    setClubSlots(
+    const ok = await setClubSlots(
       club.id,
       next.map((t) => (closed.has(t) ? closedSlot(t) : t)),
     );
+    if (!ok) {
+      toast.show('Horaires non enregistrés — vérifie ta connexion', { icon: 'alert-circle' });
+      return;
+    }
+    // Un décalage de grille (ex. 8h00 → 8h30) peut faire disparaître un créneau fermé à la main
+    // (une pause déjeuner à 12h30 n’existe plus dans une grille 8h00) : on le dit, sinon le
+    // gérant croit sa pause conservée alors qu’elle a silencieusement sauté.
+    const lostClosed = [...closed].filter((t) => !next.includes(t));
+    if (lostClosed.length) {
+      toast.show(
+        `Nouvelle grille : ${lostClosed.length > 1 ? 'des créneaux fermés ont' : 'un créneau fermé a'} été retiré${lostClosed.length > 1 ? 's' : ''} (${lostClosed.join(', ')}). Referme-les si besoin.`,
+        { icon: 'information-circle' },
+      );
+    }
   };
 
-  const toggleSlot = (t: string) => {
+  const toggleSlot = async (t: string) => {
     if (openSlots.includes(t)) {
       // Fermer un horaire qui porte encore une réservation À VENIR la rendrait invisible du
       // planning sans l'annuler → on refuse tant qu'elle n'est pas jouée (ou annule-la avant).
@@ -247,18 +270,23 @@ export function SectionMonClub({ club }: { club: Club }) {
     // Réécrit la grille complète : `t` bascule ouvert ↔ fermé ('!t'), le reste est inchangé
     // (une vieille config « ouverts seuls » est normalisée en grille complète au passage).
     const willBeOpen = (x: string) => (x === t ? !openSlots.includes(x) : openSlots.includes(x));
-    setClubSlots(
+    const ok = await setClubSlots(
       club.id,
       grid.map((x) => (willBeOpen(x) ? x : closedSlot(x))),
     );
+    if (!ok) toast.show('Horaires non enregistrés — vérifie ta connexion', { icon: 'alert-circle' });
   };
-  const addCourt = () => {
+  const addCourt = async () => {
     const n = courtName.trim();
     if (n.length < 1 || courts.includes(n)) return;
-    setClubCourts(club.id, [...courts, n]);
+    const ok = await setClubCourts(club.id, [...courts, n]);
+    if (!ok) {
+      toast.show('Terrain non enregistré — vérifie ta connexion', { icon: 'alert-circle' });
+      return;
+    }
     setCourtName('');
   };
-  const removeCourt = (n: string) => {
+  const removeCourt = async (n: string) => {
     if (courts.length <= 1) return; // garder au moins un terrain
     // Retirer un terrain qui a des réservations À VENIR les rendrait invisibles du planning ET
     // rouvrirait le créneau à la réservation → double occupation physique. On refuse.
@@ -267,10 +295,14 @@ export function SectionMonClub({ club }: { club: Club }) {
       toast.show(`« ${n} » a des réservations à venir — annule-les ou attends qu’elles soient jouées.`, { icon: 'alert-circle' });
       return;
     }
-    setClubCourts(
+    const ok = await setClubCourts(
       club.id,
       courts.filter((c) => c !== n),
     );
+    if (!ok) {
+      toast.show('Terrain non retiré — vérifie ta connexion', { icon: 'alert-circle' });
+      return;
+    }
     // Sa photo ne sert plus à rien (et resterait orpheline en base/Storage) → on la retire aussi.
     if (courtPhotos[n]) void setClubCourtPhoto(club.id, n, null);
   };
@@ -507,7 +539,12 @@ export function SectionMonClub({ club }: { club: Club }) {
                     </Txt>
                     {o.detail ? <Txt variant="muted">{o.detail}</Txt> : null}
                   </View>
-                  <Pressable onPress={() => removeClubOffer(club.id, o.id)} hitSlop={8}>
+                  <Pressable
+                    onPress={() => removeClubOffer(club.id, o.id)}
+                    hitSlop={13}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Supprimer la publication ${o.title}`}
+                  >
                     <Ionicons name="trash-outline" size={18} color={colors.danger} />
                   </Pressable>
                 </View>
@@ -595,14 +632,30 @@ export function SectionMonClub({ club }: { club: Club }) {
                           />
                         </Pressable>
                         <Pressable
-                          onPress={() => void demoteCoach(c)}
-                          hitSlop={8}
+                          onPress={() => setConfirmDemoteId((cur) => (cur === c.userId ? null : c.userId))}
+                          hitSlop={13}
                           accessibilityRole="button"
                           accessibilityLabel={`Retirer le coach ${c.name}`}
                         >
                           <Ionicons name="trash-outline" size={18} color={colors.danger} />
                         </Pressable>
                       </View>
+                      {confirmDemoteId === c.userId ? (
+                        // Confirmation légère, en place — pas de retrait au premier tap.
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs }}>
+                          <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
+                            Retirer {c.name} de tes coachs ?
+                          </Txt>
+                          <Button
+                            size="sm"
+                            label={demoting === c.userId ? '…' : 'Oui, retirer'}
+                            variant="danger"
+                            onPress={() => void demoteCoach(c)}
+                            disabled={demoting === c.userId}
+                          />
+                          <Button size="sm" label="Non" variant="secondary" onPress={() => setConfirmDemoteId(null)} />
+                        </View>
+                      ) : null}
                       {priceEditing === c.userId ? (
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs }}>
                           <TextInput
@@ -675,7 +728,7 @@ export function SectionMonClub({ club }: { club: Club }) {
                   <Ionicons name={uploadingCourt === c ? 'cloud-upload-outline' : 'camera-outline'} size={18} color={colors.signature} />
                 </Pressable>
                 {courts.length > 1 ? (
-                  <Pressable onPress={() => removeCourt(c)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Retirer ${c}`}>
+                  <Pressable onPress={() => removeCourt(c)} hitSlop={13} accessibilityRole="button" accessibilityLabel={`Retirer ${c}`}>
                     <Ionicons name="trash-outline" size={18} color={colors.danger} />
                   </Pressable>
                 ) : null}

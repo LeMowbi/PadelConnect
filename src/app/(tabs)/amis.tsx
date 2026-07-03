@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Avatar } from '@/components/Avatar';
 import { Confetti } from '@/components/Confetti';
@@ -27,6 +27,10 @@ export default function AmisScreen() {
   const { refreshControl } = usePullToRefresh();
   const toast = useToast();
   const [phone, setPhone] = useState(DEFAULT_DIAL);
+  // Numéro COURANT tenu en ref (pas en state) : lu après l’await de doSearch pour détecter
+  // une recherche périmée. Un state capturé par closure serait toujours égal à lui-même —
+  // la ref, elle, reflète la VRAIE valeur au moment de la comparaison.
+  const phoneRef = useRef(phone);
   const [removeId, setRemoveId] = useState<string | null>(null); // ami en cours de retrait (confirmation)
   const [openPlayer, setOpenPlayer] = useState<PlayerLike | null>(null);
   // Recherche serveur par numéro : on n’invite QUE de vrais joueurs PadelConnect (pas de nom fictif).
@@ -51,7 +55,7 @@ export default function AmisScreen() {
     setSearch('idle');
     const res = await findPlayerByPhone(q);
     setSearching(false);
-    if (q !== phone) return; // recherche périmée (le champ a changé pendant l’attente)
+    if (q !== phoneRef.current) return; // recherche périmée (le champ a changé pendant l’attente)
     if (res === undefined) {
       // Échec RÉSEAU ≠ « pas de compte » : on n'affirme pas qu'il n'est pas inscrit.
       hapticWarning();
@@ -123,8 +127,10 @@ export default function AmisScreen() {
     const c = await pickContact();
     if (!c) return;
     setPhone(c.phone);
+    phoneRef.current = c.phone;
     setSearch('idle');
     setFound(null);
+    setFoundPhone(null);
   };
 
   const invite = () =>
@@ -133,6 +139,7 @@ export default function AmisScreen() {
   // Le numéro change → la recherche précédente n’est plus valable.
   const onPhone = (t: string) => {
     setPhone(t);
+    phoneRef.current = t;
     if (search !== 'idle') setSearch('idle');
   };
 
@@ -262,6 +269,7 @@ export default function AmisScreen() {
                   icon="person-circle-outline"
                   variant="secondary"
                   onPress={chooseContact}
+                  disabled={searching}
                   pill
                 />
               </View>
@@ -275,8 +283,16 @@ export default function AmisScreen() {
               editable={!searching}
               style={styles.input}
             />
-            <View style={{ marginTop: spacing.sm, opacity: phoneReady ? 1 : 0.5 }}>
-              <Button size="sm" label={searching ? 'Recherche…' : 'Rechercher'} icon="search" variant="secondary" onPress={doSearch} pill />
+            <View style={{ marginTop: spacing.sm }}>
+              <Button
+                size="sm"
+                label={searching ? 'Recherche…' : 'Rechercher'}
+                icon="search"
+                variant="secondary"
+                onPress={doSearch}
+                disabled={!phoneReady || searching}
+                pill
+              />
             </View>
 
             {search === 'found' && found ? (

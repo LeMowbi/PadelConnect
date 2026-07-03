@@ -63,7 +63,7 @@ export default function ClubsScreen() {
           style={styles.searchInput}
         />
         {query.length > 0 ? (
-          <Pressable onPress={() => setQuery('')} hitSlop={8}>
+          <Pressable onPress={() => setQuery('')} hitSlop={14} accessibilityRole="button" accessibilityLabel="Effacer la recherche">
             <Ionicons name="close-circle" size={17} color={colors.textFaint} />
           </Pressable>
         ) : null}

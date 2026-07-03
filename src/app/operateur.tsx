@@ -22,7 +22,7 @@ import { hapticSuccess } from '@/lib/haptics';
 import { fetchReviewReports, operatorDeleteReview, operatorDismissReport, type ReviewReport } from '@/lib/moderation';
 import { COMMISSION_RATE, isPlayed, useApp, type ServerClubRequest, type ServerSupportMessage } from '@/store/AppContext';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
-import { addWeeks, dateKeyLabel, weekKeyOf, weekLabel } from '@/lib/days';
+import { addWeeks, dateKeyLabel, dayKey, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa, pctLabel } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
 import { colors, font, radius, shadows, spacing } from '@/theme';
@@ -481,7 +481,15 @@ export default function Operateur() {
           {/* Actualité de l’accueil — éditorialisée par l’opérateur, visible par tous les joueurs */}
           <View style={{ marginBottom: spacing.md }}>
             <SectionHeader title="Actualité de l’accueil" />
-            <NewsEditor news={state.operatorNews} onPublish={setOperatorNews} onRemove={removeOperatorNews} />
+            {/* key : ne remonte l'éditeur qu'à la transition null ↔ actu — l'actu serveur peut
+                arriver APRÈS le montage (nouvel appareil), sans quoi les champs restent vides
+                sous « Retirer l'actu ». Ne détruit pas un brouillon en cours sur une actu déjà chargée. */}
+            <NewsEditor
+              key={state.operatorNews ? 'edit' : 'vide'}
+              news={state.operatorNews}
+              onPublish={setOperatorNews}
+              onRemove={removeOperatorNews}
+            />
           </View>
         </>
       ) : null}
@@ -1198,7 +1206,8 @@ export default function Operateur() {
                         </Txt>
                         {on && exp ? (
                           <Txt variant="small" color={colors.green} style={{ fontWeight: '600' }}>
-                            Sponsorisé · jusqu’au {new Date(exp).toLocaleDateString('fr-FR')}
+                            {/* Date formatée en UTC (pas le fuseau appareil) — même motif que le reste du fichier. */}
+                            Sponsorisé · jusqu’au {dateKeyLabel(dayKey(new Date(exp)))}
                           </Txt>
                         ) : (
                           <Txt variant="small" color={colors.textFaint}>

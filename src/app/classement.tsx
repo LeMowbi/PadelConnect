@@ -21,10 +21,17 @@ export default function ClassementScreen() {
   // undefined = chargement ; null = échec réseau (≠ [] = classement vide), convention §8.
   const [rows, setRows] = useState<LeaderboardRow[] | null | undefined>(undefined);
   const [myRank, setMyRank] = useState<number | null>(null);
+  // rank : null = échec réseau (on garde la valeur affichée) ; 0 = non classé (on masque la
+  // carte « Ta position ») ; sinon = rang réel. Les vieux serveurs (avant la 49) renvoient
+  // encore null pour « non classé » — dans ce cas on garde simplement l'existant, comme avant.
+  const applyRank = (rank: number | null) => {
+    if (rank === null) return; // échec réseau (ou vieux serveur « non classé ») → inchangé
+    setMyRank(rank === 0 ? null : rank);
+  };
   const load = async () => {
     const [list, rank] = await Promise.all([fetchLeaderboard(50), fetchMyRank()]);
     setRows((cur) => list ?? (cur === undefined ? null : cur)); // échec → on garde l'existant
-    if (rank != null) setMyRank(rank);
+    applyRank(rank);
   };
   const { refreshControl } = usePullToRefresh(load);
   useEffect(() => {
@@ -32,7 +39,7 @@ export default function ClassementScreen() {
     void Promise.all([fetchLeaderboard(50), fetchMyRank()]).then(([list, rank]) => {
       if (!alive) return;
       setRows(list);
-      if (rank != null) setMyRank(rank);
+      applyRank(rank);
     });
     return () => {
       alive = false;

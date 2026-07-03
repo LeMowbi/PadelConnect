@@ -1,8 +1,9 @@
-// Score de match (46) : CHAQUE joueur saisit les sets de son point de vue, et l'app désigne
-// le vainqueur AUTOMATIQUEMENT dès que deux saisies concordent (identiques côté coéquipiers,
-// en miroir côté adversaires) — pas de bouton « confirmer ». Sans 2ᵉ saisie sous 48 h, la
-// saisie unique est validée. Une victoire validée vaut +3 points au classement (seuls les
-// joueurs ayant saisi leur score les marquent). Convention réseau §8 : null = échec réseau.
+// Score de match (46, règle anti-triche durcie en 49) : CHAQUE joueur saisit les sets de son
+// point de vue, l'app dérive la forme canonique et désigne le vainqueur AUTOMATIQUEMENT — pas
+// de bouton « confirmer ». Validé UNIQUEMENT si un joueur du camp PERDANT confirme le score
+// (saisie « j'ai perdu » en miroir), OU si une saisie GAGNANTE restée SEULE dépasse 48 h.
+// Deux « je gagne » identiques ne valident donc jamais (invariant §9). Une victoire validée
+// vaut +3 points (seuls les joueurs ayant saisi les marquent). Convention §8 : null = échec réseau.
 
 import { supabase } from './supabase';
 
@@ -12,7 +13,7 @@ export type MatchSet = { me: number; them: number };
 export type MatchScore = {
   reservationId: string;
   entries: number; // nombre de joueurs ayant saisi
-  validated: boolean; // saisies concordantes (2+) ou saisie unique de plus de 48 h
+  validated: boolean; // un perdant a confirmé, ou saisie gagnante restée seule plus de 48 h
   conflict: boolean; // les saisies ne concordent pas → le match ne compte pas
   mine: boolean; // j'ai saisi mon score
   iWon: boolean; // MA saisie était gagnante (n'a de sens que si mine)

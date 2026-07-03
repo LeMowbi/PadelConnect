@@ -20,7 +20,12 @@ export async function registerPushToken(userId: string): Promise<void> {
     const projectId = Constants.expoConfig?.extra?.eas?.projectId;
     if (!projectId) return;
     const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-    if (token) await supabase.from('profiles').update({ expo_push_token: token }).eq('id', userId);
+    if (!token) return;
+    // Un jeton = UN APPAREIL : la RPC (53) l'enregistre pour ce compte ET le retire de tout
+    // autre profil — après une bascule de compte sur le même téléphone, l'ancien compte ne
+    // reçoit plus les push de cet appareil. Repli direct si la 53 n'est pas encore appliquée.
+    const { error } = await supabase.rpc('register_push_token', { p_token: token });
+    if (error) await supabase.from('profiles').update({ expo_push_token: token }).eq('id', userId);
   } catch {
     // pas de push (simulateur, permission refusée, réseau) — sans impact sur le reste de l’app
   }

@@ -1,12 +1,12 @@
 -- PadelConnect — DURCISSEMENTS AUDIT n°5 (SQL Editor → Run). Idempotent.
 --
 -- Corrige les constats confirmés de l'audit n°5, dont deux régressions de la 48 :
---   1. SCORE DE MATCH — un DOUBLE (2v2) où les DEUX vainqueurs saisissent n'était JAMAIS
---      validé (la porte « 48 h » exigeait UNE seule saisie) : le +3 ne tombait jamais, et une
---      2ᵉ saisie gagnante ANNULAIT même une victoire déjà auto-validée. On base désormais la
---      validation sur le NOMBRE DE JOUEURS identifiés du match : jusqu'à floor(joueurs/2)
---      « je gagne » sont légitimes (2 pour un 2v2, 1 pour un 1v1) — l'anti-triche du perdant
---      qui recopie le score reste intact (un 1v1 refuse toujours deux « je gagne »).
+--   1. SCORE DE MATCH — règle finale (re-durcie à l'audit n°6, plafond recalé à l'audit n°7) :
+--      un match n'est validé QUE si un joueur du camp PERDANT confirme le score (saisie
+--      « j'ai perdu » en miroir), OU si une saisie GAGNANTE restée SEULE dépasse 48 h.
+--      Le plafond de « je gagne » légitimes est least(2, joueurs - 1) — deux « je gagne »
+--      identiques ne valident JAMAIS un match (deux perdants complices ne peuvent pas se
+--      créditer +3) ; au-delà du plafond, le match est GELÉ (contestation).
 --   2. respond_invitation (48) — le décrément de `players` n'était pas idempotent : un double
 --      refus (double-tap, retry réseau, client forgé) corrompait l'effectif. On rend l'UPDATE
 --      idempotent (transition réelle only) et on RECALCULE players = 1 + nb d'invités (source
@@ -281,7 +281,9 @@ as $$
     select id, row_number() over (order by points desc, wins desc, mwins desc, id) as rk
       from scored where points > 0 -- non classé tant qu'on n'a marqué aucun point
   )
-  select rk::int from ranked where id = auth.uid();
+  -- 0 = NON CLASSÉ (0 point) — distinct d'un échec réseau côté client (null) : sans cela,
+  -- l'écran Classement gardait un rang périmé après que les points du joueur sont retombés.
+  select coalesce((select rk::int from ranked where id = auth.uid()), 0);
 $$;
 
 grant execute on function public.my_leaderboard_rank() to authenticated;

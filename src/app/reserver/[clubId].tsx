@@ -19,7 +19,7 @@ import { openWhatsApp } from '@/lib/contact';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { courtsFor, freeCourts, hasFullDayCompetition, openSlotsFor, type AvailCtx } from '@/lib/availability';
 import { dateKeyLabel, nextDays, slotTimestamp } from '@/lib/days';
-import { fcfa, perPlayer } from '@/lib/format';
+import { fcfa, perPlayer, perPlayerOf } from '@/lib/format';
 import { minPrice, priceForSlot, priceTiersFor } from '@/lib/pricing';
 import { useTodayKey } from '@/lib/useTodayKey';
 import { MAX_UPCOMING, useApp } from '@/store/AppContext';
@@ -192,6 +192,11 @@ export default function ReserverScreen() {
       hapticSuccess();
       setDone(true);
       setCelebrate(true);
+      // Résa créée mais rattachement des amis invités échoué : sans ce toast, la carte
+      // affiche « Avec X » alors que X n'a reçu ni push ni la résa chez lui.
+      if (res.partnersNotified === false) {
+        toast.show('Tes partenaires n’ont pas pu être prévenus dans l’app — envoie-leur le récap WhatsApp.', { icon: 'alert-circle' });
+      }
     } else if (res.reason === 'limit') {
       // Limite anti-blocage (appliquée dans addReservation) : trop de créneaux à venir.
       hapticWarning();
@@ -279,7 +284,9 @@ export default function ReserverScreen() {
                 onPress={() => {
                   const invitedNames = [...state.friends.filter((f) => friendIds.includes(f.id)).map((f) => f.name), ...extraNames];
                   const who = invitedNames.length ? `\nÉquipe : ${invitedNames.join(', ')}` : '';
-                  const share = slotPrice ? `\nPrévois ${perPlayer(slotPrice)} chacun.` : '';
+                  // Part calculée sur l'effectif RÉEL (toi + invités) : « /4 » sur un match à 2
+                  // annoncerait la moitié de la vraie part à payer au club.
+                  const share = slotPrice ? `\nPrévois ${perPlayerOf(slotPrice, 1 + invitedNames.length)} chacun.` : '';
                   openWhatsApp(
                     '',
                     `On joue au padel ! 🎾\n${club.name} — ${day!.label} à ${slot!} (session 1h30)\n${effectiveCourt!}${who}${share}\nRéservé via PadelConnect.`,

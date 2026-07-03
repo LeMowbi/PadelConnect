@@ -30,7 +30,10 @@ export function QuickBlock({
   onBlock: (dateKey: string, time: string, court: string, reason: string, ts: number) => Promise<boolean>;
   onUnblock: (dateKey: string, time: string, court: string) => Promise<boolean>;
 }) {
-  const [day, setDay] = useState(days[0]);
+  // Jour retrouvé par CLÉ (pas l'objet capturé au montage) : après minuit, days[0] change de
+  // valeur — un état objet figerait le formulaire sur la veille (motif : cours/[coachId].tsx).
+  const [selDayKey, setSelDayKey] = useState<string | null>(null);
+  const day = days.find((d) => d.key === selDayKey) ?? days[0];
   const [time, setTime] = useState<string | null>(null);
   const [court, setCourt] = useState<string | null>(null);
   const [confirmUnblock, setConfirmUnblock] = useState<string | null>(null);
@@ -57,7 +60,7 @@ export function QuickBlock({
             label={d.label}
             active={d.key === day.key}
             onPress={() => {
-              setDay(d);
+              setSelDayKey(d.key);
               reset();
             }}
           />

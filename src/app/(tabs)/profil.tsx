@@ -619,7 +619,7 @@ function EditAccount({ onDone }: { onDone: () => void }) {
       return;
     }
     setError(null);
-    const { photoSaved } = await updateAccount({
+    const { photoSaved, profileSaved } = await updateAccount({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       phone: phone.trim(),
@@ -627,8 +627,14 @@ function EditAccount({ onDone }: { onDone: () => void }) {
       birthDate: parseBirthDate(birth) ? birth.trim() : a.birthDate,
       gender,
     });
-    // On ne ment plus sur la photo : si son upload a échoué (réseau), l’utilisateur doit le
-    // savoir au lieu de croire sa nouvelle photo enregistrée (les autres champs, eux, sont bien à jour).
+    // On ne ment plus : si les champs texte n'ont pas atteint le serveur (réseau), le formulaire
+    // RESTE OUVERT — sinon l'ancien prénom/numéro serveur revenait en silence au prochain
+    // lancement (et le numéro sert aux clubs + à l'appariement amis/coachs).
+    if (!profileSaved) {
+      setError('Modifications non enregistrées — vérifie ta connexion et réessaie.');
+      return;
+    }
+    // La photo, elle, peut échouer seule (upload) : profil à jour mais photo non enregistrée.
     toast.show(
       photoSaved ? 'Profil mis à jour ✓' : 'Profil mis à jour, mais la photo non enregistrée — vérifie ta connexion',
       photoSaved ? undefined : { icon: 'alert-circle' },
@@ -639,7 +645,12 @@ function EditAccount({ onDone }: { onDone: () => void }) {
   return (
     <Card style={{ marginTop: spacing.sm }}>
       <View style={{ alignItems: 'center' }}>
-        <Pressable onPress={choose} style={styles.avatar}>
+        <Pressable
+          onPress={choose}
+          style={styles.avatar}
+          accessibilityRole="button"
+          accessibilityLabel={photoUri ? 'Changer la photo de profil' : 'Ajouter une photo de profil'}
+        >
           {photoUri ? (
             <Image source={{ uri: photoUri }} style={styles.avatarImg} contentFit="cover" />
           ) : (

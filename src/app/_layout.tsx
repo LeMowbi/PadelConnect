@@ -11,6 +11,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ToastProvider, useToast } from '@/components/Toast';
 import { installGlobalErrorLogging } from '@/lib/diagnostics';
 import { useNotificationTapRouter } from '@/lib/notifications';
+import { supabase } from '@/lib/supabase';
 import { useEmailConfirmLink } from '@/lib/useEmailConfirmLink';
 import { AppProvider, useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
@@ -87,8 +88,10 @@ function RootNav() {
   }, [hydrated, state.account, segments, router]);
 
   // Confirmation d’e-mail : le lien reçu par mail rouvre l’app → on échange le code contre
-  // une session, on recharge le profil. Deux cas distincts : NOUVEL inscrit (bienvenue + accueil)
-  // ou utilisateur DÉJÀ connecté qui change d’adresse (message neutre, on ne le déplace pas).
+  // une session, on recharge le profil. Trois cas distincts : NOUVEL inscrit (bienvenue +
+  // accueil), utilisateur DÉJÀ connecté qui change d’adresse (message neutre, on ne le déplace
+  // pas), ou lien d’un AUTRE compte cliqué connecté → BASCULE de compte (dire la vérité +
+  // repartir de l’accueil, loadSession a déjà purgé les données du compte précédent).
   const onConfirm = useCallback(
     async (r: 'confirmed' | 'error') => {
       if (r === 'error') {
@@ -96,15 +99,21 @@ function RootNav() {
         return;
       }
       const alreadySignedIn = !!state.account;
+      const prevUserId = state.serverUserId;
       await refreshSession();
-      if (alreadySignedIn) {
+      const { data } = await supabase.auth.getUser();
+      const newUserId = data.user?.id ?? null;
+      if (alreadySignedIn && prevUserId && newUserId && newUserId !== prevUserId) {
+        toast.show('Tu es maintenant connecté avec un autre compte 🎾');
+        router.replace('/');
+      } else if (alreadySignedIn) {
         toast.show('Adresse e-mail mise à jour ✓');
       } else {
         toast.show('E-mail confirmé — bienvenue ! 🎾');
         router.replace('/');
       }
     },
-    [refreshSession, router, toast, state.account],
+    [refreshSession, router, toast, state.account, state.serverUserId],
   );
   useEmailConfirmLink(onConfirm);
 

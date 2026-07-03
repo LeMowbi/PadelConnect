@@ -51,6 +51,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [opacity, slide],
   );
 
+  // 'cloud-offline-outline' porte toujours un ÉCHEC réseau (« Connexion impossible ») :
+  // le laisser sur fond vert signature faisait croire au succès d'un coup d'œil.
+  const isError = icon === 'alert-circle' || icon === 'cloud-offline-outline';
+
   return (
     <ToastContext.Provider value={{ show }}>
       {children}
@@ -59,11 +63,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           pointerEvents="none"
           style={[styles.wrap, { opacity, bottom: insets.bottom + spacing.xl, transform: [{ translateY: slide }] }]}
         >
-          <View
-            style={[styles.toast, icon === 'alert-circle' && styles.toastDanger]}
-            accessible
-            accessibilityLiveRegion={icon === 'alert-circle' ? 'assertive' : 'polite'}
-          >
+          <View style={[styles.toast, isError && styles.toastDanger]} accessible accessibilityLiveRegion={isError ? 'assertive' : 'polite'}>
             <Ionicons name={icon} size={18} color={colors.white} />
             <Txt color={colors.white} style={{ flex: 1 }}>
               {message}
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
   },
-  // Erreur (icon: 'alert-circle') : fond corail plutôt que le vert signature des succès —
-  // même token que Button variant="danger" / Card.toastError (club/[id].tsx).
+  // Erreur (icon 'alert-circle' ou 'cloud-offline-outline') : fond corail plutôt que le vert
+  // signature des succès — même token que Button variant="danger" / Card.toastError (club/[id].tsx).
   toastDanger: { backgroundColor: colors.danger },
 });

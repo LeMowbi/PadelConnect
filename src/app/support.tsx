@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, StyleSheet, TextInput, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { useToast } from '@/components/Toast';
@@ -21,12 +21,17 @@ export default function Support() {
   const [sent, setSent] = useState(false);
   // Boucle de retour : l’historique de MES messages avec leur statut (Reçu / Traité).
   const [mine, setMine] = useState<ServerSupportMessage[]>([]);
+  // Ref STABLE vers l'action du contexte (motif operateur.tsx) : `fetchMySupportMessages` est
+  // recréée à chaque setState global — en dépendance d'effet, l'historique était re-téléchargé
+  // à chaque rafraîchissement du contexte (rafale au retour au premier plan).
+  const fetchMineRef = useRef(fetchMySupportMessages);
+  fetchMineRef.current = fetchMySupportMessages;
   const loadMine = useCallback(() => {
     // null = échec réseau → on garde l’historique affiché (convention §8, pas d’écrasement).
-    void fetchMySupportMessages().then((rows) => rows && setMine(rows));
-  }, [fetchMySupportMessages]);
+    void fetchMineRef.current().then((rows) => rows && setMine(rows));
+  }, []);
   useEffect(() => {
-    loadMine();
+    loadMine(); // une seule fois au montage (loadMine est stable), puis après chaque envoi
   }, [loadMine]);
 
   const send = async () => {

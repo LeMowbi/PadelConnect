@@ -34,6 +34,9 @@ export function SectionReservations({
   // Historique paginé par SEMAINES : un club actif accumule vite des centaines de résas —
   // tout rendre d'un coup gèle l'ouverture de l'onglet (même esprit que PAST_PREVIEW joueur).
   const [weeksShown, setWeeksShown] = useState(4);
+  // « Réservations à venir » paginé pareil (même motif) : un ScrollView non virtualisé qui
+  // rend des centaines de cartes d'un coup fige l'ouverture de l'onglet.
+  const [upcomingShown, setUpcomingShown] = useState(15);
 
   // Annulations récentes du club (serveur) : un joueur a annulé → le créneau s’est libéré.
   // On garde la trace (status='cancelled') pour prévenir le club (cf. fonction serveur 09).
@@ -387,7 +390,7 @@ export function SectionReservations({
             />
           </Card>
         ) : (
-          upcomingRes.map((r) => (
+          upcomingRes.slice(0, upcomingShown).map((r) => (
             <Card key={r.id} style={{ marginBottom: spacing.sm }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
                 <IconCircle icon="time" color={colors.signature} bg={colors.signatureSoft} size={40} />
@@ -479,6 +482,16 @@ export function SectionReservations({
             </Card>
           ))
         )}
+        {upcomingRes.length > upcomingShown ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            label={`Voir plus (${upcomingRes.length - upcomingShown} restantes)`}
+            icon="chevron-down"
+            onPress={() => setUpcomingShown((n) => n + 15)}
+            full
+          />
+        ) : null}
       </View>
 
       {/* Annulations récentes — un joueur a libéré son créneau (> 5 h avant le match). */}

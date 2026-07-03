@@ -98,7 +98,9 @@ export default function CoachAdmin() {
       toast.show('Le terrain a été pris entre-temps — impossible d’accepter ce créneau', { icon: 'alert-circle' });
     } else if (res === 'busy') {
       hapticWarning();
-      toast.show('Tu as déjà un cours accepté à ce créneau — refuse ou déplace l’autre d’abord', { icon: 'alert-circle' });
+      toast.show('Tu avais déjà un cours accepté à ce créneau — cette demande a été refusée automatiquement, l’élève est prévenu.', {
+        icon: 'alert-circle',
+      });
     } else if (res === 'student_full') {
       hapticWarning();
       toast.show('L’élève a trop de réservations à venir — il doit en libérer avant que tu acceptes', { icon: 'alert-circle' });

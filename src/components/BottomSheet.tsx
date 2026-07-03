@@ -58,7 +58,10 @@ export function BottomSheet({
   return (
     <Modal transparent visible animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        {/* Scrim MASQUÉ des lecteurs d'écran : sinon le premier balayage VoiceOver tombe sur un
+            bouton anonyme plein écran qui ferme la feuille (et perd la saisie). La fermeture
+            accessible passe par le bouton « Fermer » libellé + onRequestClose. */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessible={false} importantForAccessibility="no-hide-descendants" />
       </Animated.View>
       <KeyboardAvoidingView style={styles.wrapper} pointerEvents="box-none" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Animated.View style={[styles.sheet, { paddingBottom: spacing.xxl + insets.bottom, transform: [{ translateY: sheetY }] }]}>

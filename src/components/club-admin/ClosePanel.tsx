@@ -28,6 +28,9 @@ export function ClosePanel({
   const [third, setThird] = useState<string | null>(null);
   const [step, setStep] = useState<'winner' | 'final'>('winner');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Garde anti double-tap sur la clôture : onClose est un callback SYNC posé par le parent
+  // (la sheet se ferme au succès) — pas besoin de repasser closing à false.
+  const [closing, setClosing] = useState(false);
 
   // Americano : tournoi par rotation → clôture par un podium (2ᵉ/3ᵉ place), pas une fin de tableau.
   const isAmericano = comp.format.toLowerCase().includes('americano');
@@ -179,14 +182,16 @@ export function ClosePanel({
           <View style={{ marginTop: spacing.md }}>
             <Button
               size="sm"
-              label="Clôturer le tournoi"
+              label={closing ? 'Clôture…' : 'Clôturer le tournoi'}
               icon="trophy"
-              onPress={() =>
+              onPress={() => {
+                setClosing(true);
                 onClose(selected!, selected === myTeam, undefined, false, {
                   second: second ?? undefined,
                   third: third ?? undefined,
-                })
-              }
+                });
+              }}
+              disabled={!selected || closing}
               full
             />
           </View>
@@ -221,17 +226,24 @@ export function ClosePanel({
           <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
             <Button
               size="sm"
-              label={loser ? `Clôturer (fin de tableau : ${loser})` : 'Clôturer'}
+              label={closing ? 'Clôture…' : loser ? `Clôturer (fin de tableau : ${loser})` : 'Clôturer'}
               icon="trophy"
-              onPress={() => onClose(selected!, selected === myTeam, loser ?? undefined, !!loser && loser === myTeam)}
-              disabled={!loser}
+              onPress={() => {
+                setClosing(true);
+                onClose(selected!, selected === myTeam, loser ?? undefined, !!loser && loser === myTeam);
+              }}
+              disabled={!selected || !loser || closing}
               full
             />
             <Button
               size="sm"
-              label="Passer (pas de fin de tableau)"
+              label={closing ? 'Clôture…' : 'Passer (pas de fin de tableau)'}
               variant="ghost"
-              onPress={() => onClose(selected!, selected === myTeam)}
+              onPress={() => {
+                setClosing(true);
+                onClose(selected!, selected === myTeam);
+              }}
+              disabled={!selected || closing}
               full
             />
           </View>

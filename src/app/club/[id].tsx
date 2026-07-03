@@ -2,7 +2,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import {
+  AccessibilityInfo,
+  Animated,
+  Easing,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { ClubPhoto } from '@/components/ClubPhoto';
 import { ContactButtons } from '@/components/ContactButtons';
 import { RatingStars } from '@/components/RatingStars';
@@ -18,9 +29,10 @@ import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { isPlayed, useApp } from '@/store/AppContext';
 import { fetchClubCoaches, type ServerCoach } from '@/lib/coachesServer';
 import { deleteMyReview, fetchClubReviews, replyToReview, submitReview, type ServerReview } from '@/lib/reviewsServer';
-import { blockUser, fetchBlockedUserIds, reportReview } from '@/lib/moderation';
+import { reportReview } from '@/lib/moderation';
 import { openWhatsApp } from '@/lib/contact';
 import { hapticSuccess } from '@/lib/haptics';
+import { dateKeyLabel, dayKey } from '@/lib/days';
 import { fcfa, initials } from '@/lib/format';
 import { groupTiersByLabel, minPrice, priceTiersFor } from '@/lib/pricing';
 import { shareClub } from '@/lib/share';
@@ -28,10 +40,12 @@ import { openMaps } from '@/lib/maps';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { colors, radius, spacing } from '@/theme';
 
-// Date d’un avis serveur (ISO) → libellé court FR ; repli silencieux si la date est invalide.
+// Date d’un avis serveur (ISO) → libellé court FR, en UTC (comme le reste du projet — jamais
+// le fuseau de l’appareil, sinon le jour affiché peut sauter selon le fuseau du lecteur) ;
+// repli silencieux si la date est invalide.
 function reviewDate(iso: string): string {
   const t = new Date(iso).getTime();
-  return Number.isFinite(t) ? new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  return Number.isFinite(t) ? dateKeyLabel(dayKey(new Date(t))) : '';
 }
 
 // Barre de répartition des notes (5→1 étoiles) : se remplit de 0 % à `pct` au premier montage
@@ -51,7 +65,7 @@ function RatingBar({ pct, delay }: { pct: number; delay: number }) {
 export default function ClubDetail() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { state, toggleFavorite, myReservations, refreshClubRatings } = useApp();
+  const { state, toggleFavorite, myReservations, refreshClubRatings, blockUserAccount } = useApp();
   const club = findClub(id, state.customClubs, state.clubInfo);
 
   const [rating, setRating] = useState(0);
@@ -60,6 +74,15 @@ export default function ClubDetail() {
   const [noteError, setNoteError] = useState(false);
   // tone distingue succès (coche verte) et échec (icône d’alerte rouge) — même overlay pour les deux.
   const [toast, setToast] = useState<{ text: string; tone: 'success' | 'error' } | null>(null);
+  // Affiche le toast + l'ANNONCE aux lecteurs d'écran (seul canal de confirmation/erreur de ces
+  // actions — même motif que components/Toast.tsx) + auto-disparition (timer précédent remplacé).
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = (text: string, tone: 'success' | 'error' = 'success') => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ text, tone });
+    AccessibilityInfo.announceForAccessibility(text);
+    toastTimer.current = setTimeout(() => setToast(null), tone === 'error' ? 2400 : 2200);
+  };
   const [viewer, setViewer] = useState<number | null>(null); // photo ouverte en plein écran
   const [tierTab, setTierTab] = useState(0); // onglet de tarifs actif (plages nommées)
   const [showAllReviews, setShowAllReviews] = useState(false); // liste d’avis repliée par défaut
@@ -72,7 +95,6 @@ export default function ClubDetail() {
   const [replying, setReplying] = useState(false); // garde anti double-tap : publier la réponse
   const [removing, setRemoving] = useState(false); // garde anti double-tap : supprimer mon avis
   const [serverCoaches, setServerCoaches] = useState<ServerCoach[]>([]); // coachs réservables (serveur)
-  const [blockedIds, setBlockedIds] = useState<string[]>([]); // comptes que j'ai bloqués → avis masqués
   const { width: winW } = useWindowDimensions();
 
   // Avis VÉRIFIÉS du serveur : chargés à l’ouverture (effet) et rechargés après chaque action
@@ -117,26 +139,32 @@ export default function ClubDetail() {
       });
     // Coachs réservables du club (serveur) : chargés à l’ouverture, comme les avis.
     if (clubId) void fetchClubCoaches(clubId).then((cs) => alive && cs && setServerCoaches(cs));
-    // Ma liste de comptes bloqués → les avis de ces joueurs sont masqués (modération UGC).
-    if (state.serverUserId) void fetchBlockedUserIds().then((ids) => alive && ids && setBlockedIds(ids));
     return () => {
       alive = false;
     };
   }, [clubId, state.serverUserId]);
+  // Au démontage uniquement : pas de setToast orphelin après avoir quitté la fiche.
+  useEffect(
+    () => () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    },
+    [],
+  );
 
   // Signaler un avis (envoi à la modération) ou bloquer son auteur (ses avis disparaissent
   // aussitôt de ma vue) — actions requises par l'App Store (Guideline 1.2) sur tout contenu UGC.
   const reportReviewItem = async (reviewId: string) => {
     const ok = await reportReview(reviewId);
-    setToast({ text: ok ? 'Avis signalé — merci, on le vérifie.' : 'Signalement impossible — réessaie.', tone: ok ? 'success' : 'error' });
+    showToast(ok ? 'Avis signalé — merci, on le vérifie.' : 'Signalement impossible — réessaie.', ok ? 'success' : 'error');
   };
   const blockReviewAuthor = async (userId: string, author: string) => {
-    const ok = await blockUser(userId);
+    // Miroir du STORE (persisté, convention §8) : un échec réseau au prochain montage ne
+    // réaffiche plus les avis d'un compte déjà bloqué.
+    const ok = await blockUserAccount(userId);
     if (ok) {
-      setBlockedIds((cur) => (cur.includes(userId) ? cur : [...cur, userId]));
-      setToast({ text: `${author} bloqué — tu ne verras plus ses avis.`, tone: 'success' });
+      showToast(`${author} bloqué — tu ne verras plus ses avis.`);
     } else {
-      setToast({ text: 'Blocage impossible — réessaie.', tone: 'error' });
+      showToast('Blocage impossible — réessaie.', 'error');
     }
   };
 
@@ -175,7 +203,7 @@ export default function ClubDetail() {
     .map((c) => ({ id: c.id, name: c.name, sub: c.level, phone: c.phone }));
   // Source de vérité : les avis VÉRIFIÉS du serveur (un joueur ne peut noter qu’après avoir joué),
   // MOINS ceux des comptes que j’ai bloqués (modération UGC — ils n’apparaissent plus chez moi).
-  const reviews = serverReviews.filter((r) => !blockedIds.includes(r.userId));
+  const reviews = serverReviews.filter((r) => !state.blockedUserIds.includes(r.userId));
   // Liste repliée : on n’affiche que les premiers avis, avec un bouton « Voir tout ».
   const REVIEWS_PREVIEW = 3;
   const reviewsShown = showAllReviews ? reviews : reviews.slice(0, REVIEWS_PREVIEW);
@@ -208,11 +236,7 @@ export default function ClubDetail() {
     const res = await submitReview(club.id, rating, text);
     setSubmitting(false);
     if (!res.ok) {
-      setToast({
-        text: res.reason === 'not_played' ? 'Avis réservé à ceux qui ont joué ici.' : 'Envoi impossible — réessaie.',
-        tone: 'error',
-      });
-      setTimeout(() => setToast(null), 2400);
+      showToast(res.reason === 'not_played' ? 'Avis réservé à ceux qui ont joué ici.' : 'Envoi impossible — réessaie.', 'error');
       return;
     }
     setRating(0);
@@ -232,8 +256,7 @@ export default function ClubDetail() {
     setRating(myReview.rating);
     setText(myReview.text);
     setSent(false);
-    setToast({ text: 'Modifie ton avis ci-dessus ↑', tone: 'success' });
-    setTimeout(() => setToast(null), 2200);
+    showToast('Modifie ton avis ci-dessus ↑');
   };
   const removeMyReview = async () => {
     if (removing || !state.serverUserId) return; // garde anti double-tap
@@ -243,11 +266,10 @@ export default function ClubDetail() {
     if (ok) {
       loadReviews();
       void refreshClubRatings(); // même raison qu'au dépôt : moyenne des cartes à jour
-      setToast({ text: 'Avis supprimé', tone: 'success' });
+      showToast('Avis supprimé');
     } else {
-      setToast({ text: 'Suppression impossible — réessaie.', tone: 'error' });
+      showToast('Suppression impossible — réessaie.', 'error');
     }
-    setTimeout(() => setToast(null), 2200);
   };
   // Gérant : publier / retirer une réponse à un avis.
   const sendReply = async (reviewId: string) => {
@@ -259,11 +281,9 @@ export default function ClubDetail() {
       setReplyTarget(null);
       setReplyDraft('');
       loadReviews();
-      setToast({ text: 'Réponse publiée', tone: 'success' });
-      setTimeout(() => setToast(null), 2200);
+      showToast('Réponse publiée');
     } else {
-      setToast({ text: 'Réponse impossible — réessaie.', tone: 'error' });
-      setTimeout(() => setToast(null), 2400);
+      showToast('Réponse impossible — réessaie.', 'error');
     }
   };
 
@@ -285,7 +305,12 @@ export default function ClubDetail() {
           />
           {toast ? (
             // Toast léger (succès ex. « Lien copié ! » ou échec ex. « Envoi impossible »).
-            <View style={[styles.toast, toast.tone === 'error' && styles.toastError]} pointerEvents="none">
+            <View
+              style={[styles.toast, toast.tone === 'error' && styles.toastError]}
+              pointerEvents="none"
+              accessible
+              accessibilityLiveRegion={toast.tone === 'error' ? 'assertive' : 'polite'}
+            >
               <Ionicons name={toast.tone === 'error' ? 'alert-circle' : 'checkmark-circle'} size={16} color={colors.white} />
               <Txt variant="small" color={colors.white}>
                 {toast.text}
@@ -320,10 +345,7 @@ export default function ClubDetail() {
         <Pressable
           onPress={async () => {
             const r = await shareClub(club);
-            if (r === 'copied') {
-              setToast({ text: 'Lien copié !', tone: 'success' });
-              setTimeout(() => setToast(null), 2200);
-            }
+            if (r === 'copied') showToast('Lien copié !');
           }}
           hitSlop={8}
           style={styles.shareBtn}
@@ -588,12 +610,16 @@ export default function ClubDetail() {
                     {c.price ? ` · cours ${fcfa(c.price)}` : ''}
                   </Txt>
                 </View>
-                <Button
-                  size="sm"
-                  label="Réserver un cours"
-                  icon="calendar-outline"
-                  onPress={() => router.push(`/cours/${c.userId}?clubId=${club.id}`)}
-                />
+                {c.slots.length === 0 ? (
+                  <Tag label="Bientôt dispo" tone="neutral" />
+                ) : (
+                  <Button
+                    size="sm"
+                    label="Réserver un cours"
+                    icon="calendar-outline"
+                    onPress={() => router.push(`/cours/${c.userId}?clubId=${club.id}`)}
+                  />
+                )}
               </View>
             </View>
           ))}

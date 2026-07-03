@@ -78,8 +78,9 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - Compte CI EAS : **padelconnect-ci** (le token EAS est fourni au moment du build ; ne pas
   l'écrire dans le dépôt).
 - Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
-  --auto-submit --non-interactive --no-wait`.
-- **Dernier build : #42** (= #41 + audit n°4 : durcissements serveur SQL 48 + corrections app).
+--auto-submit --non-interactive --no-wait`.
+- **Dernier build : #45** (audits n°5/6 + APNs réparé — les push partent enfin). Le #46 (audit
+  n°7 complet) est le build de LANCEMENT : SQL 49 (re-corrigée) → 53 à coller AVANT.
 - Un module natif nouveau (ex. `expo-contacts`) ⇒ **nouveau build requis** + config plugin dans
   `app.json` avec la chaîne de permission.
 
@@ -92,7 +93,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `52` (voir dossier `supabase/`).
+  **SQL Editor → Run**. Migrations actuelles : `02` → `53` (voir dossier `supabase/`).
 - **Edge Function** `supabase/functions/notify-club/index.ts` (Deno) : envoie les push via
   l'API Expo. Déclenchée par des **Database Webhooks** (INSERT + UPDATE). Redéploiement **sans
   terminal** : Dashboard → Edge Functions → notify-club → Edit → coller le code → Deploy.
@@ -180,22 +181,27 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   le niveau, plafonné à 7 et auto-déclaré, ne peut pas servir de rang) : 100 = tournoi officiel
   gagné (winner_user_id ancré), 10 = tournoi officiel joué, 3 = victoire de match confirmée,
   2 = partie jouée. `fetch_leaderboard`/`my_leaderboard_rank`, écran `/classement`.
-- **Score de match (46, durci en 48, réglé en 49/audit 6)** : CHAQUE joueur du match saisit les
+- **Score de match (46, durci en 48, réglé en 49/audits 6-7)** : CHAQUE joueur du match saisit les
   sets de SON point de vue (`submit_match_score`) ; l'app calcule la forme CANONIQUE (score vu du
   vainqueur) et **désigne le vainqueur automatiquement**. RÈGLE ANTI-TRICHE : un match n'est validé
   que si un camp PERDANT reconnaît le score (une saisie « j'ai perdu » en miroir), OU si une saisie
-  UNIQUE reste 48 h sans réponse ; le plafond de « je gagne » est `floor(joueurs/2)` (2 pour un
-  2v2, 1 pour un 1v1) — au-delà, GELÉ. **Deux « je gagne » identiques ne valident donc jamais**
-  (invariant restauré à l'audit 6 : la 49 avait par erreur laissé un 2v2 double se valider à 48 h,
-  ce qui permettait à deux perdants complices de se créditer +3 — voir `submit_match_score`,
-  `fetch_my_match_scores`, `fetch_leaderboard`, `my_leaderboard_rank` et notify-club, tous alignés).
+  UNIQUE et GAGNANTE reste 48 h sans réponse ; le plafond de « je gagne » est `least(2, joueurs-1)`
+  (recalé à l'audit 7 : `floor(joueurs/2)` laissait un 1v1 à 2 comptes valider deux « je gagne ») —
+  au-delà, GELÉ. **Deux « je gagne » identiques ne valident donc jamais** (invariant restauré à
+  l'audit 6 — voir `submit_match_score`, `fetch_my_match_scores`, `fetch_leaderboard`,
+  `my_leaderboard_rank` et notify-club, tous alignés). `my_leaderboard_rank` renvoie 0 = « non
+  classé » (≠ null = échec réseau, audit 7).
   Les +3 ne comptent que si la résa est encore 'booked' (pas « pas venu »). Contestation ouvrable
   au-delà de 14 j dès qu'une 1ʳᵉ saisie existe (la fenêtre 14 j ne borne que la 1ʳᵉ saisie).
   UI « Mes réservations » (`src/lib/matchResults.ts`), push via webhook **`match_results`**.
-- **Modération UGC (51, audit 6)** : tout avis d'un autre joueur porte « Signaler » / « Bloquer »
-  (`src/lib/moderation.ts` → `report_review` / `block_user`) ; les avis et matchs ouverts des
-  comptes bloqués sont masqués localement (`fetch_blocked_users`). Requis par l'App Store (1.2) et
-  Google Play. Confidentialité (51) : le téléphone du créateur d'un **match ouvert** n'est plus
+- **Modération UGC (51 + 53, audits 6-7)** : tout avis d'un autre joueur porte « Signaler » /
+  « Bloquer » (`src/lib/moderation.ts` → `report_review` / `block_user`) ; chaque match ouvert
+  d'un autre joueur porte « ⋮ » → Signaler (via le canal support) / Bloquer. Les comptes bloqués
+  sont masqués via le MIROIR persisté `state.blockedUserIds` (chargé session + premier plan —
+  plus d'état local réinitialisable par un échec réseau) ; côté serveur (53) un bloqué ne peut
+  plus envoyer de demande d'ami ni rejoindre les matchs du bloqueur. L'OPÉRATEUR traite les
+  signalements dans Demandes → « Avis signalés » (`fetch_review_reports`, `operator_delete_review`,
+  `operator_dismiss_report`). Requis par l'App Store (1.2) et Google Play. Confidentialité (51) : le téléphone du créateur d'un **match ouvert** n'est plus
   stocké (trigger `strip_open_match_phone`) — il était récoltable en rejoignant chaque match.
 - **Liens de téléchargement multi-plateformes (audit 6)** : l'app sort sur iOS ET Android. Les
   partages d'invitation/parrainage pointent vers `padelconnectci.com/get` (`DOWNLOAD_URL`), page
@@ -220,7 +226,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   EN TANT QUE PadelConnect, VALIDÉS par le club hôte dans son Espace Club (jamais en entrant
   dans son planning sans accord). Présentation premium (bandeau doré) — futur canal FIP.
 - **Abonnement Gold (3 500 F/mois, Wave)** : GARDÉ POUR PLUS TARD (décision porteur) — statut
-  + avantages (badge, matchs épinglés, priorité tournois), jamais de verrou sur le cœur de l'app.
+  - avantages (badge, matchs épinglés, priorité tournois), jamais de verrou sur le cœur de l'app.
 - **Barre d'onglets** : groupe `(tabs)` (Accueil/Réserver/Tournois/Amis/Profil) ; les détails
   glissent par-dessus. Espace opérateur en 4 onglets (Aperçu/Finances/Clubs/Demandes).
 - **Calendrier appareil** : `createEventInCalendarAsync` (fiche système pré-remplie, AUCUNE
@@ -241,8 +247,8 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   annulations synchronisées cours ↔ réservation).
 - Serveur appliqué le 2026-07-01 (confirmé par le porteur) : SQL `30` → `36` (dont
   `34_level_integrity` anti-triche et `36_audit_hardening` : niveau borné [1,7] à l'inscription
-  + anti-collision de noms à la clôture), webhook `friend_requests`, notify-club redéployé
-  (push des demandes d'ami renvoyées).
+  - anti-collision de noms à la clôture), webhook `friend_requests`, notify-club redéployé
+    (push des demandes d'ami renvoyées).
 - **Audit n°3 (2026-07-02, ultracode)** : 4 agents spécialisés (matrice serveur↔app 31 RPC +
   21 tables, designer, testeur, planner) + workflow 50 agents (8 angles × sceptiques). Résultat :
   SQL `41_reservations_hardening` (plus de DELETE direct d'une résa + insertion forcée
@@ -251,9 +257,23 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   immédiate à la déconnexion, perfs (agrégats opérateur mémoïsés, tunnel de résa, planning club,
   historiques paginés), quick wins UX (guide gérant « 4 gestes », « Chercher des joueurs »,
   preuves de confiance, skeletons, EmptyState actionnables, maxWidth tablette 640/480).
-- **Reste à faire par le porteur (docs/AUDIT-SERVEUR.md §1)** : coller SQL `37` + `38` + `39` +
-  `40` + `41`, redéployer notify-club, créer les **webhooks `lessons` et `coaches`** (INSERT +
-  UPDATE). Optionnel plus tard : `WEBHOOK_SECRET` + en-tête `x-webhook-secret` sur les webhooks (§3).
+- **Audits n°4 à n°6** appliqués (SQL 42 → 52, builds #36 → #45) ; **APNs réparé** (clé push créée
+  par le porteur, liée sur EAS — les notifications partent réellement depuis le #45).
+- **Audit n°7 (2026-07-03, 125 agents / 22 angles — le plus gros)** : 94 constats corrigés
+  (11 HIGH, 39 MEDIUM, 44 LOW). Serveur : SQL `53_audit7_hardening` (blocages appliqués côté
+  serveur, delete_account/delete_club complets, garde créneau-fermé/terrain-retiré à l'INSERT,
+  anti double-occupation tournois avec verrous consultatifs, désinscription refusée après début,
+  signalements d'avis dans l'Espace opérateur, `register_push_token`, revokes anon) + 49
+  re-corrigée (plafond `least(2, joueurs-1)`, rang 0 = non classé). App : écritures honnêtes
+  partout (horaires/terrains/offres/profil/suppression de tournoi), refreshMirror en UN setState
+  (~17 → 1 re-render), miroir `blockedUserIds`, Signaler/Bloquer sur les matchs ouverts, textes
+  score/annulation alignés sur la règle réelle, part par joueur sur l'effectif réel, resync
+  ClubInfoCard (patch limité aux champs modifiés), accessibilité (toasts annoncés, labels,
+  cibles 44 pt, scrims masqués), CGU/privacy complétées, docs stores recalées.
+- **Reste à faire par le porteur (docs/AUDIT-SERVEUR.md §0-SEXIES)** : coller SQL `49` (re-corrigée)
+  → `50` → `51` → `52` → `53` DANS L'ORDRE, redéployer notify-club, re-déployer le dossier `site/`
+  (privacy + /get), compléter l'empreinte SHA-256 d'assetlinks. Optionnel plus tard :
+  `WEBHOOK_SECRET` + en-tête `x-webhook-secret` sur les webhooks (§3).
 
 ### Feuille de route (décidée avec le porteur le 2026-07-01)
 

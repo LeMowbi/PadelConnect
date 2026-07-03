@@ -42,7 +42,9 @@ export async function fetchLeaderboard(limit = 50): Promise<LeaderboardRow[] | n
   }));
 }
 
-// Ma position exacte (même au-delà du top affiché). null = échec réseau OU non classé.
+// Ma position exacte (même au-delà du top affiché). null = échec réseau ; 0 = non classé
+// (0 point) — distinction introduite côté serveur pour que l'app puisse masquer la carte
+// « Ta position » sans la confondre avec une panne réseau (cf. audit).
 export async function fetchMyRank(): Promise<number | null> {
   const { data, error } = await supabase.rpc('my_leaderboard_rank');
   if (error || typeof data !== 'number') return null;

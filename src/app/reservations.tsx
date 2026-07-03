@@ -16,7 +16,7 @@ import { hapticSuccess } from '@/lib/haptics';
 import { fetchMyMatchScores, leaveOpenMatch, setMatchOpen, submitMatchScore, type MatchScore, type MatchSet } from '@/lib/matchResults';
 import { fetchCancelledReservations } from '@/lib/reservations';
 import { dateKeyLabel, dayKey } from '@/lib/days';
-import { fcfa, perPlayer } from '@/lib/format';
+import { fcfa, perPlayer, perPlayerOf } from '@/lib/format';
 import { APP_DOMAIN } from '@/lib/referrals';
 import { openMaps } from '@/lib/maps';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
@@ -162,10 +162,11 @@ export default function ReservationsScreen() {
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
 
   // Récap envoyé aux partenaires (WhatsApp s’ouvre avec le message, tu choisis le destinataire).
-  // La part par joueur se calcule sur le PRIX RÉEL du créneau (terrain à 4).
+  // La part se calcule sur le PRIX RÉEL du créneau et l'EFFECTIF RÉEL du match (créateur +
+  // invités) : « /4 » sur une résa à 2 annoncerait la moitié de la vraie part à payer au club.
   const notifyPartners = (r: Reservation) => {
     const who = r.invited.length ? `\nÉquipe : ${r.invited.map((i) => i.name).join(', ')}` : '';
-    const share = r.price ? `\nPrévois ${perPlayer(r.price)} chacun.` : '';
+    const share = r.price ? `\nPrévois ${perPlayerOf(r.price, 1 + r.invited.length)} chacun.` : '';
     openWhatsApp(
       '',
       `On joue au padel ! 🎾\n${r.clubName} — ${dateKeyLabel(r.dateKey)} à ${r.time} (session 1h30)\n${r.court}${who}${share}\nRéservé via PadelConnect.`,
@@ -223,7 +224,13 @@ export default function ReservationsScreen() {
       hapticSuccess();
       toast.show('Score validé ✓ — le match compte au classement');
     } else if (res === 'waiting') {
-      toast.show('Score enregistré — validé quand un adversaire confirme le même score, ou automatiquement 48 h après.');
+      // Règle 49 réelle : seule une saisie GAGNANTE restée SEULE est auto-validée à 48 h ;
+      // sinon il faut qu'un joueur du camp perdant confirme. Promesse honnête selon le cas.
+      toast.show(
+        parsed.iWin
+          ? 'Score enregistré — validé dès qu’un adversaire confirme (ou automatiquement sous 48 h si ta saisie reste la seule).'
+          : 'Score enregistré — validé dès qu’un joueur du camp gagnant saisit le même score.',
+      );
     } else if (res === 'conflict') {
       toast.show('Ton score ne correspond pas à celui déjà saisi — vérifiez ensemble.', { icon: 'alert-circle' });
     } else if (res === 'no_players') {
@@ -334,13 +341,14 @@ export default function ReservationsScreen() {
                 </View>
                 <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
                   {s.conflict
-                    ? 'Les scores déjà saisis ne correspondent pas — mets le tien pour départager.'
+                    ? 'Les scores déjà saisis ne correspondent pas — demandez à celui qui s’est trompé de corriger sa saisie.'
                     : `${s.enteredNames || 'Un joueur'} a mis ${s.score}. Si tu as perdu, saisis ton score pour valider tout de suite.`}
                 </Txt>
                 <Divider style={{ marginVertical: spacing.md }} />
                 <Button size="sm" label="Mettre mon score" icon="trophy-outline" onPress={() => openScore(r)} full />
                 <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-                  Sinon, le score est validé automatiquement 48 h après la première saisie.
+                  Le match ne compte que si un joueur du camp perdant confirme le score (ou si la saisie du vainqueur reste la seule pendant
+                  48 h).
                 </Txt>
               </Card>
             );
@@ -527,10 +535,10 @@ export default function ReservationsScreen() {
                     <View style={{ flex: 1 }}>
                       <Button
                         size="sm"
-                        label={r.invited.length < 3 && owner ? 'Chercher des joueurs' : 'Prévenir mes partenaires'}
+                        label={r.invited.length < 3 && owner && !r.coachName ? 'Chercher des joueurs' : 'Prévenir mes partenaires'}
                         icon="logo-whatsapp"
                         variant="secondary"
-                        onPress={() => (r.invited.length < 3 && owner ? findPlayers(r) : notifyPartners(r))}
+                        onPress={() => (r.invited.length < 3 && owner && !r.coachName ? findPlayers(r) : notifyPartners(r))}
                         pill
                         full
                       />
@@ -543,8 +551,10 @@ export default function ReservationsScreen() {
                       rejoint peut quitter (sa place se libère). Les contrôles ne sont PAS gatés
                       sur l'état ouvert/fermé courant (sinon fermer faisait disparaître « Rouvrir »
                       après resynchro) : le créateur les voit tant qu'il reste des places, le
-                      joueur inscrit tant qu'il est un participant accepté. */}
-                  {owner && r.invited.length < 3 ? (
+                      joueur inscrit tant qu'il est un participant accepté. Un COURS de coach
+                      (r.coachName) ne s'ouvre jamais : des inconnus rejoindraient un cours que le
+                      coach n'a pas accepté de donner à 4 (le serveur le refuse aussi, SQL 53). */}
+                  {owner && !r.coachName && r.invited.length < 3 ? (
                     <View style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}>
                       <Button
                         size="sm"
@@ -784,7 +794,7 @@ export default function ReservationsScreen() {
         onClose={() => setCancelTarget(null)}
       >
         <Txt variant="body" color={colors.textMuted}>
-          Le créneau sera libéré et le club ne la verra plus.
+          Le créneau sera libéré et de nouveau réservable. Le club est prévenu et l’annulation reste visible dans son espace.
         </Txt>
         <View style={{ gap: spacing.sm, marginTop: spacing.lg }}>
           <Button
@@ -817,8 +827,8 @@ export default function ReservationsScreen() {
         onClose={() => setScoreTarget(null)}
       >
         <Txt variant="body" color={colors.textMuted}>
-          Saisis les sets de TON point de vue (ton équipe d’abord). Le match est validé quand un ADVERSAIRE confirme le même score, ou
-          automatiquement 48 h après la première saisie — une victoire vaut +3 pts au classement.
+          Saisis les sets de TON point de vue (ton équipe d’abord). Le match est validé quand un joueur du camp PERDANT confirme le même
+          score ; une saisie de victoire restée seule 48 h est validée automatiquement — une victoire vaut +3 pts au classement.
         </Txt>
         {scoreTarget && scores[scoreTarget.id] && !scores[scoreTarget.id].mine && scores[scoreTarget.id].score ? (
           <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>

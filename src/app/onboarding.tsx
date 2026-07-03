@@ -47,13 +47,12 @@ export default function Onboarding() {
   const [step, setStep] = useState(0);
   // Code capté via un lien d’invitation (padelconnectci.com/invite/CODE) → pré-remplissage.
   // setState APRÈS await (pas dans le corps de l’effet) pour respecter le React Compiler.
+  // On ne l’EFFACE PAS ici : si l’utilisateur quitte sans s’inscrire, le code doit rester
+  // disponible pour la prochaine visite (effacé seulement APRÈS un succès, dans create()).
   useEffect(() => {
     let alive = true;
     void getPendingReferral().then((code) => {
-      if (alive && code) {
-        setReferralCode(code);
-        clearPendingReferral();
-      }
+      if (alive && code) setReferralCode(code);
     });
     return () => {
       alive = false;
@@ -75,6 +74,7 @@ export default function Onboarding() {
   const [siError, setSiError] = useState<string | null>(null);
   const [siInfo, setSiInfo] = useState<string | null>(null); // « lien envoyé » (mot de passe oublié)
   const [resendMsg, setResendMsg] = useState<string | null>(null); // retour du renvoi d’e-mail
+  const [resending, setResending] = useState(false); // garde anti double-tap
   const scrollRef = useRef<ScrollView>(null);
   const positions = useRef<Partial<Record<FieldKey, number>>>({});
   // Champ à cibler après un changement d’étape déclenché par create() (filet de sécurité) —
@@ -170,10 +170,13 @@ export default function Onboarding() {
       photoUri, // envoyée au stockage à la 1ʳᵉ session (mise de côté d’ici là)
     });
     setBusy(false);
-    if (res.needsConfirm)
+    if (res.needsConfirm) {
+      void clearPendingReferral(); // inscription réussie → le code ne sert plus, on le libère
       setSentTo(email.trim().toLowerCase()); // → écran « Vérifie ta boîte mail »
-    else if (res.ok) router.replace('/');
-    else setAuthError(res.error ?? 'Inscription impossible. Réessaie.');
+    } else if (res.ok) {
+      void clearPendingReferral();
+      router.replace('/');
+    } else setAuthError(res.error ?? 'Inscription impossible. Réessaie.');
   };
 
   const signIn = async () => {
@@ -216,9 +219,11 @@ export default function Onboarding() {
 
   // Renvoyer l’e-mail de confirmation depuis l’écran « Vérifie ta boîte mail ».
   const resend = async () => {
-    if (!sentTo) return;
+    if (!sentTo || resending) return; // garde anti double-tap
+    setResending(true);
     setResendMsg(null);
     const res = await resendConfirmation(sentTo);
+    setResending(false);
     setResendMsg(res.ok ? 'E-mail renvoyé ✓' : (res.error ?? 'Renvoi impossible — réessaie.'));
   };
 
@@ -274,7 +279,14 @@ export default function Onboarding() {
               full
             />
             {/* Secondaire (pas ghost) : c'est LE geste de secours quand le mail n'arrive pas. */}
-            <Button label="Renvoyer l’e-mail" icon="refresh" variant="secondary" onPress={resend} full />
+            <Button
+              label={resending ? 'Envoi…' : 'Renvoyer l’e-mail'}
+              icon="refresh"
+              variant="secondary"
+              onPress={resend}
+              disabled={resending}
+              full
+            />
             <Button label="Modifier l’adresse" variant="ghost" onPress={() => setSentTo(null)} full />
           </View>
           {resendMsg ? (

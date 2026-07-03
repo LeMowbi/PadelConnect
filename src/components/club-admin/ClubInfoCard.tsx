@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Chip } from '@/components/Chip';
@@ -47,6 +47,21 @@ export function ClubInfoCard({
   const [saving, setSaving] = useState(false);
   const [tierError, setTierError] = useState<string | null>(null);
 
+  // Instantané des valeurs au MONTAGE : « Enregistrer » n'envoie que les champs réellement
+  // modifiés. Un champ non touché n'écrase ainsi jamais une valeur serveur plus récente
+  // (réglée depuis un autre appareil pendant que ce formulaire était ouvert) — setClubInfo
+  // complète le patch avec le miroir local, lui, tenu à jour en arrière-plan.
+  const initial = useRef({
+    name: club.name,
+    area: club.area,
+    blurb: club.blurb,
+    type: club.type,
+    price: String(club.priceFrom),
+    tiers: JSON.stringify(emptyTiers(club)),
+    phone: club.contactPhone ?? '',
+    mapsQuery: club.mapsQuery ?? '',
+  }).current;
+
   const openLabel = minutesToSlot(openMin);
   const closeLabel = minutesToSlot(closeMin);
 
@@ -76,19 +91,21 @@ export function ClubInfoCard({
       return;
     }
     setTierError(null);
+    // Patch limité aux champs MODIFIÉS depuis le montage (cf. `initial`) : un champ intact
+    // reprend la valeur du miroir local dans setClubInfo, jamais une valeur périmée d'ici.
+    const patch: ClubInfo = {};
+    if (name.trim() !== initial.name) patch.name = name.trim();
+    if (area.trim() !== initial.area) patch.area = area.trim();
+    if (blurb.trim() !== initial.blurb) patch.blurb = blurb.trim();
+    if (type !== initial.type) patch.type = type;
+    if (price !== initial.price) patch.priceFrom = Number(price);
+    if (JSON.stringify(tiers) !== initial.tiers) patch.priceTiers = built.length ? built : undefined;
+    if (phone.trim() !== initial.phone) patch.contactPhone = phone.trim() || undefined;
+    if (mapsQuery.trim() !== initial.mapsQuery) patch.mapsQuery = mapsQuery.trim() || undefined;
     // On ATTEND le serveur : « Enregistré ✓ » ne s’affiche qu’au vrai succès (sinon, hors-ligne,
     // l’accusé mentait et la page se rétablissait silencieusement au prochain chargement).
     setSaving(true);
-    void onSave({
-      name: name.trim(),
-      area: area.trim(),
-      blurb: blurb.trim(),
-      type,
-      priceFrom: Number(price),
-      priceTiers: built.length ? built : undefined,
-      contactPhone: phone.trim() || undefined,
-      mapsQuery: mapsQuery.trim() || undefined,
-    }).then(({ ok }) => {
+    void onSave(patch).then(({ ok }) => {
       setSaving(false);
       if (!ok) {
         setTierError('Enregistrement impossible — vérifie ta connexion et réessaie.');

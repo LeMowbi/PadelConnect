@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { Confetti } from '@/components/Confetti';
 import { PlayerSheet, type PlayerLike } from '@/components/PlayerSheet';
@@ -10,7 +10,7 @@ import { PopIn } from '@/components/PopIn';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
 import { findClub } from '@/data/clubs';
-import { compDateLabel, formatFee, hasEntryFee, seedCompetitions, teamCount, teamsToShow } from '@/data/competitions';
+import { compDateLabel, formatFee, hasEntryFee, isTournamentPublic, seedCompetitions, teamCount, teamsToShow } from '@/data/competitions';
 import { openWhatsApp } from '@/lib/contact';
 import { dayKey } from '@/lib/days';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
@@ -34,11 +34,45 @@ export default function CompetitionDetail() {
   const [thirdName, setThirdName] = useState(''); // americano : 3ᵉ place (facultatif)
   const [pickingLoser, setPickingLoser] = useState(false); // 2ᵉ étape de clôture
   const [confirmCancel, setConfirmCancel] = useState(false); // annulation d’un tournoi sans inscrit
-  const [toast, setToast] = useState<string | null>(null);
+  // tone distingue succès (coche) et échec (alerte) — l'icône suivait avant toujours « succès ».
+  const [toast, setToast] = useState<{ text: string; tone: 'success' | 'error' } | null>(null);
   const [openPlayer, setOpenPlayer] = useState<PlayerLike | null>(null);
   const [registering, setRegistering] = useState(false); // évite double-clic + toast menteur si échec serveur
   const [closing, setClosing] = useState(false); // évite double-clic sur la clôture + retour d’échec
+  const [deleting, setDeleting] = useState(false); // évite double-clic sur la suppression du tournoi
   const [celebrate, setCelebrate] = useState(false); // confettis quand MON équipe remporte le tournoi (motif amis.tsx)
+
+  // Affiche le toast + l'ANNONCE aux lecteurs d'écran (seul canal de confirmation/erreur de ces
+  // actions — même motif que components/Toast.tsx) + auto-disparition (timer précédent remplacé).
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = (text: string, tone: 'success' | 'error' = 'success') => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ text, tone });
+    AccessibilityInfo.announceForAccessibility(text);
+    toastTimer.current = setTimeout(() => setToast(null), tone === 'error' ? 2400 : 2200);
+  };
+  // Au démontage uniquement : pas de setToast orphelin après avoir quitté la fiche.
+  useEffect(
+    () => () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    },
+    [],
+  );
+
+  // Suppression / annulation du tournoi : on ATTEND le serveur avant de quitter l'écran —
+  // un échec (hors-ligne, droits) était avant silencieux et le tournoi « réapparaissait ».
+  const removeCompetition = async () => {
+    if (!comp || deleting) return;
+    setDeleting(true);
+    const ok = await deleteCompetition(comp.id);
+    setDeleting(false);
+    if (!ok) {
+      hapticWarning();
+      showToast('Suppression impossible — réessaie.', 'error');
+      return;
+    }
+    router.back();
+  };
 
   if (!comp) {
     return (
@@ -118,8 +152,7 @@ export default function CompetitionDetail() {
       // un résultat qui n’est pas le sien — cf. audit).
       if (winnerName === myTeam && registered) setCelebrate(true);
     } else hapticWarning();
-    setToast(ok ? 'Tournoi clôturé ✓' : 'Clôture impossible — réessaie.');
-    setTimeout(() => setToast(null), 2200);
+    showToast(ok ? 'Tournoi clôturé ✓' : 'Clôture impossible — réessaie.', ok ? 'success' : 'error');
   };
   // Clôture americano : vainqueur + 2ᵉ/3ᵉ place (le niveau ne bouge que pour le 1ᵉ, comme ailleurs).
   const doClosePodium = async () => {
@@ -134,8 +167,7 @@ export default function CompetitionDetail() {
       hapticSuccess();
       if (winnerName === myTeam && registered) setCelebrate(true);
     } else hapticWarning();
-    setToast(ok ? 'Tournoi clôturé ✓' : 'Clôture impossible — réessaie.');
-    setTimeout(() => setToast(null), 2200);
+    showToast(ok ? 'Tournoi clôturé ✓' : 'Clôture impossible — réessaie.', ok ? 'success' : 'error');
   };
 
   return (
@@ -144,11 +176,16 @@ export default function CompetitionDetail() {
       title="Tournoi"
       overlay={
         toast ? (
-          // Toast léger (« Lien copié ! » après partage sur ordinateur)
-          <View style={styles.toast} pointerEvents="none">
-            <Ionicons name="checkmark-circle" size={16} color={colors.white} />
+          // Toast léger (succès ex. « Lien copié ! » ou échec ex. « Inscription impossible »)
+          <View
+            style={styles.toast}
+            pointerEvents="none"
+            accessible
+            accessibilityLiveRegion={toast.tone === 'error' ? 'assertive' : 'polite'}
+          >
+            <Ionicons name={toast.tone === 'error' ? 'alert-circle' : 'checkmark-circle'} size={16} color={colors.white} />
             <Txt variant="small" color={colors.white}>
-              {toast}
+              {toast.text}
             </Txt>
           </View>
         ) : null
@@ -257,10 +294,8 @@ export default function CompetitionDetail() {
                 label="Supprimer ce tournoi"
                 icon="trash-outline"
                 variant="danger"
-                onPress={() => {
-                  void deleteCompetition(comp.id);
-                  router.back();
-                }}
+                onPress={() => void removeCompetition()}
+                disabled={deleting}
                 full
               />
             </View>
@@ -336,8 +371,7 @@ export default function CompetitionDetail() {
           onPress={async () => {
             const r = await shareCompetition(comp);
             if (r === 'copied') {
-              setToast('Lien copié !');
-              setTimeout(() => setToast(null), 2200);
+              showToast('Lien copié !');
             }
           }}
         />
@@ -373,10 +407,8 @@ export default function CompetitionDetail() {
                   label="Oui, annuler le tournoi"
                   icon="trash-outline"
                   variant="danger"
-                  onPress={() => {
-                    deleteCompetition(comp.id);
-                    router.back();
-                  }}
+                  onPress={() => void removeCompetition()}
+                  disabled={deleting}
                   full
                 />
                 <Button label="Le garder" variant="secondary" onPress={() => setConfirmCancel(false)} full />
@@ -614,8 +646,7 @@ export default function CompetitionDetail() {
                   setRegistering(false);
                   if (ok) hapticSuccess();
                   else hapticWarning();
-                  setToast(ok ? 'Désinscription effectuée' : 'Action impossible — réessaie.');
-                  setTimeout(() => setToast(null), 2200);
+                  showToast(ok ? 'Désinscription effectuée' : 'Action impossible — réessaie.', ok ? 'success' : 'error');
                 }}
                 full
               />
@@ -630,6 +661,17 @@ export default function CompetitionDetail() {
             Toutes les places sont prises — les inscriptions sont fermées.
           </Txt>
         </Card>
+      ) : !isTournamentPublic(comp) ? (
+        // register_competition exige status='published' côté serveur : le formulaire n'a pas
+        // sa place tant que le club n'a pas validé le tournoi (pending). Pour 'rejected', la
+        // fiche propose déjà Supprimer/Recréer plus haut — rien de plus à afficher ici.
+        comp.status !== 'rejected' ? (
+          <Card style={{ marginTop: spacing.lg }}>
+            <Txt variant="small" color={colors.textFaint}>
+              Les inscriptions ouvriront une fois le tournoi validé par le club.
+            </Txt>
+          </Card>
+        ) : null
       ) : (
         <View style={{ marginTop: spacing.lg }}>
           <Txt variant="h3">S’inscrire en équipe</Txt>
@@ -681,8 +723,7 @@ export default function CompetitionDetail() {
                 setRegistering(false);
                 if (ok) hapticSuccess();
                 else hapticWarning();
-                setToast(ok ? 'Inscription enregistrée ✓' : 'Inscription impossible — réessaie.');
-                setTimeout(() => setToast(null), 2200);
+                showToast(ok ? 'Inscription enregistrée ✓' : 'Inscription impossible — réessaie.', ok ? 'success' : 'error');
               }}
               disabled={!canRegister || registering}
               full

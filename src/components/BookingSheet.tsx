@@ -88,6 +88,11 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
     setSubmitting(false);
     if (res.ok) {
       setDone(true);
+      // Résa créée mais rattachement des amis invités échoué : sans ce toast, la carte
+      // affiche « Avec X » alors que X n'a reçu ni push ni la résa chez lui.
+      if (res.partnersNotified === false) {
+        toast.show('Tes partenaires n’ont pas pu être prévenus dans l’app — envoie-leur le récap WhatsApp.', { icon: 'alert-circle' });
+      }
     } else if (res.reason === 'limit') {
       // Même barrière anti-blocage que la fiche club (règle centralisée dans addReservation).
       hapticWarning();
@@ -138,7 +143,9 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
 
   return (
     <Modal transparent animationType="slide" visible onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.backdrop} onPress={onClose} />
+      {/* Scrim masqué des lecteurs d'écran (même règle que BottomSheet) : la fermeture
+          accessible passe par le bouton « Fermer » libellé + onRequestClose. */}
+      <Pressable style={styles.backdrop} onPress={onClose} accessible={false} importantForAccessibility="no-hide-descendants" />
       <KeyboardAvoidingView style={styles.wrapper} pointerEvents="box-none" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={[styles.sheet, { paddingBottom: spacing.xxl + insets.bottom }]}>
           <View style={styles.handle} />
@@ -281,6 +288,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   sheet: {
+    // Plafond tablette : une feuille pleine largeur d'iPad serait démesurée — 480 pt max,
+    // centrée (même règle que BottomSheet.tsx).
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
     backgroundColor: colors.bgElevated,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
