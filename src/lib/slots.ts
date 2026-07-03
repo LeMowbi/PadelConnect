@@ -71,3 +71,25 @@ export function inferOpenClose(slots: string[], sessionMin = SESSION_MIN): { ope
   if (mins.length === 0) return { open: DEFAULT_OPEN, close: DEFAULT_CLOSE };
   return { open: minutesToSlot(mins[0]), close: minutesToSlot(mins[mins.length - 1] + sessionMin) };
 }
+
+// ── Grille LIBRE (brique 2 des créneaux modulables) ─────────────────────────────
+// Le gérant peut ajouter n'importe quel horaire à sa grille (ex. 10:00 entre 8:00 et 11:30
+// impossible, mais 10:00 après avoir retiré 9:30 oui). Fonction PURE : valide qu'un horaire
+// peut rejoindre la grille — format correct, session entière avant minuit, pas avant 05:00,
+// pas déjà présent, et à AU MOINS une session (90 min) de tout créneau existant (ouvert OU
+// fermé) : deux sessions qui se chevauchent rendraient le même terrain vendable deux fois.
+export function canAddSlot(grid: string[], time: string): { ok: true } | { ok: false; error: string } {
+  const t = slotToMinutes(time);
+  if (t === null) return { ok: false, error: 'Heure invalide (format HH:MM, ex. 10:00).' };
+  if (t < 5 * 60) return { ok: false, error: 'Pas de créneau avant 05:00.' };
+  if (t + SESSION_MIN > 24 * 60) return { ok: false, error: 'La session (1h30) doit finir avant minuit.' };
+  for (const entry of grid) {
+    const other = slotToMinutes(slotTime(entry));
+    if (other === null) continue;
+    if (other === t) return { ok: false, error: `Le créneau ${slotTime(entry)} existe déjà.` };
+    if (Math.abs(other - t) < SESSION_MIN) {
+      return { ok: false, error: `Trop proche de ${slotTime(entry)} — deux sessions de 1h30 se chevaucheraient.` };
+    }
+  }
+  return { ok: true };
+}

@@ -66,6 +66,9 @@ export type ClubConfig = {
   photos?: string[]; // photos GÉNÉRALES du club (galerie)
   coverUrl?: string; // photo « de profil » : celle de la carte, avant d’ouvrir la fiche
   courtPhotos?: Record<string, string>; // une photo PAR TERRAIN → { nom du terrain: url }
+  // Fermetures RÉCURRENTES par terrain (54) : { 'Terrain 1': ['18:00'] } = jamais réservable
+  // à 18:00 sur CE terrain (ex. réservé aux cours) — les autres terrains restent ouverts.
+  courtClosed?: Record<string, string[]>;
 };
 
 type ClubConfigRow = {
@@ -76,6 +79,7 @@ type ClubConfigRow = {
   photos: string[] | null;
   cover_url: string | null;
   court_photos: Record<string, string> | null;
+  court_closed: Record<string, string[]> | null;
 };
 
 // Toutes les configs de club → { clubId: config } pour fusion dans le store au chargement.
@@ -92,6 +96,7 @@ export async function fetchClubConfigs(): Promise<Record<string, ClubConfig> | n
       photos: r.photos ?? undefined,
       coverUrl: r.cover_url ?? undefined,
       courtPhotos: r.court_photos ?? undefined,
+      courtClosed: r.court_closed ?? undefined,
     };
   }
   return out;
@@ -110,6 +115,7 @@ export async function upsertClubConfig(clubId: string, c: ClubConfig): Promise<b
     p_photos: c.photos ?? null,
     p_cover_url: c.coverUrl ?? null,
     p_court_photos: c.courtPhotos ?? null,
+    p_court_closed: c.courtClosed ?? null,
   });
   return !error && data === true;
 }

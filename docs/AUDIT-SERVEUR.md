@@ -1,6 +1,22 @@
 # Audit — actions serveur (sans terminal)
 
-## 0-SEXIES) AUDIT n°7 (2026-07-03) — recoller `49`, coller `50` → `53`, redéployer notify-club — ⏳ À FAIRE
+## 0-SEPTIES) CRÉNEAUX MODULABLES (2026-07-03) — coller SQL `54` (1 min) — ⏳ À FAIRE
+
+Trois nouveautés pour les clubs (demande porteur) : **fermer un terrain sur une période**
+(travaux, événement…), **grille d'horaires libre** (ajouter/retirer n'importe quel créneau),
+et **fermetures récurrentes par terrain** (« Terrain 1 réservé aux cours à 18h00 »).
+
+1. Dashboard Supabase → **SQL Editor** → **New query** → ouvre `supabase/54_creneaux_modulables.sql`
+   du dépôt → copie **tout** → colle → **Run** (« Success. No rows returned »). Idempotente.
+
+⚠️ **Colle la 54 APRÈS la 53 et AVANT d'installer le build #47** : elle change la fonction
+d'enregistrement de la config club — sans elle, l'enregistrement des horaires/terrains depuis
+le nouveau build échouerait (« Enregistrement impossible »). Aucun webhook, aucun redéploiement
+de notify-club ici.
+
+---
+
+## 0-SEXIES) AUDIT n°7 (2026-07-03) — recoller `49`, coller `50` → `53`, redéployer notify-club — ✅ FAIT (confirmé porteur, 2026-07-03)
 
 Le plus gros audit du projet (125 vérifications croisées) avant la sortie stores. Cette section
 REMPLACE le 0-QUINQUIES ci-dessous (mêmes étapes + la nouvelle `53`). Dans **SQL Editor**, colle

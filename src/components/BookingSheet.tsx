@@ -34,11 +34,25 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
     occupancy: state.occupancy,
     comps: [...seedCompetitions, ...state.myCompetitions],
     blocked: state.blockedSlots,
+    ranges: state.blockedRanges,
+    courtClosed: state.clubCourtClosed,
   };
   const free = useMemo(
     () => freeCourts(club, day.key, time, ctx),
+    // deps volontairement listées à la main : ctx est reconstruit à chaque rendu.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [club.id, day.key, time, state.reservations, state.occupancy, state.clubCourts, state.blockedSlots, state.myCompetitions],
+    [
+      club.id,
+      day.key,
+      time,
+      state.reservations,
+      state.occupancy,
+      state.clubCourts,
+      state.blockedSlots,
+      state.blockedRanges,
+      state.clubCourtClosed,
+      state.myCompetitions,
+    ],
   );
 
   const price = priceForSlot(club, time);

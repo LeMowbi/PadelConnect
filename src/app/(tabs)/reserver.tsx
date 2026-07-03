@@ -84,8 +84,20 @@ export default function ReserverScreen() {
       occupancy: state.occupancy,
       comps: [...seedCompetitions, ...state.myCompetitions],
       blocked: state.blockedSlots,
+      ranges: state.blockedRanges,
+      courtClosed: state.clubCourtClosed,
     }),
-    [visibleClubs, state.clubSlots, state.clubCourts, state.reservations, state.occupancy, state.myCompetitions, state.blockedSlots],
+    [
+      visibleClubs,
+      state.clubSlots,
+      state.clubCourts,
+      state.reservations,
+      state.occupancy,
+      state.myCompetitions,
+      state.blockedSlots,
+      state.blockedRanges,
+      state.clubCourtClosed,
+    ],
   );
 
   // Priorité d’affichage des clubs : Padelta (règle porteur) → mes FAVORIS (l’habitué

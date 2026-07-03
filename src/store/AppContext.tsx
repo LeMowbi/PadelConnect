@@ -63,8 +63,10 @@ import {
   type IncomingFriendRequest,
 } from '@/lib/friends';
 import {
+  blockRangeRow,
   blockSlotRow,
   cancelReservationRow,
+  fetchBlockedRanges,
   fetchBlockedSlots,
   fetchMyParticipations,
   markNoShowRow,
@@ -75,6 +77,9 @@ import {
   insertReservation,
   linkParticipants,
   setClubConfirmedRow,
+  unblockRangeRow,
+  type BlockedRange,
+  type BlockRangeStatus,
   type SlotOccupancy,
 } from '@/lib/reservations';
 import { blockUser as blockUserRpc, fetchBlockedUserIds } from '@/lib/moderation';
@@ -247,6 +252,9 @@ export type AppState = {
   clubSlots: Record<string, string[]>; // horaires ouverts par club
   clubCourts: Record<string, string[]>; // terrains (courts) gérés par club
   blockedSlots: BlockedSlot[]; // créneaux fermés hors app par les clubs
+  blockedRanges: BlockedRange[]; // fermetures sur PÉRIODE (54) — terrain ou club entier
+  // Fermetures récurrentes PAR TERRAIN (54) : { clubId: { 'Terrain 1': ['18:00'] } }.
+  clubCourtClosed: Record<string, Record<string, string[]>>;
   // Comptes que J'AI bloqués (modération UGC, 51) : miroir persisté — un échec réseau au
   // montage d'un écran ne fait plus réapparaître les avis / matchs ouverts d'un compte bloqué.
   blockedUserIds: string[];
@@ -442,6 +450,11 @@ type AppContextType = {
   setClubCourts: (clubId: string, courts: string[]) => Promise<boolean>;
   blockSlot: (b: BlockedSlot, startsAt: number) => Promise<boolean>;
   unblockSlot: (clubId: string, dateKey: string, time: string, court: string) => Promise<boolean>;
+  // Fermetures sur PÉRIODE (54). 'reservations' = une résa à venir vit dans la période.
+  blockRange: (input: Omit<BlockedRange, 'id'>) => Promise<BlockRangeStatus>;
+  unblockRange: (id: string) => Promise<boolean>;
+  // Fermetures RÉCURRENTES par terrain (54) — false = échec serveur, miroir intact.
+  setCourtClosed: (clubId: string, closed: Record<string, string[]>) => Promise<boolean>;
   // ok = false quand l’écriture SERVEUR a échoué (réseau/session) : l’actu reste alors visible
   // seulement sur le téléphone de l’opérateur — l’appelant doit le dire honnêtement.
   // `push` (47) : true = notify-club envoie AUSSI l’actu en notification à tous les joueurs.
@@ -616,6 +629,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         compRegs,
         tournamentFee,
         blocked,
+        blockedRangesRes,
         opPayments,
         news,
         coachProfile,
@@ -638,6 +652,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         fetchMyCompRegistrations(),
         fetchTournamentFee(),
         fetchBlockedSlots(),
+        fetchBlockedRanges(),
         fetchOperatorPayments(),
         fetchOperatorNews(),
         fetchMyCoachProfile(),
@@ -682,6 +697,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         tournamentFee: tournamentFee ?? s.tournamentFee,
         // Créneaux fermés hors app (serveur) : source de vérité, visibles par tous les joueurs.
         blockedSlots: blocked ?? s.blockedSlots,
+        // Fermetures sur période (54) : mêmes règles (null = échec réseau → on garde).
+        blockedRanges: blockedRangesRes ?? s.blockedRanges,
         // Règlements opérateur (persistants). Vide pour les non-opérateurs (RLS).
         operatorPayments: opPayments ?? s.operatorPayments,
         // Actu d’accueil publiée par l’opérateur (visible par TOUS). undefined = échec réseau →
@@ -773,6 +790,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ratings,
             news,
             blocked,
+            blockedRangesRes,
             opPayments,
             serverClubs,
             overrides,
@@ -797,6 +815,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             fetchClubRatings(),
             fetchOperatorNews(),
             fetchBlockedSlots(),
+            fetchBlockedRanges(),
             fetchOperatorPayments(),
             fetchServerClubs(),
             // Pages club éditées ailleurs (infos, tarifs, Maps) : sans cette relecture, le
@@ -838,6 +857,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             clubRatings: ratings ?? s.clubRatings,
             operatorNews: news === undefined ? s.operatorNews : news,
             blockedSlots: blocked ?? s.blockedSlots,
+            blockedRanges: blockedRangesRes ?? s.blockedRanges,
             operatorPayments: opPayments ?? s.operatorPayments,
             customClubs: serverClubs ? mergeServerClubs(s.customClubs, serverClubs) : s.customClubs,
             clubInfo: overrides ? { ...s.clubInfo, ...overrides } : s.clubInfo,
@@ -2014,6 +2034,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             (x) => !(x.clubId === clubId && x.dateKey === dateKey && x.time === time && x.court === court),
           ),
         }));
+        return true;
+      },
+      // Ferme un terrain (ou tout le club) sur une PÉRIODE (54) : travaux, événement privé…
+      // Écriture honnête : le serveur d'abord (il refuse si une résa à venir vit dans la
+      // période — 'reservations'), puis relecture du miroir (la ligne créée porte son id serveur).
+      blockRange: async (input) => {
+        if (!state.serverUserId) return 'error';
+        const epoch = sessionEpochRef.current;
+        const status = await blockRangeRow(input);
+        if (status !== 'ok') return status;
+        const fresh = await fetchBlockedRanges();
+        if (fresh && sessionEpochRef.current === epoch) setState((s) => ({ ...s, blockedRanges: fresh }));
+        return 'ok';
+      },
+      // Rouvre une période fermée. Le miroir n'est mis à jour qu'au succès serveur.
+      unblockRange: async (id) => {
+        if (!state.serverUserId) return false;
+        const epoch = sessionEpochRef.current;
+        const ok = await unblockRangeRow(id);
+        if (!ok || sessionEpochRef.current !== epoch) return ok;
+        setState((s) => ({ ...s, blockedRanges: s.blockedRanges.filter((r) => r.id !== id) }));
+        return true;
+      },
+      // Fermetures RÉCURRENTES par terrain (54) : remplace la carte complète du club
+      // ({ 'Terrain 1': ['18:00'] }). Écriture honnête, motif setClubSlots.
+      setCourtClosed: async (clubId, closed) => {
+        if (state.serverUserId) {
+          const ok = await upsertClubConfig(clubId, { courtClosed: closed });
+          if (!ok) return false;
+        }
+        setState((s) => ({ ...s, clubCourtClosed: { ...s.clubCourtClosed, [clubId]: closed } }));
         return true;
       },
       // L’opérateur publie/met à jour l’actu d’accueil. On ne régénère l’id (ce qui la

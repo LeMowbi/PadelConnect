@@ -77,6 +77,8 @@ export default function ReserverScreen() {
       occupancy: state.occupancy,
       comps: [...seedCompetitions, ...state.myCompetitions],
       blocked: state.blockedSlots,
+      ranges: state.blockedRanges,
+      courtClosed: state.clubCourtClosed,
     }),
     [
       state.customClubs,
@@ -87,6 +89,8 @@ export default function ReserverScreen() {
       state.occupancy,
       state.myCompetitions,
       state.blockedSlots,
+      state.blockedRanges,
+      state.clubCourtClosed,
     ],
   );
   const freeBySlot = useMemo(() => {

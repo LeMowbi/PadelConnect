@@ -88,7 +88,11 @@ export const initialState: AppState = {
   managedClubId: 'padelta',
   clubSlots: {},
   clubCourts: {},
+  // Fermetures récurrentes par terrain (54) : { clubId: { 'Terrain 1': ['18:00'] } }.
+  clubCourtClosed: {},
   blockedSlots: [],
+  // Fermetures sur période (54) : « Terrain 2 fermé du 10 au 24 juillet (travaux) ».
+  blockedRanges: [],
   // Comptes que J'AI bloqués (modération UGC) : miroir persisté — un échec réseau au montage
   // d'un écran ne fait plus réapparaître les avis / matchs ouverts d'un compte bloqué.
   blockedUserIds: [],
@@ -110,6 +114,7 @@ export function clubConfigSlices(s: AppState, configs: Record<string, ClubConfig
   const clubPhotos = { ...s.clubPhotos };
   const clubCovers = { ...s.clubCovers };
   const clubCourtPhotos = { ...s.clubCourtPhotos };
+  const clubCourtClosed = { ...s.clubCourtClosed };
   for (const [id, c] of Object.entries(configs ?? {})) {
     if (c.slots) clubSlots[id] = c.slots;
     if (c.courts) clubCourts[id] = c.courts;
@@ -119,8 +124,9 @@ export function clubConfigSlices(s: AppState, configs: Record<string, ClubConfig
     // Cover retirée par le gérant (serveur la renvoie absente) → on retire aussi le miroir.
     else if (id in clubCovers) delete clubCovers[id];
     if (c.courtPhotos) clubCourtPhotos[id] = c.courtPhotos;
+    if (c.courtClosed) clubCourtClosed[id] = c.courtClosed;
   }
-  return { clubSlots, clubCourts, clubOffers, clubPhotos, clubCovers, clubCourtPhotos };
+  return { clubSlots, clubCourts, clubOffers, clubPhotos, clubCovers, clubCourtPhotos, clubCourtClosed };
 }
 
 // État ramené à « déconnecté » : identité + données serveur ET tout le périmètre personnel

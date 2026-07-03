@@ -4,6 +4,7 @@
 
 import {
   buildSlots,
+  canAddSlot,
   closedSlot,
   inferOpenClose,
   isClosedSlot,
@@ -73,6 +74,20 @@ eq(inferOpenClose(['08:00', '09:30', '11:00']), { open: '08:00', close: '12:30' 
 eq(inferOpenClose([]), { open: '08:00', close: '23:00' }, 'Aucun créneau → valeurs par défaut');
 // Des trous au milieu (créneaux fermés) ne changent pas les BORNES déduites.
 eq(inferOpenClose(['08:00', '14:00']), { open: '08:00', close: '15:30' }, 'Trous internes : bornes = min/max + session');
+
+// ── Grille LIBRE (canAddSlot) : ajouter n'importe quel horaire, sessions de 1h30 sans
+// chevauchement, marque « fermé » comprise dans les voisins.
+check(canAddSlot(['08:00', '09:30'], '11:00').ok === true, 'canAddSlot : 11:00 après 09:30 (90 min pile) → OK');
+check(canAddSlot(['08:00', '11:30'], '10:00').ok === true, 'canAddSlot : 10:00 tient pile entre 08:00 et 11:30 (sessions adjacentes) → OK');
+check(canAddSlot(['08:00', '11:00'], '10:00').ok === false, 'canAddSlot : 10:00 à 60 min de 11:00 → chevauchement → refus');
+check(canAddSlot(['08:00'], '09:00').ok === false, 'canAddSlot : 09:00 à 60 min de 08:00 → refus (session 1h30)');
+check(canAddSlot(['!12:30'], '13:00').ok === false, 'canAddSlot : un créneau FERMÉ (!12:30) compte comme voisin → refus');
+check(canAddSlot(['08:00'], '08:00').ok === false, 'canAddSlot : doublon exact → refus');
+check(canAddSlot([], '04:30').ok === false, 'canAddSlot : avant 05:00 → refus');
+check(canAddSlot([], '23:00').ok === false, 'canAddSlot : 23:00 + 1h30 déborde minuit → refus');
+check(canAddSlot([], '22:30').ok === true, 'canAddSlot : 22:30 (fin 24:00 pile) → OK');
+check(canAddSlot([], 'abc').ok === false, 'canAddSlot : format invalide → refus');
+check('error' in canAddSlot(['08:00', '11:00'], '10:00'), 'canAddSlot : le refus porte un message actionnable');
 
 if (failed) {
   console.error(`\n${failed} test(s) en échec`);

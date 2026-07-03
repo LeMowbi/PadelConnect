@@ -75,9 +75,10 @@ npx eas-cli submit --platform ios --profile production
       des matchs ouverts).
 - [ ] Coller **`supabase/52_tournoi_refus_commente.sql`** (motif de refus d'un tournoi — sans elle,
       refuser un tournoi ÉCHOUE en production).
-- [ ] Coller **`supabase/53_audit7_hardening.sql`** (durcissements de l'audit n°7 : blocages,
-      suppression de compte complète, anti double-occupation, signalements dans l'Espace
-      opérateur…) — détail dans `docs/AUDIT-SERVEUR.md` §0-SEXIES.
+- [x] Coller **`supabase/53_audit7_hardening.sql`** (durcissements de l'audit n°7) — FAIT
+      (confirmé le 2026-07-03, vérifié à distance).
+- [ ] Coller **`supabase/54_creneaux_modulables.sql`** (fermetures de période, grille libre,
+      horaires par terrain) — détail dans `docs/AUDIT-SERVEUR.md` §0-SEPTIES. ⚠️ AVANT le build #47.
 - [ ] **Edge Function `notify-club`** → **Edit** → recoller tout `supabase/functions/notify-club/index.ts`
       → **Deploy**.
 

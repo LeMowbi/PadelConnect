@@ -4,6 +4,7 @@
 
 import { SAMPLE_SLOTS, compareClubs, defaultCourts, type Club } from '@/data/clubs';
 import { isTournamentPublic, type Competition } from '@/data/competitions';
+import { rangeBlocks, type BlockedRange } from '@/lib/ranges';
 import { isClosedSlot } from '@/lib/slots';
 import type { BlockedSlot, Reservation } from '@/store/AppContext';
 
@@ -18,8 +19,16 @@ export type AvailCtx = {
   reservations: Reservation[];
   occupancy?: Occupancy[]; // créneaux pris par les autres joueurs (serveur)
   comps: Competition[];
-  blocked: BlockedSlot[]; // créneaux fermés hors app par les clubs
+  blocked: BlockedSlot[]; // créneaux fermés hors app par les clubs (un jour, une heure, un terrain)
+  ranges: BlockedRange[]; // fermetures sur PÉRIODE (54) — terrain ou club entier, plusieurs jours
+  // Fermetures RÉCURRENTES par terrain (54) : { clubId: { 'Terrain 1': ['18:00', …] } } —
+  // le Terrain 1 n'est jamais réservable à 18:00 (ex. réservé aux cours), les autres si.
+  courtClosed: Record<string, Record<string, string[]>>;
 };
+
+// (rangeBlocks vit dans src/lib/ranges.ts — module pur, testé — et est ré-exporté ici
+// pour les écrans qui raisonnent « disponibilité ».)
+export { rangeBlocks };
 
 // Horaires OUVERTS par un club (sinon créneaux standards). La config stocke la grille complète,
 // créneaux fermés préfixés « ! » (cf. src/lib/slots.ts) — on ne garde ici que les ouverts.
@@ -82,8 +91,17 @@ export function freeCourts(club: Club, dateKey: string, time: string, ctx: Avail
     .filter((o) => o.clubId === club.id && o.dateKey === dateKey && o.time === time)
     .map((o) => o.court);
   const blocked = ctx.blocked.filter((b) => b.clubId === club.id && b.dateKey === dateKey && b.time === time).map((b) => b.court);
+  // Fermetures sur période (54) et fermetures récurrentes par terrain (54).
+  const clubRanges = ctx.ranges.filter((r) => r.clubId === club.id);
+  const closedByCourt = ctx.courtClosed[club.id] ?? {};
   return courtsFor(club, ctx.clubCourts).filter(
-    (c) => !compBlocked.includes(c) && !taken.includes(c) && !occupied.includes(c) && !blocked.includes(c),
+    (c) =>
+      !compBlocked.includes(c) &&
+      !taken.includes(c) &&
+      !occupied.includes(c) &&
+      !blocked.includes(c) &&
+      !(closedByCourt[c] ?? []).includes(time) &&
+      !clubRanges.some((r) => rangeBlocks(r, dateKey, time, c)),
   );
 }
 

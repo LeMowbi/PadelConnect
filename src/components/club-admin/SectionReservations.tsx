@@ -6,13 +6,20 @@ import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, EmptyState, IconCircle, SectionHeader, StatTile, Tag, Txt } from '@/components/ui';
 import { LegendDot } from '@/components/club-admin/LegendDot';
 import { QuickBlock } from '@/components/club-admin/QuickBlock';
+import { BlockRangeForm } from '@/components/club-admin/BlockRangeForm';
 import { type Club } from '@/data/clubs';
-import { competitionBlockedCourts, courtsFor, hasFullDayCompetition, openSlotsFor } from '@/lib/availability';
+import { competitionBlockedCourts, courtsFor, hasFullDayCompetition, openSlotsFor, rangeBlocks } from '@/lib/availability';
 import { DAY_MS, dateKeyLabel, nextDays, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
 import { hapticLight, hapticSuccess, hapticWarning } from '@/lib/haptics';
-import { fetchCancelledReservations, fetchNoShowReservations, fetchReliability, type Reliability } from '@/lib/reservations';
+import {
+  fetchCancelledReservations,
+  fetchNoShowReservations,
+  fetchReliability,
+  purgeOldBlockedRanges,
+  type Reliability,
+} from '@/lib/reservations';
 import { isPlayed, useApp, type Reservation } from '@/store/AppContext';
 import { colors, radius, shadows, spacing } from '@/theme';
 
@@ -27,10 +34,20 @@ export function SectionReservations({
   comps: import('@/data/competitions').Competition[];
   onSelectCell: (cell: SelectedCell) => void;
 }) {
-  const { state, blockSlot, unblockSlot, confirmReservationByClub, markNoShow } = useApp();
+  const { state, blockSlot, unblockSlot, blockRange, unblockRange, confirmReservationByClub, markNoShow } = useApp();
   const toast = useToast();
   const [planDayKey, setPlanDayKey] = useState<string | null>(null);
   const [showBlockForm, setShowBlockForm] = useState(false);
+  const [showRangeForm, setShowRangeForm] = useState(false);
+  // Garde anti double-tap du bouton « Rouvrir » d’une période (id en cours, ou null).
+  const [unblockingRangeId, setUnblockingRangeId] = useState<string | null>(null);
+
+  // Purge best-effort des fermetures sur période entièrement passées, une fois au montage de
+  // la section (même motif que la purge des signalements résolus côté opérateur) — fonction
+  // déjà fire-and-forget (void supabase.rpc(...) en interne), pas de setState synchrone ici.
+  useEffect(() => {
+    purgeOldBlockedRanges();
+  }, []);
   // Historique paginé par SEMAINES : un club actif accumule vite des centaines de résas —
   // tout rendre d'un coup gèle l'ouverture de l'onglet (même esprit que PAST_PREVIEW joueur).
   const [weeksShown, setWeeksShown] = useState(4);
@@ -133,6 +150,8 @@ export function SectionReservations({
   }
   // Blocages hors app de ce club.
   const clubBlocked = state.blockedSlots.filter((b) => b.clubId === club.id);
+  // Fermetures sur PÉRIODE (54) de ce club, triées par date de début (les plus proches d’abord).
+  const clubRanges = state.blockedRanges.filter((r) => r.clubId === club.id).sort((a, b) => a.dateFrom.localeCompare(b.dateFrom));
 
   // Planning par TERRAIN pour un jour donné (maquette Espace Club · planning).
   const week = nextDays(7);
@@ -156,6 +175,8 @@ export function SectionReservations({
     if (compBlocked === 'all' || compBlocked.includes(court)) return 'tournoi';
     if (planDayRes.some((r) => r.time === time && r.court === court)) return 'reserved';
     if (planDayBlocked.some((b) => b.time === time && b.court === court)) return 'blocked';
+    // Fermeture sur période (54) couvrant ce jour/heure/terrain — même rendu qu’un blocage ponctuel.
+    if (clubRanges.some((r) => rangeBlocks(r, planDay.key, time, court))) return 'blocked';
     return 'free';
   };
 
@@ -228,6 +249,96 @@ export function SectionReservations({
             return ok;
           }}
         />
+      ) : null}
+
+      {/* Fermer sur une période (travaux, événement privé…) — dure plusieurs jours/heures,
+          à la différence du blocage ponctuel ci-dessus. */}
+      <View style={{ marginTop: spacing.sm }}>
+        <Button
+          size="sm"
+          label={showRangeForm ? 'Fermer' : '+ Fermer sur une période'}
+          icon={showRangeForm ? 'chevron-up' : 'calendar-clear-outline'}
+          variant="secondary"
+          onPress={() => setShowRangeForm((v) => !v)}
+          full
+        />
+      </View>
+      {showRangeForm ? (
+        <BlockRangeForm
+          courts={courts}
+          times={openSlots}
+          onSubmit={async (input) => {
+            const status = await blockRange({ clubId: club.id, ...input });
+            if (status === 'ok') {
+              hapticSuccess();
+              toast.show('Période fermée ✓ — plus aucun créneau réservable dessus');
+            } else if (status === 'reservations') {
+              hapticWarning();
+              toast.show('Une réservation à venir existe sur cette période — annule-la d’abord.', { icon: 'alert-circle' });
+            } else if (status === 'invalid') {
+              hapticWarning();
+              toast.show('Dates invalides — vérifie la période (1 an maximum).', { icon: 'alert-circle' });
+            } else if (status === 'error') {
+              hapticWarning();
+              toast.show('Enregistrement impossible — vérifie ta connexion.', { icon: 'cloud-offline-outline' });
+            } else {
+              // 'forbidden'
+              hapticWarning();
+              toast.show('Enregistrement impossible — vérifie ta connexion.', { icon: 'alert-circle' });
+            }
+            return status;
+          }}
+        />
+      ) : null}
+
+      {/* Périodes fermées actives de ce club — chacune rouvrable d’un tap. */}
+      {clubRanges.length > 0 ? (
+        <Card style={{ marginTop: spacing.sm }}>
+          <Txt variant="label" color={colors.textFaint} style={{ marginBottom: spacing.sm }}>
+            PÉRIODES FERMÉES · {clubRanges.length}
+          </Txt>
+          {clubRanges.map((r, i) => (
+            <View key={r.id}>
+              {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Txt variant="body" style={{ fontWeight: '600' }}>
+                    {r.court ?? 'Tous les terrains'} · du {dateKeyLabel(r.dateFrom)} au {dateKeyLabel(r.dateTo)}
+                  </Txt>
+                  <Txt variant="small" color={colors.textFaint}>
+                    {r.times && r.times.length > 0 ? r.times.join(', ') : 'Toute la journée'}
+                  </Txt>
+                  {r.reason ? (
+                    <Txt variant="small" color={colors.textMuted}>
+                      {r.reason}
+                    </Txt>
+                  ) : null}
+                </View>
+                <Button
+                  size="sm"
+                  label="Rouvrir"
+                  icon="lock-open"
+                  variant="ghost"
+                  disabled={unblockingRangeId === r.id}
+                  onPress={() => {
+                    if (unblockingRangeId) return; // garde anti double-tap
+                    setUnblockingRangeId(r.id);
+                    void unblockRange(r.id).then((ok) => {
+                      setUnblockingRangeId(null);
+                      if (ok) {
+                        hapticSuccess();
+                        toast.show('Période rouverte ✓');
+                      } else {
+                        hapticWarning();
+                        toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
+                      }
+                    });
+                  }}
+                />
+              </View>
+            </View>
+          ))}
+        </Card>
       ) : null}
 
       {/* Planning par terrain (jour sélectionné) — maquette Espace Club */}

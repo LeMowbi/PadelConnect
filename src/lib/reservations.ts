@@ -3,6 +3,7 @@
 // On écrit ici, puis on met à jour le miroir dans AppContext.
 
 import { dayKey, slotTimestamp } from './days';
+import type { BlockedRange } from './ranges';
 import { supabase } from './supabase';
 import type { BlockedSlot, Invited, Reservation } from '@/store/AppContext';
 
@@ -144,6 +145,72 @@ export async function fetchBlockedSlots(): Promise<BlockedSlot[] | null> {
     court: r.court,
     reason: r.reason ?? '',
   }));
+}
+
+// ─── Fermetures sur PÉRIODE (blocked_ranges serveur, 54) ────────────────────────
+// « Terrain 2 fermé du 10 au 24 juillet (travaux) » : terrain précis ou tout le club,
+// toute la journée ou certaines heures. Lu par TOUS (la dispo joueur en dépend).
+// Le modèle + le prédicat purs vivent dans src/lib/ranges.ts (testés sous node).
+export type { BlockedRange } from './ranges';
+
+// null = échec réseau → l'appelant garde l'existant (convention §8). Borné aux périodes
+// encore actives (une période finie ne sert plus à l'affichage ; purge serveur par ailleurs).
+export async function fetchBlockedRanges(): Promise<BlockedRange[] | null> {
+  const { data, error } = await supabase
+    .from('blocked_ranges')
+    .select('id, club_id, court, date_from, date_to, times, reason')
+    .gte('date_to', dayKey(new Date()))
+    .order('date_from', { ascending: true })
+    .limit(500);
+  if (error) return null;
+  return (data ?? []).map(
+    (r: {
+      id: string;
+      club_id: string;
+      court: string | null;
+      date_from: string;
+      date_to: string;
+      times: string[] | null;
+      reason: string | null;
+    }) => ({
+      id: r.id,
+      clubId: r.club_id,
+      court: r.court,
+      dateFrom: r.date_from,
+      dateTo: r.date_to,
+      times: r.times && r.times.length ? r.times : null,
+      reason: r.reason ?? '',
+    }),
+  );
+}
+
+export type BlockRangeStatus = 'ok' | 'reservations' | 'forbidden' | 'invalid' | 'error';
+
+// Ferme une période côté serveur. 'reservations' = une résa à venir vit dans la période
+// (le gérant l'annule d'abord) ; 'error' = échec réseau.
+export async function blockRangeRow(input: Omit<BlockedRange, 'id'>): Promise<BlockRangeStatus> {
+  const { data, error } = await supabase.rpc('block_range', {
+    p_club_id: input.clubId,
+    p_court: input.court,
+    p_date_from: input.dateFrom,
+    p_date_to: input.dateTo,
+    p_times: input.times,
+    p_reason: input.reason,
+  });
+  if (error) return 'error';
+  return data === 'ok' || data === 'reservations' || data === 'forbidden' || data === 'invalid' ? data : 'error';
+}
+
+// Rouvre une période (gérant du club, ou opérateur). false si refusé/échec.
+export async function unblockRangeRow(id: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('unblock_range', { p_id: id });
+  return !error && data === true;
+}
+
+// Purge opportuniste des périodes entièrement passées (best-effort, appelée à l'ouverture de
+// l'Espace Club — même motif que la purge des signalements résolus côté opérateur).
+export function purgeOldBlockedRanges(): void {
+  void supabase.rpc('purge_old_blocked_ranges');
 }
 
 // Ferme un créneau côté serveur (gérant du club). false si refusé (déjà réservé / droits).

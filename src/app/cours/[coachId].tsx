@@ -139,6 +139,8 @@ export default function CoursScreen() {
     occupancy: state.occupancy,
     comps: [...seedCompetitions, ...state.myCompetitions],
     blocked: state.blockedSlots,
+    ranges: state.blockedRanges,
+    courtClosed: state.clubCourtClosed,
   };
   // Créneaux proposables = dispos du COACH ∩ horaires encore ouverts par le CLUB (triés).
   const openSlots = openSlotsFor(club, state.clubSlots);

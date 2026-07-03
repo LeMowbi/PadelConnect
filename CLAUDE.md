@@ -158,6 +158,17 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   AUCUN SQL pour les horaires. Les **plages tarifaires** ne sont plus forcées à 07:00→24:00 :
   `validateTiers(tiers, openMin, closeMin)` exige une couverture des HEURES D'OUVERTURE du club
   (bornes passées par `ClubInfoCard`). Fermer un créneau portant une résa à venir est refusé.
+- **Créneaux modulables (54, demande porteur)** : trois briques. 1) **Fermeture sur PÉRIODE**
+  (`blocked_ranges` : terrain précis ou club entier, du jour A au jour B, toute la journée ou
+  certaines heures — `src/lib/ranges.ts` pur + testé, miroir `state.blockedRanges`, RPC
+  `block_range` qui refuse si une résa à venir vit dans la période, garde à l'INSERT +
+  `competition_slot_conflict`). 2) **Grille LIBRE** (`canAddSlot` dans slots.ts : le gérant
+  ajoute/retire n'importe quel horaire, sessions de 1h30 sans chevauchement — aucun SQL,
+  la garde `= any(slots)` accepte toute grille). 3) **Fermetures récurrentes PAR TERRAIN**
+  (`club_config.court_closed` : { 'Terrain 1': ['18:00'] }, miroir `state.clubCourtClosed`,
+  action `setCourtClosed`). La durée de session reste 1h30 PARTOUT (tarifs, commission,
+  anti double-résa) — décision assumée. `upsert_club_config` gagne `p_court_closed` (⚠️ 54 à
+  coller AVANT le build #47). La dispo joueur filtre tout ça dans `freeCourts` (availability.ts).
 - **Coachs « fiche simple » RETIRÉS (audit 7, décision porteur)** : un coach doit AVOIR
   l'application. Plus d'annuaire de contact sans compte dans l'Espace Club (`clubCoaches`
   supprimé du store/`ClubConfig` ; `upsert_club_config` omet `p_coaches`, defaulted côté SQL).
