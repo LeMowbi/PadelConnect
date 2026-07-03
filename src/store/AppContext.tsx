@@ -1912,7 +1912,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (link && !/^https?:\/\/.+\..+/i.test(link)) link = undefined;
         const prev = state.operatorNews;
         const unchanged = !!prev && prev.title === title && prev.subtitle === subtitle && prev.link === link;
-        const next = { id: unchanged ? prev.id : uid(), title, subtitle, link };
+        // Contenu inchangé → même id (le bandeau ne réapparaît pas chez ceux qui l'ont fermé)…
+        // SAUF si la case « notification » est cochée : l'opérateur veut un (re)envoi délibéré →
+        // nouvel id, sinon la garde anti-doublon de notify-club ignorerait ce push en silence
+        // (republier le même texte pendant un test donnait l'impression que « ça ne marche pas »).
+        const next = { id: unchanged && news.push !== true ? prev.id : uid(), title, subtitle, link };
         // On ATTEND le serveur AVANT d’écrire le miroir (comme removeOperatorNews) : sinon,
         // hors-ligne, le bandeau s’affichait « publié » alors que rien n’était parti, puis
         // disparaissait au prochain fetch réussi (accusé mensonger).
