@@ -20,7 +20,7 @@ export default function MatchsOuvertsScreen() {
     <Screen
       back
       title="Matchs ouverts"
-      subtitle="Rejoins une partie près de chez toi — gratuit"
+      subtitle="Rejoins une partie près de chez toi — le terrain se partage entre joueurs"
       refreshControl={state.serverUserId ? refreshControl : undefined}
     >
       {state.serverUserId ? (

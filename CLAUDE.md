@@ -171,7 +171,10 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   listes joueurs (décision du porteur) ; les tris « Sponsorisé d'abord » restent prioritaires.
 - **Matchs ouverts (45, modèle Playtomic)** : terrain bloqué direct par le créateur, places
   restantes rejoignables (`join_open_match` → participant 'accepted' + prénom dans `invited`,
-  push au créateur). GRATUIT pour tous — un futur Gold les ÉPINGLERA (jamais ne les verrouille).
+  push au créateur — y compris au re-rejoint après un départ ; annulation par le créateur →
+  push à tous les participants). La FONCTIONNALITÉ est sans frais — un futur Gold les ÉPINGLERA
+  (jamais ne les verrouille) — mais l'UI ne dit plus « gratuit » (les joueurs croyaient le
+  TERRAIN gratuit) : elle dit « le prix du terrain se partage entre les joueurs ».
   UI : toggle dans le tunnel + section `src/components/OpenMatches.tsx` (onglet Réserver).
 - **Classement (46, remplace la 44)** : par **POINTS** gagnés dans l'app (modèle « Race » FIP —
   le niveau, plafonné à 7 et auto-déclaré, ne peut pas servir de rang) : 100 = tournoi officiel

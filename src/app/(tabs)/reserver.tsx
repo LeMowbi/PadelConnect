@@ -330,7 +330,7 @@ export default function ReserverScreen() {
             ))
         )}
 
-        {/* Matchs ouverts : des joueurs cherchent du monde — rejoindre est gratuit. */}
+        {/* Matchs ouverts : des joueurs cherchent du monde (le prix du terrain se partage). */}
         {state.serverUserId ? <OpenMatches refreshToken={refreshToken} /> : null}
 
         <View style={{ marginTop: spacing.lg }}>

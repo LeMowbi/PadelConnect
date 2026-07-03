@@ -101,7 +101,7 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
           </View>
           <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
             Aucun match ouvert pour l’instant. Réserve un terrain et coche « Ouvrir ce match aux autres joueurs » : ta partie s’affichera
-            ici et n’importe quel joueur pourra rejoindre les places restantes — gratuit.
+            ici et n’importe quel joueur pourra rejoindre les places restantes.
           </Txt>
         </Card>
       </View>
@@ -117,7 +117,7 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
       <SectionHeader title={`Matchs ouverts · ${visible.length}`} />
       <Card>
         <Txt variant="small" color={colors.textMuted}>
-          Des joueurs ont déjà leur terrain et cherchent du monde — rejoins, c’est gratuit.
+          Des joueurs ont déjà leur terrain et cherchent du monde — le prix du terrain se partage entre les joueurs, sur place.
         </Txt>
         {shown.map((m, i) => {
           const mine = m.creatorId === me;

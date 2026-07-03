@@ -174,11 +174,20 @@ Deno.serve(async (req) => {
     ) {
       // Un invité vient d'ACCEPTER (transition → accepted) → prévenir l'AUTEUR (notif sociale).
       // Garde de transition : sans elle, chaque UPDATE d'une ligne déjà 'accepted' renotifierait.
-      const { data: resa } = await supabase.from('reservations').select('user_id').eq('id', record.reservation_id).maybeSingle();
+      // MATCH OUVERT : un joueur qui re-rejoint après avoir quitté passe aussi par cette
+      // transition (upsert declined → accepted) — le texte « invitation » serait faux pour un
+      // inconnu qui rejoint : on adapte au type de réservation.
+      const { data: resa } = await supabase
+        .from('reservations')
+        .select('user_id, open_match, club_name, date_label, time')
+        .eq('id', record.reservation_id)
+        .maybeSingle();
       notifs.push({
         targets: await userToken(resa?.user_id ?? ''),
-        title: 'Invitation acceptée ✅',
-        body: 'Un ami a accepté de jouer avec toi.',
+        title: resa?.open_match ? 'Un joueur a rejoint ton match 🎾' : 'Invitation acceptée ✅',
+        body: resa?.open_match
+          ? `${await userName(record.user_id)} a rejoint ton match du ${resa?.date_label ?? ''} à ${resa?.time ?? ''} (${resa?.club_name ?? ''}).`
+          : 'Un ami a accepté de jouer avec toi.',
         data: { kind: 'reservation', id: record.reservation_id },
       });
     } else if (
