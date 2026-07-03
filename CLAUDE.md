@@ -79,11 +79,10 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   l'écrire dans le dépôt).
 - Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
   --auto-submit --non-interactive --no-wait`.
-- **Dernier build : #38** (= #37 + demandes porteur du 2026-07-02 : barre d'onglets en bas
-  (Accueil/Réserver/Tournois/Amis/Profil, groupe `(tabs)`), tarif des cours fixé par le club
-  (SQL 42), badges Officiel/Amical + carte opérateur « Créer un tournoi officiel »,
-  annulation <5h → contact WhatsApp club, débordements de texte (Button/StatTile),
-  série en cours 🔥 profil, parrainage épuré).
+- **Dernier build : #39** (= #38 + matchs ouverts (45), classement (44), écran /cours,
+  calendrier appareil réparé (createEventInCalendarAsync), CalendarPicker mensuel pour les
+  tournois, Espace opérateur en 4 onglets, tournois officiels PadelConnect (43) + revue
+  adversariale 52 agents : 11 corrections).
 - Un module natif nouveau (ex. `expo-contacts`) ⇒ **nouveau build requis** + config plugin dans
   `app.json` avec la chaîne de permission.
 

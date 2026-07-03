@@ -12,7 +12,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ci.padelco.app",
-      "buildNumber": "38",
+      "buildNumber": "39",
       "associatedDomains": [
         "applinks:padelconnectci.com"
       ],
