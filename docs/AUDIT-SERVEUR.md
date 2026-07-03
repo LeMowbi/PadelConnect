@@ -1,5 +1,23 @@
 # Audit — actions serveur (sans terminal)
 
+## 0-QUATER) Horaires modulables + position Maps (2026-07-03) — coller SQL `50` (1 min) — ⏳ À FAIRE
+
+Nouvelle demande : chaque club règle **ses propres horaires d'ouverture** (l'app découpe la plage
+en créneaux de 1h30) et peut **corriger sa position Google Maps** — y compris les 9 clubs
+fondateurs (utile quand tu renommes un club). Les horaires ne demandent **aucune** action serveur
+(déjà stockés dans `club_config.slots`). La position Maps, elle, ajoute **une seule** migration :
+
+1. Dashboard Supabase → **SQL Editor** → **New query** → ouvre `supabase/50_club_maps_query.sql`
+   du dépôt → copie **tout** → colle → **Run** (« Success. No rows returned »). Elle ajoute la
+   colonne `maps_query` aux surcharges de page et l'expose dans `upsert_club_override`. Idempotente.
+
+⚠️ **Colle la 50 AVANT (ou en même temps que) la nouvelle version de l'app.** Tant qu'elle n'est
+pas passée, l'ancienne fonction serveur (8 paramètres) ne reconnaît pas le nouveau champ et
+l'enregistrement des **infos du club** échouerait (« Enregistrement impossible »). Une fois collée,
+tout rentre dans l'ordre. Aucun webhook, aucun redéploiement de notify-club ici.
+
+---
+
 ## 0-TER) AUDIT n°5 (2026-07-03) — coller SQL `49` + redéployer notify-club (3 min) — ⏳ À FAIRE
 
 Nouvel audit complet. Côté serveur, **une migration à coller** + **notify-club à redéployer** :

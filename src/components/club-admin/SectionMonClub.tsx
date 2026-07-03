@@ -12,10 +12,61 @@ import { clubAddCoach, clubRemoveCoach, clubSetCoachPrice, fetchClubCoaches, typ
 import { isPlayed, MAX_CLUB_PHOTOS, useApp } from '@/store/AppContext';
 import { fcfa, initials } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
+import { buildSlots, inferOpenClose, minutesToSlot, slotToMinutes, SESSION_MIN } from '@/lib/slots';
 import { colors, radius, spacing } from '@/theme';
 
-// Sessions de 1h30 — la grille complète que le club peut ouvrir/fermer.
-const ALL_TIMES = ['06:00', '07:30', '09:00', '10:30', '12:00', '13:30', '15:00', '16:30', '18:00', '19:30', '21:00', '22:30'];
+// Réglage des heures d'ouverture par pas de 30 min ; bornes réalistes d'un club (05:00 → minuit).
+const STEP = 30;
+const MIN_OPEN = 5 * 60; // 05:00
+const MAX_CLOSE = 24 * 60; // 24:00 (minuit)
+
+// Sélecteur d'heure « − valeur + » (accessible, simple) — sert à l'ouverture et à la fermeture.
+function TimeStepper({
+  label,
+  value,
+  onDec,
+  onInc,
+  canDec,
+  canInc,
+}: {
+  label: string;
+  value: string;
+  onDec: () => void;
+  onInc: () => void;
+  canDec: boolean;
+  canInc: boolean;
+}) {
+  return (
+    <View style={styles.stepperRow}>
+      <Txt variant="body" style={{ flex: 1, fontWeight: '600' }}>
+        {label}
+      </Txt>
+      <Pressable
+        onPress={onDec}
+        disabled={!canDec}
+        hitSlop={8}
+        style={[styles.stepBtn, !canDec && styles.stepBtnOff]}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} : reculer de 30 minutes`}
+      >
+        <Ionicons name="remove" size={18} color={canDec ? colors.signature : colors.textFaint} />
+      </Pressable>
+      <Txt variant="h3" style={styles.stepValue}>
+        {value}
+      </Txt>
+      <Pressable
+        onPress={onInc}
+        disabled={!canInc}
+        hitSlop={8}
+        style={[styles.stepBtn, !canInc && styles.stepBtnOff]}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} : avancer de 30 minutes`}
+      >
+        <Ionicons name="add" size={18} color={canInc ? colors.signature : colors.textFaint} />
+      </Pressable>
+    </View>
+  );
+}
 
 export function SectionMonClub({ club }: { club: Club }) {
   const {
@@ -46,6 +97,15 @@ export function SectionMonClub({ club }: { club: Club }) {
   // Mêmes valeurs par défaut que côté joueur (créneaux standards, « Terrain 1…N ») tant que le
   // gérant n’a rien personnalisé → cohérence avec le planning et ce que les joueurs voient.
   const openSlots = openSlotsFor(club, state.clubSlots);
+
+  // Heures d’ouverture/fermeture (état local, pré-rempli depuis les créneaux actifs). Le gérant
+  // règle SA plage (chaque club ouvre à son heure) ; l’app la découpe en sessions de 1h30.
+  const [range, setRange] = useState(() => inferOpenClose(openSlots));
+  const openMin = slotToMinutes(range.open) ?? MIN_OPEN;
+  const closeMin = slotToMinutes(range.close) ?? MAX_CLOSE;
+  // Grille affichée = créneaux générés PAR la plage, plus les éventuels créneaux actifs hors
+  // plage (jamais masqués), triés — le gérant peut fermer/rouvrir chaque créneau à l’unité.
+  const grid = [...new Set([...buildSlots(range.open, range.close), ...openSlots])].sort();
   const courts = courtsFor(club, state.clubCourts);
   const photos = state.clubPhotos[club.id] ?? [];
   const offers = state.clubOffers[club.id] ?? [];
@@ -153,6 +213,22 @@ export function SectionMonClub({ club }: { club: Club }) {
       ok ? `Photo du ${courtName} enregistrée ✓` : 'Photo non envoyée — vérifie ta connexion',
       ok ? undefined : { icon: 'alert-circle' },
     );
+  };
+
+  // Change la plage d’ouverture : régénère les créneaux de 1h30. On PRÉSERVE les créneaux que le
+  // gérant a fermés manuellement (pause déjeuner…) tant qu’ils restent dans la nouvelle plage, et
+  // on refuse de retirer un créneau qui porte une réservation à venir (comme toggleSlot).
+  const applyRange = (nextOpen: string, nextClose: string) => {
+    const closed = new Set(buildSlots(range.open, range.close).filter((t) => !openSlots.includes(t)));
+    const next = buildSlots(nextOpen, nextClose).filter((t) => !closed.has(t));
+    const now = Date.now();
+    const dropped = openSlots.filter((t) => !next.includes(t));
+    if (dropped.some((t) => state.reservations.some((r) => r.clubId === club.id && r.time === t && !isPlayed(r, now)))) {
+      toast.show('Un créneau à retirer a des réservations à venir — annule-les d’abord.', { icon: 'alert-circle' });
+      return;
+    }
+    setRange({ open: nextOpen, close: nextClose });
+    setClubSlots(club.id, next);
   };
 
   const toggleSlot = (t: string) => {
@@ -271,9 +347,10 @@ export function SectionMonClub({ club }: { club: Club }) {
         </Card>
       ) : null}
 
-      {/* Infos du club — éditables par le gérant */}
+      {/* Infos du club — éditables par le gérant. On transmet les heures d’ouverture (déduites
+          des créneaux) : les plages tarifaires doivent couvrir CETTE amplitude, pas un 07→24 forcé. */}
       <SectionHeader title="Infos du club" />
-      <ClubInfoCard key={club.id} club={club} onSave={(patch) => setClubInfo(club.id, patch)} />
+      <ClubInfoCard key={club.id} club={club} onSave={(patch) => setClubInfo(club.id, patch)} openMin={openMin} closeMin={closeMin} />
 
       {/* Booster le profil */}
       <View style={{ marginTop: spacing.xl }}>
@@ -670,18 +747,42 @@ export function SectionMonClub({ club }: { club: Club }) {
         </Card>
       </View>
 
-      {/* Disponibilités */}
+      {/* Disponibilités — le gérant choisit ses heures d’ouverture, l’app crée les créneaux */}
       <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title="Disponibilités" />
+        <SectionHeader title="Horaires d’ouverture" />
         <Card>
-          <Txt variant="muted">Touche un horaire pour l’ouvrir ou le fermer à la réservation.</Txt>
+          <Txt variant="muted">
+            Choisis ton heure d’ouverture et de fermeture : l’app crée automatiquement tes créneaux de 1h30. Tu peux ensuite fermer un
+            créneau précis (pause déjeuner…) en le touchant.
+          </Txt>
+          <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
+            <TimeStepper
+              label="Ouverture"
+              value={range.open}
+              canDec={openMin - STEP >= MIN_OPEN}
+              canInc={openMin + STEP + SESSION_MIN <= closeMin}
+              onDec={() => applyRange(minutesToSlot(openMin - STEP), range.close)}
+              onInc={() => applyRange(minutesToSlot(openMin + STEP), range.close)}
+            />
+            <TimeStepper
+              label="Fermeture"
+              value={range.close}
+              canDec={closeMin - STEP - SESSION_MIN >= openMin}
+              canInc={closeMin + STEP <= MAX_CLOSE}
+              onDec={() => applyRange(range.open, minutesToSlot(closeMin - STEP))}
+              onInc={() => applyRange(range.open, minutesToSlot(closeMin + STEP))}
+            />
+          </View>
+          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+            TES CRÉNEAUX — TOUCHE POUR FERMER / ROUVRIR
+          </Txt>
           <View style={styles.wrap}>
-            {ALL_TIMES.map((t) => (
+            {grid.map((t) => (
               <Chip key={t} label={t} active={openSlots.includes(t)} onPress={() => toggleSlot(t)} />
             ))}
           </View>
           <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-            Les créneaux actifs (verts) sont réservables par les joueurs ; les autres sont fermés.
+            Les créneaux verts sont réservables par les joueurs ; les gris sont fermés.
           </Txt>
         </Card>
       </View>
@@ -734,6 +835,19 @@ const styles = StyleSheet.create({
   },
   inlineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
   listRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  stepBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBtnOff: { opacity: 0.4 },
+  stepValue: { minWidth: 64, textAlign: 'center' },
   coverRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
   coverDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
   courtPhotoRemove: {

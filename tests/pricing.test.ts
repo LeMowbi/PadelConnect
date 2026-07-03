@@ -92,6 +92,24 @@ check(validateTiers([tier('07:00', '12:00'), tier('12:00', '24:00')]).ok === tru
 check(validateTiers([tier('16:00', '07:00')]).ok === false, 'Début après fin → bloqué');
 check(validateTiers([tier('7h', '24:00')]).ok === false, 'Format heure invalide → bloqué');
 
+// ——— Bornes dynamiques : la couverture suit les HEURES D'OUVERTURE du club (chaque club
+// ouvre à son heure). Un club 08:00→23:00 valide 08:00→23:00, et REFUSE le 07:00→24:00 forcé. ———
+check(validateTiers([tier('08:00', '23:00')], 8 * 60, 23 * 60).ok === true, 'Club 08:00→23:00 : plage unique couvrant l’amplitude → OK');
+check(
+  validateTiers([tier('08:00', '16:00'), tier('16:00', '23:00')], 8 * 60, 23 * 60).ok === true,
+  'Club 08:00→23:00 : deux plages jointes → OK',
+);
+check(
+  validateTiers([tier('07:00', '24:00')], 8 * 60, 23 * 60).ok === false,
+  'Club 08:00→23:00 : plage 07:00→24:00 hors amplitude → bloqué',
+);
+check(
+  validateTiers([tier('08:00', '22:00')], 8 * 60, 23 * 60).ok === false,
+  'Club 08:00→23:00 : dernière plage finit avant 23:00 → bloqué',
+);
+// Rétro-compat : sans bornes fournies, on garde 07:00 → 24:00.
+check(validateTiers([tier('07:00', '24:00')]).ok === true, 'Sans bornes → défaut 07:00→24:00 (rétro-compat)');
+
 // L'état n'est PAS modifié quand la validation échoue (miroir de ClubInfoCard.save).
 let savedPatch: unknown = null;
 const fakeSave = (built: ReturnType<typeof tier>[]) => {

@@ -15,6 +15,7 @@ export type ClubOverride = {
   priceFrom?: number;
   priceTiers?: PriceTier[];
   contactPhone?: string;
+  mapsQuery?: string; // position Google Maps (nom + adresse), éditable par le gérant
 };
 
 // Toutes les surcharges de page (édités par les gérants) → { clubId: surcharge } pour fusion.
@@ -32,6 +33,7 @@ export async function fetchClubOverrides(): Promise<Record<string, ClubOverride>
       priceFrom: r.price_from ?? undefined,
       priceTiers: r.price_tiers ?? undefined,
       contactPhone: r.contact_phone ?? undefined,
+      mapsQuery: r.maps_query ?? undefined,
     };
   }
   return out;
@@ -48,6 +50,7 @@ export async function upsertClubOverride(clubId: string, o: ClubOverride): Promi
     p_price_from: o.priceFrom ?? null,
     p_price_tiers: o.priceTiers ?? null,
     p_contact_phone: o.contactPhone ?? null,
+    p_maps_query: o.mapsQuery ?? null,
   });
   return !error && data === true;
 }
@@ -121,6 +124,7 @@ type ClubOverrideRow = {
   price_from: number | null;
   price_tiers: PriceTier[] | null;
   contact_phone: string | null;
+  maps_query: string | null;
 };
 
 type ClubRow = {

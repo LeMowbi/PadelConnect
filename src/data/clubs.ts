@@ -107,7 +107,7 @@ const FOUNDER_CLUBS: Club[] = [
     city: CITY,
     type: 'Extérieur',
     courts: 4,
-    blurb: "Parmi les premiers terrains de padel du pays, installés du côté de l’Hôtel Ivoire à Cocody.",
+    blurb: 'Parmi les premiers terrains de padel du pays, installés du côté de l’Hôtel Ivoire à Cocody.',
     amenities: ['Vestiaires', 'Cadre arboré', 'Buvette'],
     priceFrom: 16000,
     mapsQuery: 'Padel Magic Hotel Ivoire Cocody Abidjan',
@@ -238,10 +238,10 @@ export function serverRowToClub(row: {
   };
 }
 
-// Surcharges du gérant (nom, quartier, description, type, tarif, plages, WhatsApp).
+// Surcharges du gérant (nom, quartier, description, type, tarif, plages, WhatsApp, position Maps).
 export type ClubOverrides = Record<
   string,
-  Partial<Pick<Club, 'name' | 'area' | 'blurb' | 'type' | 'priceFrom' | 'priceTiers'>> & { contactPhone?: string }
+  Partial<Pick<Club, 'name' | 'area' | 'blurb' | 'type' | 'priceFrom' | 'priceTiers' | 'mapsQuery'>> & { contactPhone?: string }
 >;
 
 // Statut piloté par l’OPÉRATEUR (côté serveur, club_status), appliqué à N’IMPORTE QUEL club —

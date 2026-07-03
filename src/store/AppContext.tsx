@@ -199,6 +199,7 @@ export type ClubInfo = {
   priceFrom?: number;
   priceTiers?: PriceTier[]; // tarifs par plage horaire définis par le gérant
   contactPhone?: string; // numéro WhatsApp du club — alimente le lien discret de la fiche
+  mapsQuery?: string; // position Google Maps (nom + adresse) — éditable même pour les fondateurs
 };
 
 export type AppState = {

@@ -92,7 +92,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `49` (voir dossier `supabase/`).
+  **SQL Editor → Run**. Migrations actuelles : `02` → `50` (voir dossier `supabase/`).
 - **Edge Function** `supabase/functions/notify-club/index.ts` (Deno) : envoie les push via
   l'API Expo. Déclenchée par des **Database Webhooks** (INSERT + UPDATE). Redéploiement **sans
   terminal** : Dashboard → Edge Functions → notify-club → Edit → coller le code → Deploy.
@@ -140,6 +140,20 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - **Photos club (38)** : `cover_url` = photo « de profil » (carte ClubCard + héros fiche ;
   `''` = retrait côté serveur) et `court_photos` = **une photo par terrain** (vignettes étiquetées
   sur la fiche, gérées ligne par ligne dans l'Espace Club). Store : `clubCovers`/`clubCourtPhotos`.
+- **Horaires modulables par club (50)** : chaque club règle SES heures via deux sélecteurs
+  « Ouverture / Fermeture » (pas de 30 min) dans l'Espace Club → `buildSlots` (`src/lib/slots.ts`,
+  PUR) découpe la plage en sessions de 1h30 (`SESSION_MIN`, un créneau ne déborde jamais la
+  fermeture). Le gérant peut ensuite fermer/rouvrir un créneau précis (pause déjeuner) à l'unité.
+  Stockage inchangé (`club_config.slots: string[]`, AUCUN SQL pour les horaires) ; les sélecteurs
+  se pré-remplissent depuis les créneaux via `inferOpenClose`. Les **plages tarifaires** ne sont
+  plus forcées à 07:00→24:00 : `validateTiers(tiers, openMin, closeMin)` exige une couverture des
+  HEURES D'OUVERTURE du club (bornes passées par `ClubInfoCard`). Fermer un créneau portant une
+  résa à venir est refusé (même garde qu'avant).
+- **Position Google Maps éditable (50)** : `mapsQuery` devient surchargeable par le gérant pour
+  TOUS les clubs, fondateurs compris (le porteur peut renommer les fondateurs). Colonne
+  `club_overrides.maps_query` + `upsert_club_override` (9ᵉ paramètre) ; `ClubInfo.mapsQuery` fusionné
+  via `applyInfo` → `mapsUrl` ouvre la position saisie. ⚠️ la 50 change la signature de
+  `upsert_club_override` : à coller AVANT le build (sinon l'enregistrement des infos club échoue).
 - **Padelta d'abord** : `compareClubs` (data/clubs.ts) épingle Padelta en tête de toutes les
   listes joueurs (décision du porteur) ; les tris « Sponsorisé d'abord » restent prioritaires.
 - **Matchs ouverts (45, modèle Playtomic)** : terrain bloqué direct par le créateur, places

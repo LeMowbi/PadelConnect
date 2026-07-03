@@ -5,6 +5,7 @@ import { Chip } from '@/components/Chip';
 import { Button, Card, Txt } from '@/components/ui';
 import { type Club, type PriceTier } from '@/data/clubs';
 import { PRICE_MAX, PRICE_MIN, validateTiers } from '@/lib/pricing';
+import { minutesToSlot } from '@/lib/slots';
 import { type ClubInfo } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
@@ -20,13 +21,19 @@ function emptyTiers(club: Club): TierRow[] {
   return rows.slice(0, 3);
 }
 
-// Infos éditables du club (nom, quartier, description, type, tarifs par plage, WhatsApp).
+// Infos éditables du club (nom, quartier, description, type, tarifs par plage, WhatsApp, Maps).
+// openMin/closeMin = heures d'ouverture du club (minutes depuis minuit) → les plages tarifaires
+// doivent couvrir CETTE amplitude, pas un 07:00→24:00 forcé (chaque club ouvre à son heure).
 export function ClubInfoCard({
   club,
   onSave,
+  openMin = 7 * 60,
+  closeMin = 24 * 60,
 }: {
   club: Club & { contactPhone?: string };
   onSave: (patch: ClubInfo) => Promise<{ ok: boolean }>;
+  openMin?: number;
+  closeMin?: number;
 }) {
   const [name, setName] = useState(club.name);
   const [area, setArea] = useState(club.area);
@@ -35,9 +42,13 @@ export function ClubInfoCard({
   const [price, setPrice] = useState(String(club.priceFrom));
   const [tiers, setTiers] = useState<TierRow[]>(emptyTiers(club));
   const [phone, setPhone] = useState(club.contactPhone ?? '');
+  const [mapsQuery, setMapsQuery] = useState(club.mapsQuery ?? '');
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [tierError, setTierError] = useState<string | null>(null);
+
+  const openLabel = minutesToSlot(openMin);
+  const closeLabel = minutesToSlot(closeMin);
 
   const setTier = (i: number, patch: Partial<TierRow>) => {
     setTierError(null);
@@ -57,9 +68,9 @@ export function ClubInfoCard({
     const built: PriceTier[] = tiers
       .filter((t) => t.start.trim() && t.end.trim() && Number(t.price) > 0)
       .map((t) => ({ start: t.start.trim(), end: t.end.trim(), price: Number(t.price), label: t.label.trim() || undefined }));
-    // Validation À LA SOURCE : des plages doivent couvrir 07:00→24:00 sans trou ni
-    // chevauchement. Échec → on N’ENREGISTRE RIEN (l’état du club reste intact).
-    const v = validateTiers(built);
+    // Validation À LA SOURCE : des plages doivent couvrir les HEURES D’OUVERTURE du club
+    // (openMin→closeMin) sans trou ni chevauchement. Échec → on N’ENREGISTRE RIEN (état intact).
+    const v = validateTiers(built, openMin, closeMin);
     if (!v.ok) {
       setTierError(v.error);
       return;
@@ -76,6 +87,7 @@ export function ClubInfoCard({
       priceFrom: Number(price),
       priceTiers: built.length ? built : undefined,
       contactPhone: phone.trim() || undefined,
+      mapsQuery: mapsQuery.trim() || undefined,
     }).then(({ ok }) => {
       setSaving(false);
       if (!ok) {
@@ -142,7 +154,7 @@ export function ClubInfoCard({
             <TextInput
               value={t.start}
               onChangeText={(v) => setTier(i, { start: v })}
-              placeholder="07:00"
+              placeholder={openLabel}
               placeholderTextColor={colors.textMuted}
               style={[styles.input, styles.tierCell, { marginTop: 0 }]}
             />
@@ -166,8 +178,8 @@ export function ClubInfoCard({
         </View>
       ))}
       <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
-        Si tu définis des plages, elles doivent couvrir 07:00 → 24:00 sans trou. Nomme-les (Journée, Soirée…) pour les afficher en onglets
-        sur ta page.
+        Si tu définis des plages, elles doivent couvrir tes heures d’ouverture ({openLabel} → {closeLabel}) sans trou. Nomme-les (Journée,
+        Soirée…) pour les afficher en onglets sur ta page.
       </Txt>
       {tierError ? (
         <View style={styles.tierErrorBox}>
@@ -186,6 +198,24 @@ export function ClubInfoCard({
         keyboardType="phone-pad"
         style={styles.input}
       />
+
+      {/* Position Google Maps : nom + adresse. Ouvre Maps depuis la fiche → « Itinéraire ».
+          Éditable pour TOUS les clubs (même les fondateurs, dont le nom peut changer). */}
+      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+        POSITION GOOGLE MAPS
+      </Txt>
+      <TextInput
+        value={mapsQuery}
+        onChangeText={setMapsQuery}
+        placeholder="Nom + adresse (ex. Padelta, Cocody Danga, Abidjan)"
+        placeholderTextColor={colors.textMuted}
+        style={styles.input}
+      />
+      <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
+        C’est ce que « Voir sur la carte » ouvre dans Google Maps. Le nom seul suffit s’il est bien référencé ; ajoute l’adresse ou le
+        quartier pour être sûr de tomber au bon endroit.
+      </Txt>
+
       <View style={{ marginTop: spacing.md }}>
         <Button
           size="sm"
