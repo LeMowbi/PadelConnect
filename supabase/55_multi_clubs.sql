@@ -169,3 +169,84 @@ $$;
 
 grant execute on function public.delete_club(text) to authenticated;
 revoke execute on function public.delete_club(text) from public, anon;
+
+-- ─── 6) Les DEUX autres chemins d'onboarding alimentent aussi manager_clubs ─────
+-- (Constat de la revue dédiée : approve_club_request — chemin PRINCIPAL, l'opérateur approuve
+-- une demande de club — et grant_club_access (par id) écrivaient managed_club_id sans miroir
+-- manager_clubs. Un gérant approuvé APRÈS le collage de la 55 aurait ensuite PERDU son 1ᵉʳ
+-- club en en recevant un 2ᵉ : la liste ne contenait que le nouveau.)
+create or replace function public.approve_club_request(p_request_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  is_op boolean;
+  req public.club_requests%rowtype;
+  new_id text;
+begin
+  select exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'operator') into is_op;
+  if not is_op then return null; end if;
+  select * into req from public.club_requests where id = p_request_id;
+  if req.id is null then return null; end if;
+
+  -- id lisible : slug du nom + 8 caractères de l'id de la demande (anti-collision).
+  new_id := left(regexp_replace(lower(coalesce(req.name, 'club')), '[^a-z0-9]+', '-', 'g'), 24);
+  new_id := trim(both '-' from new_id);
+  if new_id = '' then new_id := 'club'; end if;
+  new_id := new_id || '-' || substr(replace(p_request_id::text, '-', ''), 1, 8);
+
+  insert into public.clubs (id, name, area, type, courts, price_from, contact_phone)
+    values (
+      new_id,
+      req.name,
+      req.area,
+      coalesce(req.type, 'Mixte'),
+      coalesce(req.courts, 1),
+      coalesce(req.price_from, 10000),
+      req.contact_phone
+    )
+    on conflict (id) do nothing;
+
+  -- Accès gérant au demandeur (s'il est connu) : role='club' + son club, AJOUTÉ à sa liste
+  -- multi-clubs (55) — le nouveau club devient l'actif, les précédents restent accessibles.
+  if req.requested_by is not null then
+    insert into public.manager_clubs (user_id, club_id) values (req.requested_by, new_id)
+      on conflict (user_id, club_id) do nothing;
+    update public.profiles
+      set role = 'club', managed_club_id = new_id
+      where id = req.requested_by;
+  end if;
+
+  update public.club_requests set status = 'approved' where id = p_request_id;
+  return new_id;
+end;
+$$;
+
+grant execute on function public.approve_club_request(uuid) to authenticated;
+revoke execute on function public.approve_club_request(uuid) from public, anon;
+
+create or replace function public.grant_club_access(p_user_id uuid, p_club_id text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'operator') then
+    return false; -- réservé à l'opérateur
+  end if;
+  if not exists (select 1 from public.clubs c where c.id = p_club_id) then
+    return false; -- club inconnu
+  end if;
+  -- Multi-clubs (55) : le club S'AJOUTE à la liste et devient l'actif.
+  insert into public.manager_clubs (user_id, club_id) values (p_user_id, p_club_id)
+    on conflict (user_id, club_id) do nothing;
+  update public.profiles set role = 'club', managed_club_id = p_club_id where id = p_user_id;
+  return found;
+end;
+$$;
+
+grant execute on function public.grant_club_access(uuid, text) to authenticated;
+revoke execute on function public.grant_club_access(uuid, text) from public, anon;
