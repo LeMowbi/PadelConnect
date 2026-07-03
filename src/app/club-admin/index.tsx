@@ -13,6 +13,7 @@ import { SectionMonClub } from '@/components/club-admin/SectionMonClub';
 import { SectionReservations } from '@/components/club-admin/SectionReservations';
 import { SectionTournois } from '@/components/club-admin/SectionTournois';
 import { clubsByName, findClub, manageableClubs, type Club } from '@/data/clubs';
+import { fetchMyManagedClubs, switchManagedClub } from '@/lib/clubsServer';
 import { seedCompetitions } from '@/data/competitions';
 import { competitionBlockedCourts, courtsFor, hasFullDayCompetition } from '@/lib/availability';
 import { openWhatsApp } from '@/lib/contact';
@@ -47,6 +48,7 @@ export default function ClubAdmin() {
     deleteCompetition,
     blockSlot,
     unblockSlot,
+    refreshSession,
   } = useApp();
   const toast = useToast();
   const { refreshControl } = usePullToRefresh();
@@ -65,6 +67,20 @@ export default function ClubAdmin() {
     setGuideSeen(true);
     void AsyncStorage.setItem(GUIDE_SEEN_KEY, '1');
   };
+  // Multi-clubs (55) : la liste de MES clubs autorisés — le sélecteur n'apparaît qu'à 2+.
+  // Convention §8 : null = échec réseau → on garde la liste déjà affichée.
+  const [myClubIds, setMyClubIds] = useState<string[]>([]);
+  const [switching, setSwitching] = useState(false);
+  const connectedManager = !!state.serverUserId && state.role === 'club';
+  useEffect(() => {
+    if (!connectedManager) return;
+    let alive = true;
+    void fetchMyManagedClubs().then((ids) => alive && ids && setMyClubIds(ids));
+    return () => {
+      alive = false;
+    };
+  }, [connectedManager]);
+
   const [closingId, setClosingId] = useState<string | null>(null);
   const [selectedCell, setSelectedCell] = useState<{ dateKey: string; time: string; label: string } | null>(null);
   const [blockingCourt, setBlockingCourt] = useState<string | null>(null);
@@ -240,6 +256,35 @@ export default function ClubAdmin() {
                   label={isPending ? `${c.name} · en attente` : c.name}
                   active={c.id === club.id}
                   onPress={() => setManagedClub(c.id)}
+                />
+              );
+            })}
+          </View>
+        ) : myClubIds.length > 1 ? (
+          // Multi-clubs (55) : basculer change le club ACTIF côté serveur (le périmètre des
+          // réservations/écritures suit), puis on recharge toute la session — écriture honnête.
+          <View style={styles.wrap}>
+            {myClubIds.map((id) => {
+              const c = findClub(id, state.customClubs, state.clubInfo);
+              return (
+                <Chip
+                  key={id}
+                  label={switching && id !== club.id ? '…' : (c?.name ?? id)}
+                  active={id === club.id}
+                  onPress={() => {
+                    if (switching || id === club.id) return;
+                    setSwitching(true);
+                    void switchManagedClub(id)
+                      .then(async (ok) => {
+                        if (!ok) {
+                          toast.show('Changement de club impossible — vérifie ta connexion', { icon: 'alert-circle' });
+                          return;
+                        }
+                        await refreshSession();
+                        toast.show(`Tu gères maintenant ${findClub(id, state.customClubs, state.clubInfo)?.name ?? 'ce club'} ✓`);
+                      })
+                      .finally(() => setSwitching(false));
+                  }}
                 />
               );
             })}

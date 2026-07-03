@@ -79,6 +79,8 @@ npx eas-cli submit --platform ios --profile production
       (confirmé le 2026-07-03, vérifié à distance).
 - [ ] Coller **`supabase/54_creneaux_modulables.sql`** (fermetures de période, grille libre,
       horaires par terrain) — détail dans `docs/AUDIT-SERVEUR.md` §0-SEPTIES. ⚠️ AVANT le build #47.
+- [ ] Coller **`supabase/55_multi_clubs.sql`** (un compte peut gérer plusieurs clubs) — détail
+      dans `docs/AUDIT-SERVEUR.md` §0-OCTIES. ⚠️ AVANT le build #47, APRÈS la 54.
 - [ ] **Edge Function `notify-club`** → **Edit** → recoller tout `supabase/functions/notify-club/index.ts`
       → **Deploy**.
 

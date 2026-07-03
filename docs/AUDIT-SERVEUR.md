@@ -1,5 +1,22 @@
 # Audit — actions serveur (sans terminal)
 
+## 0-OCTIES) MULTI-CLUBS (2026-07-03) — coller SQL `55` (1 min) — ⏳ À FAIRE
+
+Un même compte (même numéro) peut désormais **gérer plusieurs clubs** (demande porteur) :
+tu donnes l'accès gérant club par club depuis ton Espace opérateur (un 2ᵉ club **s'ajoute**
+au lieu de remplacer le premier), et le gérant **bascule de club** depuis son Espace Club
+(section « Club géré »). « Retirer l'accès » retire tous ses clubs d'un coup.
+
+1. Dashboard Supabase → **SQL Editor** → **New query** → ouvre `supabase/55_multi_clubs.sql`
+   du dépôt → copie **tout** → colle → **Run** (« Success. No rows returned »). Idempotente,
+   et elle reprend automatiquement les gérants actuels (chacun garde son club).
+
+À coller **APRÈS la 54** et **AVANT d'installer le build #47** (sans elle, donner un 2ᵉ club
+continue de REMPLACER le premier, et le sélecteur de l'Espace Club reste vide).
+Aucun webhook, aucun redéploiement de notify-club.
+
+---
+
 ## 0-SEPTIES) CRÉNEAUX MODULABLES (2026-07-03) — coller SQL `54` (1 min) — ⏳ À FAIRE
 
 Trois nouveautés pour les clubs (demande porteur) : **fermer un terrain sur une période**

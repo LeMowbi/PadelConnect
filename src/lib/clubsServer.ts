@@ -247,6 +247,23 @@ export async function grantClubAccessByPhone(phone: string, clubId: string): Pro
   return { ok: true, name: data as string };
 }
 
+// ─── Multi-clubs (55) : un compte peut gérer plusieurs clubs ─────────────────────
+// La liste de MES clubs autorisés (RLS : chacun ne lit que les siens). Le club ACTIF reste
+// profiles.managed_club_id — tous les contrôles serveur continuent de porter sur lui.
+// null = échec réseau (≠ [] = aucun club), convention §8.
+export async function fetchMyManagedClubs(): Promise<string[] | null> {
+  const { data, error } = await supabase.from('manager_clubs').select('club_id').order('created_at', { ascending: true });
+  if (error) return null;
+  return (data ?? []).map((r: { club_id: string }) => r.club_id);
+}
+
+// Bascule le club ACTIF (doit être dans ma liste autorisée). false si refusé/échec —
+// l'appelant recharge ensuite la session (le périmètre RLS des réservations change).
+export async function switchManagedClub(clubId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('switch_managed_club', { p_club_id: clubId });
+  return !error && data === true;
+}
+
 // Opérateur : retire l’accès gérant d’un joueur (par son numéro). Renvoie son nom si trouvé.
 export async function revokeClubAccessByPhone(phone: string): Promise<{ ok: boolean; name?: string; error?: boolean }> {
   const { data, error } = await supabase.rpc('revoke_club_access_by_phone', { p_phone: phone.trim() });

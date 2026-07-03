@@ -93,7 +93,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `53` (voir dossier `supabase/`).
+  **SQL Editor → Run**. Migrations actuelles : `02` → `55` (voir dossier `supabase/`).
 - **Edge Function** `supabase/functions/notify-club/index.ts` (Deno) : envoie les push via
   l'API Expo. Déclenchée par des **Database Webhooks** (INSERT + UPDATE). Redéploiement **sans
   terminal** : Dashboard → Edge Functions → notify-club → Edit → coller le code → Deploy.
@@ -169,6 +169,12 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   action `setCourtClosed`). La durée de session reste 1h30 PARTOUT (tarifs, commission,
   anti double-résa) — décision assumée. `upsert_club_config` gagne `p_court_closed` (⚠️ 54 à
   coller AVANT le build #47). La dispo joueur filtre tout ça dans `freeCourts` (availability.ts).
+- **Multi-clubs (55, demande porteur)** : un compte gère PLUSIEURS clubs. `manager_clubs` liste
+  les clubs autorisés ; `profiles.managed_club_id` reste le club ACTIF (un seul à la fois) →
+  aucun contrôle serveur existant ne change. `grant_club_access_by_phone` AJOUTE (plus de
+  remplacement), `revoke` retire tout, `switch_managed_club` bascule (le client fait ensuite
+  `refreshSession()` : le périmètre RLS des résas suit). Sélecteur dans Espace Club → « Club
+  géré » (visible à 2+ clubs). ⚠️ 55 à coller APRÈS la 54, AVANT le build #47.
 - **Coachs « fiche simple » RETIRÉS (audit 7, décision porteur)** : un coach doit AVOIR
   l'application. Plus d'annuaire de contact sans compte dans l'Espace Club (`clubCoaches`
   supprimé du store/`ClubConfig` ; `upsert_club_config` omet `p_coaches`, defaulted côté SQL).

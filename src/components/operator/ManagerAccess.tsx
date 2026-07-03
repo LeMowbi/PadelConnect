@@ -9,6 +9,8 @@ import { colors } from '@/theme';
 
 // Accès gérant : l’opérateur saisit le numéro du joueur (qui a déjà créé un compte) et
 // choisit le club. Le joueur devient gérant et voit son Espace Club au prochain retour.
+// Multi-clubs (55) : donner un 2ᵉ club S'AJOUTE (le gérant bascule depuis son Espace Club) ;
+// « Retirer l'accès » retire TOUS ses clubs d'un coup.
 export function ManagerAccess({
   clubs,
   onGrant,
