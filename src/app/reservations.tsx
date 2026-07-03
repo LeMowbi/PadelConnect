@@ -14,6 +14,7 @@ import { addReservationToCalendar } from '@/lib/calendar';
 import { openWhatsApp } from '@/lib/contact';
 import { hapticSuccess } from '@/lib/haptics';
 import { fetchMyMatchScores, leaveOpenMatch, setMatchOpen, submitMatchScore, type MatchScore, type MatchSet } from '@/lib/matchResults';
+import { fetchCancelledReservations } from '@/lib/reservations';
 import { dateKeyLabel, dayKey } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
 import { APP_DOMAIN } from '@/lib/referrals';
@@ -77,9 +78,20 @@ export default function ReservationsScreen() {
   const [openOverride, setOpenOverride] = useState<Record<string, boolean>>({});
   const [matchBusy, setMatchBusy] = useState<string | null>(null);
 
+  // ANNULÉES : une réservation annulée reste VISIBLE ici (section dédiée, badge « Annulée »)
+  // au lieu de disparaître en silence (demande porteur). Le serveur garde la trace
+  // (status='cancelled') ; on ne montre que MON périmètre (créateur ou participant) — un
+  // gérant-joueur ne voit pas ici les annulations des autres clients de son club.
+  const [cancelled, setCancelled] = useState<Reservation[]>([]);
+  const inMyPerimeter = (r: Reservation) => r.userId === state.serverUserId || state.participantReservationIds.includes(r.id);
+
   const loadScores = async () => {
     const list = await fetchMyMatchScores();
     if (list) setScores(Object.fromEntries(list.map((m) => [m.reservationId, m])));
+  };
+  const loadCancelled = async () => {
+    const rows = await fetchCancelledReservations();
+    if (rows) setCancelled(rows.filter(inMyPerimeter)); // null = échec réseau → on garde l'existant (§8)
   };
   useEffect(() => {
     if (!state.serverUserId) return;
@@ -88,14 +100,20 @@ export default function ReservationsScreen() {
       if (!alive || !list) return;
       setScores(Object.fromEntries(list.map((m) => [m.reservationId, m])));
     });
+    void fetchCancelledReservations().then((rows) => {
+      if (!alive || !rows) return;
+      setCancelled(rows.filter((r) => r.userId === state.serverUserId || state.participantReservationIds.includes(r.id)));
+    });
     return () => {
       alive = false;
     };
+    // participantReservationIds ne doit pas re-déclencher le chargement (seul le compte compte).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.serverUserId]);
 
-  // Tirer pour rafraîchir : resynchronise mes réservations, mes cours ET les scores de match.
+  // Tirer pour rafraîchir : resynchronise mes réservations, mes cours, les scores ET les annulées.
   const { refreshControl } = usePullToRefresh(async () => {
-    await Promise.all([refreshLessons(), loadScores()]);
+    await Promise.all([refreshLessons(), loadScores(), loadCancelled()]);
   });
 
   const now = Date.now();
@@ -727,6 +745,33 @@ export default function ReservationsScreen() {
         )}
       </View>
 
+      {/* Annulées — la trace reste visible (au lieu de disparaître en silence) : mes annulations
+          ET celles d'un créateur dont j'avais rejoint le match. Les 5 plus récentes. */}
+      {cancelled.length > 0 ? (
+        <View style={{ marginTop: spacing.xl }}>
+          <SectionHeader title={`Annulées · ${cancelled.length}`} />
+          <Card>
+            {cancelled.slice(0, PAST_PREVIEW).map((r, i) => (
+              <View key={r.id}>
+                {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
+                <View style={styles.row}>
+                  <View style={{ flex: 1 }}>
+                    <Txt variant="body" color={colors.textMuted} style={{ fontWeight: '600' }}>
+                      {r.clubName}
+                    </Txt>
+                    <Txt variant="small" color={colors.textFaint}>
+                      {dateKeyLabel(r.dateKey)} · {r.time} · {r.court}
+                      {!isOwner(r) && r.bookedBy?.name ? ` · annulée par ${r.bookedBy.name}` : ''}
+                    </Txt>
+                  </View>
+                  <Tag label="Annulée" tone="coral" icon="close-circle" />
+                </View>
+              </View>
+            ))}
+          </Card>
+        </View>
+      ) : null}
+
       {/* Confirmation avant annulation — plus de suppression en un seul tap */}
       <BottomSheet
         visible={cancelTarget !== null}
@@ -750,9 +795,11 @@ export default function ReservationsScreen() {
               const target = cancelTarget;
               setCancelTarget(null);
               if (target) {
-                void cancelReservation(target.id).then((ok) =>
-                  toast.show(ok ? 'Réservation annulée' : 'Annulation impossible — réessaie', ok ? undefined : { icon: 'alert-circle' }),
-                );
+                void cancelReservation(target.id).then((ok) => {
+                  // La résa annulée reste visible (section « Annulées ») au lieu de disparaître.
+                  if (ok) setCancelled((cur) => [target, ...cur.filter((x) => x.id !== target.id)]);
+                  toast.show(ok ? 'Réservation annulée' : 'Annulation impossible — réessaie', ok ? undefined : { icon: 'alert-circle' });
+                });
               }
             }}
             full
