@@ -870,7 +870,9 @@ function Field({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+  // Plafond de largeur (comme Screen.tsx) : sur iPad, le formulaire ne s’étire pas sur
+  // toute la largeur — il reste lisible, centré, colonne de 640 pt max.
+  root: { flex: 1, backgroundColor: colors.bg, width: '100%', maxWidth: 640, alignSelf: 'center' },
   hero: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xxxl,

@@ -80,11 +80,17 @@ export function ClosePanel({
           <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
             Équipe vainqueure · {teams.length} inscrite{teams.length > 1 ? 's' : ''}
           </Txt>
-          <View style={{ marginTop: spacing.sm, gap: 6 }}>
+          <View style={{ marginTop: spacing.sm, gap: 6 }} accessibilityRole="radiogroup">
             {teams.map((t) => {
               const sel = selected === t;
               return (
-                <Pressable key={t} onPress={() => setSelected(t)} style={[styles.teamRow, sel && styles.teamRowSel]}>
+                <Pressable
+                  key={t}
+                  onPress={() => setSelected(t)}
+                  style={[styles.teamRow, sel && styles.teamRowSel]}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: sel }}
+                >
                   <Ionicons
                     name={sel ? 'radio-button-on' : 'radio-button-off'}
                     size={18}
@@ -120,7 +126,7 @@ export function ClosePanel({
           <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
             🥈 2ᵉ place
           </Txt>
-          <View style={{ marginTop: 6, gap: 6 }}>
+          <View style={{ marginTop: 6, gap: 6 }} accessibilityRole="radiogroup">
             {teams
               .filter((t) => t !== selected)
               .map((t) => {
@@ -133,6 +139,8 @@ export function ClosePanel({
                       if (third === t) setThird(null);
                     }}
                     style={[styles.teamRow, sel && styles.teamRowSel]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: sel }}
                   >
                     <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.amber : colors.textMuted} />
                     <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
@@ -146,7 +154,7 @@ export function ClosePanel({
           <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
             🥉 3ᵉ place
           </Txt>
-          <View style={{ marginTop: 6, gap: 6 }}>
+          <View style={{ marginTop: 6, gap: 6 }} accessibilityRole="radiogroup">
             {teams
               .filter((t) => t !== selected && t !== second)
               .map((t) => {
@@ -156,6 +164,8 @@ export function ClosePanel({
                     key={t}
                     onPress={() => setThird((cur) => (cur === t ? null : t))}
                     style={[styles.teamRow, sel && styles.teamRowSel]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: sel }}
                   >
                     <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.coral : colors.textMuted} />
                     <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
@@ -186,13 +196,19 @@ export function ClosePanel({
           <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
             Fin de tableau ? (facultatif)
           </Txt>
-          <View style={{ marginTop: spacing.sm, gap: 6 }}>
+          <View style={{ marginTop: spacing.sm, gap: 6 }} accessibilityRole="radiogroup">
             {teams
               .filter((t) => t !== selected)
               .map((t) => {
                 const sel = loser === t;
                 return (
-                  <Pressable key={t} onPress={() => setLoser(t)} style={[styles.teamRow, sel && styles.teamRowSel]}>
+                  <Pressable
+                    key={t}
+                    onPress={() => setLoser(t)}
+                    style={[styles.teamRow, sel && styles.teamRowSel]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: sel }}
+                  >
                     <Ionicons name={sel ? 'radio-button-on' : 'radio-button-off'} size={18} color={sel ? colors.coral : colors.textMuted} />
                     <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
                       {t}

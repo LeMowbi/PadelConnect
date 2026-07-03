@@ -54,7 +54,7 @@ function parseSetDrafts(drafts: { me: string; them: string }[]): { sets: MatchSe
 
 export default function ReservationsScreen() {
   const router = useRouter();
-  const { state, myReservations, cancelReservation, respondInvitation, cancelMyLesson, refreshLessons } = useApp();
+  const { state, myReservations, cancelReservation, respondInvitation, cancelMyLesson, refreshLessons, refreshSession } = useApp();
   const toast = useToast();
   // Passées : pagination INCRÉMENTALE (+20) — « tout » d'un coup monterait des centaines de
   // lignes animées dans un ScrollView non virtualisé chez un joueur assidu.
@@ -205,7 +205,7 @@ export default function ReservationsScreen() {
       hapticSuccess();
       toast.show('Score validé ✓ — le match compte au classement');
     } else if (res === 'waiting') {
-      toast.show('Score enregistré — dès qu’un autre joueur saisit le même score, le match est validé ✓');
+      toast.show('Score enregistré — validé quand un adversaire confirme le même score, ou automatiquement 48 h après.');
     } else if (res === 'conflict') {
       toast.show('Ton score ne correspond pas à celui déjà saisi — vérifiez ensemble.', { icon: 'alert-circle' });
     } else if (res === 'no_players') {
@@ -227,6 +227,9 @@ export default function ReservationsScreen() {
     if (ok) {
       setLeftIds((cur) => [...cur, r.id]);
       toast.show('Tu as quitté le match — ta place est libérée.');
+      // Propage au miroir global (participations + réservations) : sans ça, au retour sur
+      // l'écran (leftIds réinitialisé) le match réapparaissait et un 2ᵉ départ échouait.
+      void refreshSession();
     } else toast.show('Impossible de quitter — réessaie', { icon: 'alert-circle' });
   };
   // Le créateur ferme / rouvre son match aux nouveaux joueurs (les places prises restent).
@@ -314,12 +317,12 @@ export default function ReservationsScreen() {
                 <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
                   {s.conflict
                     ? 'Les scores déjà saisis ne correspondent pas — mets le tien pour départager.'
-                    : `${s.enteredNames || 'Un joueur'} a mis ${s.score} — saisis ton score pour valider le match.`}
+                    : `${s.enteredNames || 'Un joueur'} a mis ${s.score}. Si tu as perdu, saisis ton score pour valider tout de suite.`}
                 </Txt>
                 <Divider style={{ marginVertical: spacing.md }} />
                 <Button size="sm" label="Mettre mon score" icon="trophy-outline" onPress={() => openScore(r)} full />
                 <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-                  Sans autre saisie sous 48 h, le score déjà mis est validé automatiquement.
+                  Sinon, le score est validé automatiquement 48 h après la première saisie.
                 </Txt>
               </Card>
             );
@@ -519,8 +522,11 @@ export default function ReservationsScreen() {
                     ) : null}
                   </View>
                   {/* Matchs ouverts (48) : le créateur ferme/rouvre aux nouveaux ; un joueur qui a
-                      rejoint peut quitter (sa place se libère). Rien pour une résa classique. */}
-                  {owner && r.openMatch ? (
+                      rejoint peut quitter (sa place se libère). Les contrôles ne sont PAS gatés
+                      sur l'état ouvert/fermé courant (sinon fermer faisait disparaître « Rouvrir »
+                      après resynchro) : le créateur les voit tant qu'il reste des places, le
+                      joueur inscrit tant qu'il est un participant accepté. */}
+                  {owner && r.invited.length < 3 ? (
                     <View style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}>
                       <Button
                         size="sm"
@@ -528,16 +534,16 @@ export default function ReservationsScreen() {
                         label={
                           matchBusy === r.id
                             ? '…'
-                            : (openOverride[r.id] ?? true)
+                            : (openOverride[r.id] ?? !!r.openMatch)
                               ? 'Fermer aux nouveaux joueurs'
-                              : 'Rouvrir le match aux joueurs'
+                              : 'Ouvrir le match aux joueurs'
                         }
-                        icon={(openOverride[r.id] ?? true) ? 'lock-closed-outline' : 'lock-open-outline'}
+                        icon={(openOverride[r.id] ?? !!r.openMatch) ? 'lock-closed-outline' : 'lock-open-outline'}
                         onPress={() => void toggleMatchOpen(r)}
                         disabled={matchBusy !== null}
                       />
                     </View>
-                  ) : !owner && r.openMatch && r.bookedBy ? (
+                  ) : !owner && r.bookedBy && state.participantReservationIds.includes(r.id) ? (
                     <View style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}>
                       <Button
                         size="sm"
@@ -764,8 +770,8 @@ export default function ReservationsScreen() {
         onClose={() => setScoreTarget(null)}
       >
         <Txt variant="body" color={colors.textMuted}>
-          Saisis les sets de TON point de vue (ton équipe d’abord). Dès qu’un autre joueur du match saisit le même score, le match est
-          validé automatiquement — une victoire vaut +3 pts au classement.
+          Saisis les sets de TON point de vue (ton équipe d’abord). Le match est validé quand un ADVERSAIRE confirme le même score, ou
+          automatiquement 48 h après la première saisie — une victoire vaut +3 pts au classement.
         </Txt>
         {scoreTarget && scores[scoreTarget.id] && !scores[scoreTarget.id].mine && scores[scoreTarget.id].score ? (
           <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>

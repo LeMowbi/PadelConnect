@@ -174,11 +174,14 @@ export async function requestLesson(input: {
 }
 
 // LE COACH répond. 'ok' = accepté (réservation créée) ; 'conflict' = terrain parti entre-temps.
-export async function respondLesson(id: string, accept: boolean): Promise<'ok' | 'declined' | 'conflict' | 'busy' | 'gone' | 'error'> {
+export async function respondLesson(
+  id: string,
+  accept: boolean,
+): Promise<'ok' | 'declined' | 'conflict' | 'busy' | 'student_full' | 'gone' | 'error'> {
   const { data, error } = await supabase.rpc('respond_lesson', { p_id: id, p_accept: accept });
   if (error) return 'error';
   const s = data as string;
-  return s === 'ok' || s === 'declined' || s === 'conflict' || s === 'busy' || s === 'gone' ? s : 'error';
+  return s === 'ok' || s === 'declined' || s === 'conflict' || s === 'busy' || s === 'student_full' || s === 'gone' ? s : 'error';
 }
 
 // L’élève annule sa demande EN ATTENTE (un cours accepté = une réservation → annulation normale).

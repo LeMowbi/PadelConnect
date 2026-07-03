@@ -1,6 +1,25 @@
 # Audit — actions serveur (sans terminal)
 
-## 0-BIS) AUDIT n°4 (2026-07-03) — coller SQL `48` + redéployer notify-club (3 min) — ⏳ À FAIRE
+## 0-TER) AUDIT n°5 (2026-07-03) — coller SQL `49` + redéployer notify-club (3 min) — ⏳ À FAIRE
+
+Nouvel audit complet. Côté serveur, **une migration à coller** + **notify-club à redéployer** :
+
+1. Dashboard Supabase → **SQL Editor** → ouvre `supabase/49_audit5_hardening.sql` → copie
+   **tout** → colle → **Run** (« Success. No rows returned »). Elle corrige : le **score d'un
+   match en double** (2v2) qui n'était jamais validé quand les deux gagnants saisissaient ;
+   `respond_invitation` rendu **idempotent** (un double refus ne fausse plus l'effectif) ; le
+   **classement** (le niveau ne départage plus, les 0 point ne s'affichent plus) ; et les
+   **cours** (un plafond atteint par l'élève renvoie un message honnête). Idempotente.
+2. Dashboard → **Edge Functions** → **notify-club** → **Edit** → recolle **tout**
+   `supabase/functions/notify-club/index.ts` → **Deploy** (anti-phishing sur le push d'actu :
+   le texte vient désormais de la base, jamais d'un appel forgé ; et plus de « Score à saisir »
+   en double quand le 1ᵉʳ saisisseur corrige son score).
+
+⚠️ Colle la 49 APRÈS la 48 (elle s'appuie dessus). Aucun nouveau webhook à créer.
+
+---
+
+## 0-BIS) AUDIT n°4 (2026-07-03) — coller SQL `48` + redéployer notify-club (3 min) — ✅ FAIT (porteur)
 
 Un audit complet (workflow multi-agents) a trouvé des correctifs. Côté serveur, **une seule
 migration à coller** et **notify-club à redéployer** :

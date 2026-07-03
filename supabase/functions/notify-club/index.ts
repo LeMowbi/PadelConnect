@@ -364,8 +364,10 @@ Deno.serve(async (req) => {
             body: `Le score saisi pour votre match ${when} diffère du tien — vérifiez ensemble dans Mes réservations.`,
             data: { kind: 'reservation', id: record.reservation_id },
           });
-        } else if (after.n === 1) {
-          // Première saisie du match → inviter les AUTRES joueurs (créateur + acceptés) à saisir.
+        } else if (after.n === 1 && prev.n === 0) {
+          // VRAIE première saisie du match (cette écriture a créé la 1ʳᵉ entrée) → inviter les
+          // AUTRES joueurs à saisir. Le test prev.n === 0 évite de re-pousser « Score à saisir »
+          // quand l'unique saisisseur CORRIGE simplement son score (before garde sa ligne, n=1).
           const { data: parts } = await supabase
             .from('reservation_participants')
             .select('user_id, status')
@@ -389,17 +391,26 @@ Deno.serve(async (req) => {
       // ACTU opérateur publiée AVEC la case « Envoyer une notification » cochée (47) → push à
       // TOUS les joueurs. Garde anti-doublon : on n'envoie que si l'actu change réellement
       // (nouvel id) ou si le push vient d'être activé — jamais deux fois la même.
-      const { data: players } = await supabase
-        .from('profiles')
-        .select('expo_push_token')
-        .or('role.eq.player,role.is.null')
-        .not('expo_push_token', 'is', null);
-      notifs.push({
-        targets: (players ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
-        title: record.title ?? 'Actu PadelConnect 📣',
-        body: record.subtitle ?? 'Ouvre l’app pour découvrir la nouveauté.',
-        data: { kind: 'news' },
-      });
+      //
+      // SÉCURITÉ (anti-phishing) : le titre/sous-titre proviennent de la BASE (relecture par
+      // key='home'), jamais des champs `record` du payload. Un appel forgé (quiconque possède
+      // la clé anon publique) ne peut donc PAS injecter un texte de phishing dans un push de
+      // masse — au pire il rejoue la dernière actu réellement publiée. On vérifie aussi que
+      // l'actu en base porte bien push=true et le même news_id que le webhook.
+      const { data: live } = await supabase.from('operator_news').select('news_id, title, subtitle, push').eq('key', 'home').maybeSingle();
+      if (live && live.push === true && live.news_id === record.news_id) {
+        const { data: players } = await supabase
+          .from('profiles')
+          .select('expo_push_token')
+          .or('role.eq.player,role.is.null')
+          .not('expo_push_token', 'is', null);
+        notifs.push({
+          targets: (players ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
+          title: live.title ?? 'Actu PadelConnect 📣',
+          body: live.subtitle ?? 'Ouvre l’app pour découvrir la nouveauté.',
+          data: { kind: 'news' },
+        });
+      }
     }
 
     // Aplatis toutes les notifs en messages Expo (une entrée par destinataire).

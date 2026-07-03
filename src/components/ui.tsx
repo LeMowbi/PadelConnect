@@ -247,7 +247,7 @@ const tagTones: Record<TagTone, { bg: string; fg: string }> = {
   danger: { bg: colors.dangerSoft, fg: colors.danger },
   blue: { bg: colors.blueSoft, fg: colors.blue },
   coral: { bg: colors.coralSoft, fg: colors.coral },
-  purple: { bg: colors.purpleSoft, fg: colors.purple },
+  purple: { bg: colors.purpleSoft, fg: colors.purpleDark }, // texte violet foncé lisible sur tint violet (WCAG AA)
   amber: { bg: colors.amberSoft, fg: colors.amberDark }, // texte or lisible sur tint or (WCAG AA)
 };
 

@@ -369,11 +369,17 @@ export default function CompetitionDetail() {
               <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
                 Le tournoi est terminé : sélectionne l’équipe qui a gagné. C’est toi (l’organisateur) qui décides.
               </Txt>
-              <View style={{ marginTop: spacing.sm, gap: 6 }}>
+              <View style={{ marginTop: spacing.sm, gap: 6 }} accessibilityRole="radiogroup">
                 {teamList.map((t) => {
                   const sel = winnerName === t;
                   return (
-                    <Pressable key={t} onPress={() => setWinnerName(t)} style={[styles.teamRow, sel && styles.teamRowSel]}>
+                    <Pressable
+                      key={t}
+                      onPress={() => setWinnerName(t)}
+                      style={[styles.teamRow, sel && styles.teamRowSel]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: sel }}
+                    >
                       <Ionicons
                         name={sel ? 'radio-button-on' : 'radio-button-off'}
                         size={18}
@@ -411,7 +417,7 @@ export default function CompetitionDetail() {
               <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
                 🥈 2ᵉ place
               </Txt>
-              <View style={{ marginTop: 6, gap: 6 }}>
+              <View style={{ marginTop: 6, gap: 6 }} accessibilityRole="radiogroup">
                 {teamList
                   .filter((t) => t !== winnerName)
                   .map((t) => {
@@ -424,6 +430,8 @@ export default function CompetitionDetail() {
                           if (thirdName === t) setThirdName('');
                         }}
                         style={[styles.teamRow, sel && styles.teamRowSel]}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: sel }}
                       >
                         <Ionicons
                           name={sel ? 'radio-button-on' : 'radio-button-off'}
@@ -441,7 +449,7 @@ export default function CompetitionDetail() {
               <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
                 🥉 3ᵉ place
               </Txt>
-              <View style={{ marginTop: 6, gap: 6 }}>
+              <View style={{ marginTop: 6, gap: 6 }} accessibilityRole="radiogroup">
                 {teamList
                   .filter((t) => t !== winnerName && t !== secondName)
                   .map((t) => {
@@ -451,6 +459,8 @@ export default function CompetitionDetail() {
                         key={t}
                         onPress={() => setThirdName((cur) => (cur === t ? '' : t))}
                         style={[styles.teamRow, sel && styles.teamRowSel]}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: sel }}
                       >
                         <Ionicons
                           name={sel ? 'radio-button-on' : 'radio-button-off'}
@@ -481,13 +491,19 @@ export default function CompetitionDetail() {
               <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
                 Facultatif. {comp.official ? 'L’équipe désignée perd −0.25 de niveau. ' : ''}Tu peux passer.
               </Txt>
-              <View style={{ marginTop: spacing.sm, gap: 6 }}>
+              <View style={{ marginTop: spacing.sm, gap: 6 }} accessibilityRole="radiogroup">
                 {teamList
                   .filter((t) => t !== winnerName)
                   .map((t) => {
                     const sel = loserName === t;
                     return (
-                      <Pressable key={t} onPress={() => setLoserName(t)} style={[styles.teamRow, sel && styles.teamRowSel]}>
+                      <Pressable
+                        key={t}
+                        onPress={() => setLoserName(t)}
+                        style={[styles.teamRow, sel && styles.teamRowSel]}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: sel }}
+                      >
                         <Ionicons
                           name={sel ? 'radio-button-on' : 'radio-button-off'}
                           size={18}

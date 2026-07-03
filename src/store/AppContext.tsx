@@ -1928,8 +1928,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const prev = state.operatorNews;
         const unchanged = !!prev && prev.title === title && prev.subtitle === subtitle && prev.link === link;
         const next = { id: unchanged ? prev.id : uid(), title, subtitle, link };
-        setState((s) => ({ ...s, operatorNews: next })); // affichage immédiat côté opérateur
+        // On ATTEND le serveur AVANT d’écrire le miroir (comme removeOperatorNews) : sinon,
+        // hors-ligne, le bandeau s’affichait « publié » alors que rien n’était parti, puis
+        // disparaissait au prochain fetch réussi (accusé mensonger).
         const ok = state.serverUserId ? await setOperatorNewsServer(next, news.push === true) : true;
+        if (ok) setState((s) => ({ ...s, operatorNews: next }));
         return { ok };
       },
       // Retrait de l’actu d’accueil : on ATTEND le serveur et on ne vide le miroir qu’au succès —

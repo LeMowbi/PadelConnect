@@ -285,13 +285,18 @@ export default function Operateur() {
 
   // Tournois JOUEURS publiés avec un frais fixe → à encaisser (Wave). Non réglés d’abord,
   // puis par date décroissante. On garde les réglés visibles (historique récent).
-  const playerTournamentsToBill = state.myCompetitions
-    .filter((c) => c.organizerType === 'joueur' && (c.commission ?? 0) > 0 && isTournamentPublic(c))
-    .sort((a, b) => {
-      const paidA = state.operatorPayments[`tourn:${a.id}`] === 'paid' ? 1 : 0;
-      const paidB = state.operatorPayments[`tourn:${b.id}`] === 'paid' ? 1 : 0;
-      return paidA - paidB || b.dateKey.localeCompare(a.dateKey);
-    });
+  // Mémoïsé : sans quoi ce filter+sort tournait à chaque frappe dans « Ajouter un club ».
+  const playerTournamentsToBill = useMemo(
+    () =>
+      state.myCompetitions
+        .filter((c) => c.organizerType === 'joueur' && (c.commission ?? 0) > 0 && isTournamentPublic(c))
+        .sort((a, b) => {
+          const paidA = state.operatorPayments[`tourn:${a.id}`] === 'paid' ? 1 : 0;
+          const paidB = state.operatorPayments[`tourn:${b.id}`] === 'paid' ? 1 : 0;
+          return paidA - paidB || b.dateKey.localeCompare(a.dateKey);
+        }),
+    [state.myCompetitions, state.operatorPayments],
+  );
 
   const totalCount = rows.reduce((s, r) => s + r.count, 0);
   const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
@@ -317,13 +322,18 @@ export default function Operateur() {
     return { total, weeksCount: weeks.size, oldest: [...weeks].sort()[0] ?? null };
   }, [state.reservations, state.operatorPayments, state.clubCommission, state.customClubs, state.clubInfo, thisWeek]);
 
-  // Santé plateforme (3 chiffres).
-  const now = Date.now();
-  const weekAgo = now - 7 * 86400000;
-  const twoWeeksAgo = now - 14 * 86400000;
-  const resThisWeek = state.reservations.filter((r) => r.createdAt >= weekAgo).length;
-  const resPrevWeek = state.reservations.filter((r) => r.createdAt >= twoWeeksAgo && r.createdAt < weekAgo).length;
-  const activeClubsCount = activeClubs(state.customClubs, state.clubInfo).length;
+  // Santé plateforme (3 chiffres) — mémoïsé : ces deux filter() parcourent TOUTES les résas
+  // (tous clubs confondus) et ne doivent pas se rejouer à chaque frappe dans « Ajouter un club ».
+  const { resThisWeek, resPrevWeek } = useMemo(() => {
+    const now = Date.now();
+    const weekAgo = now - 7 * 86400000;
+    const twoWeeksAgo = now - 14 * 86400000;
+    return {
+      resThisWeek: state.reservations.filter((r) => r.createdAt >= weekAgo).length,
+      resPrevWeek: state.reservations.filter((r) => r.createdAt >= twoWeeksAgo && r.createdAt < weekAgo).length,
+    };
+  }, [state.reservations]);
+  const activeClubsCount = useMemo(() => activeClubs(state.customClubs, state.clubInfo).length, [state.customClubs, state.clubInfo]);
 
   const statusOf = (clubId: string): 'tofacture' | 'sent' | 'paid' => state.operatorPayments[`${clubId}:${week}`] ?? 'tofacture';
 
@@ -663,7 +673,10 @@ export default function Operateur() {
             <TournamentFees
               comps={playerTournamentsToBill}
               payments={state.operatorPayments}
-              onSetPaid={(id, paid) => void setPaymentStatus('tourn', id, paid ? 'paid' : 'tofacture')}
+              onSetPaid={async (id, paid) => {
+                const { ok } = await setPaymentStatus('tourn', id, paid ? 'paid' : 'tofacture');
+                if (!ok) toast.show('Changement impossible — réessaie', { icon: 'alert-circle' });
+              }}
             />
           </View>
         </>

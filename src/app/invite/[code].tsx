@@ -18,5 +18,9 @@ export default function InviteRoute() {
   useEffect(() => {
     if (hydrated && value && !state.account) setPendingReferral(value);
   }, [hydrated, value, state.account]);
+  // Tant que l’hydratation n’est pas terminée, on NE redirige PAS : un démontage prématuré de
+  // cette route empêcherait l’effet ci-dessus de jamais s’exécuter (cold start via Universal
+  // Link) et le code de parrainage serait perdu. On garde la route montée le temps nécessaire.
+  if (!hydrated) return null;
   return <Redirect href="/" />;
 }

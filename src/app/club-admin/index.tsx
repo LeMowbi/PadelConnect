@@ -355,9 +355,11 @@ export default function ClubAdmin() {
         </Pressable>
       ) : null}
 
-      {section === 'Réservations' ? <SectionReservations club={club} comps={comps} onSelectCell={setSelectedCell} /> : null}
+      {section === 'Réservations' ? (
+        <SectionReservations key={club.id} club={club} comps={comps} onSelectCell={setSelectedCell} />
+      ) : null}
 
-      {section === 'Mon club' ? <SectionMonClub club={club} /> : null}
+      {section === 'Mon club' ? <SectionMonClub key={club.id} club={club} /> : null}
 
       {section === 'Tournois' ? <SectionTournois club={club} comps={comps} onCloseComp={setClosingId} /> : null}
 
