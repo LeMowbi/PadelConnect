@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Reveal, staggerDelay } from '@/components/Reveal';
@@ -13,6 +13,16 @@ import { isPlayed, useApp, type Reservation } from '@/store/AppContext';
 import { addReservationToCalendar } from '@/lib/calendar';
 import { openWhatsApp } from '@/lib/contact';
 import { hapticSuccess } from '@/lib/haptics';
+import {
+  confirmMatchResult,
+  fetchMatchPlayers,
+  fetchMyMatchResults,
+  fetchResultsToConfirm,
+  submitMatchResult,
+  type MatchPlayer,
+  type MatchResult,
+  type ResultToConfirm,
+} from '@/lib/matchResults';
 import { dateKeyLabel, dayKey } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
 import { APP_DOMAIN } from '@/lib/referrals';
@@ -33,8 +43,40 @@ export default function ReservationsScreen() {
   const [pastShownCount, setPastShownCount] = useState(PAST_PREVIEW);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null); // confirmation avant annulation
   const [cancellingLesson, setCancellingLesson] = useState<string | null>(null); // garde anti double-tap
-  // Tirer pour rafraîchir : resynchronise mes réservations (et mes demandes de cours).
-  const { refreshControl } = usePullToRefresh(refreshLessons);
+
+  // SCORE DE MATCH (46, modèle Playtomic) : un joueur saisit qui a gagné, un AUTRE joueur du
+  // match confirme (ou conteste) — la victoire confirmée vaut +3 pts au classement.
+  const [results, setResults] = useState<Record<string, MatchResult>>({}); // par id de réservation
+  const [toConfirm, setToConfirm] = useState<ResultToConfirm[]>([]); // saisis par un autre, à confirmer
+  const [scoreTarget, setScoreTarget] = useState<Reservation | null>(null); // fiche « Qui a gagné ? »
+  // undefined = chargement ; null = échec réseau (convention §8).
+  const [scorePlayers, setScorePlayers] = useState<MatchPlayer[] | null | undefined>(undefined);
+  const [scoreWinners, setScoreWinners] = useState<string[]>([]);
+  const [scoreSending, setScoreSending] = useState(false); // garde anti double-tap
+  const [respondingResult, setRespondingResult] = useState<string | null>(null); // idem (confirmation)
+
+  const loadResults = async () => {
+    const [mine2, pending] = await Promise.all([fetchMyMatchResults(), fetchResultsToConfirm()]);
+    if (mine2) setResults(Object.fromEntries(mine2.map((m) => [m.reservationId, m])));
+    if (pending) setToConfirm(pending);
+  };
+  useEffect(() => {
+    if (!state.serverUserId) return;
+    let alive = true;
+    void Promise.all([fetchMyMatchResults(), fetchResultsToConfirm()]).then(([mine2, pending]) => {
+      if (!alive) return;
+      if (mine2) setResults(Object.fromEntries(mine2.map((m) => [m.reservationId, m])));
+      if (pending) setToConfirm(pending);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [state.serverUserId]);
+
+  // Tirer pour rafraîchir : resynchronise mes réservations, mes cours ET les scores de match.
+  const { refreshControl } = usePullToRefresh(async () => {
+    await Promise.all([refreshLessons(), loadResults()]);
+  });
 
   const now = Date.now();
   // « Mes réservations » = celles que j’ai créées + celles où un ami m’a invité (résa
@@ -126,6 +168,44 @@ export default function ReservationsScreen() {
     );
   };
 
+  // Ouvre la fiche « Qui a gagné ? » et charge les joueurs identifiés du match (comptes réels).
+  const openScore = (r: Reservation) => {
+    setScoreTarget(r);
+    setScorePlayers(undefined);
+    setScoreWinners([]);
+    void fetchMatchPlayers(r.id).then((ps) => setScorePlayers(ps));
+  };
+
+  const sendScore = async () => {
+    if (!scoreTarget || scoreWinners.length === 0 || scoreSending) return;
+    setScoreSending(true);
+    const res = await submitMatchResult(scoreTarget.id, scoreWinners);
+    setScoreSending(false);
+    setScoreTarget(null);
+    if (res === 'ok') {
+      hapticSuccess();
+      toast.show('Score enregistré — un joueur du match doit le confirmer ✓');
+      void loadResults();
+    } else if (res === 'exists') toast.show('Le score de ce match est déjà enregistré.');
+    else if (res === 'no_players')
+      toast.show('Ajoute un partenaire (compte PadelConnect) à la réservation pour compter la victoire.', { icon: 'alert-circle' });
+    else toast.show('Enregistrement impossible — réessaie', { icon: 'alert-circle' });
+  };
+
+  // Confirmer (ou contester) le score saisi par un autre joueur du match.
+  const respondResult = async (item: ResultToConfirm, agree: boolean) => {
+    if (respondingResult) return;
+    setRespondingResult(item.resultId);
+    const ok = await confirmMatchResult(item.resultId, agree);
+    setRespondingResult(null);
+    if (ok) {
+      if (agree) hapticSuccess();
+      setToConfirm((cur) => cur.filter((c) => c.resultId !== item.resultId));
+      toast.show(agree ? 'Score confirmé ✓' : 'Score contesté — il ne comptera pas.');
+      void loadResults();
+    } else toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
+  };
+
   return (
     <Screen
       back
@@ -162,6 +242,55 @@ export default function ReservationsScreen() {
                 </View>
                 <Button size="sm" label="Refuser" icon="close" variant="ghost" onPress={() => respond(r, false)} />
               </View>
+            </Card>
+          ))}
+        </View>
+      ) : null}
+
+      {/* Scores à confirmer — un joueur du match a saisi le résultat, à moi de valider. */}
+      {toConfirm.length > 0 ? (
+        <View style={{ marginTop: spacing.sm }}>
+          <SectionHeader title={`Scores à confirmer · ${toConfirm.length}`} />
+          {toConfirm.map((item) => (
+            <Card key={item.resultId} style={{ marginBottom: spacing.sm }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
+                    {item.clubName}
+                  </Txt>
+                  <Txt variant="muted">
+                    {item.dateLabel} · {item.time}
+                  </Txt>
+                </View>
+                <Tag label="Score" tone="amber" icon="trophy-outline" />
+              </View>
+              <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
+                {item.submittedName} a noté la victoire de {item.winnerNames} — c’est bien ça ?
+              </Txt>
+              <Divider style={{ marginVertical: spacing.md }} />
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    size="sm"
+                    label="C’est exact"
+                    icon="checkmark"
+                    onPress={() => void respondResult(item, true)}
+                    disabled={respondingResult !== null}
+                    full
+                  />
+                </View>
+                <Button
+                  size="sm"
+                  label="Contester"
+                  icon="close"
+                  variant="ghost"
+                  onPress={() => void respondResult(item, false)}
+                  disabled={respondingResult !== null}
+                />
+              </View>
+              <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                Sans réponse sous 48 h, le score est validé automatiquement.
+              </Txt>
             </Card>
           ))}
         </View>
@@ -479,20 +608,39 @@ export default function ReservationsScreen() {
                         {dateKeyLabel(r.dateKey)} · {r.time} · {r.court}
                       </Txt>
                     </View>
-                    <Tag label="Jouée" tone="blue" />
+                    {(() => {
+                      // Badge résultat (46) : Victoire (confirmée), en attente, contestée — sinon « Jouée ».
+                      const res = results[r.id];
+                      if (res?.status === 'confirmed' && res.iWon) return <Tag label="Victoire" tone="amber" icon="trophy" />;
+                      if (res?.status === 'pending') return <Tag label="Score en attente" tone="purple" icon="hourglass-outline" />;
+                      if (res?.status === 'disputed') return <Tag label="Score contesté" tone="coral" />;
+                      return <Tag label="Jouée" tone="blue" />;
+                    })()}
                   </View>
                   {/* A-R7 : « Rejouer ici » → réservation du club, avec l’HEURE habituelle
                       pré-remplie (l’habitué rejoue souvent au même créneau — il ne reste que
                       le jour et le terrain à choisir). */}
-                  <Pressable
-                    onPress={() => router.push(`/reserver/${r.clubId}?time=${encodeURIComponent(r.time)}`)}
-                    style={styles.replayBtn}
-                  >
-                    <Ionicons name="refresh-outline" size={13} color={colors.signature} />
-                    <Txt variant="small" color={colors.signature} style={{ fontWeight: '600' }}>
-                      Rejouer ici
-                    </Txt>
-                  </Pressable>
+                  <View style={{ flexDirection: 'row', gap: spacing.lg }}>
+                    <Pressable
+                      onPress={() => router.push(`/reserver/${r.clubId}?time=${encodeURIComponent(r.time)}`)}
+                      style={styles.replayBtn}
+                    >
+                      <Ionicons name="refresh-outline" size={13} color={colors.signature} />
+                      <Txt variant="small" color={colors.signature} style={{ fontWeight: '600' }}>
+                        Rejouer ici
+                      </Txt>
+                    </Pressable>
+                    {/* Saisie du score (46) : matchs récents (≤ 14 jours, fenêtre serveur) sans
+                        résultat — ou au résultat contesté (ressaisie possible). */}
+                    {state.serverUserId && (!results[r.id] || results[r.id].status === 'disputed') && r.startsAt > now - 14 * 86400000 ? (
+                      <Pressable onPress={() => openScore(r)} style={styles.replayBtn}>
+                        <Ionicons name="trophy-outline" size={13} color={colors.signature} />
+                        <Txt variant="small" color={colors.signature} style={{ fontWeight: '600' }}>
+                          Qui a gagné ?
+                        </Txt>
+                      </Pressable>
+                    ) : null}
+                  </View>
                 </View>
               </Reveal>
             ))}
@@ -541,6 +689,70 @@ export default function ReservationsScreen() {
           <Button label="Garder ma réservation" variant="secondary" onPress={() => setCancelTarget(null)} full />
         </View>
       </BottomSheet>
+
+      {/* Saisie du score (46) : coche le ou les vainqueurs parmi les joueurs IDENTIFIÉS du
+          match — un autre joueur devra confirmer (anti-triche : rien ne se déclare seul). */}
+      <BottomSheet
+        visible={scoreTarget !== null}
+        title="Qui a gagné ce match ?"
+        subtitle={scoreTarget ? `${scoreTarget.clubName} — ${dateKeyLabel(scoreTarget.dateKey)} à ${scoreTarget.time}` : undefined}
+        onClose={() => setScoreTarget(null)}
+      >
+        {scorePlayers === undefined ? (
+          <Txt variant="body" color={colors.textMuted}>
+            Chargement des joueurs du match…
+          </Txt>
+        ) : scorePlayers === null ? (
+          <Txt variant="body" color={colors.textMuted}>
+            Impossible de charger les joueurs — vérifie ta connexion et réessaie.
+          </Txt>
+        ) : scorePlayers.length < 2 ? (
+          <Txt variant="body" color={colors.textMuted}>
+            Il faut au moins un partenaire avec un compte PadelConnect rattaché à cette réservation (invité, ou ayant rejoint le match) pour
+            compter une victoire — sinon personne ne peut confirmer le score.
+          </Txt>
+        ) : (
+          <>
+            <Txt variant="body" color={colors.textMuted}>
+              Coche le ou les vainqueurs — un autre joueur du match confirmera (+3 pts au classement par victoire).
+            </Txt>
+            <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
+              {scorePlayers.map((p) => {
+                const on = scoreWinners.includes(p.userId);
+                return (
+                  <Pressable
+                    key={p.userId}
+                    onPress={() => setScoreWinners((cur) => (on ? cur.filter((id) => id !== p.userId) : [...cur, p.userId]))}
+                    style={[styles.playerRow, on && styles.playerRowOn]}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: on }}
+                  >
+                    <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={on ? colors.signature : colors.textFaint} />
+                    <Txt variant="body" style={{ fontWeight: on ? '700' : '500', flex: 1 }} numberOfLines={1}>
+                      {p.name}
+                      {p.userId === state.serverUserId ? ' (toi)' : ''}
+                    </Txt>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {scoreWinners.length >= scorePlayers.length ? (
+              <Txt variant="small" color={colors.coral} style={{ marginTop: spacing.sm }}>
+                Tout le monde ne peut pas gagner — décoche les perdants.
+              </Txt>
+            ) : null}
+            <View style={{ marginTop: spacing.lg }}>
+              <Button
+                label={scoreSending ? 'Enregistrement…' : 'Enregistrer le score'}
+                icon="trophy"
+                onPress={() => void sendScore()}
+                disabled={scoreWinners.length === 0 || scoreWinners.length >= scorePlayers.length || scoreSending}
+                full
+              />
+            </View>
+          </>
+        )}
+      </BottomSheet>
     </Screen>
   );
 }
@@ -584,4 +796,13 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     paddingVertical: 2,
   },
+  playerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+  },
+  playerRowOn: { backgroundColor: colors.signatureSoft },
 });

@@ -9,9 +9,11 @@ import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
-// CLASSEMENT GÉNÉRAL (modèle Playtomic adapté) : par NIVEAU — seul signal anti-triche du
-// projet (il n'évolue que par les tournois officiels) — départagé par tournois officiels
-// gagnés puis parties jouées. Top 50 + MA position toujours affichée, même hors du top.
+// CLASSEMENT GÉNÉRAL par POINTS (modèle « Race » FIP, 46) : le niveau est plafonné à 7 et
+// déclaré à l'inscription — il ne peut pas servir de rang. Les points, eux, se GAGNENT dans
+// l'app (100 = tournoi officiel gagné · 10 = tournoi officiel joué · 3 = victoire de match
+// confirmée · 2 = partie jouée) : infalsifiables, sans plafond. Top 50 + MA position
+// toujours affichée, même hors du top.
 const MEDALS = ['🥇', '🥈', '🥉'];
 
 export default function ClassementScreen() {
@@ -41,7 +43,7 @@ export default function ClassementScreen() {
   const myRow = (rows ?? []).find((r) => r.userId === me);
 
   return (
-    <Screen back title="Classement" subtitle="Les joueurs PadelConnect, par niveau" refreshControl={refreshControl}>
+    <Screen back title="Classement" subtitle="Les joueurs PadelConnect, par points" refreshControl={refreshControl}>
       {/* Ma position — toujours visible, même 137ᵉ (objectif personnel avant tout). */}
       {me && (myRank != null || myRow) ? (
         <Card style={styles.meCard}>
@@ -53,10 +55,11 @@ export default function ClassementScreen() {
           <View style={{ flex: 1 }}>
             <Txt variant="h3">Ta position</Txt>
             <Txt variant="small" color={colors.textMuted}>
-              Gagne un tournoi officiel (+0.50 de niveau) pour grimper.
+              Joue (+2 pts), gagne tes matchs (+3), fais les tournois officiels (+10), gagne-les (+100).
             </Txt>
           </View>
-          <Tag label={`Niv. ${(myRow?.level ?? state.level).toFixed(2)}`} tone="green" />
+          {/* Points affichés seulement si je suis dans le top chargé (sinon on ne les connaît pas). */}
+          {myRow ? <Tag label={`${myRow.points} pts`} tone="green" /> : null}
         </Card>
       ) : null}
 
@@ -92,10 +95,11 @@ export default function ClassementScreen() {
                     </Txt>
                     <Txt variant="small" color={colors.textMuted} numberOfLines={1}>
                       {r.wins > 0 ? `🏆 ${r.wins} tournoi${r.wins > 1 ? 's' : ''} gagné${r.wins > 1 ? 's' : ''} · ` : ''}
-                      {r.played} partie{r.played > 1 ? 's' : ''} jouée{r.played > 1 ? 's' : ''}
+                      {r.matchWins > 0 ? `${r.matchWins} victoire${r.matchWins > 1 ? 's' : ''} · ` : ''}
+                      {r.played} partie{r.played > 1 ? 's' : ''} · niv. {r.level.toFixed(1)}
                     </Txt>
                   </View>
-                  <Tag label={`Niv. ${r.level.toFixed(2)}`} tone={i < 3 ? 'amber' : 'neutral'} />
+                  <Tag label={`${r.points} pts`} tone={i < 3 ? 'amber' : 'neutral'} />
                 </View>
               </View>
             );
@@ -103,8 +107,9 @@ export default function ClassementScreen() {
         </Card>
       )}
       <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.md }}>
-        Le niveau n’évolue que par les tournois officiels (badge doré) — c’est ce qui rend ce classement fiable. À niveau égal :
-        tournois gagnés, puis parties jouées.
+        Les points se gagnent en JOUANT : 100 pour un tournoi officiel gagné (badge doré), 10 pour y participer, 3 par victoire de match
+        confirmée par un partenaire (saisis le score dans « Mes réservations »), 2 par partie jouée. Tout est vérifié — rien ne se déclare
+        tout seul.
       </Txt>
     </Screen>
   );

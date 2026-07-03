@@ -18,6 +18,9 @@
 //   • lessons UPDATE (→ accepted) → notif à l'ÉLÈVE (cours accepté, terrain réservé) — le club
 //     reçoit la notif « nouvelle réservation » via le webhook reservations, automatiquement.
 //   • lessons UPDATE (→ declined) → notif à l'ÉLÈVE (cours refusé, aucun terrain réservé).
+//   • match_results INSERT / UPDATE (→ pending) → notif aux AUTRES joueurs du match (score à
+//     confirmer — l'UPDATE couvre la ressaisie après contestation).
+//   • match_results UPDATE (→ confirmed / disputed) → notif au joueur qui avait SAISI le score.
 // L'envoi passe par l'API Push d'Expo (pas besoin de gérer APNs soi-même : Expo route vers
 // Apple/Google). Les webhooks « reservations », « reservation_participants », « competitions »
 // et « lessons » doivent écouter INSERT **et** UPDATE (cf. docs/PUSH-SETUP.md).
@@ -120,10 +123,7 @@ Deno.serve(async (req) => {
       });
       // Et prévenir les PARTICIPANTS (amis invités / joueurs qui avaient rejoint un match
       // ouvert) : sans ça, le match disparaît en silence de leurs réservations.
-      const { data: parts } = await supabase
-        .from('reservation_participants')
-        .select('user_id, status')
-        .eq('reservation_id', record.id);
+      const { data: parts } = await supabase.from('reservation_participants').select('user_id, status').eq('reservation_id', record.id);
       const partIds = (parts ?? []).filter((p) => p.status !== 'declined').map((p) => p.user_id as string);
       if (partIds.length > 0) {
         const { data: toks } = await supabase.from('profiles').select('expo_push_token').in('id', partIds);
@@ -299,6 +299,50 @@ Deno.serve(async (req) => {
         title: 'Tu es maintenant coach 🎾',
         body: `${clubRow?.name ?? 'Ton club'} t’a déclaré coach — règle tes disponibilités dans ton Espace Coach.`,
         data: { kind: 'lesson' }, // route vers /coach-admin (même écran que les demandes de cours)
+      });
+    } else if (
+      table === 'match_results' &&
+      record.status === 'pending' &&
+      (type === 'INSERT' || (type === 'UPDATE' && oldRecord.status !== 'pending'))
+    ) {
+      // SCORE DE MATCH saisi (46) — ou RESSAISI après contestation (UPDATE disputed → pending) :
+      // prévenir les AUTRES joueurs du match pour qu'ils confirment (48 h avant auto-validation).
+      const { data: resa } = await supabase
+        .from('reservations')
+        .select('user_id, club_name, date_label, time')
+        .eq('id', record.reservation_id)
+        .maybeSingle();
+      const { data: parts } = await supabase
+        .from('reservation_participants')
+        .select('user_id, status')
+        .eq('reservation_id', record.reservation_id);
+      const others = [resa?.user_id, ...(parts ?? []).filter((p) => p.status === 'accepted').map((p) => p.user_id as string)].filter(
+        (id): id is string => Boolean(id) && id !== record.submitted_by,
+      );
+      if (others.length > 0) {
+        const { data: toks } = await supabase.from('profiles').select('expo_push_token').in('id', others);
+        notifs.push({
+          targets: (toks ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
+          title: 'Score à confirmer 🎾',
+          body: `${await userName(record.submitted_by)} a noté le résultat de votre match du ${resa?.date_label ?? ''} à ${resa?.time ?? ''} (${resa?.club_name ?? ''}) — confirme-le dans Mes réservations.`,
+          data: { kind: 'reservation', id: record.reservation_id },
+        });
+      }
+    } else if (
+      table === 'match_results' &&
+      type === 'UPDATE' &&
+      (record.status === 'confirmed' || record.status === 'disputed') &&
+      oldRecord.status === 'pending'
+    ) {
+      // Verdict d'un joueur du match → prévenir celui qui avait SAISI le score.
+      notifs.push({
+        targets: await userToken(record.submitted_by),
+        title: record.status === 'confirmed' ? 'Score confirmé ✅' : 'Score contesté',
+        body:
+          record.status === 'confirmed'
+            ? 'Un joueur du match a confirmé le score — la victoire compte au classement.'
+            : 'Un joueur du match a contesté le score — il ne comptera pas. Vous pouvez le ressaisir ensemble.',
+        data: { kind: 'reservation', id: record.reservation_id },
       });
     }
 

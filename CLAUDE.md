@@ -79,10 +79,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   l'écrire dans le dépôt).
 - Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
   --auto-submit --non-interactive --no-wait`.
-- **Dernier build : #39** (= #38 + matchs ouverts (45), classement (44), écran /cours,
-  calendrier appareil réparé (createEventInCalendarAsync), CalendarPicker mensuel pour les
-  tournois, Espace opérateur en 4 onglets, tournois officiels PadelConnect (43) + revue
-  adversariale 52 agents : 11 corrections).
+- **Dernier build : #40** (= #39 + classement par POINTS + score de match confirmé (46)).
 - Un module natif nouveau (ex. `expo-contacts`) ⇒ **nouveau build requis** + config plugin dans
   `app.json` avec la chaîne de permission.
 
@@ -95,12 +92,12 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `45` (voir dossier `supabase/`).
+  **SQL Editor → Run**. Migrations actuelles : `02` → `46` (voir dossier `supabase/`).
 - **Edge Function** `supabase/functions/notify-club/index.ts` (Deno) : envoie les push via
   l'API Expo. Déclenchée par des **Database Webhooks** (INSERT + UPDATE). Redéploiement **sans
   terminal** : Dashboard → Edge Functions → notify-club → Edit → coller le code → Deploy.
   Webhooks à brancher (voir `docs/PUSH-SETUP.md`) : `reservations`, `reservation_participants`,
-  `competitions`, **`friend_requests`**, **`lessons`**.
+  `competitions`, **`friend_requests`**, **`lessons`**, **`match_results`**.
 - **Convention réseau** : un fetch serveur renvoie `null` en cas d'échec réseau (≠ `[]`/`{}` =
   succès vide). Les appelants font `x ?? s.existant` ou `if (!x) return` pour ne pas écraser le
   miroir local hors-ligne.
@@ -149,8 +146,16 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   restantes rejoignables (`join_open_match` → participant 'accepted' + prénom dans `invited`,
   push au créateur). GRATUIT pour tous — un futur Gold les ÉPINGLERA (jamais ne les verrouille).
   UI : toggle dans le tunnel + section `src/components/OpenMatches.tsx` (onglet Réserver).
-- **Classement (44)** : par NIVEAU (seul signal anti-triche), départagé tournois officiels
-  gagnés puis parties jouées. `fetch_leaderboard`/`my_leaderboard_rank`, écran `/classement`.
+- **Classement (46, remplace la 44)** : par **POINTS** gagnés dans l'app (modèle « Race » FIP —
+  le niveau, plafonné à 7 et auto-déclaré, ne peut pas servir de rang) : 100 = tournoi officiel
+  gagné (winner_user_id ancré), 10 = tournoi officiel joué, 3 = victoire de match confirmée,
+  2 = partie jouée. `fetch_leaderboard`/`my_leaderboard_rank`, écran `/classement`.
+- **Score de match (46, modèle Playtomic)** : après un match fini, un joueur saisit les
+  vainqueurs parmi les joueurs IDENTIFIÉS de la résa (créateur + participants acceptés) ; un
+  AUTRE joueur confirme/conteste (`submit_match_result`/`confirm_match_result`) ; validation
+  auto sous 48 h sans réponse ; ≥ 2 comptes rattachés requis ; fenêtre 14 jours ; contesté =
+  ne compte pas (ressaisie possible). UI dans « Mes réservations » (`src/lib/matchResults.ts`),
+  push via webhook **`match_results`** (INSERT + UPDATE).
 - **Tournois officiels PadelConnect (43)** : organizer_type 'operator' — créés par l'opérateur
   EN TANT QUE PadelConnect, VALIDÉS par le club hôte dans son Espace Club (jamais en entrant
   dans son planning sans accord). Présentation premium (bandeau doré) — futur canal FIP.

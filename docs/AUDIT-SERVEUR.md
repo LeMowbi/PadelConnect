@@ -1,8 +1,8 @@
 # Audit — actions serveur (sans terminal)
 
-## 0) NOUVEAU (2026-07-02, soir) — SQL `42` à `45` + notify-club (5 min) — ⏳ À FAIRE
+## 0) NOUVEAU (2026-07-02/03) — SQL `42` à `46` + notify-club + 1 webhook (7 min) — ⏳ À FAIRE
 
-### a. Coller les migrations `42`, `43`, `44` puis `45` (dans cet ordre)
+### a. Coller les migrations `42`, `43`, `44`, `45` puis `46` (dans cet ordre)
 
 1. Dashboard Supabase → **SQL Editor** → **New query**.
 2. `supabase/42_club_coach_price.sql` (le club fixe le tarif du cours de ses coachs) :
@@ -14,12 +14,24 @@
    coachs réservables pour l'écran « Réserver un cours ») : copie **tout** → colle → **Run**.
 5. `supabase/45_open_matches.sql` (MATCHS OUVERTS façon Playtomic : un joueur réserve son
    terrain et les autres peuvent rejoindre les places restantes) : copie **tout** → colle → **Run**.
+6. `supabase/46_leaderboard_points.sql` (classement **par POINTS** — le niveau plafonné à 7
+   ne peut pas servir de rang — + **score de match** : un joueur saisit qui a gagné, un
+   partenaire confirme, la victoire vaut +3 pts). **Même si tu as déjà collé la 44**, colle
+   la 46 : elle REMPLACE le classement de la 44 (c'est prévu, ça ne casse rien).
    Attendu à chaque fois : « Success. No rows returned ».
 
-### b. Redéployer `notify-club` (push « Un joueur a rejoint ton match 🎾 »)
+### b. Redéployer `notify-club` (push matchs ouverts + scores de match)
 
 1. Dashboard → **Edge Functions** → **notify-club** → **Edit**.
 2. Remplace tout le code par `supabase/functions/notify-club/index.ts` du dépôt → **Deploy**.
+
+### c. Créer le webhook « match_results » (push « Score à confirmer 🎾 »)
+
+1. Dashboard → **Database** → **Webhooks** → **Create a new hook**.
+2. **Name** : `match_results` · **Table** : `public.match_results` · **Events** : coche
+   **Insert** ET **Update**.
+3. **Type** : Supabase Edge Functions → **notify-club** (mêmes réglages que les webhooks
+   existants) → **Create**.
    (Le webhook `reservation_participants` existe déjà — rien d'autre à créer.)
 
 ---
