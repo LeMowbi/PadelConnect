@@ -79,7 +79,8 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   l'écrire dans le dépôt).
 - Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
   --auto-submit --non-interactive --no-wait`.
-- **Dernier build : #40** (= #39 + classement par POINTS + score de match confirmé (46)).
+- **Dernier build : #41** (= #39 + classement par POINTS (46), score saisi par chaque joueur
+  avec vainqueur automatique (46 v2), push d'actu optionnel (47) — remplace le #40).
 - Un module natif nouveau (ex. `expo-contacts`) ⇒ **nouveau build requis** + config plugin dans
   `app.json` avec la chaîne de permission.
 
