@@ -10,12 +10,13 @@ import { Logo } from '@/components/Logo';
 import { PopIn } from '@/components/PopIn';
 import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
-import { Card, SectionHeader, Tag, Txt } from '@/components/ui';
+import { Card, Divider, SectionHeader, Tag, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { DAY_MS, dateKeyLabel, dayKey } from '@/lib/days';
 import { hapticLight } from '@/lib/haptics';
 import { initials, perPlayer } from '@/lib/format';
+import { fetchLeaderboard, type LeaderboardRow } from '@/lib/leaderboard';
 import { openWhatsApp } from '@/lib/contact';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { isBirthdayToday, parseBirthDate, zodiacFor } from '@/lib/zodiac';
@@ -92,6 +93,22 @@ export default function HomeScreen() {
 
   const fullName = `${state.account?.firstName ?? ''} ${state.account?.lastName ?? ''}`.trim();
   const greeting = new Date().getHours() < 18 ? 'Bonjour' : 'Bonsoir';
+
+  // Podium du CLASSEMENT sur l'accueil (retour porteur : le classement était « caché »).
+  // undefined = pas encore chargé ; échec réseau → on garde l'existant (§8). La carte reste
+  // visible même sans donnée (invitation), pour que la fonctionnalité soit toujours trouvable.
+  const [top3, setTop3] = useState<LeaderboardRow[] | undefined>(undefined);
+  const serverUserId = state.serverUserId;
+  useEffect(() => {
+    if (!serverUserId) return;
+    let alive = true;
+    void fetchLeaderboard(3).then((rows) => {
+      if (alive && rows) setTop3(rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [serverUserId]);
 
   // Clubs sponsorisés en tête (badge visible), le reste en ordre alphabétique.
   // Mémoïsé pour ne pas recalculer activeClubs + tri à chaque rendu (pulse du hero, etc.).
@@ -755,6 +772,44 @@ export default function HomeScreen() {
             </View>
           </Reveal>
         ) : null}
+
+        {/* Classement — podium (top 3) directement sur l'accueil (retour porteur : le
+            classement était introuvable). TOUJOURS visible : podium réel si chargé, sinon
+            invitation — un tap ouvre /classement dans les deux cas. */}
+        <Reveal delay={160}>
+          <View style={styles.section}>
+            <SectionHeader title="Classement des joueurs" actionLabel="Voir tout" onAction={() => go('/classement')} />
+            <Card onPress={() => go('/classement')}>
+              {top3 && top3.length > 0 ? (
+                top3.map((r, i) => (
+                  <View key={r.userId}>
+                    {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
+                    <View style={styles.podiumRow}>
+                      <Txt variant="h3" style={styles.podiumMedal}>
+                        {['🥇', '🥈', '🥉'][i]}
+                      </Txt>
+                      <Txt variant="body" numberOfLines={1} style={{ flex: 1, fontWeight: i === 0 ? '800' : '600' }}>
+                        {r.name}
+                        {r.userId === state.serverUserId ? ' (toi)' : ''}
+                      </Txt>
+                      <Tag label={`${r.points} pts`} tone={i === 0 ? 'amber' : 'neutral'} />
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <View style={styles.podiumRow}>
+                  <Txt variant="h3" style={styles.podiumMedal}>
+                    🏆
+                  </Txt>
+                  <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
+                    Joue tes matchs et saisis les scores pour gagner des points — le Top 3 des joueurs s’affichera ici.
+                  </Txt>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+                </View>
+              )}
+            </Card>
+          </View>
+        </Reveal>
       </Reveal>
     </Screen>
   );
@@ -857,6 +912,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   section: { marginTop: spacing.xl },
+  podiumRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  podiumMedal: { minWidth: 30, textAlign: 'center' },
   matchHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   dateChip: {
     width: 46,

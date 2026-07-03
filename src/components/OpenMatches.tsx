@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 import { useToast } from '@/components/Toast';
@@ -78,8 +79,27 @@ export function OpenMatches({ refreshToken }: { refreshToken?: number } = {}) {
     if (res === 'full' || res === 'gone') void load(); // liste périmée → on la corrige
   };
 
-  // Rien à afficher tant que le serveur n'a rien donné (pas de section vide qui encombre).
-  if (!matches || matches.length === 0) return null;
+  // Chargement ou hors-ligne sans donnée : rien (pas de section fantôme).
+  if (matches === undefined || matches === null) return null;
+
+  // AUCUN match ouvert : la section reste VISIBLE avec le mode d'emploi — sinon la
+  // fonctionnalité est introuvable tant que personne n'a créé le premier match (retour porteur).
+  if (matches.length === 0) {
+    return (
+      <View style={{ marginTop: spacing.lg }}>
+        <SectionHeader title="Matchs ouverts" />
+        <Card style={styles.emptyRow}>
+          <View style={styles.emptyIcon}>
+            <Ionicons name="people-outline" size={20} color={colors.signature} />
+          </View>
+          <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
+            Aucun match ouvert pour l’instant. Réserve un terrain et coche « Ouvrir ce match aux autres joueurs » : ta partie s’affichera
+            ici et n’importe quel joueur pourra rejoindre les places restantes — gratuit.
+          </Txt>
+        </Card>
+      </View>
+    );
+  }
 
   const shown = showAll ? matches : matches.slice(0, PREVIEW);
   const me = state.serverUserId;
@@ -148,6 +168,15 @@ export function OpenMatches({ refreshToken }: { refreshToken?: number } = {}) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  emptyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  emptyIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    backgroundColor: colors.signatureSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   when: {
     minWidth: 64,
     backgroundColor: colors.signatureSoft,
