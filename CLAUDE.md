@@ -295,6 +295,35 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   (§0-OCTIES), dans cet ordre. Plus tard : empreinte SHA-256 d'assetlinks (Android) ; optionnel :
   `WEBHOOK_SECRET` + en-tête `x-webhook-secret` sur les webhooks (§3).
 
+### Chantier v2 (2026-07-04) — comptes club, web, Wave, stats, 1v1
+
+Gros chantier « personne ne peut rivaliser », décidé et planifié avec le porteur. Fait
+sur la branche de dev (build #48, mise à jour day-1 après approbation du #47) :
+- **Comptes club ≠ joueur (Chantier 1, SQL 56)** : choix « Joueur / Je gère un club » à
+  l'inscription (`onboarding.tsx`) ; état `accountType` ; profil « club en cours de validation »
+  tant que `role≠'club'`. Réutilise `club_requests` + `approve_club_request` (trigger crée la
+  demande d'office). L'opérateur valide dans « Demandes ».
+- **Statistiques joueur (Chantier 6)** : écran `/statistiques` (rang, points, matchs gagnés,
+  tournois, activité mensuelle `BarChart`). Aucun SQL. Lien depuis le profil.
+- **1v1 (SQL 57)** : matchs ouverts à 2 joueurs en plus du 2v2. `reservations.open_capacity`
+  (2|4) ; `fetch_open_matches`/`join_open_match` généralisés ; sélecteur de format dans le tunnel.
+- **Site vitrine (Chantier 3)** : `site/index.html` refait (héros, fonctionnalités, 9 clubs réels,
+  « Pour les clubs »), `site/cgu.html`, `assets/style.css`+`site.js` (FR/EN, menu, clubs), `og.svg`.
+- **Espace Club & opérateur web (Chantiers 2 & 4)** : `npm run build:web` (export Expo web —
+  build vérifié). Même code app+web, accès protégé par le rôle (pas d'URL secrète). Déploiement :
+  `docs/ESPACE-CLUB-WEB.md` (Cloudflare Pages → `club.padelconnectci.com`).
+- **Paiement Wave (Chantier 5, SQL 58)** : version MANUELLE. `tournament_config.wave_link`
+  (`set_wave_link`), `competitions.payment_status` + `operator_confirm_tournament_payment`,
+  `fetch_competitions` renvoie les 2. Organisateur : carte « Frais à régler » (ouvre le lien Wave)
+  une fois le club validé ; opérateur : champ lien Wave + « Paiement reçu ». API Wave = plus tard.
+- **Frais tournoi joueur** : défaut passé de 5 000 à **10 000 FCFA** (`helpers.ts`, `26`).
+- **Reste à faire par le porteur (v2), AVANT le build #48** : coller SQL `56`, `57`, `58` (dans
+  cet ordre, après 54/55) ; coller le **lien de paiement Wave** dans Espace opérateur → Finances ;
+  déployer `site/` (vitrine) + le build web sur `club.padelconnectci.com` ; créer l'e-mail pro
+  `contact@padelconnectci.com` (Cloudflare Email Routing) + WhatsApp Business « PadelConnect ».
+  Améliorations « en plus » (carte clubs app, image de résultat, messages types, happy hours…)
+  = lots suivants, non encore codés.
+
 ### Feuille de route (décidée avec le porteur le 2026-07-01)
 
 - ✅ **Stats club** (revenu + créneaux creux) — fait.
