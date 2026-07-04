@@ -40,6 +40,8 @@ export type Competition = {
   status?: 'pending' | 'approved' | 'rejected';
   // Motif de refus laissé par le club (52) — l’organisateur sait quoi changer avant de recréer.
   rejectReason?: string;
+  // Paiement Wave des frais (v2) : 'unpaid' tant que l’opérateur n’a pas confirmé, 'paid' ensuite.
+  paymentStatus?: 'unpaid' | 'paid';
 };
 
 // Tournoi visible publiquement (listes, accueil, fiche club) : ni « en attente », ni « refusé ».

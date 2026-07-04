@@ -6,23 +6,16 @@ import { fcfa } from '@/lib/format';
 import { colors, spacing } from '@/theme';
 
 // Frais à encaisser sur les tournois JOUEURS : l’opérateur voit chaque tournoi publié, son
-// montant et le contact de l’organisateur → il le relance par WhatsApp (règlement Wave) puis
-// marque « réglé ». Suivi local à l’opérateur (comme les règlements de commission des clubs).
-export function TournamentFees({
-  comps,
-  payments,
-  onSetPaid,
-}: {
-  comps: Competition[];
-  payments: Record<string, 'sent' | 'paid'>;
-  onSetPaid: (compId: string, paid: boolean) => Promise<void>;
-}) {
+// montant et le contact de l’organisateur → il le relance par WhatsApp (règlement Wave via le
+// lien), puis confirme la réception. Le paiement est SERVEUR (payment_status, v2) : dès que
+// l’opérateur confirme, l’organisateur voit « frais réglés ✓ » dans sa fiche tournoi.
+export function TournamentFees({ comps, onConfirm }: { comps: Competition[]; onConfirm: (compId: string) => Promise<void> }) {
   if (comps.length === 0) {
     return (
       <Card>
         <Txt variant="small" color={colors.textMuted}>
-          Aucun tournoi joueur à encaisser. Dès qu’un joueur organise un tournoi, il apparaît ici avec son montant et le contact de
-          l’organisateur pour le règlement par Wave.
+          Aucun tournoi joueur à encaisser. Dès qu’un joueur organise un tournoi validé par son club, il apparaît ici avec son montant et le
+          contact de l’organisateur pour le règlement par Wave.
         </Txt>
       </Card>
     );
@@ -30,7 +23,7 @@ export function TournamentFees({
   return (
     <Card>
       {comps.map((c, i) => {
-        const paid = payments[`tourn:${c.id}`] === 'paid';
+        const paid = c.paymentStatus === 'paid';
         const contact = () =>
           c.organizerPhone
             ? openWhatsApp(
@@ -53,20 +46,16 @@ export function TournamentFees({
               </View>
               {paid ? <Tag label="Réglé" tone="green" icon="checkmark" /> : null}
             </View>
-            <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-              {c.organizerPhone && !paid ? (
-                <Button size="sm" label="Contacter (Wave)" icon="logo-whatsapp" variant="secondary" onPress={contact} />
-              ) : null}
-              <View style={{ flex: 1 }}>
-                <Button
-                  size="sm"
-                  label={paid ? 'Marquer non réglé' : 'Marquer réglé'}
-                  variant={paid ? 'ghost' : 'primary'}
-                  onPress={() => void onSetPaid(c.id, !paid)}
-                  full
-                />
+            {!paid ? (
+              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                {c.organizerPhone ? (
+                  <Button size="sm" label="Relancer (Wave)" icon="logo-whatsapp" variant="secondary" onPress={contact} />
+                ) : null}
+                <View style={{ flex: 1 }}>
+                  <Button size="sm" label="Paiement reçu" icon="checkmark" onPress={() => void onConfirm(c.id)} full />
+                </View>
               </View>
-            </View>
+            ) : null}
           </View>
         );
       })}

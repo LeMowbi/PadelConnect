@@ -47,6 +47,8 @@ import {
   registerCompetition as registerCompetitionRpc,
   rejectCompetition as rejectCompetitionRpc,
   setTournamentFee as setTournamentFeeRpc,
+  setWaveLink as setWaveLinkRpc,
+  confirmTournamentPayment as confirmTournamentPaymentRpc,
   unregisterCompetition as unregisterCompetitionRpc,
 } from '@/lib/competitionsServer';
 import { seedCompetitions, type Competition } from '@/data/competitions';
@@ -239,6 +241,7 @@ export type AppState = {
   clubStatus: Record<string, 'active' | 'coming_soon' | 'hidden'>; // statut piloté par l’opérateur (tout club)
   clubCommission: Record<string, number>; // taux de commission propre à chaque club (vu opérateur)
   tournamentFee: number; // frais fixe (FCFA) appliqué aux tournois JOUEURS — réglé par l’opérateur
+  waveLink: string | null; // lien de paiement Wave de l’opérateur (frais tournois joueurs, v2)
   // RÔLE vérifié côté serveur (Supabase) — la VRAIE sécurité des espaces.
   //  - 'operator' : toi (PadelConnect). 'club' : un gérant. 'player' : par défaut.
   // Un joueur ne peut pas se promouvoir (protégé par un trigger côté serveur).
@@ -349,6 +352,8 @@ type AppContextType = {
   registerCompetition: (id: string, partner: string) => Promise<boolean>; // false = échec serveur
   unregisterCompetition: (id: string) => Promise<boolean>; // false = échec serveur
   setTournamentFee: (amount: number) => Promise<{ ok: boolean }>; // opérateur : frais fixe tournois joueurs
+  setWaveLink: (link: string) => Promise<{ ok: boolean }>; // opérateur : lien de paiement Wave (v2)
+  confirmTournamentPayment: (id: string) => Promise<{ ok: boolean }>; // opérateur : confirme un paiement Wave
   // Réservations : SERVEUR = source de vérité quand connecté (sinon miroir local, démo).
   addReservation: (r: Omit<Reservation, 'id' | 'createdAt' | 'bookedBy' | 'userId'>) => Promise<AddReservationResult>;
   cancelReservation: (id: string) => Promise<boolean>;
@@ -1390,6 +1395,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const ok = await setTournamentFeeRpc(amount);
         if (!ok) return { ok: false };
         setState((s) => ({ ...s, tournamentFee: Math.max(0, Math.round(amount)) }));
+        return { ok: true };
+      },
+      // Opérateur : enregistre le lien de paiement Wave (frais tournois joueurs, v2). On attend
+      // le serveur avant de refléter (écriture honnête), puis on met à jour le miroir local.
+      setWaveLink: async (link) => {
+        const clean = link.trim();
+        const ok = await setWaveLinkRpc(clean);
+        if (!ok) return { ok: false };
+        setState((s) => ({ ...s, waveLink: clean || null }));
+        return { ok: true };
+      },
+      // Opérateur : confirme la réception du paiement d’un tournoi → passe payment_status à
+      // 'paid'. On reflète localement le tournoi concerné (le prochain fetch confirmera).
+      confirmTournamentPayment: async (id) => {
+        const ok = await confirmTournamentPaymentRpc(id);
+        if (!ok) return { ok: false };
+        setState((s) => ({
+          ...s,
+          myCompetitions: s.myCompetitions.map((c) => (c.id === id ? { ...c, paymentStatus: 'paid' } : c)),
+        }));
         return { ok: true };
       },
       addReservation: async (r) => {

@@ -12,6 +12,7 @@ import { CommissionRates } from '@/components/operator/CommissionRates';
 import { ManagerAccess } from '@/components/operator/ManagerAccess';
 import { TournamentFee } from '@/components/operator/TournamentFee';
 import { TournamentFees } from '@/components/operator/TournamentFees';
+import { WaveLink } from '@/components/operator/WaveLink';
 import { DiagnosticsCard } from '@/components/operator/DiagnosticsCard';
 import { NewsEditor } from '@/components/operator/NewsEditor';
 import { opStyles } from '@/components/operator/styles';
@@ -53,6 +54,8 @@ export default function Operateur() {
     fetchSupportMessages,
     setSupportMessageStatus,
     setTournamentFee,
+    setWaveLink,
+    confirmTournamentPayment,
   } = useApp();
   const toast = useToast();
   const [section, setSection] = useState<(typeof OP_SECTIONS)[number]>('Aperçu');
@@ -330,11 +333,12 @@ export default function Operateur() {
       state.myCompetitions
         .filter((c) => c.organizerType === 'joueur' && (c.commission ?? 0) > 0 && isTournamentPublic(c))
         .sort((a, b) => {
-          const paidA = state.operatorPayments[`tourn:${a.id}`] === 'paid' ? 1 : 0;
-          const paidB = state.operatorPayments[`tourn:${b.id}`] === 'paid' ? 1 : 0;
+          // Non réglés d'abord (payment_status serveur), puis par date décroissante.
+          const paidA = a.paymentStatus === 'paid' ? 1 : 0;
+          const paidB = b.paymentStatus === 'paid' ? 1 : 0;
           return paidA - paidB || b.dateKey.localeCompare(a.dateKey);
         }),
-    [state.myCompetitions, state.operatorPayments],
+    [state.myCompetitions],
   );
 
   const totalCount = rows.reduce((s, r) => s + r.count, 0);
@@ -721,15 +725,21 @@ export default function Operateur() {
             <TournamentFee fee={state.tournamentFee} onSet={setTournamentFee} toast={toast} />
           </View>
 
-          {/* Frais à encaisser (Wave) sur les tournois publiés par des joueurs. */}
+          {/* Lien de paiement Wave (v2) : les organisateurs l'ouvrent pour régler leurs frais. */}
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title="Lien de paiement Wave" />
+            <WaveLink link={state.waveLink} onSet={setWaveLink} toast={toast} />
+          </View>
+
+          {/* Frais à encaisser (Wave) sur les tournois publiés par des joueurs. Confirmation
+              SERVEUR (payment_status) → l'organisateur voit « frais réglés ✓ » dans sa fiche. */}
           <View style={{ marginTop: spacing.xl }}>
             <SectionHeader title="Tournois joueurs — à encaisser" />
             <TournamentFees
               comps={playerTournamentsToBill}
-              payments={state.operatorPayments}
-              onSetPaid={async (id, paid) => {
-                const { ok } = await setPaymentStatus('tourn', id, paid ? 'paid' : 'tofacture');
-                if (!ok) toast.show('Changement impossible — réessaie', { icon: 'alert-circle' });
+              onConfirm={async (id) => {
+                const { ok } = await confirmTournamentPayment(id);
+                toast.show(ok ? 'Paiement confirmé ✅' : 'Confirmation impossible — réessaie', ok ? undefined : { icon: 'alert-circle' });
               }}
             />
           </View>

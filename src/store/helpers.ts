@@ -78,6 +78,7 @@ export const initialState: AppState = {
   clubStatus: {},
   clubCommission: {},
   tournamentFee: 10000, // frais fixe par défaut des tournois joueurs (réglable par l’opérateur)
+  waveLink: null, // lien de paiement Wave (défini par l’opérateur, v2)
   role: 'player',
   accountType: 'player', // type choisi à l'inscription (joueur / club) — pilote l'affichage
   serverManagedClubId: null,
@@ -173,7 +174,7 @@ export function competitionSlices(
   s: AppState,
   sc: ServerCompetitions | null,
   regs: Record<string, string> | null,
-): Pick<AppState, 'myCompetitions' | 'compResults' | 'compRegistrations' | 'level' | 'officialResults'> {
+): Pick<AppState, 'myCompetitions' | 'compResults' | 'compRegistrations' | 'level' | 'officialResults' | 'waveLink'> {
   const comps = sc ? sc.comps : s.myCompetitions;
   const serverIds = new Set(comps.filter((c) => c.server).map((c) => c.id));
 
@@ -202,7 +203,14 @@ export function competitionSlices(
     compRegistrations = { ...seedRegs, ...serverRegs };
   }
 
-  const base = { myCompetitions: comps, compResults, compRegistrations, level: s.level, officialResults: s.officialResults };
+  const base = {
+    myCompetitions: comps,
+    compResults,
+    compRegistrations,
+    level: s.level,
+    officialResults: s.officialResults,
+    waveLink: sc ? sc.waveLink : s.waveLink,
+  };
   if (!sc || !s.account) return base;
 
   // PALMARÈS (affichage) de MES tournois serveur clôturés — DÉRIVÉ des clôtures serveur et

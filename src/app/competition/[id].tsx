@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { AccessibilityInfo, Linking, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { Confetti } from '@/components/Confetti';
 import { PlayerSheet, type PlayerLike } from '@/components/PlayerSheet';
@@ -306,15 +306,38 @@ export default function CompetitionDetail() {
         </>
       ) : null}
 
-      {/* Frais PadelConnect (Wave) — visible par l’ORGANISATEUR d’un tournoi joueur, pour qu’il
-          sache qu’un montant est dû. PadelConnect le recontacte depuis l’Espace opérateur. */}
-      {comp.createdByMe && comp.organizerType === 'joueur' && (comp.commission ?? 0) > 0 && comp.status !== 'rejected' ? (
-        <View style={[styles.pendingBanner, { backgroundColor: colors.amberSoft }]}>
-          <Ionicons name="cash-outline" size={16} color={colors.amber} />
-          <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
-            Frais d’organisation PadelConnect : {formatFee(`${comp.commission} FCFA`)}, à régler par Wave. PadelConnect te contactera.
-          </Txt>
-        </View>
+      {/* Frais PadelConnect (Wave, v2) — visible par l’ORGANISATEUR d’un tournoi joueur, UNE FOIS
+          le club validé (approved). Payé → confirmé ✓. Non payé → bouton Wave (lien de l’opérateur)
+          + rappel d’envoyer la preuve, l’opérateur confirme la réception dans son espace. */}
+      {comp.createdByMe && comp.organizerType === 'joueur' && (comp.commission ?? 0) > 0 && comp.status === 'approved' ? (
+        comp.paymentStatus === 'paid' ? (
+          <View style={[styles.pendingBanner, { backgroundColor: colors.greenSoft }]}>
+            <Ionicons name="checkmark-circle" size={16} color={colors.green} />
+            <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
+              Frais d’organisation PadelConnect réglés — merci ! Ton tournoi est en règle.
+            </Txt>
+          </View>
+        ) : (
+          <Card style={{ marginTop: spacing.md, backgroundColor: colors.amberSoft, gap: spacing.sm }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+              <Ionicons name="cash-outline" size={18} color={colors.amberDark} />
+              <Txt variant="h3" style={{ flex: 1 }}>
+                Frais à régler : {formatFee(`${comp.commission} FCFA`)}
+              </Txt>
+            </View>
+            <Txt variant="small" color={colors.textMuted}>
+              Ton club a validé le tournoi. Règle les frais d’organisation PadelConnect par Wave, puis envoie la preuve — l’opérateur
+              confirme la réception.
+            </Txt>
+            {state.waveLink ? (
+              <Button label="Payer par Wave" icon="card-outline" onPress={() => void Linking.openURL(state.waveLink!)} full />
+            ) : (
+              <Txt variant="small" color={colors.amberDark}>
+                PadelConnect t’enverra le lien de paiement très vite.
+              </Txt>
+            )}
+          </Card>
+        )
       ) : null}
 
       <Card style={{ marginTop: spacing.md }}>

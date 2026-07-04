@@ -35,6 +35,8 @@ type CompetitionRow = {
   registered: number;
   teams: string[] | null;
   reject_reason: string | null;
+  payment_status: string | null; // 'unpaid' | 'paid' (Wave, v2)
+  wave_link: string | null; // lien de paiement Wave de l'opérateur (identique sur chaque ligne)
 };
 
 // Résultat de clôture figé côté serveur (rejoué dans le store sous compResults).
@@ -72,10 +74,13 @@ function rowToCompetition(r: CompetitionRow, myUserId: string): Competition {
     commission: r.commission,
     status,
     rejectReason: r.reject_reason ?? undefined,
+    paymentStatus: r.payment_status === 'paid' ? 'paid' : 'unpaid',
   };
 }
 
-export type ServerCompetitions = { comps: Competition[]; closes: Record<string, CompClose> };
+// waveLink : lien de paiement Wave courant de l'opérateur (identique sur chaque ligne) — sert
+// à l'organisateur d'un tournoi pour régler ses frais. null = non réglé / pas encore défini.
+export type ServerCompetitions = { comps: Competition[]; closes: Record<string, CompClose>; waveLink: string | null };
 
 // Tous les tournois visibles + l’état de clôture des tournois terminés. null = échec réseau
 // (l’appelant garde l’existant).
@@ -96,7 +101,19 @@ export async function fetchCompetitions(myUserId: string): Promise<ServerCompeti
       };
     }
   }
-  return { comps, closes };
+  return { comps, closes, waveLink: rows[0]?.wave_link ?? null };
+}
+
+// Opérateur : enregistre SON lien de paiement Wave (que les organisateurs ouvriront pour payer).
+export async function setWaveLink(link: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('set_wave_link', { p_link: link });
+  return !error && data === true;
+}
+
+// Opérateur : confirme la réception du paiement d'un tournoi → payment_status='paid'.
+export async function confirmTournamentPayment(id: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('operator_confirm_tournament_payment', { p_id: id });
+  return !error && data === true;
 }
 
 // Mes inscriptions (équipe = moi + partenaire) → { compId: partner }. null = échec réseau.
