@@ -569,6 +569,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               // hériter photo / date de naissance / genre de l'ANCIEN compte au nouveau
               // (bascule via lien de confirmation cliqué alors qu'un autre compte est connecté).
               account: null,
+              // Rôle et périmètres SENSIBLES aussi (mêmes défauts que loggedOutState) : si la
+              // relecture du profil échoue juste après la bascule, le nouveau compte ne doit
+              // pas hériter d'un rôle opérateur/gérant ni des miroirs financiers de l'ancien.
+              role: 'player',
+              serverManagedClubId: null,
+              blockedUserIds: [],
+              clubCommission: {},
+              operatorPayments: {},
             },
       );
       const { data: prof, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
@@ -1169,7 +1177,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const { error } = await supabase.rpc('delete_account');
         if (error) return { ok: false, error: 'Suppression impossible — réessaie dans un instant.' };
         sessionEpochRef.current += 1;
-        supabase.auth.signOut().catch(() => {});
+        // Même repli que signOut : auth-js RÉSOUT avec { error } sans purger la session locale
+        // quand la révocation serveur échoue (réseau) — on la retire alors nous-mêmes, sinon une
+        // session fantôme d'un compte SUPPRIMÉ resurgit au prochain lancement.
+        void supabase.auth.signOut().then(({ error }) => {
+          if (error) void AsyncStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY).catch(() => {});
+        });
         void syncMatchReminders([], false);
         void AsyncStorage.removeItem(PENDING_AVATAR_KEY); // anti-fuite de photo vers le prochain compte
         // Même purge disque immédiate que signOut (le compte n'existe PLUS : aucune trace à garder).

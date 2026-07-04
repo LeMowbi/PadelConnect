@@ -83,6 +83,14 @@ begin
      or p_date_to > to_char(now() + interval '366 days', 'YYYY-MM-DD') then
     return 'invalid';
   end if;
+  -- Une date qui passe la regex mais n'existe pas ('2026-02-31') ferait échouer les casts
+  -- ::date plus bas avec une erreur brute : on la refuse proprement (l'app n'envoie que des
+  -- dates du calendrier — seul un appel forgé arrive ici).
+  begin
+    perform p_date_from::date, p_date_to::date;
+  exception when others then
+    return 'invalid';
+  end;
   if p_times is not null and (
     coalesce(array_length(p_times, 1), 0) > 48
     or exists (select 1 from unnest(p_times) t where t !~ '^\d{2}:\d{2}$')

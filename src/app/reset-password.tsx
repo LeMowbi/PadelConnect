@@ -30,7 +30,15 @@ export default function ResetPasswordScreen() {
   useEffect(() => {
     if (!code || exchanged.current) return;
     exchanged.current = true;
-    void supabase.auth.exchangeCodeForSession(code).then(({ error }) => setStatus(error ? 'error' : 'ready'));
+    // L'échange BASCULE la session Supabase (potentiellement sur un AUTRE compte — lien d'un
+    // proche ouvert sur ce téléphone) : le store l'adopte tout de suite (refreshSession purge
+    // le périmètre de l'ancien compte). Sinon, un abandon en cours de flux laissait l'identité
+    // affichée A sur une session serveur B — miroirs mélangés au retour au premier plan.
+    void supabase.auth.exchangeCodeForSession(code).then(async ({ error }) => {
+      if (!error) await refreshSession();
+      setStatus(error ? 'error' : 'ready');
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
   const submit = async () => {

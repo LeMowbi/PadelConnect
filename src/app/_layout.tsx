@@ -101,8 +101,11 @@ function RootNav() {
       const alreadySignedIn = !!state.account;
       const prevUserId = state.serverUserId;
       await refreshSession();
-      const { data } = await supabase.auth.getUser();
-      const newUserId = data.user?.id ?? null;
+      // getSession() = lecture LOCALE (la session vient d'être posée par l'échange de code) :
+      // getUser() interrogeait le serveur et, en cas de réseau flanchant, rendait null → le
+      // toast « Adresse e-mail mise à jour ✓ » s'affichait à tort lors d'une BASCULE de compte.
+      const { data } = await supabase.auth.getSession();
+      const newUserId = data.session?.user?.id ?? null;
       if (alreadySignedIn && prevUserId && newUserId && newUserId !== prevUserId) {
         toast.show('Tu es maintenant connecté avec un autre compte 🎾');
         router.replace('/');
