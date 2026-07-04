@@ -12,8 +12,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ci.padelco.app",
-      "buildNumber": "46",
-      "associatedDomains": ["applinks:padelconnectci.com"],
+      "buildNumber": "47",
+      "associatedDomains": [
+        "applinks:padelconnectci.com"
+      ],
       "config": {
         "usesNonExemptEncryption": false
       }
@@ -43,7 +45,10 @@
               "pathPrefix": "/club"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
