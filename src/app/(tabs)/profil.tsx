@@ -276,6 +276,15 @@ export default function ProfilScreen() {
         <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
           Les parties jouées se comptent toutes seules : une réservation passée = une partie.
         </Txt>
+        {/* Détail complet : points, rang, victoires de match, activité mensuelle (Chantier 6). */}
+        <Card onPress={() => router.push('/statistiques')} style={styles.statsLink}>
+          <IconCircle icon="stats-chart" color={colors.signature} bg={colors.signatureSoft} size={38} />
+          <View style={{ flex: 1 }}>
+            <Txt variant="h3">Voir mes statistiques</Txt>
+            <Txt variant="muted">Points, classement, victoires et activité.</Txt>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+        </Card>
       </View>
 
       {/* Trophées évolutifs — chaque trophée monte en paliers (Bronze → Platine) */}
@@ -763,6 +772,7 @@ const styles = StyleSheet.create({
   trophyTrack: { height: 5, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden', marginTop: 6 },
   trophyFill: { height: 5, borderRadius: radius.pill, backgroundColor: colors.amber },
   cta: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  statsLink: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
   input: {
     backgroundColor: colors.bg,
     borderWidth: 1,
