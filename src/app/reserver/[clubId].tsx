@@ -60,6 +60,9 @@ export default function ReserverScreen() {
   // restantes deviennent rejoignables par les autres joueurs (« Matchs ouverts »).
   const [openMatch, setOpenMatch] = useState(false);
   const [openLevel, setOpenLevel] = useState('');
+  // Format d'un match ouvert : 4 = 2v2 (défaut), 2 = 1v1. Le 1v1 n'a qu'UNE place à côté
+  // du créateur → proposé seulement quand aucun ami n'est déjà invité (sinon déjà complet).
+  const [openFormat, setOpenFormat] = useState<2 | 4>(4);
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [celebrate, setCelebrate] = useState(false); // confettis à l’écran de succès (motif amis.tsx)
@@ -176,6 +179,8 @@ export default function ReserverScreen() {
       ...state.friends.filter((f) => friendIds.includes(f.id)).map((f) => ({ id: f.id, name: f.name, confirmed: false })),
       ...extraNames.map((n, i) => ({ id: `x-${Date.now()}-${i}`, name: n, confirmed: false })),
     ];
+    // 1v1 (capacité 2) uniquement si personne n'est déjà invité — sinon on retombe sur le 2v2.
+    const openCap: 2 | 4 = invited.length >= 1 ? 4 : openFormat;
     const res = await addReservation({
       clubId: club.id,
       clubName: club.name,
@@ -187,8 +192,10 @@ export default function ReserverScreen() {
       price: priceForSlot(club, slot),
       players: 1 + invited.length,
       invited,
-      // Match ouvert seulement s'il reste des places à prendre (équipe déjà complète = inutile).
-      openMatch: openMatch && invited.length < 3,
+      // Capacité : 1v1 (2) seulement sans ami déjà invité, sinon 2v2 (4). Match ouvert
+      // seulement s'il reste au moins une place à prendre (équipe déjà complète = inutile).
+      openCapacity: openCap,
+      openMatch: openMatch && invited.length < openCap - 1,
       openLevel: openMatch ? openLevel : '',
     });
     setSubmitting(false);
@@ -506,19 +513,31 @@ export default function ReserverScreen() {
                 Ouvrir ce match aux autres joueurs
               </Txt>
               <Txt variant="small" color={colors.textMuted}>
-                Ton terrain reste bloqué — les {3 - participantCount} place{3 - participantCount > 1 ? 's' : ''} restante
-                {3 - participantCount > 1 ? 's' : ''} deviennent rejoignables (tu es prévenu à chaque arrivée).
+                Ton terrain reste bloqué — les places restantes deviennent rejoignables (tu es prévenu à chaque arrivée).
               </Txt>
             </View>
           </Pressable>
         ) : null}
         {openMatch && participantCount < 3 ? (
-          <View style={[styles.wrap, { marginTop: spacing.sm }]}>
-            {['Tous niveaux', '2–3', '3–4', '4–5', '5+'].map((lv) => {
-              const value = lv === 'Tous niveaux' ? '' : lv;
-              return <Chip key={lv} label={lv} active={openLevel === value} onPress={() => setOpenLevel(value)} />;
-            })}
-          </View>
+          <>
+            {/* Format : 1v1 (2 joueurs) proposé seulement sans ami déjà invité — sinon 2v2. */}
+            <Txt variant="label" style={{ marginTop: spacing.md }}>
+              Format
+            </Txt>
+            <View style={[styles.wrap, { marginTop: spacing.sm }]}>
+              {participantCount === 0 ? <Chip label="1v1 · 2 joueurs" active={openFormat === 2} onPress={() => setOpenFormat(2)} /> : null}
+              <Chip label="2v2 · 4 joueurs" active={openFormat === 4 || participantCount > 0} onPress={() => setOpenFormat(4)} />
+            </View>
+            <Txt variant="label" style={{ marginTop: spacing.md }}>
+              Niveau souhaité
+            </Txt>
+            <View style={[styles.wrap, { marginTop: spacing.sm }]}>
+              {['Tous niveaux', '2–3', '3–4', '4–5', '5+'].map((lv) => {
+                const value = lv === 'Tous niveaux' ? '' : lv;
+                return <Chip key={lv} label={lv} active={openLevel === value} onPress={() => setOpenLevel(value)} />;
+              })}
+            </View>
+          </>
         ) : null}
 
         <Card style={styles.priceRow}>

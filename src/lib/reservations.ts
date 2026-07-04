@@ -36,6 +36,7 @@ type Row = {
   club_confirmed: boolean | null;
   open_match: boolean | null; // match ouvert (45) — rejoignable par les autres joueurs
   open_level: string | null;
+  open_capacity: number | null; // 2 = 1v1 · 4 = 2v2 (v2)
   created_at: string | null;
 };
 
@@ -65,6 +66,7 @@ export function rowToReservation(row: Row): Reservation {
     clubConfirmed: row.club_confirmed ?? false,
     openMatch: row.open_match ?? false,
     openLevel: row.open_level ?? undefined,
+    openCapacity: row.open_capacity ?? undefined,
     createdAt: Number.isFinite(createdTs) ? createdTs : Date.now(),
   };
 }
@@ -91,7 +93,7 @@ function reservationToRow(
     booked_by_phone: bookedBy?.phone ?? null,
     // Colonnes 45 envoyées SEULEMENT pour un match ouvert : une réservation normale reste
     // insérable même si la migration 45 n'est pas encore collée (colonnes inconnues sinon).
-    ...(r.openMatch ? { open_match: true, open_level: r.openLevel ?? '' } : {}),
+    ...(r.openMatch ? { open_match: true, open_level: r.openLevel ?? '', open_capacity: r.openCapacity ?? 4 } : {}),
     status: 'booked',
   };
 }

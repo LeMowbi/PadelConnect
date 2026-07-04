@@ -159,6 +159,7 @@ export type Reservation = {
   clubConfirmed?: boolean; // le gérant a confirmé la réservation (visible par le joueur)
   openMatch?: boolean; // match OUVERT (45) : visible dans « Matchs ouverts », rejoignable
   openLevel?: string; // niveau souhaité du match ouvert (ex. « 3–4 », libre)
+  openCapacity?: number; // nombre de joueurs attendus : 2 = 1v1, 4 = 2v2 (défaut 4)
   createdAt: number;
 };
 

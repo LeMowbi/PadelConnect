@@ -16,7 +16,8 @@ export type OpenMatch = {
   level: string; // niveau souhaité (libre, ex. « 3–4 ») — '' = tous niveaux
   creatorId: string;
   creatorName: string;
-  placesLeft: number; // sur les 3 places aux côtés du créateur (padel = 4 joueurs)
+  placesLeft: number; // places restantes aux côtés du créateur (capacité − 1 − arrivés)
+  capacity: number; // 2 = 1v1 · 4 = 2v2
 };
 
 export async function fetchOpenMatches(): Promise<OpenMatch[] | null> {
@@ -36,6 +37,7 @@ export async function fetchOpenMatches(): Promise<OpenMatch[] | null> {
       creator_id: string;
       creator_name: string;
       places_left: number;
+      capacity: number;
     }[]
   ).map((r) => ({
     id: r.id,
@@ -50,6 +52,7 @@ export async function fetchOpenMatches(): Promise<OpenMatch[] | null> {
     creatorId: r.creator_id,
     creatorName: r.creator_name,
     placesLeft: r.places_left,
+    capacity: r.capacity ?? 4,
   }));
 }
 

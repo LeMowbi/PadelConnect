@@ -198,7 +198,7 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
                     {m.clubName}
                   </Txt>
                   <Txt variant="small" color={colors.textMuted} numberOfLines={1}>
-                    par {m.creatorName}
+                    {m.capacity === 2 ? '1v1' : '2v2'} · par {m.creatorName}
                     {m.level ? ` · niveau ${m.level}` : ' · tous niveaux'} · {m.placesLeft} place{m.placesLeft > 1 ? 's' : ''}
                   </Txt>
                 </View>
