@@ -15,7 +15,7 @@ import { SectionTournois } from '@/components/club-admin/SectionTournois';
 import { clubsByName, findClub, manageableClubs, type Club } from '@/data/clubs';
 import { fetchMyManagedClubs, switchManagedClub } from '@/lib/clubsServer';
 import { seedCompetitions } from '@/data/competitions';
-import { competitionBlockedCourts, courtsFor, hasFullDayCompetition } from '@/lib/availability';
+import { competitionBlockedCourts, courtsFor, hasFullDayCompetition, rangeBlocks } from '@/lib/availability';
 import { openWhatsApp } from '@/lib/contact';
 import { dateKeyLabel, slotTimestamp } from '@/lib/days';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
@@ -113,6 +113,11 @@ export default function ClubAdmin() {
   // confirmée reste confirmable — la pastille doit la compter comme la liste l'affiche.
   const pendingConfirm = clubRes.filter((r) => !r.clubConfirmed && !isPlayed(r, now)).length;
   const clubBlocked = state.blockedSlots.filter((b) => b.clubId === club.id);
+  // Fermetures sur période + récurrentes par terrain (54) : le détail d'un créneau doit les
+  // montrer — une case « Libre » avec un bouton « Bloquer » sur un créneau que le serveur
+  // refuse serait un mensonge.
+  const clubRanges = state.blockedRanges.filter((r) => r.clubId === club.id);
+  const closedByCourt = state.clubCourtClosed[club.id] ?? {};
   // Repli sur les terrains par défaut : la fiche détail d’un créneau doit lister les terrains
   // même si le gérant n’a pas encore personnalisé sa configuration.
   const courts = courtsFor(club, state.clubCourts);
@@ -435,6 +440,8 @@ export default function ClubAdmin() {
                 const isTournoi = compBlocked === 'all' || compBlocked.includes(c);
                 const resa = cellRes.find((r) => r.court === c);
                 const blk = clubBlocked.find((b) => b.dateKey === selectedCell.dateKey && b.time === selectedCell.time && b.court === c);
+                const rng = clubRanges.find((r) => rangeBlocks(r, selectedCell.dateKey, selectedCell.time, c));
+                const closedHere = (closedByCourt[c] ?? []).includes(selectedCell.time);
                 const isBlocking = blockingCourt === c;
                 return (
                   <View key={c} style={{ marginTop: spacing.sm }}>
@@ -494,6 +501,15 @@ export default function ClubAdmin() {
                             }}
                           />
                         </>
+                      ) : rng || closedHere ? (
+                        // Pas de « Débloquer » ponctuel ici : une période se rouvre dans
+                        // « Périodes fermées » (onglet Réservations), un horaire de terrain
+                        // dans « Horaires par terrain » (onglet Mon club).
+                        <Txt variant="small" color={colors.coral} style={{ flex: 1, fontWeight: '600' }} numberOfLines={2}>
+                          {rng
+                            ? 'Fermé sur période — rouvrable dans « Périodes fermées »'
+                            : 'Fermé sur ce terrain — voir « Horaires par terrain » (Mon club)'}
+                        </Txt>
                       ) : (
                         <>
                           <Txt variant="small" color={colors.green} style={{ flex: 1, fontWeight: '600' }}>

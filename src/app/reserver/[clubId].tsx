@@ -214,6 +214,12 @@ export default function ReserverScreen() {
       hapticWarning();
       setSlot(null);
       toast.show('Ce créneau vient de passer — choisis-en un autre.', { icon: 'alert-circle' });
+    } else if (res.reason === 'closed') {
+      // Le club vient de FERMER ce créneau (période, terrain, grille — 54) : changer de terrain
+      // ne servirait à rien, la grille se resynchronise (addReservation recharge les fermetures).
+      hapticWarning();
+      setSlot(null);
+      toast.show('Ce créneau vient d’être fermé par le club — choisis un autre horaire.', { icon: 'alert-circle' });
     } else {
       // Terrain pris entre-temps (autre joueur / conflit serveur) : on prévient et on
       // réinitialise la pré-sélection pour en choisir un autre.

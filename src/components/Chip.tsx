@@ -15,6 +15,7 @@ export function Chip({
   size = 'md',
   icon,
   disabled,
+  accessibilityLabel,
 }: {
   label: string;
   active?: boolean;
@@ -22,6 +23,9 @@ export function Chip({
   size?: 'md' | 'lg';
   icon?: IconName;
   disabled?: boolean;
+  // Libellé lecteur d'écran quand le label visuel ne suffit pas (ex. « Retirer l'horaire 12:30 »
+  // en mode retrait, ou « Terrain 1, 18:00, fermé » dans les grilles par terrain).
+  accessibilityLabel?: string;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const springTo = (to: number, bounciness: number) =>
@@ -40,7 +44,7 @@ export function Chip({
         disabled={disabled}
         accessibilityRole="button"
         accessibilityState={{ selected: !!active, disabled: !!disabled }}
-        accessibilityLabel={label}
+        accessibilityLabel={accessibilityLabel ?? label}
         style={[styles.base, size === 'lg' && styles.lg, active && styles.active, disabled && styles.disabled]}
       >
         {icon ? <Ionicons name={icon} size={13} color={active ? colors.onSignature : colors.textMuted} /> : null}

@@ -279,7 +279,7 @@ export const MAX_UPCOMING = 6; // réservations À VENIR max par joueur (anti-bl
 // partnersNotified = false : la résa est créée mais le rattachement des amis invités a échoué
 // (pas de push ni de résa chez eux) — l'écran de succès doit le dire au lieu de le taire.
 export type AddReservationResult =
-  { ok: true; partnersNotified?: boolean } | { ok: false; reason: 'past' | 'conflict' | 'limit' | 'network' };
+  { ok: true; partnersNotified?: boolean } | { ok: false; reason: 'past' | 'conflict' | 'limit' | 'closed' | 'network' };
 
 type AppContextType = {
   state: AppState;
@@ -354,10 +354,10 @@ type AppContextType = {
   // Bloquer un joueur (modération UGC) : écrit le serveur puis le miroir state.blockedUserIds.
   blockUserAccount: (userId: string) => Promise<boolean>;
   toggleFavorite: (clubId: string) => void;
-  addClubPhoto: (clubId: string, uri: string) => Promise<void>;
-  removeClubPhoto: (clubId: string, uri: string) => void;
-  addClubOffer: (clubId: string, kind: 'offre' | 'actu' | 'evenement', title: string, detail: string) => void;
-  removeClubOffer: (clubId: string, id: string) => void;
+  addClubPhoto: (clubId: string, uri: string) => Promise<boolean>;
+  removeClubPhoto: (clubId: string, uri: string) => Promise<boolean>;
+  addClubOffer: (clubId: string, kind: 'offre' | 'actu' | 'evenement', title: string, detail: string) => Promise<boolean>;
+  removeClubOffer: (clubId: string, id: string) => Promise<boolean>;
   // Photo « de profil » du club (celle de la carte) — null = la retirer. false = échec upload/serveur.
   setClubCover: (clubId: string, uri: string | null) => Promise<boolean>;
   // Une photo PAR TERRAIN (montre le terrain sur la fiche) — null = la retirer.
@@ -1389,6 +1389,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // en retard) et plafond de résas à venir — messages existants, pas « terrain pris ».
             if (res.past) return { ok: false, reason: 'past' };
             if (res.limit) return { ok: false, reason: 'limit' };
+            // « slot closed » (54) : le club vient de fermer ce créneau (période, terrain,
+            // grille) — « choisis un autre terrain » serait faux. On resynchronise les
+            // fermetures pour que la grille affichée se corrige immédiatement.
+            if (res.closed) {
+              const [freshRanges, freshConfigs] = await Promise.all([fetchBlockedRanges(), fetchClubConfigs()]);
+              if (sessionEpochRef.current === epoch) {
+                setState((s) => ({
+                  ...s,
+                  blockedRanges: freshRanges ?? s.blockedRanges,
+                  ...clubConfigSlices(s, freshConfigs),
+                }));
+              }
+              return { ok: false, reason: 'closed' };
+            }
             // Conflit (un autre joueur a pris le terrain) : on resynchronise l’occupation
             // pour que la disponibilité affichée se corrige immédiatement (anti dead-loop).
             if (res.conflict) {
@@ -1580,10 +1594,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Photo de club : un fichier local est d’abord ENVOYÉ au Storage (URL publique) pour que
       // les joueurs la voient sur tous les appareils ; une URL https est gardée telle quelle.
       // Puis on enregistre la liste des photos côté serveur (config club).
+      // Écritures HONNÊTES (audit 8) : galerie et offres ATTENDENT le serveur et ne touchent le
+      // miroir qu'au succès (motif setClubCover) — sinon la page divergeait entre ce téléphone
+      // et ceux des joueurs dès la moindre coupure réseau.
       addClubPhoto: async (clubId, uri) => {
-        if (!uri) return;
-        const current = state.clubPhotos[clubId] ?? [];
-        if (current.length >= MAX_CLUB_PHOTOS) return;
+        if (!uri) return false;
+        const existing = state.clubPhotos[clubId] ?? [];
+        // Plafond pour éviter de dépasser le quota de stockage local (perte de photos).
+        if (existing.length >= MAX_CLUB_PHOTOS) return false;
         let finalUrl = uri;
         const isLocalUri = !/^https?:\/\//.test(uri);
         if (state.serverUserId && isLocalUri) {
@@ -1592,43 +1610,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // data-URI) — elle serait illisible pour les autres appareils/joueurs. On prévient.
           if (!uploaded) {
             Alert.alert('Photo non envoyée', 'L’envoi de la photo a échoué. Vérifie ta connexion et réessaie.');
-            return;
+            return false;
           }
           finalUrl = uploaded;
         }
-        setState((s) => {
-          const existing = s.clubPhotos[clubId] ?? [];
-          // Plafond pour éviter de dépasser le quota de stockage local (perte de photos).
-          if (existing.includes(finalUrl) || existing.length >= MAX_CLUB_PHOTOS) return s;
-          const next = [...existing, finalUrl];
-          if (s.serverUserId) void upsertClubConfig(clubId, { photos: next });
-          return { ...s, clubPhotos: { ...s.clubPhotos, [clubId]: next } };
-        });
+        if (existing.includes(finalUrl)) return true;
+        const next = [...existing, finalUrl];
+        if (state.serverUserId) {
+          const ok = await upsertClubConfig(clubId, { photos: next });
+          if (!ok) return false;
+        }
+        setState((s) => ({ ...s, clubPhotos: { ...s.clubPhotos, [clubId]: next } }));
+        return true;
       },
-      removeClubPhoto: (clubId, uri) =>
-        setState((s) => {
-          const next = (s.clubPhotos[clubId] ?? []).filter((x) => x !== uri);
-          if (s.serverUserId) {
-            void upsertClubConfig(clubId, { photos: next });
-            void removeClubPhotoFile(uri); // best-effort : retire aussi le fichier du Storage
-          }
-          return { ...s, clubPhotos: { ...s.clubPhotos, [clubId]: next } };
-        }),
-      addClubOffer: (clubId, kind, title, detail) =>
-        setState((s) => {
-          const t = title.trim();
-          if (!t) return s;
-          const existing = s.clubOffers[clubId] ?? [];
-          const next = [{ id: uid(), kind, title: t, detail: detail.trim() }, ...existing];
-          if (s.serverUserId) void upsertClubConfig(clubId, { offers: next });
-          return { ...s, clubOffers: { ...s.clubOffers, [clubId]: next } };
-        }),
-      removeClubOffer: (clubId, id) =>
-        setState((s) => {
-          const next = (s.clubOffers[clubId] ?? []).filter((o) => o.id !== id);
-          if (s.serverUserId) void upsertClubConfig(clubId, { offers: next });
-          return { ...s, clubOffers: { ...s.clubOffers, [clubId]: next } };
-        }),
+      removeClubPhoto: async (clubId, uri) => {
+        const next = (state.clubPhotos[clubId] ?? []).filter((x) => x !== uri);
+        if (state.serverUserId) {
+          const ok = await upsertClubConfig(clubId, { photos: next });
+          if (!ok) return false;
+          void removeClubPhotoFile(uri); // best-effort : retire aussi le fichier du Storage
+        }
+        setState((s) => ({ ...s, clubPhotos: { ...s.clubPhotos, [clubId]: next } }));
+        return true;
+      },
+      addClubOffer: async (clubId, kind, title, detail) => {
+        const t = title.trim();
+        if (!t) return false;
+        const next = [{ id: uid(), kind, title: t, detail: detail.trim() }, ...(state.clubOffers[clubId] ?? [])];
+        if (state.serverUserId) {
+          const ok = await upsertClubConfig(clubId, { offers: next });
+          if (!ok) return false;
+        }
+        setState((s) => ({ ...s, clubOffers: { ...s.clubOffers, [clubId]: next } }));
+        return true;
+      },
+      removeClubOffer: async (clubId, id) => {
+        const next = (state.clubOffers[clubId] ?? []).filter((o) => o.id !== id);
+        if (state.serverUserId) {
+          const ok = await upsertClubConfig(clubId, { offers: next });
+          if (!ok) return false;
+        }
+        setState((s) => ({ ...s, clubOffers: { ...s.clubOffers, [clubId]: next } }));
+        return true;
+      },
       // Photo « de profil » du club : uploadée si locale (comme addClubPhoto), puis enregistrée
       // dans la config serveur. null = retirer ('' côté serveur — cf. 38_coaches_lessons.sql).
       setClubCover: async (clubId, uri) => {
@@ -1978,20 +2002,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Horaires/terrains : on ATTEND le serveur avant d'écrire le miroir (comme setClubInfo) —
       // sinon un échec réseau laissait la grille locale diverger en silence de ce que voient
       // les joueurs, et la modif « revenait en arrière » au prochain chargement.
+      // Garde d'époque (comme setCourtClosed) : une réponse tardive ne ré-écrit pas l'état
+      // (ni le disque) après une déconnexion ou une bascule de compte.
       setClubSlots: async (clubId, slots) => {
         const next = [...slots].sort();
+        const epoch = sessionEpochRef.current;
         if (state.serverUserId) {
           const ok = await upsertClubConfig(clubId, { slots: next });
           if (!ok) return false;
         }
+        if (sessionEpochRef.current !== epoch) return true;
         setState((s) => ({ ...s, clubSlots: { ...s.clubSlots, [clubId]: next } }));
         return true;
       },
       setClubCourts: async (clubId, courts) => {
+        const epoch = sessionEpochRef.current;
         if (state.serverUserId) {
           const ok = await upsertClubConfig(clubId, { courts });
           if (!ok) return false;
         }
+        if (sessionEpochRef.current !== epoch) return true;
         setState((s) => ({ ...s, clubCourts: { ...s.clubCourts, [clubId]: courts } }));
         return true;
       },
@@ -2042,10 +2072,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       blockRange: async (input) => {
         if (!state.serverUserId) return 'error';
         const epoch = sessionEpochRef.current;
-        const status = await blockRangeRow(input);
+        const { status, id } = await blockRangeRow(input);
         if (status !== 'ok') return status;
         const fresh = await fetchBlockedRanges();
-        if (fresh && sessionEpochRef.current === epoch) setState((s) => ({ ...s, blockedRanges: fresh }));
+        if (sessionEpochRef.current === epoch) {
+          // Relecture ratée juste après un succès serveur ? On insère quand même la ligne créée
+          // (le serveur renvoie son id) : la période reste visible, rouvrable, et freeCourts
+          // est juste tout de suite — sans ça, « Période fermée ✓ » avec un miroir intact
+          // invitait à re-soumettre (doublon serveur).
+          setState((s) => ({
+            ...s,
+            blockedRanges: fresh ?? (id ? [...s.blockedRanges, { ...input, id }] : s.blockedRanges),
+          }));
+        }
         return 'ok';
       },
       // Rouvre une période fermée. Le miroir n'est mis à jour qu'au succès serveur.
@@ -2058,12 +2097,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return true;
       },
       // Fermetures RÉCURRENTES par terrain (54) : remplace la carte complète du club
-      // ({ 'Terrain 1': ['18:00'] }). Écriture honnête, motif setClubSlots.
+      // ({ 'Terrain 1': ['18:00'] }). Écriture honnête, motif setClubSlots. Garde d'époque :
+      // une réponse tardive ne ré-écrit pas l'état (ni le disque) après déconnexion/bascule.
       setCourtClosed: async (clubId, closed) => {
+        const epoch = sessionEpochRef.current;
         if (state.serverUserId) {
           const ok = await upsertClubConfig(clubId, { courtClosed: closed });
           if (!ok) return false;
         }
+        if (sessionEpochRef.current !== epoch) return true;
         setState((s) => ({ ...s, clubCourtClosed: { ...s.clubCourtClosed, [clubId]: closed } }));
         return true;
       },

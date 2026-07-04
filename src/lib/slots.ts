@@ -72,6 +72,16 @@ export function inferOpenClose(slots: string[], sessionMin = SESSION_MIN): { ope
   return { open: minutesToSlot(mins[0]), close: minutesToSlot(mins[mins.length - 1] + sessionMin) };
 }
 
+// Grille AFFICHÉE dans l'Espace Club à partir de la config stockée : la config fait FOI.
+// On n'unionne PLUS buildSlots ici — l'union ressuscitait les horaires retirés (le scénario
+// « ajouter 10:00 après avoir retiré 09:30 » redevenait impossible) et créait des chips
+// fantômes à moins de 90 min d'un créneau réel, rouvrables → même terrain vendable deux fois.
+// Une config héritée « ouverts seuls » reste correcte : ses horaires s'affichent tous ouverts,
+// et un ancien créneau absent se ré-ajoute via « Ajouter un horaire ».
+export function deriveGrid(stored: string[]): string[] {
+  return [...new Set(stored.map(slotTime))].sort();
+}
+
 // ── Grille LIBRE (brique 2 des créneaux modulables) ─────────────────────────────
 // Le gérant peut ajouter n'importe quel horaire à sa grille (ex. 10:00 entre 8:00 et 11:30
 // impossible, mais 10:00 après avoir retiré 9:30 oui). Fonction PURE : valide qu'un horaire
@@ -82,7 +92,7 @@ export function canAddSlot(grid: string[], time: string): { ok: true } | { ok: f
   const t = slotToMinutes(time);
   if (t === null) return { ok: false, error: 'Heure invalide (format HH:MM, ex. 10:00).' };
   if (t < 5 * 60) return { ok: false, error: 'Pas de créneau avant 05:00.' };
-  if (t + SESSION_MIN > 24 * 60) return { ok: false, error: 'La session (1h30) doit finir avant minuit.' };
+  if (t + SESSION_MIN > 24 * 60) return { ok: false, error: 'La session (1h30) doit finir au plus tard à minuit.' };
   for (const entry of grid) {
     const other = slotToMinutes(slotTime(entry));
     if (other === null) continue;

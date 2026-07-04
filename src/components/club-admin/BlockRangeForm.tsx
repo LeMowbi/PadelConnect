@@ -106,11 +106,14 @@ export function BlockRangeForm({
       <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
         Motif
       </Txt>
+      {/* Promesse tenable depuis les grants de colonnes (54) : les joueurs ne téléchargent
+          plus le motif — seul l'Espace Club le lit (club_blocked_reasons). */}
       <TextInput
         value={reason}
         onChangeText={setReason}
-        placeholder="Motif (ex. travaux, tournoi privé) — visible par toi seul"
+        placeholder="Motif (ex. travaux, tournoi privé) — visible dans ton Espace Club uniquement"
         placeholderTextColor={colors.textMuted}
+        accessibilityLabel="Motif de la fermeture"
         style={styles.input}
       />
 

@@ -15,6 +15,7 @@ import { openWhatsApp } from '@/lib/contact';
 import { hapticLight, hapticSuccess, hapticWarning } from '@/lib/haptics';
 import {
   fetchCancelledReservations,
+  fetchClubBlockedReasons,
   fetchNoShowReservations,
   fetchReliability,
   purgeOldBlockedRanges,
@@ -48,6 +49,19 @@ export function SectionReservations({
   useEffect(() => {
     purgeOldBlockedRanges();
   }, []);
+  // Motifs des périodes fermées : réservés au gérant (RPC 54) — le miroir partagé n'en porte
+  // plus (les joueurs ne téléchargent plus ce texte libre). null = échec réseau → libellés neutres.
+  const [rangeReasons, setRangeReasons] = useState<Record<string, string>>({});
+  const rangeCount = state.blockedRanges.filter((r) => r.clubId === club.id).length;
+  useEffect(() => {
+    let alive = true;
+    void fetchClubBlockedReasons(club.id).then((m) => {
+      if (alive && m) setRangeReasons(m);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [club.id, rangeCount]);
   // Historique paginé par SEMAINES : un club actif accumule vite des centaines de résas —
   // tout rendre d'un coup gèle l'ouverture de l'onglet (même esprit que PAST_PREVIEW joueur).
   const [weeksShown, setWeeksShown] = useState(4);
@@ -170,6 +184,7 @@ export function SectionReservations({
   // balayer tout l'historique du club à chaque cellule deviendrait lourd avec les mois.
   const planDayRes = clubRes.filter((r) => r.dateKey === planDay.key);
   const planDayBlocked = clubBlocked.filter((b) => b.dateKey === planDay.key);
+  const closedByCourt = state.clubCourtClosed[club.id] ?? {};
   const courtStatusAt = (court: string, time: string): 'reserved' | 'blocked' | 'tournoi' | 'free' => {
     const compBlocked = competitionBlockedCourts(club.id, planDay.key, time, comps);
     if (compBlocked === 'all' || compBlocked.includes(court)) return 'tournoi';
@@ -177,20 +192,33 @@ export function SectionReservations({
     if (planDayBlocked.some((b) => b.time === time && b.court === court)) return 'blocked';
     // Fermeture sur période (54) couvrant ce jour/heure/terrain — même rendu qu’un blocage ponctuel.
     if (clubRanges.some((r) => rangeBlocks(r, planDay.key, time, court))) return 'blocked';
+    // Fermeture RÉCURRENTE par terrain (54) : la case doit se montrer fermée, comme la voient
+    // les joueurs (et comme le serveur la refuse) — sinon le gérant attend des résas dessus.
+    if ((closedByCourt[court] ?? []).includes(time)) return 'blocked';
     return 'free';
   };
 
-  // Mini-stats de la semaine : taux d’occupation + créneau le plus demandé.
+  // Mini-stats de la semaine : taux d’occupation + créneau le plus demandé. Le dénominateur ne
+  // compte que les cellules réellement VENDABLES : une case fermée (période, blocage ponctuel,
+  // fermeture récurrente du terrain) n'est pas un « créneau vide » — sinon l'occupation était
+  // sous-évaluée dès qu'un club utilisait les fermetures (54).
   const weekKeys = new Set(week.map((d) => d.key));
   const weekRes = clubRes.filter((r) => weekKeys.has(r.dateKey));
-  const capacity = Math.max(1, planTimes.length * courts.length * 7);
-  const occupancy = Math.round((weekRes.length / capacity) * 100);
+  const cellClosed = (dKey: string, t: string, court: string) =>
+    (closedByCourt[court] ?? []).includes(t) ||
+    clubRanges.some((r) => rangeBlocks(r, dKey, t, court)) ||
+    clubBlocked.some((b) => b.dateKey === dKey && b.time === t && b.court === court);
+  let sellable = 0;
+  for (const d of week) for (const t of planTimes) for (const c of courts) if (!cellClosed(d.key, t, c)) sellable++;
+  const capacity = Math.max(1, sellable);
+  const occupancy = Math.min(100, Math.round((weekRes.length / capacity) * 100));
   const byHour = new Map<string, number>();
   for (const r of weekRes) byHour.set(r.time, (byHour.get(r.time) ?? 0) + 1);
   const topHour = [...byHour.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
   // Créneaux les plus CREUX (parmi les heures d’ouverture, celles jamais réservées cette semaine)
-  // → le gérant sait où pousser une offre pour remplir.
-  const quietHours = planTimes.filter((t) => !byHour.has(t)).slice(0, 3);
+  // → le gérant sait où pousser une offre pour remplir. Une heure sans AUCUN terrain ouvert
+  // cette semaine n'est pas « creuse » : elle est fermée.
+  const quietHours = planTimes.filter((t) => !byHour.has(t) && week.some((d) => courts.some((c) => !cellClosed(d.key, t, c)))).slice(0, 3);
 
   // Revenu = somme des prix RÉELS des réservations (figés à la réservation). On additionne les
   // parties JOUÉES (revenu encaissé) — même base que la commission.
@@ -213,7 +241,7 @@ export function SectionReservations({
       <View style={{ marginTop: spacing.md }}>
         <Button
           size="sm"
-          label={showBlockForm ? 'Fermer' : '+ Bloquer un créneau (résa hors app)'}
+          label={showBlockForm ? 'Replier' : '+ Bloquer un créneau (résa hors app)'}
           icon={showBlockForm ? 'chevron-up' : 'lock-closed'}
           variant="secondary"
           onPress={() => setShowBlockForm((v) => !v)}
@@ -233,6 +261,11 @@ export function SectionReservations({
             if (resa) return { state: 'reserved', label: resa.bookedBy?.name ?? 'Joueur' };
             const blk = clubBlocked.find((b) => b.dateKey === dKey && b.time === time && b.court === court);
             if (blk) return { state: 'blocked', label: blk.reason };
+            // Mêmes yeux que le planning : une case couverte par une période fermée (54) ou une
+            // fermeture récurrente du terrain n'est PAS re-blocable (double comptabilité).
+            const rng = clubRanges.find((r) => rangeBlocks(r, dKey, time, court));
+            if (rng) return { state: 'blocked', label: rangeReasons[rng.id] || 'Fermé sur période' };
+            if ((closedByCourt[court] ?? []).includes(time)) return { state: 'blocked', label: 'Fermé sur ce terrain' };
             return { state: 'free' };
           }}
           onBlock={async (dKey, time, court, reason, ts) => {
@@ -254,9 +287,11 @@ export function SectionReservations({
       {/* Fermer sur une période (travaux, événement privé…) — dure plusieurs jours/heures,
           à la différence du blocage ponctuel ci-dessus. */}
       <View style={{ marginTop: spacing.sm }}>
+        {/* « Replier » (pas « Fermer ») : le CTA du formulaire, lui, FERME la période — deux
+            sens opposés du même verbe côte à côte perdaient le gérant. */}
         <Button
           size="sm"
-          label={showRangeForm ? 'Fermer' : '+ Fermer sur une période'}
+          label={showRangeForm ? 'Replier' : '+ Fermer sur une période'}
           icon={showRangeForm ? 'chevron-up' : 'calendar-clear-outline'}
           variant="secondary"
           onPress={() => setShowRangeForm((v) => !v)}
@@ -274,17 +309,29 @@ export function SectionReservations({
               toast.show('Période fermée ✓ — plus aucun créneau réservable dessus');
             } else if (status === 'reservations') {
               hapticWarning();
-              toast.show('Une réservation à venir existe sur cette période — annule-la d’abord.', { icon: 'alert-circle' });
+              // Le gérant ne PEUT pas annuler une résa depuis l'app : on l'oriente vers le
+              // joueur (son WhatsApp est sur la carte de la réservation, plus bas).
+              toast.show(
+                'Une réservation à venir existe sur cette période — contacte le joueur (WhatsApp sur sa carte) pour qu’il annule',
+                {
+                  icon: 'alert-circle',
+                },
+              );
+            } else if (status === 'competitions') {
+              hapticWarning();
+              toast.show('Un tournoi validé occupe cette période — choisis d’autres dates ou vois avec PadelConnect', {
+                icon: 'alert-circle',
+              });
             } else if (status === 'invalid') {
               hapticWarning();
-              toast.show('Dates invalides — vérifie la période (1 an maximum).', { icon: 'alert-circle' });
+              toast.show('Dates invalides — vérifie la période (1 an maximum)', { icon: 'alert-circle' });
             } else if (status === 'error') {
               hapticWarning();
-              toast.show('Enregistrement impossible — vérifie ta connexion.', { icon: 'cloud-offline-outline' });
+              toast.show('Enregistrement impossible — vérifie ta connexion', { icon: 'cloud-offline-outline' });
             } else {
-              // 'forbidden'
+              // 'forbidden' : refus de droits, pas un souci réseau.
               hapticWarning();
-              toast.show('Enregistrement impossible — vérifie ta connexion.', { icon: 'alert-circle' });
+              toast.show('Action réservée au gérant du club', { icon: 'alert-circle' });
             }
             return status;
           }}
@@ -293,52 +340,58 @@ export function SectionReservations({
 
       {/* Périodes fermées actives de ce club — chacune rouvrable d’un tap. */}
       {clubRanges.length > 0 ? (
-        <Card style={{ marginTop: spacing.sm }}>
-          <Txt variant="label" color={colors.textFaint} style={{ marginBottom: spacing.sm }}>
-            PÉRIODES FERMÉES · {clubRanges.length}
-          </Txt>
-          {clubRanges.map((r, i) => (
-            <View key={r.id}>
-              {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                <View style={{ flex: 1 }}>
-                  <Txt variant="body" style={{ fontWeight: '600' }}>
-                    {r.court ?? 'Tous les terrains'} · du {dateKeyLabel(r.dateFrom)} au {dateKeyLabel(r.dateTo)}
-                  </Txt>
-                  <Txt variant="small" color={colors.textFaint}>
-                    {r.times && r.times.length > 0 ? r.times.join(', ') : 'Toute la journée'}
-                  </Txt>
-                  {r.reason ? (
-                    <Txt variant="small" color={colors.textMuted}>
-                      {r.reason}
+        <View style={{ marginTop: spacing.xl }}>
+          <SectionHeader title={`Périodes fermées · ${clubRanges.length}`} />
+          <Card>
+            {clubRanges.map((r, i) => (
+              <View key={r.id}>
+                {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <View style={{ flex: 1 }}>
+                    <Txt variant="body" style={{ fontWeight: '600' }}>
+                      {r.court ?? 'Tous les terrains'} ·{' '}
+                      {r.dateFrom === r.dateTo
+                        ? `le ${dateKeyLabel(r.dateFrom)}`
+                        : `du ${dateKeyLabel(r.dateFrom)} au ${dateKeyLabel(r.dateTo)}`}
+                      {/* Un terrain retiré depuis : la période reste rouvrable, on le signale. */}
+                      {r.court && !courts.includes(r.court) ? ' (terrain retiré)' : ''}
                     </Txt>
-                  ) : null}
+                    <Txt variant="small" color={colors.textFaint}>
+                      {r.times && r.times.length > 0 ? r.times.join(', ') : 'Toute la journée'}
+                    </Txt>
+                    {rangeReasons[r.id] ? (
+                      <Txt variant="small" color={colors.textMuted}>
+                        {rangeReasons[r.id]}
+                      </Txt>
+                    ) : null}
+                  </View>
+                  <Button
+                    size="sm"
+                    label="Rouvrir"
+                    icon="lock-open"
+                    variant="ghost"
+                    accessibilityLabel={`Rouvrir ${r.court ?? 'tous les terrains'} du ${dateKeyLabel(r.dateFrom)} au ${dateKeyLabel(r.dateTo)}`}
+                    disabled={unblockingRangeId === r.id}
+                    onPress={() => {
+                      if (unblockingRangeId) return; // garde anti double-tap
+                      setUnblockingRangeId(r.id);
+                      void unblockRange(r.id).then((ok) => {
+                        setUnblockingRangeId(null);
+                        if (ok) {
+                          hapticSuccess();
+                          toast.show('Période rouverte ✓');
+                        } else {
+                          hapticWarning();
+                          toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
+                        }
+                      });
+                    }}
+                  />
                 </View>
-                <Button
-                  size="sm"
-                  label="Rouvrir"
-                  icon="lock-open"
-                  variant="ghost"
-                  disabled={unblockingRangeId === r.id}
-                  onPress={() => {
-                    if (unblockingRangeId) return; // garde anti double-tap
-                    setUnblockingRangeId(r.id);
-                    void unblockRange(r.id).then((ok) => {
-                      setUnblockingRangeId(null);
-                      if (ok) {
-                        hapticSuccess();
-                        toast.show('Période rouverte ✓');
-                      } else {
-                        hapticWarning();
-                        toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
-                      }
-                    });
-                  }}
-                />
               </View>
-            </View>
-          ))}
-        </Card>
+            ))}
+          </Card>
+        </View>
       ) : null}
 
       {/* Planning par terrain (jour sélectionné) — maquette Espace Club */}
@@ -497,7 +550,7 @@ export function SectionReservations({
             <EmptyState
               icon="calendar-outline"
               title="Aucune réservation à venir"
-              text={`Dès qu’un joueur réserve chez ${club.name}, elle apparaît ici avec son nom et son numéro.`}
+              text={`Dès qu’un joueur réserve chez ${club.name}, sa réservation apparaît ici avec son nom et son numéro.`}
             />
           </Card>
         ) : (

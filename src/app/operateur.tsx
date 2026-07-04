@@ -399,7 +399,12 @@ export default function Operateur() {
     openWhatsApp(phone, message);
     // Ne JAMAIS rétrograder un statut déjà « payé » : un renvoi du décompte (justificatif,
     // relance) à un club déjà réglé ne doit pas faire regonfler « Reste à encaisser ».
-    if (statusOf(row.clubId) !== 'paid') void setPaymentStatus(row.clubId, week, 'sent');
+    // Échec d'écriture signalé (le badge de la ligne, lui, ne change qu'au vrai succès).
+    if (statusOf(row.clubId) !== 'paid') {
+      void setPaymentStatus(row.clubId, week, 'sent').then(({ ok }) => {
+        if (!ok) toast.show('Statut « envoyé » non enregistré — vérifie ta connexion', { icon: 'alert-circle' });
+      });
+    }
   };
 
   // Export de TOUTE la semaine (tableau CSV, séparateur « ; ») à partager (comptabilité).

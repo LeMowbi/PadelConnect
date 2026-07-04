@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
+import { SkeletonLines } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, SectionHeader, Tag, Txt } from '@/components/ui';
 import { dateKeyLabel } from '@/lib/days';
@@ -113,8 +114,35 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
     );
   };
 
-  // Chargement ou hors-ligne sans donnée : rien (pas de section fantôme).
-  if (matches === undefined || matches === null) return null;
+  // Chargement / hors-ligne : sur l'ÉCRAN DÉDIÉ (full), une page vide serait illisible — on
+  // affiche un squelette puis, en échec réseau, une carte « Réessayer » (motif classement.tsx).
+  // En section d'accueil, on reste discret : rien (pas de section fantôme).
+  if (matches === undefined) {
+    return full ? (
+      <View style={{ marginTop: spacing.lg }}>
+        <SectionHeader title="Matchs ouverts" />
+        <Card>
+          <SkeletonLines lines={5} />
+        </Card>
+      </View>
+    ) : null;
+  }
+  if (matches === null) {
+    return full ? (
+      <View style={{ marginTop: spacing.lg }}>
+        <SectionHeader title="Matchs ouverts" />
+        <Card style={{ alignItems: 'center', paddingVertical: spacing.lg }}>
+          <Ionicons name="cloud-offline-outline" size={24} color={colors.textFaint} />
+          <Txt variant="muted" style={{ marginTop: spacing.sm, textAlign: 'center' }}>
+            Impossible de charger les matchs — vérifie ta connexion.
+          </Txt>
+          <View style={{ marginTop: spacing.md }}>
+            <Button size="sm" label="Réessayer" icon="refresh" variant="secondary" onPress={() => void load()} />
+          </View>
+        </Card>
+      </View>
+    ) : null;
+  }
 
   // On masque les matchs des comptes que j'ai bloqués (modération UGC — prénom du créateur
   // affiché). Miroir du STORE : persisté, chargé en session et au premier plan (convention §8).

@@ -88,7 +88,7 @@ Aucun nouveau webhook. Ordre conseillé : 49 → 50 → 51 → 52, puis notify-c
 
 ---
 
-## 0-QUATER) Horaires modulables + position Maps (2026-07-03) — coller SQL `50` (1 min) — ⏳ À FAIRE
+## 0-QUATER) Horaires modulables + position Maps (2026-07-03) — coller SQL `50` (1 min) — ✅ FAIT (confirmé porteur, 2026-07-03)
 
 Chaque club règle **ses propres horaires d'ouverture** (l'app découpe la plage en créneaux de 1h30)
 et peut **corriger sa position Google Maps** — y compris les 9 clubs fondateurs (utile quand tu
@@ -106,7 +106,7 @@ tout rentre dans l'ordre. Aucun webhook, aucun redéploiement de notify-club ici
 
 ---
 
-## 0-TER) AUDIT n°5 (2026-07-03) — coller SQL `49` + redéployer notify-club (3 min) — ⏳ À FAIRE
+## 0-TER) AUDIT n°5 (2026-07-03) — coller SQL `49` + redéployer notify-club (3 min) — ✅ FAIT (confirmé porteur, 2026-07-03)
 
 Nouvel audit complet. Côté serveur, **une migration à coller** + **notify-club à redéployer** :
 
@@ -146,7 +146,7 @@ operator_news), fais-la D'ABORD, puis colle la 48.
 
 ---
 
-## 0) NOUVEAU (2026-07-02/03) — SQL `42` à `47` + notify-club + 2 webhooks (8 min) — ⏳ À FAIRE
+## 0) NOUVEAU (2026-07-02/03) — SQL `42` à `47` + notify-club + 2 webhooks (8 min) — ✅ FAIT (confirmé porteur, 2026-07-03)
 
 ### a. Coller les migrations `42`, `43`, `44`, `45`, `46` puis `47` (dans cet ordre)
 
@@ -188,13 +188,12 @@ operator_news), fais-la D'ABORD, puis colle la 48.
 
 ---
 
-État au 2026-07-02 : les migrations `30 → 36` sont appliquées, `notify-club` est redéployée
-(confirmé par le porteur). **Reste à faire : le §1 (coachs & photos, avec la 37 au passage) —
-puis, optionnel, le §3.**
+État au 2026-07-03 (confirmé par le porteur) : les migrations `30 → 53` sont appliquées et
+`notify-club` est redéployée. **Reste : §0-SEPTIES (54) puis §0-OCTIES (55), AVANT le build #47.**
 
 ---
 
-## 1) Activer « Coachs & cours » + photos club (10 min) — ⏳ À FAIRE
+## 1) Activer « Coachs & cours » + photos club (10 min) — ✅ FAIT (confirmé porteur, 2026-07-03)
 
 La nouvelle version de l'app permet : photo « de profil » du club + une photo par terrain,
 et la **réservation de cours avec un coach** (le club déclare ses coachs ; le terrain n'est
@@ -267,8 +266,9 @@ il devient **obligatoire** — rien à redéployer.
 2. Dashboard → **Edge Functions** → **notify-club** → **Settings** (ou « Secrets ») → ajoute :
    **Nom** `WEBHOOK_SECRET`, **Valeur** = ton secret → **Save**.
 3. Dashboard → **Database → Webhooks** → pour **chaque** webhook qui appelle `notify-club`
-   (`reservations`, `reservation_participants`, `competitions`, `friend_requests`, `lessons`) :
-   **Edit** → **HTTP Headers** → ajoute **`x-webhook-secret`** = **le même secret** → **Save**.
+   — les **8** : `reservations`, `reservation_participants`, `competitions`, `friend_requests`,
+   `lessons`, `coaches`, `match_results`, `operator_news` (en oublier un = couper sa famille de
+   push) : **Edit** → **HTTP Headers** → ajoute **`x-webhook-secret`** = **le même secret** → **Save**.
 4. Vérifie : une action qui envoie un push (ex. réservation de test) → la notification arrive
    toujours. Si plus rien n'arrive, un webhook n'a pas le bon en-tête.
 

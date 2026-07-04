@@ -69,13 +69,20 @@ export function CalendarPicker({
   return (
     <View style={styles.box}>
       <View style={styles.header}>
-        <Pressable onPress={() => goMonth(-1)} disabled={!canPrev} hitSlop={8} accessibilityLabel="Mois précédent">
+        {/* hitSlop 12 : chevrons de ~20 pt portés au-delà des 44 pt effectifs (cible tactile). */}
+        <Pressable
+          onPress={() => goMonth(-1)}
+          disabled={!canPrev}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Mois précédent"
+        >
           <Ionicons name="chevron-back" size={20} color={canPrev ? colors.text : colors.textFaint} />
         </Pressable>
         <Txt variant="h3">
           {MONTHS_FULL[month]} {year}
         </Txt>
-        <Pressable onPress={() => goMonth(1)} disabled={!canNext} hitSlop={8} accessibilityLabel="Mois suivant">
+        <Pressable onPress={() => goMonth(1)} disabled={!canNext} hitSlop={12} accessibilityRole="button" accessibilityLabel="Mois suivant">
           <Ionicons name="chevron-forward" size={20} color={canNext ? colors.text : colors.textFaint} />
         </Pressable>
       </View>
@@ -100,6 +107,7 @@ export function CalendarPicker({
                   <Pressable
                     onPress={() => onSelect(key)}
                     disabled={disabled}
+                    hitSlop={4}
                     style={[styles.day, selected && styles.daySelected, !selected && today && styles.dayToday]}
                     accessibilityRole="button"
                     accessibilityState={{ selected, disabled }}

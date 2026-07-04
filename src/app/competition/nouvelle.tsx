@@ -9,7 +9,7 @@ import { useToast } from '@/components/Toast';
 import { Button, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { COMP_FORMATS } from '@/data/competitions';
-import { courtsFor, openSlotsFor } from '@/lib/availability';
+import { courtsFor, openSlotsFor, rangeBlocks } from '@/lib/availability';
 import { fetchTournamentFee } from '@/lib/competitionsServer';
 import { DAY_MS, dateKeyLabel, dayKey, nextDays, type DayOption } from '@/lib/days';
 import { fcfa } from '@/lib/format';
@@ -108,6 +108,31 @@ export default function NouvelleCompetition() {
   const toggleCourt = (c: string) => setCourts((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]));
   const toggleTime = (t: string) => setTimes((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
 
+  // Fermetures du club hôte (54) sur les dates choisies : un terrain/créneau couvert par une
+  // période fermée ou une fermeture récurrente est grisé — le serveur refuserait la validation,
+  // autant le montrer AVANT l'envoi plutôt qu'un échec inexpliqué au moment d'approuver.
+  const hostRanges = host ? state.blockedRanges.filter((r) => r.clubId === host.id) : [];
+  const hostClosedByCourt = host ? (state.clubCourtClosed[host.id] ?? {}) : {};
+  const chosenDayKeys = useMemo(() => {
+    if (!day) return [];
+    const end = endDay && endDay.key > day.key ? endDay.key : day.key;
+    return dates.filter((d) => d.key >= day.key && d.key <= end).map((d) => d.key);
+  }, [day, endDay, dates]);
+  // Terrain fermé si TOUTES les heures d'un des jours choisis le sont ? Non — on grise dès
+  // qu'une période « toute la journée » le couvre (times null) ; une fermeture partielle ne
+  // grise que les heures concernées (chips créneaux).
+  const courtDisabled = (c: string) =>
+    chosenDayKeys.length > 0 && hostRanges.some((r) => r.times === null && chosenDayKeys.some((dk) => rangeBlocks(r, dk, '00:00', c)));
+  // Une heure n'est grisée que si AUCUN terrain du club ne peut la jouer sur les dates choisies
+  // (période fermée ou fermeture récurrente) — partiellement fermée, elle reste sélectionnable
+  // avec les terrains restants.
+  const timeDisabled = (t: string) =>
+    chosenDayKeys.length > 0 &&
+    hostCourts.length > 0 &&
+    hostCourts.every(
+      (c) => (hostClosedByCourt[c] ?? []).includes(t) || hostRanges.some((r) => chosenDayKeys.some((dk) => rangeBlocks(r, dk, t, c))),
+    );
+
   const isPlayerTournament = !asClub && !asPadel;
 
   // Frais d’organisation PadelConnect : state.tournamentFee est chargé UNE FOIS par session —
@@ -162,7 +187,7 @@ export default function NouvelleCompetition() {
       // Club : le serveur refuse aussi quand des réservations occupent déjà la plage choisie (37).
       toast.show(
         asClub
-          ? 'Création impossible — des réservations occupent peut-être déjà ces créneaux.'
+          ? 'Création impossible — des réservations, un autre tournoi ou une période fermée occupent peut-être cette plage.'
           : 'Création impossible — réessaie dans un instant.',
         { icon: 'alert-circle' },
       );
@@ -312,7 +337,7 @@ export default function NouvelleCompetition() {
           </Txt>
           <View style={styles.wrap}>
             {hostCourts.map((c) => (
-              <Chip key={c} label={c} active={courts.includes(c)} onPress={() => toggleCourt(c)} />
+              <Chip key={c} label={c} active={courts.includes(c)} disabled={courtDisabled(c)} onPress={() => toggleCourt(c)} />
             ))}
           </View>
 
@@ -321,11 +346,14 @@ export default function NouvelleCompetition() {
           </Txt>
           <View style={styles.wrap}>
             {hostSlots.map((t) => (
-              <Chip key={t} label={t} active={times.includes(t)} onPress={() => toggleTime(t)} />
+              <Chip key={t} label={t} active={times.includes(t)} disabled={timeDisabled(t)} onPress={() => toggleTime(t)} />
             ))}
           </View>
           <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
             Sélectionne les terrains et les heures à bloquer. Si tu ne choisis rien, tout le club est réservé ce(s) jour(s)-là.
+            {chosenDayKeys.length > 0 && (hostCourts.some(courtDisabled) || hostSlots.some(timeDisabled))
+              ? ' Les choix grisés sont fermés par le club sur ces dates.'
+              : ''}
           </Txt>
         </>
       ) : null}

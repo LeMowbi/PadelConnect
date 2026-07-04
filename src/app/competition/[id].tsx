@@ -97,6 +97,9 @@ export default function CompetitionDetail() {
   // Le jour même = en cours, pas encore « terminé » (on ne clôture pas avant que ça se joue).
   // Pour un tournoi multi-jours, c’est la date de FIN qui fait foi.
   const played = (comp.endDateKey ?? comp.dateKey) < dayKey(new Date());
+  // Dès le JOUR MÊME du tournoi, le serveur refuse la désinscription (53) : on ne montre plus
+  // le bouton — un « réessaie » en boucle sur un refus définitif serait mensonger.
+  const started = dayKey(new Date()) >= comp.dateKey;
   const result = state.compResults[comp.id];
   const mine = state.officialResults.find((o) => o.compId === comp.id);
   const myTeam = registered ? `${state.account?.firstName ?? 'Toi'} & ${reg.partner}` : '';
@@ -633,7 +636,7 @@ export default function CompetitionDetail() {
               L’organisateur désignera l’équipe vainqueure — tes stats se mettront à jour automatiquement.
             </Txt>
           ) : null}
-          {!played ? (
+          {!played && !started ? (
             <View style={{ marginTop: spacing.md }}>
               <Button
                 label="Se désinscrire"
@@ -646,11 +649,17 @@ export default function CompetitionDetail() {
                   setRegistering(false);
                   if (ok) hapticSuccess();
                   else hapticWarning();
+                  // Le bouton n'existe plus dès le jour J : un échec ici est un vrai souci
+                  // réseau/serveur, « réessaie » redevient honnête.
                   showToast(ok ? 'Désinscription effectuée' : 'Action impossible — réessaie.', ok ? 'success' : 'error');
                 }}
                 full
               />
             </View>
+          ) : !played && started ? (
+            <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+              Le tournoi a commencé — la désinscription n’est plus possible. Un empêchement ? Contacte l’organisateur.
+            </Txt>
           ) : null}
         </Card>
       ) : played ? null : full ? (

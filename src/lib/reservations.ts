@@ -102,7 +102,7 @@ export async function insertReservation(
   input: Omit<Reservation, 'id' | 'createdAt' | 'bookedBy' | 'userId'>,
   userId: string,
   bookedBy?: { name: string; phone: string },
-): Promise<{ ok: boolean; reservation?: Reservation; conflict?: boolean; past?: boolean; limit?: boolean }> {
+): Promise<{ ok: boolean; reservation?: Reservation; conflict?: boolean; past?: boolean; limit?: boolean; closed?: boolean }> {
   const { data, error } = await supabase
     .from('reservations')
     .insert(reservationToRow(input, userId, bookedBy))
@@ -121,6 +121,9 @@ export async function insertReservation(
     const msg = (error as { message?: string }).message ?? '';
     if (code === 'P0001' && msg.includes('must be in the future')) return { ok: false, past: true };
     if (code === 'P0001' && msg.includes('too many upcoming')) return { ok: false, limit: true };
+    // « slot closed » (54) = le club vient de fermer ce créneau (période, terrain, grille) :
+    // « choisis un autre terrain » serait faux — l'appelant resynchronise plutôt la grille.
+    if (code === 'P0001' && msg.includes('slot closed')) return { ok: false, closed: true };
     return { ok: false, conflict: code === '23505' || code === '23514' || code === 'P0001' };
   }
   return { ok: true, reservation: rowToReservation(data as Row) };
@@ -155,40 +158,46 @@ export type { BlockedRange } from './ranges';
 
 // null = échec réseau → l'appelant garde l'existant (convention §8). Borné aux périodes
 // encore actives (une période finie ne sert plus à l'affichage ; purge serveur par ailleurs).
+// La colonne `reason` n'est PAS lue : texte libre du gérant, elle n'est plus lisible que par
+// lui (grants de colonnes 54 + club_blockedReasons) — la dispo joueur n'en a pas besoin.
 export async function fetchBlockedRanges(): Promise<BlockedRange[] | null> {
   const { data, error } = await supabase
     .from('blocked_ranges')
-    .select('id, club_id, court, date_from, date_to, times, reason')
+    .select('id, club_id, court, date_from, date_to, times')
     .gte('date_to', dayKey(new Date()))
     .order('date_from', { ascending: true })
     .limit(500);
   if (error) return null;
   return (data ?? []).map(
-    (r: {
-      id: string;
-      club_id: string;
-      court: string | null;
-      date_from: string;
-      date_to: string;
-      times: string[] | null;
-      reason: string | null;
-    }) => ({
+    (r: { id: string; club_id: string; court: string | null; date_from: string; date_to: string; times: string[] | null }) => ({
       id: r.id,
       clubId: r.club_id,
       court: r.court,
       dateFrom: r.date_from,
       dateTo: r.date_to,
       times: r.times && r.times.length ? r.times : null,
-      reason: r.reason ?? '',
+      reason: '',
     }),
   );
 }
 
-export type BlockRangeStatus = 'ok' | 'reservations' | 'forbidden' | 'invalid' | 'error';
+// Motifs des périodes fermées du club GÉRÉ (RPC 54, réservée au gérant/opérateur) :
+// { id → motif }. null = échec réseau (convention §8) — l'UI affiche alors un libellé neutre.
+export async function fetchClubBlockedReasons(clubId: string): Promise<Record<string, string> | null> {
+  const { data, error } = await supabase.rpc('club_blocked_reasons', { p_club_id: clubId });
+  if (error) return null;
+  const map: Record<string, string> = {};
+  for (const r of (data ?? []) as { id: string; reason: string | null }[]) map[r.id] = r.reason ?? '';
+  return map;
+}
+
+export type BlockRangeStatus = 'ok' | 'reservations' | 'competitions' | 'forbidden' | 'invalid' | 'error';
 
 // Ferme une période côté serveur. 'reservations' = une résa à venir vit dans la période
-// (le gérant l'annule d'abord) ; 'error' = échec réseau.
-export async function blockRangeRow(input: Omit<BlockedRange, 'id'>): Promise<BlockRangeStatus> {
+// (le gérant l'annule d'abord) ; 'competitions' = un tournoi publié la chevauche ;
+// 'error' = échec réseau. Au succès, le serveur renvoie 'ok:<uuid>' → on rend l'id créé
+// pour que l'appelant tienne son miroir local même si la relecture réseau échoue.
+export async function blockRangeRow(input: Omit<BlockedRange, 'id'>): Promise<{ status: BlockRangeStatus; id?: string }> {
   const { data, error } = await supabase.rpc('block_range', {
     p_club_id: input.clubId,
     p_court: input.court,
@@ -197,8 +206,11 @@ export async function blockRangeRow(input: Omit<BlockedRange, 'id'>): Promise<Bl
     p_times: input.times,
     p_reason: input.reason,
   });
-  if (error) return 'error';
-  return data === 'ok' || data === 'reservations' || data === 'forbidden' || data === 'invalid' ? data : 'error';
+  if (error) return { status: 'error' };
+  if (typeof data === 'string' && data.startsWith('ok:')) return { status: 'ok', id: data.slice(3) };
+  return data === 'reservations' || data === 'competitions' || data === 'forbidden' || data === 'invalid'
+    ? { status: data }
+    : { status: 'error' };
 }
 
 // Rouvre une période (gérant du club, ou opérateur). false si refusé/échec.

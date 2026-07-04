@@ -22,7 +22,8 @@ export type AvailCtx = {
   blocked: BlockedSlot[]; // créneaux fermés hors app par les clubs (un jour, une heure, un terrain)
   ranges: BlockedRange[]; // fermetures sur PÉRIODE (54) — terrain ou club entier, plusieurs jours
   // Fermetures RÉCURRENTES par terrain (54) : { clubId: { 'Terrain 1': ['18:00', …] } } —
-  // le Terrain 1 n'est jamais réservable à 18:00 (ex. réservé aux cours), les autres si.
+  // le Terrain 1 n'est jamais réservable à 18:00, pour TOUTES les réservations (cours in-app
+  // compris) ; les autres terrains restent ouverts.
   courtClosed: Record<string, Record<string, string[]>>;
 };
 

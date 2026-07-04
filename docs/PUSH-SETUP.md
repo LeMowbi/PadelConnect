@@ -11,6 +11,9 @@ Exécuter **`supabase/16_push_token.sql`** (ajoute la colonne `expo_push_token`)
 
 ## 2. Clé de notifications Apple (APNs) — ⚠️ OBLIGATOIRE, à faire UNE FOIS (10 min, sans terminal)
 
+> ✅ **Réglé** — la clé APNs a été créée par le porteur et liée sur EAS : les push sont vérifiés
+> depuis le build **#45**. Les étapes ci-dessous restent comme référence (rien à refaire).
+
 **Correction importante (2026-07-03)** : contrairement à ce que disait ce guide, la clé APNs
 n'est PAS créée automatiquement — nos builds tournent en mode non-interactif, qui SAUTE cette
 étape. Vérifié en direct via l'API Expo : `pushKey: null` → **Apple refuse toutes les
@@ -110,9 +113,22 @@ Dashboard Supabase → **Database → Webhooks** → *Create a new hook* :
   même fonction `notify-club`.
   - INSERT (le club déclare un coach) ou UPDATE `active → true` (re-promotion) → notifie le
     **joueur promu** (« Tu es maintenant coach 🎾 » — le tap ouvre son Espace Coach).
+- **Scores de match** : table `match_results`, événements **INSERT _et_ UPDATE** (coche les
+  deux) → même fonction `notify-club`.
+  - INSERT d'une première saisie → notifie les **autres joueurs** du match (score à confirmer).
+  - UPDATE qui valide le match (la règle du serveur est atteinte) → notifie **les joueurs**
+    (« Match validé »).
+  - UPDATE avec des saisies **en désaccord** → notifie les joueurs (le score est à revoir).
+- **Actu opérateur** : table `operator_news`, événements **INSERT _et_ UPDATE** (coche les
+  deux) → même fonction `notify-club`.
+  - INSERT ou UPDATE d'une actu dont la case **« Envoyer aussi en notification »** était cochée
+    (colonne `push`) → push d'actu à tous les joueurs. Case décochée = aucun push.
+  - Garde **anti-doublon** sur `news_id` : la même actu ne part jamais deux fois.
 
 La fonction lit la table + le type d'événement et envoie au bon destinataire (gérant du club,
 joueur, auteur de la réservation, opérateur, organisateur du tournoi, ami invité, coach ou élève).
+**Au total, 8 webhooks** doivent exister : `reservations`, `reservation_participants`,
+`competitions`, `friend_requests`, `lessons`, `coaches`, `match_results`, `operator_news`.
 
 ## 4 bis. (Recommandé) Sécuriser le webhook
 

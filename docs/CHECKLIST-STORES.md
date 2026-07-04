@@ -14,7 +14,7 @@
 - [ ] **Compte Expo** — déjà créé (`padelconnect-ci`). ✅
 - [ ] **Apple Developer Program** — ~99 USD/an — https://developer.apple.com/programs/ (obligatoire pour l'iPhone : TestFlight + App Store).
 - [ ] **Google Play Console** — 25 USD une fois — https://play.google.com/console (obligatoire pour Android sur le Play Store).
-- [ ] (Plus tard, version connectée) **Supabase** + fournisseur **SMS** — voir GUIDE-LANCEMENT.md (chantier §B serveur).
+- [x] **Supabase** — en production ✅ (l'éventuel fournisseur **SMS** reste une note post-lancement — voir GUIDE-LANCEMENT.md).
 
 ## 2. Éléments légaux (obligatoires)
 
@@ -38,7 +38,7 @@
 
 - [ ] iOS `bundleIdentifier` = `ci.padelco.app` (IMMUABLE après publication — confirmer avant le 1er envoi).
 - [ ] Android `package` = `ci.padelco.app`.
-- [ ] `version` = 1.0.0 ; `ios.buildNumber` s'auto-incrémente à chaque build (profil `production` d'eas.json — actuellement 45) ; `android.versionCode` = 1 au premier envoi Android.
+- [ ] `version` = 1.0.0 ; `ios.buildNumber` s'auto-incrémente à chaque build (profil `production` d'eas.json — actuellement 46) ; `android.versionCode` = 1 au premier envoi Android.
 
 ## 5. Fabriquer et envoyer (commandes EAS, depuis un ordinateur)
 
@@ -69,20 +69,21 @@ npx eas-cli submit --platform ios --profile production
 
 ### a. Serveur (Dashboard Supabase, sans terminal) — dans CET ORDRE
 
-- [ ] Re-coller **`supabase/49_audit5_hardening.sql`** (re-corrigé : anti-triche du score verrouillé + « non classé » géré par le classement).
-- [ ] Coller **`supabase/50_club_maps_query.sql`** (position Maps éditable) — voir `docs/AUDIT-SERVEUR.md` §0-QUATER.
-- [ ] Coller **`supabase/51_moderation.sql`** (signaler un avis / bloquer un joueur + confidentialité
-      des matchs ouverts).
-- [ ] Coller **`supabase/52_tournoi_refus_commente.sql`** (motif de refus d'un tournoi — sans elle,
-      refuser un tournoi ÉCHOUE en production).
+- [x] Re-coller **`supabase/49_audit5_hardening.sql`** (re-corrigé : anti-triche du score verrouillé + « non classé » géré par le classement) — FAIT (confirmé 2026-07-03, voir AUDIT-SERVEUR §0-SEXIES).
+- [x] Coller **`supabase/50_club_maps_query.sql`** (position Maps éditable) — FAIT (confirmé
+      2026-07-03, voir AUDIT-SERVEUR §0-SEXIES).
+- [x] Coller **`supabase/51_moderation.sql`** (signaler un avis / bloquer un joueur + confidentialité
+      des matchs ouverts) — FAIT (confirmé 2026-07-03, voir AUDIT-SERVEUR §0-SEXIES).
+- [x] Coller **`supabase/52_tournoi_refus_commente.sql`** (motif de refus d'un tournoi — sans elle,
+      refuser un tournoi ÉCHOUE en production) — FAIT (confirmé 2026-07-03, voir AUDIT-SERVEUR §0-SEXIES).
 - [x] Coller **`supabase/53_audit7_hardening.sql`** (durcissements de l'audit n°7) — FAIT
       (confirmé le 2026-07-03, vérifié à distance).
 - [ ] Coller **`supabase/54_creneaux_modulables.sql`** (fermetures de période, grille libre,
       horaires par terrain) — détail dans `docs/AUDIT-SERVEUR.md` §0-SEPTIES. ⚠️ AVANT le build #47.
 - [ ] Coller **`supabase/55_multi_clubs.sql`** (un compte peut gérer plusieurs clubs) — détail
       dans `docs/AUDIT-SERVEUR.md` §0-OCTIES. ⚠️ AVANT le build #47, APRÈS la 54.
-- [ ] **Edge Function `notify-club`** → **Edit** → recoller tout `supabase/functions/notify-club/index.ts`
-      → **Deploy**.
+- [x] **Edge Function `notify-club`** → **Edit** → recoller tout `supabase/functions/notify-club/index.ts`
+      → **Deploy** — FAIT (confirmé 2026-07-03, voir AUDIT-SERVEUR §0-SEXIES).
 
 ### b. Modération du contenu (exigé par Apple Guideline 1.2 et Google Play)
 
@@ -100,14 +101,12 @@ npx eas-cli submit --platform ios --profile production
       `assetlinks.json` et un `_redirects` mis à jour — un ami **Android** est enfin envoyé vers
       **Google Play**, plus vers l'App Store iPhone). ⚠️ Redéployer `site/` **en entier**.
 
-### c-bis. ⚠️ BLOQUANT — Clé de notifications Apple (APNs) absente
+### c-bis. Clé de notifications Apple (APNs)
 
-- [ ] **Aucun push n'arrive sur iPhone tant que ce n'est pas fait** (vérifié : `pushKey: null`
-      chez Expo — Apple jette toutes les notifications). Créer la clé APNs sur developer.apple.com
-      et l'ajouter sur expo.dev → guide pas-à-pas : **`docs/PUSH-SETUP.md` §2** (10 min, sans
-      terminal, effet immédiat sans nouveau build).
+- [x] **✅ FAIT** — clé APNs créée et liée sur EAS, push opérationnels depuis le build **#45**
+      (guide conservé pour référence : **`docs/PUSH-SETUP.md` §2**).
 - [ ] Au moment du build **Android** : ajouter aussi les identifiants **FCM** (même page
-      Credentials d'expo.dev, section Android) — même symptôme sinon.
+      Credentials d'expo.dev, section Android) — sans eux, aucun push n'arrivera sur Android.
 
 ### d. Sécuriser les notifications (recommandé fort avant lancement)
 

@@ -52,7 +52,7 @@ export function ManagerAccess({
     const { ok, name, error } = await onRevoke(phone);
     setBusy(null);
     if (ok) {
-      toast.show(`Accès gérant retiré (${name || 'joueur'})`);
+      toast.show(`Accès retiré à TOUS ses clubs (${name || 'joueur'})`);
       setPhone('');
     } else if (error) {
       toast.show('Connexion impossible — réessaie', { icon: 'alert-circle' });
@@ -65,7 +65,8 @@ export function ManagerAccess({
     <Card>
       <Txt variant="small" color={colors.textMuted}>
         Le gérant crée d’abord un compte normal dans l’app, puis te communique son numéro. Saisis-le ici et choisis son club : il obtient
-        l’accès « Espace Club » à sa prochaine ouverture de l’app, sans rien faire de technique.
+        l’accès « Espace Club » à sa prochaine ouverture de l’app, sans rien faire de technique. Redonner l’accès avec un autre club
+        l’AJOUTE à sa liste (multi-clubs) ; « Retirer » retire l’accès à TOUS ses clubs d’un coup — redonne-lui ensuite un club si besoin.
       </Txt>
       <TextInput
         value={phone}

@@ -79,8 +79,8 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   l'écrire dans le dépôt).
 - Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
 --auto-submit --non-interactive --no-wait`.
-- **Dernier build : #45** (audits n°5/6 + APNs réparé — les push partent enfin). Le #46 (audit
-  n°7 complet) est le build de LANCEMENT : SQL 49 (re-corrigée) → 53 à coller AVANT.
+- **Dernier build : #46** (LANCEMENT, audit n°7 complet — SQL 49 re-corrigée → 53 collées ✅).
+  Le #47 (créneaux modulables + multi-clubs) exige SQL `54` PUIS `55` AVANT installation.
 - Un module natif nouveau (ex. `expo-contacts`) ⇒ **nouveau build requis** + config plugin dans
   `app.json` avec la chaîne de permission.
 
@@ -97,8 +97,9 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - **Edge Function** `supabase/functions/notify-club/index.ts` (Deno) : envoie les push via
   l'API Expo. Déclenchée par des **Database Webhooks** (INSERT + UPDATE). Redéploiement **sans
   terminal** : Dashboard → Edge Functions → notify-club → Edit → coller le code → Deploy.
-  Webhooks à brancher (voir `docs/PUSH-SETUP.md`) : `reservations`, `reservation_participants`,
-  `competitions`, **`friend_requests`**, **`lessons`**, **`match_results`**, **`operator_news`**.
+  Webhooks à brancher (voir `docs/PUSH-SETUP.md`, 8 au total) : `reservations`,
+  `reservation_participants`, `competitions`, **`friend_requests`**, **`lessons`**,
+  **`coaches`**, **`match_results`**, **`operator_news`**.
 - **Convention réseau** : un fetch serveur renvoie `null` en cas d'échec réseau (≠ `[]`/`{}` =
   succès vide). Les appelants font `x ?? s.existant` ou `if (!x) return` pour ne pas écraser le
   miroir local hors-ligne.
@@ -287,9 +288,11 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   score/annulation alignés sur la règle réelle, part par joueur sur l'effectif réel, resync
   ClubInfoCard (patch limité aux champs modifiés), accessibilité (toasts annoncés, labels,
   cibles 44 pt, scrims masqués), CGU/privacy complétées, docs stores recalées.
-- **Reste à faire par le porteur (docs/AUDIT-SERVEUR.md §0-SEXIES)** : coller SQL `49` (re-corrigée)
-  → `50` → `51` → `52` → `53` DANS L'ORDRE, redéployer notify-club, re-déployer le dossier `site/`
-  (privacy + /get), compléter l'empreinte SHA-256 d'assetlinks. Optionnel plus tard :
+- **Serveur post-audit 7 ✅ FAIT (confirmé porteur, 2026-07-03)** : SQL `49` (re-corrigée) → `53`
+  collées DANS L'ORDRE, notify-club redéployée, dossier `site/` re-déployé (privacy + /get, AASA ok)
+  — voir docs/AUDIT-SERVEUR.md §0-SEXIES.
+- **Reste à faire par le porteur, AVANT le build #47** : coller SQL `54` (§0-SEPTIES) PUIS `55`
+  (§0-OCTIES), dans cet ordre. Plus tard : empreinte SHA-256 d'assetlinks (Android) ; optionnel :
   `WEBHOOK_SECRET` + en-tête `x-webhook-secret` sur les webhooks (§3).
 
 ### Feuille de route (décidée avec le porteur le 2026-07-01)

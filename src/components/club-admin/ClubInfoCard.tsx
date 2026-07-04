@@ -85,10 +85,15 @@ export function ClubInfoCard({
       .map((t) => ({ start: t.start.trim(), end: t.end.trim(), price: Number(t.price), label: t.label.trim() || undefined }));
     // Validation À LA SOURCE : des plages doivent couvrir les HEURES D’OUVERTURE du club
     // (openMin→closeMin) sans trou ni chevauchement. Échec → on N’ENREGISTRE RIEN (état intact).
-    const v = validateTiers(built, openMin, closeMin);
-    if (!v.ok) {
-      setTierError(v.error);
-      return;
+    // SEULEMENT si les plages ont été touchées : une amplitude élargie entre-temps (horaire
+    // libre ajouté) ne doit pas bloquer l'enregistrement d'un champ sans rapport (WhatsApp…).
+    const tiersChanged = JSON.stringify(tiers) !== initial.tiers;
+    if (tiersChanged) {
+      const v = validateTiers(built, openMin, closeMin);
+      if (!v.ok) {
+        setTierError(v.error);
+        return;
+      }
     }
     setTierError(null);
     // Patch limité aux champs MODIFIÉS depuis le montage (cf. `initial`) : un champ intact
@@ -99,7 +104,7 @@ export function ClubInfoCard({
     if (blurb.trim() !== initial.blurb) patch.blurb = blurb.trim();
     if (type !== initial.type) patch.type = type;
     if (price !== initial.price) patch.priceFrom = Number(price);
-    if (JSON.stringify(tiers) !== initial.tiers) patch.priceTiers = built.length ? built : undefined;
+    if (tiersChanged) patch.priceTiers = built.length ? built : undefined;
     if (phone.trim() !== initial.phone) patch.contactPhone = phone.trim() || undefined;
     if (mapsQuery.trim() !== initial.mapsQuery) patch.mapsQuery = mapsQuery.trim() || undefined;
     // On ATTEND le serveur : « Enregistré ✓ » ne s’affiche qu’au vrai succès (sinon, hors-ligne,

@@ -115,6 +115,20 @@ check(
 );
 // Rétro-compat : sans bornes fournies, on garde 07:00 → 24:00.
 check(validateTiers([tier('07:00', '24:00')]).ok === true, 'Sans bornes → défaut 07:00→24:00 (rétro-compat)');
+// Grille libre : un horaire ajouté AVANT la couverture des plages est vendu au prix minimum
+// (repli priceForSlot) — d'où l'avertissement à l'ajout — et re-valider des plages inchangées
+// contre l'amplitude ÉLARGIE échouerait : ClubInfoCard ne re-valide que des plages MODIFIÉES.
+check(
+  priceForSlot(
+    { priceFrom: 12000, priceTiers: [tier('08:00', '16:00'), tier('16:00', '23:00', 30000)] } as Parameters<typeof priceForSlot>[0],
+    '06:30',
+  ) === 10000,
+  'Créneau libre hors plages (06:30) → repli prix minimum (l’ajout affiche un avertissement)',
+);
+check(
+  validateTiers([tier('08:00', '16:00'), tier('16:00', '23:00')], 6 * 60 + 30, 23 * 60).ok === false,
+  'Amplitude élargie (06:30) + plages inchangées → validation en échec (d’où la re-validation UNIQUEMENT si modifiées)',
+);
 
 // L'état n'est PAS modifié quand la validation échoue (miroir de ClubInfoCard.save).
 let savedPatch: unknown = null;

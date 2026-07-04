@@ -120,6 +120,7 @@ export function Button({
   size = 'md',
   disabled,
   pill,
+  accessibilityLabel,
 }: {
   label: string;
   onPress?: () => void;
@@ -129,6 +130,9 @@ export function Button({
   size?: 'sm' | 'md';
   disabled?: boolean;
   pill?: boolean;
+  // Libellé lecteur d'écran quand plusieurs boutons partagent le même label visuel
+  // (ex. une liste de « Rouvrir ») — défaut : le label.
+  accessibilityLabel?: string;
 }) {
   const tone = btnTones[variant];
   // Tout CTA pleine largeur est en pill (look premium du handoff) ; surchargeable.
@@ -155,7 +159,7 @@ export function Button({
         onPress={onPress}
         disabled={disabled}
         accessibilityRole="button"
-        accessibilityLabel={label}
+        accessibilityLabel={accessibilityLabel ?? label}
         accessibilityState={{ disabled: !!disabled }}
         style={({ pressed }) => [
           shadows.e2,
@@ -182,7 +186,7 @@ export function Button({
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => [
         btn.base,

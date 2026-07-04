@@ -6,6 +6,7 @@ import {
   buildSlots,
   canAddSlot,
   closedSlot,
+  deriveGrid,
   inferOpenClose,
   isClosedSlot,
   minutesToSlot,
@@ -88,6 +89,24 @@ check(canAddSlot([], '23:00').ok === false, 'canAddSlot : 23:00 + 1h30 déborde 
 check(canAddSlot([], '22:30').ok === true, 'canAddSlot : 22:30 (fin 24:00 pile) → OK');
 check(canAddSlot([], 'abc').ok === false, 'canAddSlot : format invalide → refus');
 check('error' in canAddSlot(['08:00', '11:00'], '10:00'), 'canAddSlot : le refus porte un message actionnable');
+
+// ── deriveGrid : la grille affichée EST la grille stockée — un horaire retiré ne ressuscite
+// jamais (l'ancienne union avec buildSlots recréait les retraits et des fantômes à < 90 min).
+const g = deriveGrid(['08:00', '11:00', '12:30']);
+check(!g.includes('09:30'), 'deriveGrid : un créneau retiré (09:30) ne ressuscite pas');
+check(canAddSlot(g, '10:00').ok === false, 'deriveGrid : 10:00 refusé tant que 11:00 existe (60 min)');
+check(
+  canAddSlot(deriveGrid(['08:00', '11:30']), '10:00').ok === true,
+  'deriveGrid : « ajouter 10:00 après avoir retiré 09:30 » marche (scénario documenté)',
+);
+// Invariant : jamais deux créneaux de la grille dérivée à moins d'une session.
+const g2 = deriveGrid(['08:30', '10:00', '12:00', '!13:30']);
+const opens = g2.map((t) => slotToMinutes(t)!).sort((a, b) => a - b);
+check(
+  opens.every((m, i) => i === 0 || m - opens[i - 1] >= SESSION_MIN),
+  'deriveGrid : aucun fantôme intercalé — écarts ≥ 90 min conservés tels que stockés',
+);
+eq(deriveGrid(['!12:30', '08:00', '12:30']), ['08:00', '12:30'], 'deriveGrid : marque « fermé » retirée + doublons fusionnés + tri');
 
 if (failed) {
   console.error(`\n${failed} test(s) en échec`);

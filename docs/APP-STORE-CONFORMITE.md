@@ -37,11 +37,16 @@ _Purpose_ = **App Functionality**) :
 | **User Content**             | Photos             | Photo de profil / de club (facultatif)                   |
 | **User Content**             | Other user content | Avis, messages de support                                |
 | **Identifiers**              | User ID            | Identifier ton compte                                    |
+| **Identifiers**              | Device ID          | Jeton de notification push (recevoir les notifs)         |
 | **Contacts**                 | Contacts           | Retrouver un ami par son numéro (contact choisi par toi) |
+| **Other Data Types**         | Date de naissance  | Profil (facultatif)                                      |
+| **Other Data Types**         | Sexe               | Profil (facultatif)                                      |
 | **Health & Fitness** / autre | _(rien)_           | —                                                        |
 
 - **Sensitive Info / Location / Financial / Browsing history** : **rien** (l'app n'utilise pas le
-  GPS, ne fait aucun paiement, n'a pas de navigateur).
+  GPS, ne fait aucun paiement, n'a pas de navigateur). La date de naissance et le sexe
+  (facultatifs) se déclarent en **Other Data Types** — voir le tableau ci-dessus — pas en
+  Sensitive Info.
 
 **Données collectées mais NON reliées à l'identité** (_Not Linked to You_, _Used for tracking_ =
 NON, _Purpose_ = App Functionality / Analytics) — journal de diagnostics self-hosted dans Supabase,
@@ -86,7 +91,11 @@ les signalements sont traités sous 24 h. »_ Rien d'autre à coder — c'est en
 
 ## 5. Divers à cocher dans App Store Connect
 
-- **Age Rating** : questionnaire → l'app n'a pas de contenu sensible → classement **4+**.
+- **Age Rating** : viser **13 ans ou plus** (c'est la limite d'âge posée par les CGU et la
+  politique de confidentialité — ne pas déclarer 4+, ça les contredirait). Dans le questionnaire,
+  déclarer le **contenu généré par les utilisateurs** (avis, matchs ouverts) avec la **modération
+  en place** (Signaler/Bloquer + traitement dans l'Espace opérateur, §4-BIS). Côté Google Play,
+  répondre la même chose dans le questionnaire **IARC** (l'équivalent Play de l'Age Rating).
 - **Export Compliance / chiffrement** : `usesNonExemptEncryption = false` est déjà dans `app.json`
   (HTTPS standard uniquement) → répondre **Non** à « utilise-t-il un chiffrement non exempté ».
 - **Content Rights** : tu détiens les droits du contenu.

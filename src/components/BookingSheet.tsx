@@ -120,6 +120,12 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
       hapticWarning();
       toast.show('Ce créneau vient de passer — choisis un autre horaire.', { icon: 'alert-circle' });
       onClose();
+    } else if (res.reason === 'closed') {
+      // Le club vient de FERMER ce créneau (période, terrain, grille — 54) : un autre terrain
+      // du même horaire est très probablement fermé aussi → on referme la feuille.
+      hapticWarning();
+      toast.show('Ce créneau vient d’être fermé par le club — choisis un autre horaire.', { icon: 'alert-circle' });
+      onClose();
     } else {
       // Terrain pris entre-temps (autre joueur / conflit serveur) : on repropose un autre
       // terrain libre et on prévient (retour tactile comme sur la fiche club).

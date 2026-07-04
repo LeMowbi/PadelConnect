@@ -15,7 +15,7 @@ import { activeClubs, findClub } from '@/data/clubs';
 import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { DAY_MS, dateKeyLabel, dayKey } from '@/lib/days';
 import { hapticLight } from '@/lib/haptics';
-import { initials, perPlayer } from '@/lib/format';
+import { initials, perPlayerOf } from '@/lib/format';
 import { fetchLeaderboard, type LeaderboardRow } from '@/lib/leaderboard';
 import { openWhatsApp } from '@/lib/contact';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
@@ -56,7 +56,18 @@ function countdownLabel(startsAt: number): string {
 export default function HomeScreen() {
   const router = useRouter();
   const { state, dismissNews, stats, myReservations } = useApp();
-  const { refreshControl } = usePullToRefresh();
+  // Podium du CLASSEMENT sur l'accueil (déclaré AVANT le pull-to-refresh qui le recharge).
+  // undefined = pas encore chargé ; échec réseau → on garde l'existant (§8). La carte reste
+  // visible même sans donnée (invitation), pour que la fonctionnalité soit toujours trouvable.
+  const [top3, setTop3] = useState<LeaderboardRow[] | undefined>(undefined);
+  // Tirer pour rafraîchir recharge AUSSI le podium (sinon il restait figé toute la session —
+  // le setTop3 est asynchrone, jamais dans le corps d'un effet).
+  const { refreshControl } = usePullToRefresh(() => {
+    if (!state.serverUserId) return;
+    return fetchLeaderboard(3).then((rows) => {
+      if (rows) setTop3(rows);
+    });
+  });
   // Tap léger sur chaque navigation depuis l’accueil (CTA héro, 4 accès rapides, cartes) —
   // cohérent avec le vocabulaire haptique du reste de l’app.
   const go = (route: string) => {
@@ -95,10 +106,7 @@ export default function HomeScreen() {
   const fullName = `${state.account?.firstName ?? ''} ${state.account?.lastName ?? ''}`.trim();
   const greeting = new Date().getHours() < 18 ? 'Bonjour' : 'Bonsoir';
 
-  // Podium du CLASSEMENT sur l'accueil (retour porteur : le classement était « caché »).
-  // undefined = pas encore chargé ; échec réseau → on garde l'existant (§8). La carte reste
-  // visible même sans donnée (invitation), pour que la fonctionnalité soit toujours trouvable.
-  const [top3, setTop3] = useState<LeaderboardRow[] | undefined>(undefined);
+  // Premier chargement du podium (retour porteur : le classement était « caché »).
   const serverUserId = state.serverUserId;
   useEffect(() => {
     if (!serverUserId) return;
@@ -261,7 +269,8 @@ export default function HomeScreen() {
   const notifyPartners = () => {
     if (!upcoming) return;
     const who = upcoming.invited.length ? `\nÉquipe : ${upcoming.invited.map((i) => i.name).join(', ')}` : '';
-    const share = upcoming.price ? `\nPrévois ${perPlayer(upcoming.price)} chacun.` : '';
+    // Part par joueur sur l'EFFECTIF RÉEL (toi + invités), pas un « ÷4 » forfaitaire (audit 7).
+    const share = upcoming.price ? `\nPrévois ${perPlayerOf(upcoming.price, 1 + upcoming.invited.length)} chacun.` : '';
     openWhatsApp(
       '',
       `On joue au padel ! 🎾\n${upcoming.clubName} — ${dateKeyLabel(upcoming.dateKey)} à ${upcoming.time} (session 1h30)\n${upcoming.court}${who}${share}\nRéservé via PadelConnect.`,

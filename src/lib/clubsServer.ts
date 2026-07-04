@@ -67,7 +67,8 @@ export type ClubConfig = {
   coverUrl?: string; // photo « de profil » : celle de la carte, avant d’ouvrir la fiche
   courtPhotos?: Record<string, string>; // une photo PAR TERRAIN → { nom du terrain: url }
   // Fermetures RÉCURRENTES par terrain (54) : { 'Terrain 1': ['18:00'] } = jamais réservable
-  // à 18:00 sur CE terrain (ex. réservé aux cours) — les autres terrains restent ouverts.
+  // à 18:00 sur CE terrain, pour TOUTES les réservations (cours in-app compris) — les autres
+  // terrains restent ouverts.
   courtClosed?: Record<string, string[]>;
 };
 
@@ -107,6 +108,9 @@ export async function fetchClubConfigs(): Promise<Record<string, ClubConfig> | n
 export async function upsertClubConfig(clubId: string, c: ClubConfig): Promise<boolean> {
   // p_coaches (fiches simples, retirées) est omis : le paramètre a un défaut null côté serveur,
   // qui préserve la valeur existante — aucun changement de signature SQL nécessaire.
+  // p_court_closed n'est envoyé QUE s'il est fourni (même motif que open_match, reservations.ts) :
+  // contre une base où la 54 n'est pas encore collée (signature à 8 paramètres), horaires /
+  // terrains / offres / photos restent fonctionnels — seul setCourtClosed échoue proprement.
   const { data, error } = await supabase.rpc('upsert_club_config', {
     p_club_id: clubId,
     p_slots: c.slots ?? null,
@@ -115,7 +119,7 @@ export async function upsertClubConfig(clubId: string, c: ClubConfig): Promise<b
     p_photos: c.photos ?? null,
     p_cover_url: c.coverUrl ?? null,
     p_court_photos: c.courtPhotos ?? null,
-    p_court_closed: c.courtClosed ?? null,
+    ...(c.courtClosed !== undefined ? { p_court_closed: c.courtClosed } : {}),
   });
   return !error && data === true;
 }

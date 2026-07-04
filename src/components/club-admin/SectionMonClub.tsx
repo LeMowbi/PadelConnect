@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native';
+import { AccessibilityInfo, Pressable, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { ClubPhoto } from '@/components/ClubPhoto';
 import { useToast } from '@/components/Toast';
@@ -12,7 +12,18 @@ import { clubAddCoach, clubRemoveCoach, clubSetCoachPrice, fetchClubCoaches, typ
 import { isPlayed, MAX_CLUB_PHOTOS, useApp } from '@/store/AppContext';
 import { fcfa, initials } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
-import { buildSlots, canAddSlot, closedSlot, inferOpenClose, minutesToSlot, slotTime, slotToMinutes, SESSION_MIN } from '@/lib/slots';
+import { priceTiersFor, timeToMinutes } from '@/lib/pricing';
+import {
+  buildSlots,
+  canAddSlot,
+  closedSlot,
+  deriveGrid,
+  inferOpenClose,
+  minutesToSlot,
+  slotTime,
+  slotToMinutes,
+  SESSION_MIN,
+} from '@/lib/slots';
 import { colors, radius, spacing } from '@/theme';
 
 // Réglage des heures : l'OUVERTURE se décale par pas de 30 min (un club démarre à 8h00, un autre
@@ -55,6 +66,7 @@ function TimeStepper({
         style={[styles.stepBtn, !canDec && styles.stepBtnOff]}
         accessibilityRole="button"
         accessibilityLabel={`${label} : reculer ${stepLabel}`}
+        accessibilityValue={{ text: value }}
       >
         <Ionicons name="remove" size={18} color={canDec ? colors.signature : colors.textFaint} />
       </Pressable>
@@ -68,6 +80,7 @@ function TimeStepper({
         style={[styles.stepBtn, !canInc && styles.stepBtnOff]}
         accessibilityRole="button"
         accessibilityLabel={`${label} : avancer ${stepLabel}`}
+        accessibilityValue={{ text: value }}
       >
         <Ionicons name="add" size={18} color={canInc ? colors.signature : colors.textFaint} />
       </Pressable>
@@ -104,23 +117,29 @@ export function SectionMonClub({ club }: { club: Club }) {
   // Heures d’ouverture/fermeture DÉRIVÉES de la grille stockée (créneaux fermés '!' compris) —
   // aucun état local : les sélecteurs reflètent toujours la config réelle, rien ne se
   // « réinitialise » en rouvrant l’écran, et un changement de club se répercute aussitôt.
-  const storedTimes = (state.clubSlots[club.id] ?? SAMPLE_SLOTS).map(slotTime);
-  const { open: openTime, close: closeTime } = inferOpenClose(storedTimes);
+  // La grille affichée EST la grille stockée (dédupliquée/triée) : un horaire retiré ne
+  // réapparaît jamais — l'ancienne union avec buildSlots ressuscitait les retraits et créait
+  // des chips fantômes à moins de 90 min d'un vrai créneau, rouvrables (double-vente).
+  const grid = deriveGrid(state.clubSlots[club.id] ?? SAMPLE_SLOTS);
+  const { open: openTime, close: closeTime } = inferOpenClose(grid);
   const openMin = slotToMinutes(openTime) ?? MIN_OPEN;
   const closeMin = slotToMinutes(closeTime) ?? MAX_CLOSE;
-  // Grille affichée = créneaux générés par la plage + ceux de la config (legacy « ouverts seuls »
-  // inclus), triés — le gérant ferme/rouvre chaque créneau à l’unité.
-  const grid = [...new Set([...buildSlots(openTime, closeTime), ...storedTimes])].sort();
   const courts = courtsFor(club, state.clubCourts);
 
   // ── Grille libre : ajouter/retirer un horaire précis à la grille (au-delà de la simple
   // plage ouverture/fermeture) — voir addFreeSlot/removeFreeSlot plus bas. `savingGrid` sert de
   // garde anti double-tap commune à ces deux écritures.
-  const [draftSlot, setDraftSlot] = useState(closeTime);
+  // Pré-rempli VALIDE quelle que soit la fermeture : au plus 22:30 (dernière session finissant
+  // à minuit) — `closeTime` brut pouvait dépasser (club fermant à 23:00 ou minuit) et garantir
+  // une erreur au premier tap sur « Ajouter ».
+  const [draftSlot, setDraftSlot] = useState(() => minutesToSlot(Math.min(closeMin, FREE_ADD_MAX)));
   const [removingSlot, setRemovingSlot] = useState(false);
   const [savingGrid, setSavingGrid] = useState(false);
   // ── Horaires par terrain (fermetures récurrentes) — voir toggleCourtSlot plus bas.
+  // Replié par défaut : réglage rare, et la grille courts × créneaux alourdissait la carte
+  // (elle se re-rendait aussi à chaque frappe dans les champs de la section).
   const [savingCourtHours, setSavingCourtHours] = useState(false);
+  const [showCourtHours, setShowCourtHours] = useState(false);
 
   const photos = state.clubPhotos[club.id] ?? [];
   const offers = state.clubOffers[club.id] ?? [];
@@ -244,11 +263,25 @@ export function SectionMonClub({ club }: { club: Club }) {
   // stocke la grille COMPLÈTE (fermés préfixés '!') : les sélecteurs se re-déduisent d’elle.
   const applyRange = async (nextOpen: string, nextClose: string) => {
     const closed = new Set(grid.filter((t) => !openSlots.includes(t)));
+    const nextOpenMin = slotToMinutes(nextOpen) ?? MIN_OPEN;
+    const nextCloseMin = slotToMinutes(nextClose) ?? MAX_CLOSE;
+    // Échelle standard recalée + ré-injection des horaires LIBRES (hors échelle actuelle) qui
+    // tiennent encore : la grille libre du gérant survit à un réglage de plage tant qu'elle est
+    // compatible (avant, tout horaire ajouté à la main sautait silencieusement).
+    const ladderNow = buildSlots(openTime, closeTime);
+    const freeTimes = grid.filter((t) => !ladderNow.includes(t));
     const next = buildSlots(nextOpen, nextClose);
+    for (const t of freeTimes) {
+      const m = slotToMinutes(t);
+      if (m !== null && m >= nextOpenMin && m + SESSION_MIN <= nextCloseMin && canAddSlot(next, t).ok) next.push(t);
+    }
+    next.sort();
     const now = Date.now();
     const dropped = openSlots.filter((t) => !next.includes(t));
     if (dropped.some((t) => state.reservations.some((r) => r.clubId === club.id && r.time === t && !isPlayed(r, now)))) {
-      toast.show('Un créneau à retirer a des réservations à venir — annule-les d’abord.', { icon: 'alert-circle' });
+      toast.show('Un créneau à retirer a des réservations à venir — vois avec les joueurs pour qu’ils annulent depuis l’app.', {
+        icon: 'alert-circle',
+      });
       return;
     }
     const ok = await setClubSlots(
@@ -260,12 +293,12 @@ export function SectionMonClub({ club }: { club: Club }) {
       return;
     }
     // Un décalage de grille (ex. 8h00 → 8h30) peut faire disparaître un créneau fermé à la main
-    // (une pause déjeuner à 12h30 n’existe plus dans une grille 8h00) : on le dit, sinon le
-    // gérant croit sa pause conservée alors qu’elle a silencieusement sauté.
-    const lostClosed = [...closed].filter((t) => !next.includes(t));
-    if (lostClosed.length) {
+    // (pause déjeuner) ou un horaire libre devenu incompatible : on le dit, sinon le gérant
+    // croit son créneau conservé alors qu'il a silencieusement sauté.
+    const lost = [...new Set([...closed, ...freeTimes.filter((t) => openSlots.includes(t))])].filter((t) => !next.includes(t)).sort();
+    if (lost.length) {
       toast.show(
-        `Nouvelle grille : ${lostClosed.length > 1 ? 'des créneaux fermés ont' : 'un créneau fermé a'} été retiré${lostClosed.length > 1 ? 's' : ''} (${lostClosed.join(', ')}). Referme-les si besoin.`,
+        `Nouvelle grille : ${lost.join(', ')} ${lost.length > 1 ? 'ne tiennent plus' : 'ne tient plus'} dans la plage — ré-ajoute via « Ajouter un horaire » si besoin.`,
         { icon: 'information-circle' },
       );
     }
@@ -277,7 +310,20 @@ export function SectionMonClub({ club }: { club: Club }) {
       // planning sans l'annuler → on refuse tant qu'elle n'est pas jouée (ou annule-la avant).
       const now = Date.now();
       if (state.reservations.some((r) => r.clubId === club.id && r.time === t && !isPlayed(r, now))) {
-        toast.show('Cet horaire a des réservations à venir — annule-les d’abord.', { icon: 'alert-circle' });
+        toast.show('Cet horaire a des réservations à venir — vois avec les joueurs pour qu’ils annulent depuis l’app.', {
+          icon: 'alert-circle',
+        });
+        return;
+      }
+    } else {
+      // Ceinture avant RÉOUVERTURE : jamais deux créneaux ouverts à moins d'une session (une
+      // grille saine l'exclut déjà, mais une double-vente physique serait grave).
+      const v = canAddSlot(
+        grid.filter((x) => x !== t && openSlots.includes(x)),
+        t,
+      );
+      if (!v.ok) {
+        toast.show(v.error, { icon: 'alert-circle' });
         return;
       }
     }
@@ -300,6 +346,27 @@ export function SectionMonClub({ club }: { club: Club }) {
       toast.show(v.error, { icon: 'alert-circle' });
       return;
     }
+    // Un horaire hors de la couverture des plages tarifaires serait vendu au TARIF MINIMUM
+    // (repli silencieux de priceForSlot) : on prévient — l'ajout reste possible, le gérant
+    // ajuste ses plages dans « Infos du club » quand il veut.
+    const tiers = priceTiersFor(club);
+    const draftMin = slotToMinutes(draftSlot);
+    if (
+      tiers.length > 0 &&
+      draftMin !== null &&
+      !tiers.some((p) => {
+        const s = timeToMinutes(p.start);
+        const e = timeToMinutes(p.end);
+        return s !== null && e !== null && draftMin >= s && draftMin < e;
+      })
+    ) {
+      toast.show(
+        'Ce créneau sera vendu au tarif minimum tant que tes plages tarifaires ne le couvrent pas — ajuste-les dans « Infos du club »',
+        {
+          icon: 'information-circle',
+        },
+      );
+    }
     const next = [...grid.map((t) => (openSlots.includes(t) ? t : closedSlot(t))), draftSlot].sort((a, b) =>
       slotTime(a).localeCompare(slotTime(b)),
     );
@@ -313,16 +380,26 @@ export function SectionMonClub({ club }: { club: Club }) {
   // retrait/fermeture normal : refuse tant qu'une réservation à venir l'occupe.
   const removeFreeSlot = async (t: string) => {
     if (savingGrid) return;
+    // Une grille vide retomberait sur la grille par défaut (fausse) et rendrait l'écran
+    // incohérent : on garde toujours au moins un horaire (même motif que removeCourt).
+    if (grid.length <= 1) {
+      toast.show('Garde au moins un horaire — ferme-le plutôt si besoin', { icon: 'alert-circle' });
+      return;
+    }
     const now = Date.now();
     if (state.reservations.some((r) => r.clubId === club.id && r.time === t && !isPlayed(r, now))) {
-      toast.show('Cet horaire a des réservations à venir — annule-les d’abord.', { icon: 'alert-circle' });
+      toast.show('Cet horaire a des réservations à venir — vois avec les joueurs pour qu’ils annulent depuis l’app.', {
+        icon: 'alert-circle',
+      });
       return;
     }
     const next = grid.filter((x) => x !== t).map((x) => (openSlots.includes(x) ? x : closedSlot(x)));
     setSavingGrid(true);
     const ok = await setClubSlots(club.id, next);
     setSavingGrid(false);
-    if (!ok) toast.show('Horaires non enregistrés — vérifie ta connexion', { icon: 'alert-circle' });
+    // Succès confirmé (toast = annoncé au lecteur d'écran) : le silence ne confirmait rien.
+    if (ok) toast.show(`Horaire ${t} retiré de la grille`);
+    else toast.show('Horaires non enregistrés — vérifie ta connexion', { icon: 'alert-circle' });
   };
 
   // Ferme/rouvre un horaire sur UN SEUL terrain (les autres restent réservables) — carte complète
@@ -336,7 +413,9 @@ export function SectionMonClub({ club }: { club: Club }) {
       // invisible du planning sans l'annuler → on refuse, comme pour une fermeture globale.
       const now = Date.now();
       if (state.reservations.some((r) => r.clubId === club.id && r.court === court && r.time === t && !isPlayed(r, now))) {
-        toast.show('Cet horaire a des réservations à venir sur ce terrain — annule-les d’abord.', { icon: 'alert-circle' });
+        toast.show('Cet horaire a des réservations à venir sur ce terrain — vois avec les joueurs pour qu’ils annulent depuis l’app.', {
+          icon: 'alert-circle',
+        });
         return;
       }
     }
@@ -379,6 +458,13 @@ export function SectionMonClub({ club }: { club: Club }) {
     }
     // Sa photo ne sert plus à rien (et resterait orpheline en base/Storage) → on la retire aussi.
     if (courtPhotos[n]) void setClubCourtPhoto(club.id, n, null);
+    // Idem pour ses fermetures récurrentes : un terrain RE-CRÉÉ au même nom ne doit pas hériter
+    // en silence d'anciens horaires fermés (best-effort, comme la photo).
+    if (state.clubCourtClosed[club.id]?.[n]) {
+      const nextMap = { ...(state.clubCourtClosed[club.id] ?? {}) };
+      delete nextMap[n];
+      void setCourtClosed(club.id, nextMap);
+    }
   };
 
   const shareBoost = () =>
@@ -395,22 +481,32 @@ export function SectionMonClub({ club }: { club: Club }) {
     if (!uri) return;
     // La photo est envoyée au serveur (visible par tous) : court délai → on signale l’envoi.
     setUploadingPhoto(true);
-    await addClubPhoto(club.id, uri);
+    const ok = await addClubPhoto(club.id, uri);
     setUploadingPhoto(false);
+    // L'échec d'UPLOAD a déjà son alerte dans addClubPhoto ; ici on couvre l'échec d'ÉCRITURE.
+    if (!ok) toast.show('Photo non enregistrée — vérifie ta connexion', { icon: 'alert-circle' });
   };
-  const addPhotoFromUrl = () => {
+  const addPhotoFromUrl = async () => {
     if (photosFull) {
       toast.show(`Maximum ${MAX_CLUB_PHOTOS} photos par club`, { icon: 'alert-circle' });
       return;
     }
     if (/^https?:\/\//.test(url.trim())) {
-      addClubPhoto(club.id, url.trim());
+      const ok = await addClubPhoto(club.id, url.trim());
+      if (!ok) {
+        toast.show('Photo non enregistrée — vérifie ta connexion', { icon: 'alert-circle' });
+        return;
+      }
       setUrl('');
     }
   };
-  const submitOffer = () => {
+  const submitOffer = async () => {
     if (offerTitle.trim().length < 2) return;
-    addClubOffer(club.id, offerKind, offerTitle, offerDetail);
+    const ok = await addClubOffer(club.id, offerKind, offerTitle, offerDetail);
+    if (!ok) {
+      toast.show('Offre non enregistrée — vérifie ta connexion', { icon: 'alert-circle' });
+      return;
+    }
     setOfferTitle('');
     setOfferDetail('');
   };
@@ -532,7 +628,11 @@ export function SectionMonClub({ club }: { club: Club }) {
               <View key={uri}>
                 <ClubPhoto uri={uri} accent={club.accent} initials={initials(club.name)} height={90} width={120} rounded={radius.md} />
                 <Pressable
-                  onPress={() => removeClubPhoto(club.id, uri)}
+                  onPress={() =>
+                    void removeClubPhoto(club.id, uri).then((ok) => {
+                      if (!ok) toast.show('Photo non retirée — vérifie ta connexion', { icon: 'alert-circle' });
+                    })
+                  }
                   style={styles.removeBadge}
                   hitSlop={6}
                   accessibilityRole="button"
@@ -614,7 +714,11 @@ export function SectionMonClub({ club }: { club: Club }) {
                     {o.detail ? <Txt variant="muted">{o.detail}</Txt> : null}
                   </View>
                   <Pressable
-                    onPress={() => removeClubOffer(club.id, o.id)}
+                    onPress={() =>
+                      void removeClubOffer(club.id, o.id).then((ok) => {
+                        if (!ok) toast.show('Publication non retirée — vérifie ta connexion', { icon: 'alert-circle' });
+                      })
+                    }
                     hitSlop={13}
                     accessibilityRole="button"
                     accessibilityLabel={`Supprimer la publication ${o.title}`}
@@ -857,12 +961,19 @@ export function SectionMonClub({ club }: { club: Club }) {
             {removingSlot ? 'TES CRÉNEAUX — TOUCHE POUR RETIRER DÉFINITIVEMENT' : 'TES CRÉNEAUX — TOUCHE POUR FERMER / ROUVRIR'}
           </Txt>
           <View style={styles.wrap}>
+            {/* Pas de `disabled` global pendant l'écriture (la garde savingGrid des handlers
+                suffit) : tout griser faisait croire à des créneaux fermés. L'icône ✕ passe par
+                la prop icon (couleur gérée par Chip), et le lecteur d'écran entend l'action
+                RÉELLE (« retirer définitivement ») ou l'état réel du créneau. */}
             {grid.map((t) => (
               <Chip
                 key={t}
-                label={removingSlot ? `✕ ${t}` : t}
+                label={t}
+                icon={removingSlot ? 'close' : undefined}
                 active={openSlots.includes(t)}
-                disabled={removingSlot ? savingGrid : false}
+                accessibilityLabel={
+                  removingSlot ? `Retirer définitivement l’horaire ${t}` : `Créneau ${t}, ${openSlots.includes(t) ? 'ouvert' : 'fermé'}`
+                }
                 onPress={() => (removingSlot ? void removeFreeSlot(t) : void toggleSlot(t))}
               />
             ))}
@@ -898,7 +1009,17 @@ export function SectionMonClub({ club }: { club: Club }) {
               variant="ghost"
               label={removingSlot ? 'Terminé' : 'Retirer un horaire'}
               icon={removingSlot ? 'checkmark' : 'remove-circle-outline'}
-              onPress={() => setRemovingSlot((v) => !v)}
+              onPress={() => {
+                const next = !removingSlot;
+                setRemovingSlot(next);
+                // Le changement de mode est invisible à l'écoute (mêmes chips) : on l'annonce,
+                // même canal que Toast.
+                AccessibilityInfo.announceForAccessibility(
+                  next
+                    ? 'Mode retrait : touche un horaire pour le retirer définitivement'
+                    : 'Mode normal : touche un créneau pour le fermer ou le rouvrir',
+                );
+              }}
             />
           </View>
 
@@ -909,32 +1030,46 @@ export function SectionMonClub({ club }: { club: Club }) {
                 HORAIRES PAR TERRAIN
               </Txt>
               <Txt variant="muted" style={{ marginTop: 2 }}>
-                Ferme un horaire sur UN terrain seulement — ex. Terrain 1 réservé aux cours à 18:00. Les autres terrains restent
-                réservables.
+                Ferme un horaire sur UN terrain seulement — ex. Terrain 1 indisponible tous les jours à 18:00 (entretien, usage privé…). Il
+                n’est alors plus réservable par personne, cours compris ; les autres terrains restent ouverts.
               </Txt>
-              <View style={{ marginTop: spacing.md, gap: spacing.md }}>
-                {courts.map((c) => {
-                  const closedTimes = state.clubCourtClosed[club.id]?.[c] ?? [];
-                  return (
-                    <View key={c}>
-                      <Txt variant="body" style={{ fontWeight: '600' }}>
-                        {c}
-                      </Txt>
-                      <View style={styles.wrap}>
-                        {openSlots.map((t) => (
-                          <Chip
-                            key={t}
-                            label={t}
-                            active={!closedTimes.includes(t)}
-                            disabled={savingCourtHours}
-                            onPress={() => void toggleCourtSlot(c, t)}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                  );
-                })}
+              <View style={{ marginTop: spacing.sm, alignItems: 'flex-start' }}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  label={showCourtHours ? 'Masquer' : 'Régler par terrain'}
+                  icon={showCourtHours ? 'chevron-up' : 'options-outline'}
+                  onPress={() => setShowCourtHours((v) => !v)}
+                />
               </View>
+              {showCourtHours ? (
+                <View style={{ marginTop: spacing.sm, gap: spacing.md }}>
+                  {courts.map((c) => {
+                    const closedTimes = state.clubCourtClosed[club.id]?.[c] ?? [];
+                    return (
+                      <View key={c}>
+                        <Txt variant="body" style={{ fontWeight: '600' }}>
+                          {c}
+                        </Txt>
+                        {/* Pas de `disabled` global pendant l'écriture (garde savingCourtHours
+                            dans le handler) : tout griser = la couleur « fermé », illisible.
+                            Le lecteur d'écran entend le TERRAIN + l'heure + l'état. */}
+                        <View style={styles.wrap}>
+                          {openSlots.map((t) => (
+                            <Chip
+                              key={t}
+                              label={t}
+                              active={!closedTimes.includes(t)}
+                              accessibilityLabel={`${c}, ${t}, ${closedTimes.includes(t) ? 'fermé sur ce terrain' : 'ouvert'}`}
+                              onPress={() => void toggleCourtSlot(c, t)}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
             </>
           ) : null}
         </Card>

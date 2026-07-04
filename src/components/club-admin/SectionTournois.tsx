@@ -51,9 +51,12 @@ export function SectionTournois({ club, comps, onCloseComp }: { club: Club; comp
       setRejectReason('');
     } else {
       hapticWarning();
-      // Deux causes possibles côté serveur : réseau, ou des réservations occupent déjà la plage (37).
+      // Causes possibles côté serveur : réseau, ou la plage est déjà occupée — réservations,
+      // autre tournoi, créneau bloqué ou période fermée (37/53/54).
       toast.show(
-        approve ? 'Publication impossible — des réservations occupent peut-être déjà ces créneaux.' : 'Action impossible — réessaie.',
+        approve
+          ? 'Publication impossible — des réservations, un autre tournoi ou une période/créneau fermé occupent déjà cette plage.'
+          : 'Action impossible — réessaie.',
         { icon: 'alert-circle' },
       );
     }
