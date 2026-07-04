@@ -1,0 +1,34 @@
+<!-- Image de partage (Open Graph) générée par le développeur — couleurs de la marque
+     PadelConnect (vert signature + or), en attendant une vraie image fournie par le porteur.
+     Dimensions recommandées 1200x630 (ratio standard des aperçus de lien). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="fond" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0e7a64" />
+      <stop offset="55%" stop-color="#0c6a57" />
+      <stop offset="100%" stop-color="#084c3f" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#fond)" />
+
+  <!-- Lignes de terrain, stylisées -->
+  <rect x="80" y="80" width="1040" height="470" rx="24" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="3" />
+  <line x1="600" y1="80" x2="600" y2="550" stroke="rgba(255,255,255,0.14)" stroke-width="3" />
+
+  <!-- Pastille « live » -->
+  <circle cx="120" cy="120" r="8" fill="#c6f24a" />
+
+  <text x="120" y="330" font-family="Arial, sans-serif" font-size="88" font-weight="800" fill="#ffffff">PadelConnect</text>
+  <text x="120" y="392" font-family="Arial, sans-serif" font-size="34" fill="rgba(255,255,255,0.85)">
+    Le padel d'Abidjan, réservé en 2 minutes
+  </text>
+
+  <!-- Balle de padel stylisée -->
+  <circle cx="1030" cy="150" r="60" fill="#c6f24a" opacity="0.9" />
+  <path d="M980 150 Q1030 100 1080 150" stroke="#0c6a57" stroke-width="4" fill="none" opacity="0.6" />
+  <path d="M980 150 Q1030 200 1080 150" stroke="#0c6a57" stroke-width="4" fill="none" opacity="0.6" />
+
+  <text x="120" y="470" font-family="Arial, sans-serif" font-size="26" font-weight="700" fill="#c29a3a">
+    Réservation · Tournois · Matchs ouverts · Coachs
+  </text>
+</svg>

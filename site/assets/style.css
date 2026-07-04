@@ -1,0 +1,915 @@
+/* ==========================================================================
+   PadelConnect — feuille de style du site vitrine.
+   Reprend les tokens de l'app (src/theme/index.ts) : vert signature, crème,
+   touches or/violet. Aucun framework — CSS pur, mobile d'abord.
+   ========================================================================== */
+
+:root {
+  /* Couleurs — alignées sur src/theme/index.ts */
+  --vert: #0c6a57;
+  --vert-fonce: #084c3f;
+  --vert-clair: #dcebe4;
+  --creme: #f4f1e8;
+  --carte: #ffffff;
+  --ligne: #e4e0d4;
+  --texte: #15211c;
+  --texte-muted: #5b6b63;
+  --texte-faint: #7c857b;
+  --or: #c29a3a;
+  --or-fonce: #785a10;
+  --or-clair: #f3e7cc;
+  --violet: #7b6ce8;
+  --violet-fonce: #5b4fc9;
+  --violet-clair: #e7e3fa;
+  --corail: #c0492f;
+  --corail-clair: #fbe7df;
+  --lime: #c6f24a;
+
+  --rayon-sm: 10px;
+  --rayon-md: 16px;
+  --rayon-lg: 24px;
+  --rayon-pill: 999px;
+  --ombre: 0 10px 30px rgba(15, 30, 25, 0.08);
+  --ombre-lg: 0 24px 60px rgba(15, 30, 25, 0.16);
+  --largeur-max: 1160px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  /* Compense le header collant lors des liens d'ancre (#clubs, #pour-les-clubs…). */
+  scroll-padding-top: 84px;
+}
+
+body {
+  margin: 0;
+  background: var(--creme);
+  color: var(--texte);
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+  line-height: 1.55;
+  overflow-x: hidden; /* ceinture de sécurité anti scroll horizontal */
+}
+
+img,
+svg {
+  max-width: 100%;
+  display: block;
+}
+
+a {
+  color: inherit;
+}
+
+.conteneur {
+  max-width: var(--largeur-max);
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* ---------- En-tête ---------- */
+
+.entete {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(244, 241, 232, 0.92);
+  backdrop-filter: saturate(180%) blur(10px);
+  border-bottom: 1px solid var(--ligne);
+}
+
+.entete-barre {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  max-width: var(--largeur-max);
+  margin: 0 auto;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--vert-fonce);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.logo .bulle {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(155deg, #0e7a64, #084c3f);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.nav-liens {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  font-weight: 600;
+  font-size: 14.5px;
+}
+
+.nav-liens a {
+  text-decoration: none;
+  color: var(--texte);
+  opacity: 0.85;
+}
+.nav-liens a:hover {
+  opacity: 1;
+  color: var(--vert-fonce);
+}
+
+.entete-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Bouton bascule de langue */
+.btn-lang {
+  border: 1.5px solid var(--ligne);
+  background: #fff;
+  color: var(--texte);
+  border-radius: var(--rayon-pill);
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 40px;
+}
+.btn-lang:hover {
+  border-color: var(--vert);
+}
+
+/* Menu mobile (hamburger) */
+.btn-menu {
+  display: none;
+  border: 1px solid var(--ligne);
+  background: #fff;
+  border-radius: var(--rayon-sm);
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.btn-menu span,
+.btn-menu span::before,
+.btn-menu span::after {
+  content: '';
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--texte);
+  position: relative;
+  transition: 0.2s;
+}
+.btn-menu span::before {
+  position: absolute;
+  top: -6px;
+}
+.btn-menu span::after {
+  position: absolute;
+  top: 6px;
+}
+
+/* Panneau de liens replié par défaut (bureau ET mobile fermé) — seule la règle dans le
+   @media ci-dessous le fait réapparaître, une fois ouvert, sur petit écran. Sans cette règle
+   de base, le <div> s'affichait par défaut (display:block du navigateur) sous l'en-tête sur
+   grand écran. */
+.menu-mobile {
+  display: none;
+}
+
+/* ---------- Boutons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 12px 22px;
+  border-radius: var(--rayon-pill);
+  font-weight: 700;
+  font-size: 15px;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-plein {
+  background: linear-gradient(155deg, #0e7a64, #0c6a57 60%, #084c3f);
+  color: #fff;
+  box-shadow: var(--ombre);
+}
+.btn-plein:hover {
+  box-shadow: var(--ombre-lg);
+}
+
+.btn-contour {
+  background: #fff;
+  color: var(--vert-fonce);
+  border: 1.5px solid var(--vert);
+}
+.btn-contour:hover {
+  background: var(--vert-clair);
+}
+
+.btn-or {
+  background: linear-gradient(155deg, #d9b768, var(--or) 60%, var(--or-fonce));
+  color: #241a04;
+  box-shadow: var(--ombre);
+}
+
+.btn-petit {
+  min-height: 40px;
+  padding: 9px 16px;
+  font-size: 13.5px;
+}
+
+/* ---------- Héros ---------- */
+
+.heros {
+  background: linear-gradient(180deg, var(--vert-clair) 0%, #efe9da 55%, var(--creme) 100%);
+  padding: 56px 0 40px;
+  position: relative;
+  overflow: hidden;
+}
+
+.heros-grille {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 40px;
+  align-items: center;
+}
+
+.pastille-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid var(--ligne);
+  border-radius: var(--rayon-pill);
+  padding: 6px 14px 6px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--vert-fonce);
+  box-shadow: var(--ombre);
+  margin-bottom: 18px;
+}
+
+.point-live {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--lime);
+  box-shadow: 0 0 0 0 rgba(198, 242, 74, 0.6);
+  animation: pulse-live 1.8s infinite;
+}
+@keyframes pulse-live {
+  0% {
+    box-shadow: 0 0 0 0 rgba(198, 242, 74, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 9px rgba(198, 242, 74, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(198, 242, 74, 0);
+  }
+}
+
+.heros h1 {
+  font-size: clamp(30px, 4.6vw, 48px);
+  line-height: 1.08;
+  margin: 0 0 16px;
+  color: var(--vert-fonce);
+  letter-spacing: -0.01em;
+}
+
+.heros p.sous-titre {
+  font-size: clamp(16px, 2vw, 19px);
+  color: var(--texte-muted);
+  max-width: 520px;
+  margin: 0 0 26px;
+}
+
+.heros-boutons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 30px;
+}
+
+.preuves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.preuve {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--texte-muted);
+}
+.preuve .puce {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--vert-clair);
+  color: var(--vert-fonce);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+/* Mockup téléphone (CSS pur, aucune image) */
+.mockups {
+  position: relative;
+  min-height: 420px;
+  display: flex;
+  justify-content: center;
+}
+
+.telephone {
+  width: 250px;
+  height: 500px;
+  background: linear-gradient(165deg, #0e7a64, #0c6a57 55%, #084c3f);
+  border-radius: 40px;
+  padding: 14px;
+  box-shadow: var(--ombre-lg);
+  position: relative;
+  transform: rotate(-4deg);
+}
+
+.telephone-ecran {
+  background: var(--creme);
+  height: 100%;
+  border-radius: 28px;
+  padding: 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.encoche {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 70px;
+  height: 8px;
+  border-radius: var(--rayon-pill);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.ecran-carte {
+  background: #fff;
+  border-radius: var(--rayon-md);
+  padding: 12px;
+  box-shadow: 0 4px 14px rgba(15, 30, 25, 0.08);
+}
+
+.ecran-titre {
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--vert-fonce);
+  margin-bottom: 4px;
+}
+
+.ecran-ligne {
+  font-size: 11.5px;
+  color: var(--texte-muted);
+}
+
+.pile-avatars {
+  display: flex;
+  margin-top: 6px;
+}
+.pile-avatars span {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--or-clair);
+  border: 2px solid #fff;
+  margin-left: -8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+.pile-avatars span:first-child {
+  margin-left: 0;
+}
+
+.carte-flottante {
+  position: absolute;
+  background: #fff;
+  border-radius: var(--rayon-md);
+  padding: 12px 14px;
+  box-shadow: var(--ombre-lg);
+  font-size: 12.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.carte-flottante.haut-droite {
+  top: 6%;
+  right: -4%;
+}
+.carte-flottante.bas-gauche {
+  bottom: 4%;
+  left: -6%;
+}
+
+/* ---------- Sections génériques ---------- */
+
+section {
+  padding: 64px 0;
+}
+
+.section-tete {
+  text-align: center;
+  max-width: 640px;
+  margin: 0 auto 40px;
+}
+
+.badge-section {
+  display: inline-block;
+  background: var(--or-clair);
+  color: var(--or-fonce);
+  font-weight: 700;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  padding: 5px 14px;
+  border-radius: var(--rayon-pill);
+  margin-bottom: 12px;
+}
+
+.section-tete h2 {
+  font-size: clamp(24px, 3.4vw, 34px);
+  margin: 0 0 10px;
+  color: var(--vert-fonce);
+}
+
+.section-tete p {
+  color: var(--texte-muted);
+  font-size: 16px;
+}
+
+/* ---------- Fonctionnalités ---------- */
+
+.grille-fonctions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 18px;
+}
+
+.carte-fonction {
+  background: var(--carte);
+  border: 1px solid var(--ligne);
+  border-radius: var(--rayon-lg);
+  padding: 22px 20px;
+  box-shadow: var(--ombre);
+  transition: transform 0.2s ease;
+}
+.carte-fonction:hover {
+  transform: translateY(-4px);
+}
+
+.icone-fonction {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin-bottom: 14px;
+}
+
+.carte-fonction h3 {
+  margin: 0 0 6px;
+  font-size: 17px;
+  color: var(--texte);
+}
+.carte-fonction p {
+  margin: 0;
+  color: var(--texte-muted);
+  font-size: 14.5px;
+}
+
+/* ---------- Clubs ---------- */
+
+#clubs {
+  background: #fff;
+  border-top: 1px solid var(--ligne);
+  border-bottom: 1px solid var(--ligne);
+}
+
+.grille-clubs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 18px;
+  margin-bottom: 36px;
+}
+
+.carte-club {
+  background: var(--creme);
+  border: 1px solid var(--ligne);
+  border-radius: var(--rayon-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--ombre);
+}
+
+.club-visuel {
+  height: 108px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  color: rgba(255, 255, 255, 0.92);
+  position: relative;
+}
+
+.badge-partenaire {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--or-fonce);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: var(--rayon-pill);
+}
+
+.badge-featured {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: var(--vert-fonce);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: var(--rayon-pill);
+}
+
+.club-corps {
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.club-corps h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.club-meta {
+  font-size: 13px;
+  color: var(--texte-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.club-puce {
+  background: #fff;
+  border: 1px solid var(--ligne);
+  border-radius: var(--rayon-pill);
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.club-blurb {
+  font-size: 13.5px;
+  color: var(--texte-muted);
+  flex: 1;
+}
+
+.club-pied {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.club-prix {
+  font-weight: 800;
+  color: var(--vert-fonce);
+  font-size: 14px;
+}
+
+.lien-carte {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--vert-fonce);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.lien-carte:hover {
+  text-decoration: underline;
+}
+
+.note-clubs {
+  text-align: center;
+  color: var(--texte-faint);
+  font-size: 13px;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+/* ---------- Pour les clubs ---------- */
+
+.grille-arguments {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-bottom: 34px;
+}
+
+.carte-argument {
+  background: var(--carte);
+  border: 1px solid var(--ligne);
+  border-radius: var(--rayon-lg);
+  padding: 20px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  box-shadow: var(--ombre);
+}
+
+.carte-argument .icone-fonction {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+.carte-argument h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+.carte-argument p {
+  margin: 0;
+  color: var(--texte-muted);
+  font-size: 14px;
+}
+
+.bloc-commission {
+  text-align: center;
+  color: var(--texte-faint);
+  font-size: 13.5px;
+  max-width: 620px;
+  margin: 0 auto 28px;
+}
+
+.cta-club {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.cta-club .liens-secondaires {
+  font-size: 13.5px;
+  color: var(--texte-muted);
+}
+.cta-club .liens-secondaires a {
+  color: var(--vert-fonce);
+  font-weight: 700;
+  text-decoration: none;
+}
+.cta-club .liens-secondaires a:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Bandeau final ---------- */
+
+.bandeau-final {
+  background: linear-gradient(155deg, #0e7a64, #0c6a57 55%, #084c3f);
+  color: #fff;
+  border-radius: var(--rayon-lg);
+  padding: 44px 32px;
+  text-align: center;
+  max-width: var(--largeur-max);
+  margin: 0 auto;
+}
+.bandeau-final h2 {
+  margin: 0 0 10px;
+  font-size: clamp(22px, 3vw, 30px);
+}
+.bandeau-final p {
+  margin: 0 0 22px;
+  color: rgba(255, 255, 255, 0.85);
+  max-width: 480px;
+  margin-inline: auto;
+}
+.bandeau-final .btn-plein {
+  background: #fff;
+  color: var(--vert-fonce);
+}
+
+/* ---------- Pied de page ---------- */
+
+footer {
+  border-top: 1px solid var(--ligne);
+  padding: 40px 0 28px;
+}
+
+.pied-grille {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.pied-liens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 22px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.pied-liens a {
+  text-decoration: none;
+  color: var(--texte-muted);
+}
+.pied-liens a:hover {
+  color: var(--vert-fonce);
+}
+
+.pied-bas {
+  border-top: 1px solid var(--ligne);
+  padding-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--texte-faint);
+}
+
+/* ---------- Pages légales (CGU) ---------- */
+
+.page-legale {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 40px 20px 72px;
+}
+.page-legale h1 {
+  color: var(--vert-fonce);
+  font-size: 26px;
+  margin: 8px 0 4px;
+}
+.page-legale .sous-titre-legal {
+  color: var(--texte-muted);
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+.carte-legale {
+  background: var(--carte);
+  border: 1px solid var(--ligne);
+  border-radius: var(--rayon-md);
+  padding: 20px 22px;
+  margin: 16px 0;
+}
+.carte-legale h2 {
+  font-size: 18px;
+  margin: 0 0 8px;
+  color: var(--vert-fonce);
+}
+.carte-legale p {
+  font-size: 15px;
+  margin: 0 0 10px;
+}
+.carte-legale p:last-child {
+  margin-bottom: 0;
+}
+
+/* ---------- Animation « reveal » au défilement ---------- */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s ease;
+}
+.reveal.visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---------- Bascule de langue : masque le texte de la langue inactive ---------- */
+
+[data-en] {
+  display: none;
+}
+html[lang='en'] [data-fr] {
+  display: none;
+}
+html[lang='en'] [data-en] {
+  display: inline;
+}
+html[lang='en'] [data-en].bloc {
+  display: block;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 880px) {
+  .heros-grille {
+    grid-template-columns: 1fr;
+  }
+  .mockups {
+    order: -1;
+    min-height: 340px;
+    transform: scale(0.85);
+  }
+}
+
+@media (max-width: 720px) {
+  .nav-liens {
+    display: none;
+  }
+  .btn-menu {
+    display: flex;
+  }
+  .entete-barre.menu-ouvert + .menu-mobile {
+    display: flex;
+  }
+  .menu-mobile {
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 20px 18px;
+    border-top: 1px solid var(--ligne);
+  }
+  .menu-mobile a {
+    padding: 12px 4px;
+    font-weight: 700;
+    text-decoration: none;
+    color: var(--texte);
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+  /* Sur mobile, le bouton « Espace Club » du bandeau reste dans le menu déplié
+     (voir .menu-mobile) — on masque celui de la barre pour ne pas surcharger l'en-tête. */
+  .entete-actions .cache-mobile {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .heros {
+    padding: 36px 0 28px;
+  }
+  section {
+    padding: 44px 0;
+  }
+  .bandeau-final {
+    padding: 32px 20px;
+  }
+}

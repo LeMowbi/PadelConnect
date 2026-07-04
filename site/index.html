@@ -4,25 +4,428 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PadelConnect — Réserve ton terrain de padel à Abidjan</title>
-    <style>
-      body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f4f1e8; color: #17241f; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; text-align: center; padding: 24px; }
-      .card { max-width: 420px; }
-      h1 { color: #1c6b4a; font-size: 30px; margin: 0 0 8px; }
-      p { color: #5b6b63; font-size: 16px; line-height: 1.5; }
-      a.btn { display: inline-block; margin-top: 20px; background: #1c6b4a; color: #fff; text-decoration: none; padding: 14px 26px; border-radius: 999px; font-weight: 700; }
-      .links { margin-top: 28px; font-size: 13px; }
-      .links a { color: #1c6b4a; }
-    </style>
+    <meta
+      name="description"
+      content="PadelConnect : réserve un terrain de padel à Abidjan en 2 minutes, inscris-toi à des tournois, trouve des partenaires de jeu et suis ton niveau. Gratuit pour les joueurs."
+    />
+    <link rel="canonical" href="https://padelconnectci.com/" />
+
+    <!-- Favicon : petit terrain stylisé en SVG inline, aucune image binaire nécessaire. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230C6A57'/%3E%3Ctext x='32' y='42' font-size='30' text-anchor='middle' fill='white' font-family='Arial'%3EP%3C/text%3E%3C/svg%3E"
+    />
+
+    <!-- Open Graph / Twitter Card — pour un aperçu propre quand le lien est partagé. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="PadelConnect" />
+    <meta property="og:title" content="PadelConnect — Réserve ton terrain de padel à Abidjan" />
+    <meta
+      property="og:description"
+      content="Réservation, tournois, matchs ouverts, coachs : toute la communauté padel d'Abidjan, dans une seule app."
+    />
+    <meta property="og:url" content="https://padelconnectci.com/" />
+    <!-- og.svg = image de secours générée par le développeur (couleurs de la marque). Le porteur
+         peut la remplacer par une vraie capture/illustration « og.png » (1200x630) pour un rendu
+         plus net sur les réseaux qui ne lisent pas le SVG (ex. certains aperçus de messagerie). -->
+    <meta property="og:image" content="https://padelconnectci.com/og.svg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="PadelConnect — Réserve ton terrain de padel à Abidjan" />
+    <meta
+      name="twitter:description"
+      content="Réservation, tournois, matchs ouverts, coachs : toute la communauté padel d'Abidjan, dans une seule app."
+    />
+    <meta name="twitter:image" content="https://padelconnectci.com/og.svg" />
+
+    <link rel="stylesheet" href="/assets/style.css" />
   </head>
   <body>
-    <div class="card">
-      <h1>PadelConnect 🎾</h1>
-      <p>Réserve ton terrain de padel à Abidjan en 2 minutes — créneaux, tournois, partenaires de jeu.</p>
-      <!-- /get.html route vers l'App Store OU Google Play selon l'appareil (l'app sort sur les deux) -->
-      <a class="btn" href="/get.html">Télécharger l'application</a>
-      <div class="links">
-        <a href="/privacy.html">Confidentialité</a>
+    <!-- ============================= EN-TÊTE ============================= -->
+    <header class="entete">
+      <div class="entete-barre">
+        <a class="logo" href="/#accueil">
+          <span class="bulle">🎾</span>
+          PadelConnect
+        </a>
+
+        <nav class="nav-liens">
+          <a href="/#clubs" data-i18n="nav.clubs">Nos clubs</a>
+          <a href="/#pour-les-clubs" data-i18n="nav.pourclubs">Pour les clubs</a>
+        </nav>
+
+        <div class="entete-actions">
+          <button type="button" class="btn-lang" aria-label="Passer en français / Switch to English">EN</button>
+          <!-- Espace Club : sous-domaine web dédié aux gérants, prévu mais PAS ENCORE créé.
+               Le porteur doit déployer club.padelconnectci.com avant que ce bouton soit utile ;
+               en attendant il redirige simplement vers ce domaine (à surveiller : lien mort tant
+               que le sous-domaine n'existe pas). -->
+          <a class="btn btn-contour btn-petit cache-mobile" href="https://club.padelconnectci.com">
+            <span data-i18n="nav.espaceclub">Espace Club</span>
+          </a>
+          <a class="btn btn-plein btn-petit" href="/get.html" data-i18n="nav.telecharger">Télécharger</a>
+          <button type="button" class="btn-menu" aria-label="Menu" aria-expanded="false"><span></span></button>
+        </div>
       </div>
-    </div>
+      <div class="menu-mobile">
+        <a href="/#clubs" data-i18n="nav.clubs">Nos clubs</a>
+        <a href="/#pour-les-clubs" data-i18n="nav.pourclubs">Pour les clubs</a>
+        <a href="https://club.padelconnectci.com" data-i18n="nav.espaceclub">Espace Club</a>
+      </div>
+    </header>
+
+    <main>
+      <!-- ============================= HÉROS ============================= -->
+      <section id="accueil" class="heros">
+        <div class="conteneur heros-grille">
+          <div>
+            <span class="pastille-live"><span class="point-live"></span><span data-i18n="hero.badge">En ligne à Abidjan</span></span>
+            <h1 data-i18n-html="hero.titre">Le padel d'Abidjan,<br />réservé en 2 minutes.</h1>
+            <p class="sous-titre" data-i18n="hero.soustitre">
+              Réserve un terrain, inscris-toi à un tournoi, trouve des partenaires de jeu et suis ta progression — tout au même
+              endroit, 100 % en français.
+            </p>
+            <div class="heros-boutons">
+              <a class="btn btn-plein" href="/get.html">
+                <span>📲</span><span data-i18n="hero.cta1">Télécharger l'app</span>
+              </a>
+              <a class="btn btn-contour" href="https://club.padelconnectci.com">
+                <span data-i18n="hero.cta2">Espace Club →</span>
+              </a>
+            </div>
+            <div class="preuves">
+              <div class="preuve"><span class="puce">✓</span><span data-i18n="hero.preuve1">Les meilleurs clubs d'Abidjan</span></div>
+              <div class="preuve">
+                <span class="puce">✓</span><span data-i18n="hero.preuve2">Réservation confirmée par le club</span>
+              </div>
+              <div class="preuve"><span class="puce">✓</span><span data-i18n="hero.preuve3">Gratuit pour les joueurs</span></div>
+            </div>
+          </div>
+
+          <!-- Visuel « mockup » en CSS pur — aucune image à fournir. -->
+          <div class="mockups reveal">
+            <div class="telephone">
+              <div class="encoche"></div>
+              <div class="telephone-ecran">
+                <div class="ecran-carte">
+                  <div class="ecran-titre" data-i18n="hero.mockup.club">Padelta · Cocody Danga</div>
+                  <div class="ecran-ligne" data-i18n="hero.mockup.creneau">Aujourd'hui · 18h00 — 19h30</div>
+                </div>
+                <div class="ecran-carte">
+                  <div class="ecran-titre" data-i18n="hero.mockup.prochain">🔥 Prochain match</div>
+                  <div class="ecran-ligne" data-i18n="hero.mockup.avatars">Toi + 3 joueurs</div>
+                  <div class="pile-avatars"><span>🙂</span><span>🙂</span><span>🙂</span><span>🙂</span></div>
+                </div>
+                <div class="ecran-carte">
+                  <div class="ecran-titre" data-i18n="hero.mockup.tournoi">🏆 Tournoi du week-end</div>
+                  <div class="ecran-ligne" data-i18n="hero.mockup.places">6 équipes inscrites</div>
+                </div>
+              </div>
+            </div>
+            <div class="carte-flottante haut-droite">⭐ 4,8 / 5</div>
+            <div class="carte-flottante bas-gauche">✅ <span data-i18n="hero.mockup.confirme">Confirmé</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================= FONCTIONNALITÉS ============================= -->
+      <section id="fonctionnalites">
+        <div class="conteneur">
+          <div class="section-tete reveal">
+            <span class="badge-section" data-i18n="features.badge">Fonctionnalités</span>
+            <h2 data-i18n="features.titre">Tout le padel d'Abidjan, dans une app</h2>
+            <p data-i18n="features.soustitre">Pensée pour les joueurs comme pour les clubs, sans complication.</p>
+          </div>
+          <div class="grille-fonctions">
+            <div class="carte-fonction reveal">
+              <div class="icone-fonction" style="background:#dcebe4;color:#0c6a57">📅</div>
+              <h3 data-i18n="features.reserver.titre">Réserver</h3>
+              <p data-i18n="features.reserver.texte">Vois les créneaux libres en temps réel et réserve en quelques secondes.</p>
+            </div>
+            <div class="carte-fonction reveal">
+              <div class="icone-fonction" style="background:#e7e3fa;color:#5b4fc9">🏆</div>
+              <h3 data-i18n="features.tournois.titre">Tournois</h3>
+              <p data-i18n="features.tournois.texte">Inscris ton équipe aux tournois officiels ou organisés par les clubs.</p>
+            </div>
+            <div class="carte-fonction reveal">
+              <div class="icone-fonction" style="background:#f3e7cc;color:#785a10">🤝</div>
+              <h3 data-i18n="features.matchs.titre">Matchs ouverts</h3>
+              <p data-i18n="features.matchs.texte">Il manque un joueur ? Rejoins une partie déjà réservée près de chez toi.</p>
+            </div>
+            <div class="carte-fonction reveal">
+              <div class="icone-fonction" style="background:#fbe7df;color:#c0492f">🎓</div>
+              <h3 data-i18n="features.coachs.titre">Coachs</h3>
+              <p data-i18n="features.coachs.texte">Réserve un cours avec un coach partenaire, sans sortir de l'app.</p>
+            </div>
+            <div class="carte-fonction reveal">
+              <div class="icone-fonction" style="background:#dcebe4;color:#0c6a57">📈</div>
+              <h3 data-i18n="features.classement.titre">Classement</h3>
+              <p data-i18n="features.classement.texte">
+                Gagne des points à chaque match joué et grimpe le classement de la communauté.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================= NOS CLUBS ============================= -->
+      <section id="clubs">
+        <div class="conteneur">
+          <div class="section-tete reveal">
+            <span class="badge-section" data-i18n="clubs.badge">Nos clubs</span>
+            <h2 data-i18n="clubs.titre">9 clubs fondateurs, partout à Abidjan</h2>
+            <p data-i18n="clubs.soustitre">Des terrains couverts à Cocody aux clubs outdoor de Marcory et Zone 3.</p>
+          </div>
+
+          <!-- Grille remplie par assets/site.js (renderClubs) — données réelles, mêmes clubs que
+               dans l'app (src/data/clubs.ts). Aucune photo de club : le porteur n'a pas encore
+               fourni de visuels, on utilise donc un dégradé + emoji comme repli (même logique
+               que le composant ClubPhoto côté app). -->
+          <div id="grille-clubs" class="grille-clubs"></div>
+
+          <p class="note-clubs" data-i18n="clubs.note">
+            Tarifs « dès » indicatifs (heures creuses) — à confirmer sur chaque fiche club dans l'application. Le règlement se
+            fait directement au club, jamais dans l'app.
+          </p>
+        </div>
+      </section>
+
+      <!-- ============================= POUR LES CLUBS ============================= -->
+      <section id="pour-les-clubs">
+        <div class="conteneur">
+          <div class="section-tete reveal">
+            <span class="badge-section" data-i18n="pourclubs.badge">Pour les clubs</span>
+            <h2 data-i18n="pourclubs.titre">Remplis ton planning, sans effort</h2>
+            <p data-i18n="pourclubs.soustitre">Ce que PadelConnect change pour un club de padel à Abidjan.</p>
+          </div>
+
+          <div class="grille-arguments">
+            <div class="carte-argument reveal">
+              <div class="icone-fonction" style="background:#dcebe4;color:#0c6a57">📅</div>
+              <div>
+                <h3 data-i18n="pourclubs.arg1.titre">Des réservations en plus, sans effort</h3>
+                <p data-i18n="pourclubs.arg1.texte">
+                  Les joueurs de toute la ville voient tes terrains libres et réservent en quelques secondes — même la nuit,
+                  même quand personne ne répond au téléphone.
+                </p>
+              </div>
+            </div>
+            <div class="carte-argument reveal">
+              <div class="icone-fonction" style="background:#fbe7df;color:#c0492f">🔒</div>
+              <div>
+                <h3 data-i18n="pourclubs.arg2.titre">100 % du contrôle de ton planning</h3>
+                <p data-i18n="pourclubs.arg2.texte">
+                  Les résas prises au téléphone ou sur place se bloquent en deux gestes dans ton planning — jamais facturées,
+                  jamais de double réservation.
+                </p>
+              </div>
+            </div>
+            <div class="carte-argument reveal">
+              <div class="icone-fonction" style="background:#f3e7cc;color:#785a10">💳</div>
+              <div>
+                <h3 data-i18n="pourclubs.arg3.titre">Un règlement simple, chaque semaine</h3>
+                <p data-i18n="pourclubs.arg3.texte">
+                  Un décompte clair chaque fin de semaine, réglé par Wave : des sommes faciles à suivre, zéro mauvaise surprise.
+                </p>
+              </div>
+            </div>
+            <div class="carte-argument reveal">
+              <div class="icone-fonction" style="background:#e7e3fa;color:#5b4fc9">🏆</div>
+              <div>
+                <h3 data-i18n="pourclubs.arg4.titre">Tes tournois remplis et gérés</h3>
+                <p data-i18n="pourclubs.arg4.texte">
+                  Crée tes tournois, les joueurs s'inscrivent en équipe, tu clôtures en désignant le vainqueur — la communauté
+                  revient chez toi.
+                </p>
+              </div>
+            </div>
+            <div class="carte-argument reveal">
+              <div class="icone-fonction" style="background:#dcebe4;color:#0c6a57">📣</div>
+              <div>
+                <h3 data-i18n="pourclubs.arg5.titre">Ta vitrine, gérée par toi</h3>
+                <p data-i18n="pourclubs.arg5.texte">
+                  Photos, tarifs, offres, événements, coachs : ta page se met à jour en direct depuis ton téléphone.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <p class="bloc-commission reveal" data-i18n="pourclubs.commission">
+            Commission à partir de 10 %, uniquement sur les parties jouées réservées via l'app (taux convenu avec chaque club).
+            Pas d'abonnement, pas de paiement en ligne.
+          </p>
+
+          <div class="cta-club reveal">
+            <a class="btn btn-or" href="/get.html">
+              <span>🏟️</span><span data-i18n="pourclubs.cta">Inscrire mon club</span>
+            </a>
+            <p class="liens-secondaires" data-i18n-html="pourclubs.cta-aide">
+              Télécharge l'app puis choisis « Je gère un club » à l'inscription, ou écris-nous directement à
+              <a href="mailto:contact@padelconnectci.com">contact@padelconnectci.com</a>.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================= BANDEAU FINAL ============================= -->
+      <section id="telecharger">
+        <div class="conteneur">
+          <div class="bandeau-final reveal">
+            <h2 data-i18n="final.titre">Prêt à taper la balle ?</h2>
+            <p data-i18n="final.texte">Disponible sur iOS et Android. Gratuit pour les joueurs.</p>
+            <a class="btn btn-plein" href="/get.html">
+              <span>📲</span><span data-i18n="final.cta">Télécharger PadelConnect</span>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ============================= PIED DE PAGE ============================= -->
+    <footer>
+      <div class="conteneur">
+        <div class="pied-grille">
+          <div class="logo">
+            <span class="bulle">🎾</span>
+            PadelConnect
+          </div>
+          <div class="pied-liens">
+            <a href="/privacy.html" data-i18n="footer.confidentialite">Confidentialité</a>
+            <a href="/cgu.html" data-i18n="footer.cgu">CGU &amp; mentions légales</a>
+            <!-- Handle Instagram à confirmer par le porteur si différent de celui-ci. -->
+            <a href="https://instagram.com/padelconnect.ci" target="_blank" rel="noopener">Instagram</a>
+            <a href="mailto:contact@padelconnectci.com">contact@padelconnectci.com</a>
+          </div>
+        </div>
+        <div class="pied-bas">
+          <span>&copy; 2026 PadelConnect · Abidjan, Côte d'Ivoire</span>
+          <span data-i18n="footer.disponible">Application disponible sur iOS et Android</span>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Dictionnaire de traduction FR/EN de cette page (lu par assets/site.js). -->
+    <script>
+      window.I18N = {
+        'nav.clubs': { fr: 'Nos clubs', en: 'Our clubs' },
+        'nav.pourclubs': { fr: 'Pour les clubs', en: 'For clubs' },
+        'nav.espaceclub': { fr: 'Espace Club', en: 'Club portal' },
+        'nav.telecharger': { fr: 'Télécharger', en: 'Download' },
+
+        'hero.badge': { fr: 'En ligne à Abidjan', en: 'Live in Abidjan' },
+        'hero.titre': {
+          fr: "Le padel d'Abidjan,<br />réservé en 2 minutes.",
+          en: "Abidjan's padel,<br />booked in 2 minutes.",
+        },
+        'hero.soustitre': {
+          fr: "Réserve un terrain, inscris-toi à un tournoi, trouve des partenaires de jeu et suis ta progression — tout au même endroit, 100 % en français.",
+          en: 'Book a court, join a tournament, find playing partners and track your progress — all in one place.',
+        },
+        'hero.cta1': { fr: "Télécharger l'app", en: 'Download the app' },
+        'hero.cta2': { fr: 'Espace Club →', en: 'Club portal →' },
+        'hero.preuve1': { fr: "Les meilleurs clubs d'Abidjan", en: "Abidjan's best clubs" },
+        'hero.preuve2': { fr: 'Réservation confirmée par le club', en: 'Booking confirmed by the club' },
+        'hero.preuve3': { fr: 'Gratuit pour les joueurs', en: 'Free for players' },
+        'hero.mockup.club': { fr: 'Padelta · Cocody Danga', en: 'Padelta · Cocody Danga' },
+        'hero.mockup.creneau': { fr: "Aujourd'hui · 18h00 — 19h30", en: 'Today · 6:00 — 7:30 PM' },
+        'hero.mockup.prochain': { fr: '🔥 Prochain match', en: '🔥 Next match' },
+        'hero.mockup.avatars': { fr: 'Toi + 3 joueurs', en: 'You + 3 players' },
+        'hero.mockup.tournoi': { fr: '🏆 Tournoi du week-end', en: '🏆 Weekend tournament' },
+        'hero.mockup.places': { fr: '6 équipes inscrites', en: '6 teams registered' },
+        'hero.mockup.confirme': { fr: 'Confirmé', en: 'Confirmed' },
+
+        'features.badge': { fr: 'Fonctionnalités', en: 'Features' },
+        'features.titre': { fr: "Tout le padel d'Abidjan, dans une app", en: "All of Abidjan's padel, in one app" },
+        'features.soustitre': {
+          fr: 'Pensée pour les joueurs comme pour les clubs, sans complication.',
+          en: 'Built for players and clubs alike, no complications.',
+        },
+        'features.reserver.titre': { fr: 'Réserver', en: 'Book' },
+        'features.reserver.texte': {
+          fr: 'Vois les créneaux libres en temps réel et réserve en quelques secondes.',
+          en: 'See free slots in real time and book in seconds.',
+        },
+        'features.tournois.titre': { fr: 'Tournois', en: 'Tournaments' },
+        'features.tournois.texte': {
+          fr: 'Inscris ton équipe aux tournois officiels ou organisés par les clubs.',
+          en: 'Register your team for official or club-organised tournaments.',
+        },
+        'features.matchs.titre': { fr: 'Matchs ouverts', en: 'Open matches' },
+        'features.matchs.texte': {
+          fr: 'Il manque un joueur ? Rejoins une partie déjà réservée près de chez toi.',
+          en: 'Missing a player? Join an already-booked match near you.',
+        },
+        'features.coachs.titre': { fr: 'Coachs', en: 'Coaches' },
+        'features.coachs.texte': {
+          fr: "Réserve un cours avec un coach partenaire, sans sortir de l'app.",
+          en: 'Book a lesson with a partner coach, without leaving the app.',
+        },
+        'features.classement.titre': { fr: 'Classement', en: 'Leaderboard' },
+        'features.classement.texte': {
+          fr: 'Gagne des points à chaque match joué et grimpe le classement de la communauté.',
+          en: 'Earn points every match you play and climb the community leaderboard.',
+        },
+
+        'clubs.badge': { fr: 'Nos clubs', en: 'Our clubs' },
+        'clubs.titre': { fr: '9 clubs fondateurs, partout à Abidjan', en: '9 founding clubs, all across Abidjan' },
+        'clubs.soustitre': {
+          fr: 'Des terrains couverts à Cocody aux clubs outdoor de Marcory et Zone 3.',
+          en: 'From indoor courts in Cocody to outdoor clubs in Marcory and Zone 3.',
+        },
+        'clubs.note': {
+          fr: "Tarifs « dès » indicatifs (heures creuses) — à confirmer sur chaque fiche club dans l'application. Le règlement se fait directement au club, jamais dans l'app.",
+          en: '"From" prices are indicative (off-peak hours) — confirm on each club page in the app. Payment is always made directly at the club, never in the app.',
+        },
+
+        'pourclubs.badge': { fr: 'Pour les clubs', en: 'For clubs' },
+        'pourclubs.titre': { fr: 'Remplis ton planning, sans effort', en: 'Fill your schedule, effortlessly' },
+        'pourclubs.soustitre': {
+          fr: 'Ce que PadelConnect change pour un club de padel à Abidjan.',
+          en: 'What PadelConnect changes for a padel club in Abidjan.',
+        },
+        'pourclubs.arg1.titre': { fr: 'Des réservations en plus, sans effort', en: 'More bookings, no extra effort' },
+        'pourclubs.arg1.texte': {
+          fr: "Les joueurs de toute la ville voient tes terrains libres et réservent en quelques secondes — même la nuit, même quand personne ne répond au téléphone.",
+          en: 'Players across the city see your free courts and book in seconds — even at night, even when no one answers the phone.',
+        },
+        'pourclubs.arg2.titre': { fr: '100 % du contrôle de ton planning', en: 'Full control of your schedule' },
+        'pourclubs.arg2.texte': {
+          fr: 'Les résas prises au téléphone ou sur place se bloquent en deux gestes dans ton planning — jamais facturées, jamais de double réservation.',
+          en: 'Bookings taken by phone or in person are blocked in two taps on your schedule — never billed, never double-booked.',
+        },
+        'pourclubs.arg3.titre': { fr: 'Un règlement simple, chaque semaine', en: 'Simple weekly payouts' },
+        'pourclubs.arg3.texte': {
+          fr: 'Un décompte clair chaque fin de semaine, réglé par Wave : des sommes faciles à suivre, zéro mauvaise surprise.',
+          en: 'A clear statement every week, paid via Wave: easy amounts to track, zero surprises.',
+        },
+        'pourclubs.arg4.titre': { fr: 'Tes tournois remplis et gérés', en: 'Your tournaments, full and managed' },
+        'pourclubs.arg4.texte': {
+          fr: "Crée tes tournois, les joueurs s'inscrivent en équipe, tu clôtures en désignant le vainqueur — la communauté revient chez toi.",
+          en: 'Create your tournaments, players register as teams, you close by naming the winner — the community keeps coming back.',
+        },
+        'pourclubs.arg5.titre': { fr: 'Ta vitrine, gérée par toi', en: 'Your showcase, run by you' },
+        'pourclubs.arg5.texte': {
+          fr: 'Photos, tarifs, offres, événements, coachs : ta page se met à jour en direct depuis ton téléphone.',
+          en: 'Photos, prices, offers, events, coaches: your page updates live from your phone.',
+        },
+        'pourclubs.commission': {
+          fr: "Commission à partir de 10 %, uniquement sur les parties jouées réservées via l'app (taux convenu avec chaque club). Pas d'abonnement, pas de paiement en ligne.",
+          en: 'Commission from 10%, only on sessions booked through the app (rate agreed with each club). No subscription, no online payment.',
+        },
+        'pourclubs.cta': { fr: 'Inscrire mon club', en: 'Register my club' },
+        'pourclubs.cta-aide': {
+          fr: 'Télécharge l\'app puis choisis « Je gère un club » à l\'inscription, ou écris-nous directement à <a href="mailto:contact@padelconnectci.com">contact@padelconnectci.com</a>.',
+          en: 'Download the app then choose "I manage a club" at sign-up, or email us directly at <a href="mailto:contact@padelconnectci.com">contact@padelconnectci.com</a>.',
+        },
+
+        'final.titre': { fr: 'Prêt à taper la balle ?', en: 'Ready to hit the court?' },
+        'final.texte': { fr: 'Disponible sur iOS et Android. Gratuit pour les joueurs.', en: 'Available on iOS and Android. Free for players.' },
+        'final.cta': { fr: 'Télécharger PadelConnect', en: 'Download PadelConnect' },
+
+        'footer.confidentialite': { fr: 'Confidentialité', en: 'Privacy' },
+        'footer.cgu': { fr: 'CGU & mentions légales', en: 'Terms & legal notice' },
+        'footer.disponible': { fr: 'Application disponible sur iOS et Android', en: 'App available on iOS and Android' },
+      };
+    </script>
+    <script src="/assets/site.js"></script>
   </body>
 </html>
