@@ -242,6 +242,10 @@ export type AppState = {
   //  - 'operator' : toi (PadelConnect). 'club' : un gérant. 'player' : par défaut.
   // Un joueur ne peut pas se promouvoir (protégé par un trigger côté serveur).
   role: 'player' | 'operator' | 'club';
+  // TYPE DE COMPTE choisi à l’inscription (joueur / club). Indépendant du RÔLE vérifié
+  // serveur : un compte club reste account_type='club' mais role='player' TANT que
+  // l’opérateur n’a pas validé son club → l’app affiche « club en cours de validation ».
+  accountType: 'player' | 'club';
   serverManagedClubId: string | null; // pour un compte 'club' : l’id du club géré
   serverUserId: string | null; // id Supabase quand connecté → mode « réservations serveur »
   participantReservationIds: string[]; // résas où JE suis invité (hors invitations refusées)
@@ -307,6 +311,10 @@ type AppContextType = {
       level?: number;
       referralCode?: string;
       photoUri?: string;
+      // Compte CLUB (Chantier 1) : type + infos du club. Quand accountType='club', le
+      // serveur crée d’office la demande d’inscription (validée ensuite par l’opérateur).
+      accountType?: 'player' | 'club';
+      club?: { name: string; area?: string; type?: string; courts?: number; priceFrom?: number };
     },
   ) => Promise<{ ok: boolean; needsConfirm?: boolean; error?: string }>;
   signInWithEmail: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
@@ -573,6 +581,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               // relecture du profil échoue juste après la bascule, le nouveau compte ne doit
               // pas hériter d'un rôle opérateur/gérant ni des miroirs financiers de l'ancien.
               role: 'player',
+              accountType: 'player',
               serverManagedClubId: null,
               blockedUserIds: [],
               clubCommission: {},
@@ -599,6 +608,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             gender: prof.gender ?? s.account?.gender,
           },
           role: (prof.role as AppState['role']) ?? 'player',
+          accountType: prof.account_type === 'club' ? 'club' : 'player',
           serverManagedClubId: prof.managed_club_id ?? null,
           level: hydratedLevel,
         }));
@@ -842,7 +852,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // Club apparaît au retour dans l’app, sans réinstaller.
             supabase
               .from('profiles')
-              .select('role, managed_club_id, level')
+              .select('role, managed_club_id, level, account_type')
               .eq('id', userId)
               .maybeSingle()
               .then(({ data }) => data),
@@ -876,6 +886,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ...competitionSlices(s, serverComps, compRegs),
             blockedUserIds: blockedUsers ?? s.blockedUserIds,
             role: prof ? ((prof.role as AppState['role']) ?? s.role) : s.role,
+            accountType: prof ? (prof.account_type === 'club' ? 'club' : 'player') : s.accountType,
             serverManagedClubId: prof ? (prof.managed_club_id ?? null) : s.serverManagedClubId,
             level: prof ? clampLevel(Number(prof.level ?? s.level)) : s.level,
           }));
@@ -1066,6 +1077,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               gender: profile.gender ?? null,
               level: clampLevel(profile.level ?? 3.0),
               referred_by: profile.referralCode?.trim() || null,
+              // Compte CLUB : le trigger serveur (56) lit ces clés pour poser account_type
+              // et créer la demande d’inscription du club (validée ensuite par l’opérateur).
+              account_type: profile.accountType === 'club' ? 'club' : 'player',
+              club_name: profile.club?.name?.trim() || null,
+              club_area: profile.club?.area?.trim() || null,
+              club_type: profile.club?.type || null,
+              club_courts: profile.club?.courts ?? null,
+              club_price_from: profile.club?.priceFrom ?? null,
             },
           },
         });

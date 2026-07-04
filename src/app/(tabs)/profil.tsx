@@ -83,6 +83,9 @@ export default function ProfilScreen() {
   // compte lui-même, validé par le serveur, qui fait foi.)
   const showOperator = state.role === 'operator';
   const showClub = state.role === 'club' || state.role === 'operator';
+  // Compte CLUB inscrit mais PAS ENCORE validé par l’opérateur (Chantier 1) : on affiche
+  // « en cours de validation » à la place de l’Espace Club, tant que le rôle n’est pas 'club'.
+  const showClubPending = state.accountType === 'club' && !showClub;
   // Espace Coach : visible dès qu’un club a déclaré ce compte comme coach (fiche serveur).
   const showCoach = !!state.coachProfile;
   // Pastille gérant : réservations à venir de SON club en attente de confirmation (un compte
@@ -384,6 +387,16 @@ export default function ProfilScreen() {
                 <Txt variant="muted">Demandes de cours, cours à venir, ta fiche.</Txt>
               </View>
               <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+            </Card>
+          ) : null}
+          {showClubPending ? (
+            <Card style={styles.cta}>
+              <IconCircle icon="hourglass-outline" color={colors.amberDark} bg={colors.amberSoft} />
+              <View style={{ flex: 1 }}>
+                <Txt variant="h3">Club en cours de validation</Txt>
+                <Txt variant="muted">PadelConnect vérifie ton club. Ton Espace Club s’ouvrira dès l’activation.</Txt>
+              </View>
+              <Tag label="En attente" tone="amber" icon="time-outline" />
             </Card>
           ) : null}
           {showClub ? (

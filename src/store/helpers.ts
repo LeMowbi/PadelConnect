@@ -79,6 +79,7 @@ export const initialState: AppState = {
   clubCommission: {},
   tournamentFee: 10000, // frais fixe par défaut des tournois joueurs (réglable par l’opérateur)
   role: 'player',
+  accountType: 'player', // type choisi à l'inscription (joueur / club) — pilote l'affichage
   serverManagedClubId: null,
   serverUserId: null,
   participantReservationIds: [],
@@ -139,6 +140,7 @@ export function loggedOutState(s: AppState): AppState {
     ...s,
     account: null,
     role: 'player',
+    accountType: 'player',
     serverManagedClubId: null,
     serverUserId: null,
     reservations: [],

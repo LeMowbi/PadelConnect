@@ -9,7 +9,8 @@ import { Chip } from '@/components/Chip';
 import { LevelStepper } from '@/components/LevelStepper';
 import { Logo } from '@/components/Logo';
 import { Stepper } from '@/components/Stepper';
-import { Button, Txt } from '@/components/ui';
+import { Button, Card, IconCircle, Txt } from '@/components/ui';
+import { type Club } from '@/data/clubs';
 import { levelLabel } from '@/lib/format';
 import { clearPendingReferral, getPendingReferral } from '@/lib/pendingReferral';
 import { pickImage } from '@/lib/pickImage';
@@ -45,6 +46,16 @@ export default function Onboarding() {
   // Étape courante du formulaire (0 = Compte, 1 = Profil, 2 = Parrainage). État global au
   // composant (pas par étape) : le pré-remplissage du parrainage marche quel que soit l’écran.
   const [step, setStep] = useState(0);
+  // Chantier 1 — TYPE DE COMPTE choisi en tout premier : joueur ou gérant de club.
+  // null = l’écran de choix s’affiche ; ensuite le parcours diffère (le club renseigne
+  // en plus les infos de son établissement, validées ensuite par l’opérateur).
+  const [accountType, setAccountType] = useState<'player' | 'club' | null>(null);
+  // Infos du club (parcours gérant uniquement).
+  const [clubName, setClubName] = useState('');
+  const [clubArea, setClubArea] = useState('');
+  const [clubType, setClubType] = useState<Club['type']>('Extérieur');
+  const [clubCourts, setClubCourts] = useState(2);
+  const [clubPrice, setClubPrice] = useState('');
   // Code capté via un lien d’invitation (padelconnectci.com/invite/CODE) → pré-remplissage.
   // setState APRÈS await (pas dans le corps de l’effet) pour respecter le React Compiler.
   // On ne l’EFFACE PAS ici : si l’utilisateur quitte sans s’inscrire, le code doit rester
@@ -179,6 +190,48 @@ export default function Onboarding() {
     } else setAuthError(res.error ?? 'Inscription impossible. Réessaie.');
   };
 
+  // Création d’un compte CLUB (Chantier 1) : mêmes identifiants (e-mail + mot de passe +
+  // téléphone) + les infos de l’établissement. Le serveur crée d’office la demande
+  // d’inscription du club, que l’opérateur validera avant d’ouvrir l’Espace Club.
+  const createClub = async () => {
+    if (busy) return;
+    const e: Partial<Record<FieldKey, string>> = {};
+    if (!isEmail(email)) e.email = 'Adresse e-mail invalide.';
+    if (password.length < 6) e.password = 'Mot de passe : 6 caractères minimum.';
+    if (phone.replace(/\D/g, '').length < 8) e.phone = 'Numéro invalide — au moins 8 chiffres.';
+    if (firstName.trim().length < 2) e.firstName = 'Indique ton prénom (2 lettres minimum).';
+    if (lastName.trim().length < 1) e.lastName = 'Indique ton nom.';
+    setErrors(e);
+    setAuthError(null);
+    // Nom + quartier du club obligatoires (message global : ils n’ont pas de champ FieldKey).
+    if (Object.keys(e).length > 0) {
+      const first = FIELD_ORDER.find((k) => e[k]);
+      if (first) scrollRef.current?.scrollTo({ y: Math.max(0, (positions.current[first] ?? 0) - 24), animated: true });
+      return;
+    }
+    if (clubName.trim().length < 2 || clubArea.trim().length < 2) {
+      setAuthError('Indique le nom et le quartier de ton club.');
+      return;
+    }
+    setBusy(true);
+    const res = await signUpWithEmail(email, password, phone, {
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      accountType: 'club',
+      club: {
+        name: clubName.trim(),
+        area: clubArea.trim(),
+        type: clubType,
+        courts: clubCourts,
+        priceFrom: Number(clubPrice.replace(/\D/g, '')) || undefined,
+      },
+    });
+    setBusy(false);
+    if (res.needsConfirm) setSentTo(email.trim().toLowerCase());
+    else if (res.ok) router.replace('/');
+    else setAuthError(res.error ?? 'Inscription impossible. Réessaie.');
+  };
+
   const signIn = async () => {
     if (siBusy) return; // garde anti double-tap
     const byEmail = siMode === 'email';
@@ -297,6 +350,273 @@ export default function Onboarding() {
         </View>
 
         {/* Connexion (réutilise la même feuille que l’écran d’inscription). */}
+        <SignInSheet
+          visible={signInOpen}
+          mode={siMode}
+          setMode={setSiMode}
+          email={siEmail}
+          setEmail={setSiEmail}
+          phone={siPhone}
+          setPhone={setSiPhone}
+          pass={siPass}
+          setPass={setSiPass}
+          busy={siBusy}
+          error={siError}
+          info={siInfo}
+          onClose={() => {
+            setSignInOpen(false);
+            setSiInfo(null);
+          }}
+          onSubmit={signIn}
+          onForgot={forgotPassword}
+          clearError={() => {
+            setSiError(null);
+            setSiInfo(null);
+          }}
+        />
+      </View>
+    );
+  }
+
+  // ── Écran de CHOIX DU TYPE DE COMPTE (tout premier écran, Chantier 1) ──────────
+  if (accountType === null) {
+    return (
+      <View style={styles.root}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xxxl }}>
+          <LinearGradient colors={gradients.deepGreen} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+            <Logo size={40} />
+            <Txt variant="display" color={colors.onSignature} style={styles.heroTitle}>
+              Bienvenue sur PadelConnect
+            </Txt>
+            <Txt variant="body" color={colors.onSignature} style={{ marginTop: spacing.sm, opacity: 0.85 }}>
+              Dis-nous qui tu es pour commencer.
+            </Txt>
+          </LinearGradient>
+          <View style={styles.body}>
+            <Card onPress={() => setAccountType('player')} style={styles.roleCard}>
+              <IconCircle icon="tennisball" color={colors.signature} bg={colors.signatureSoft} size={52} />
+              <View style={{ flex: 1 }}>
+                <Txt variant="h3">Je suis un joueur</Txt>
+                <Txt variant="muted">Réserve un terrain, rejoins des matchs et des tournois.</Txt>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+            </Card>
+            <Card onPress={() => setAccountType('club')} style={styles.roleCard}>
+              <IconCircle icon="business" color={colors.amberDark} bg={colors.amberSoft} size={52} />
+              <View style={{ flex: 1 }}>
+                <Txt variant="h3">Je gère un club</Txt>
+                <Txt variant="muted">Référence ton club et gère tes réservations. Ton club est validé par PadelConnect.</Txt>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+            </Card>
+            <Pressable onPress={() => setSignInOpen(true)} style={{ marginTop: spacing.lg, alignItems: 'center' }}>
+              <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center' }}>
+                Tu as déjà un compte ?{' '}
+                <Txt variant="small" color={colors.signature}>
+                  Se connecter →
+                </Txt>
+              </Txt>
+            </Pressable>
+          </View>
+        </ScrollView>
+        <SignInSheet
+          visible={signInOpen}
+          mode={siMode}
+          setMode={setSiMode}
+          email={siEmail}
+          setEmail={setSiEmail}
+          phone={siPhone}
+          setPhone={setSiPhone}
+          pass={siPass}
+          setPass={setSiPass}
+          busy={siBusy}
+          error={siError}
+          info={siInfo}
+          onClose={() => {
+            setSignInOpen(false);
+            setSiInfo(null);
+          }}
+          onSubmit={signIn}
+          onForgot={forgotPassword}
+          clearError={() => {
+            setSiError(null);
+            setSiInfo(null);
+          }}
+        />
+      </View>
+    );
+  }
+
+  // ── Parcours GÉRANT DE CLUB (Chantier 1) : identifiants + infos de l’établissement ──
+  if (accountType === 'club') {
+    return (
+      <View style={styles.root}>
+        <ScrollView
+          ref={scrollRef}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={{ paddingBottom: spacing.xxxl }}
+        >
+          <LinearGradient colors={gradients.deepGreen} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+            <Logo size={40} />
+            <Txt variant="display" color={colors.onSignature} style={styles.heroTitle}>
+              Inscris ton club
+            </Txt>
+            <Txt variant="body" color={colors.onSignature} style={{ marginTop: spacing.sm, opacity: 0.85 }}>
+              Crée ton accès gérant. PadelConnect valide ton club, puis tu gères tout depuis l’app ou l’ordinateur.
+            </Txt>
+          </LinearGradient>
+
+          <View style={styles.body}>
+            <Txt variant="label" style={{ marginTop: 0 }}>
+              TON ACCÈS GÉRANT
+            </Txt>
+            <Field
+              label="Adresse e-mail"
+              value={email}
+              onChangeText={(t) => {
+                setEmail(t);
+                clearError('email');
+              }}
+              placeholder="ex. contact@ton-club.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              error={errors.email}
+              onLayout={(y) => {
+                positions.current.email = y;
+              }}
+            />
+            <Field
+              label="Numéro de téléphone (WhatsApp de préférence)"
+              value={phone}
+              onChangeText={(t) => {
+                setPhone(t);
+                clearError('phone');
+              }}
+              placeholder="+225 07 00 00 00 00"
+              keyboardType="phone-pad"
+              autoCapitalize="none"
+              error={errors.phone}
+              onLayout={(y) => {
+                positions.current.phone = y;
+              }}
+            />
+            <Field
+              label="Mot de passe"
+              value={password}
+              onChangeText={(t) => {
+                setPassword(t);
+                clearError('password');
+              }}
+              placeholder="6 caractères minimum"
+              secureTextEntry
+              autoCapitalize="none"
+              error={errors.password}
+              onLayout={(y) => {
+                positions.current.password = y;
+              }}
+            />
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              <View style={{ flex: 1 }}>
+                <Field
+                  label="Prénom (contact)"
+                  value={firstName}
+                  onChangeText={(t) => {
+                    setFirstName(t);
+                    clearError('firstName');
+                  }}
+                  placeholder="Ton prénom"
+                  autoCapitalize="words"
+                  error={errors.firstName}
+                  onLayout={(y) => {
+                    positions.current.firstName = y;
+                  }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Field
+                  label="Nom"
+                  value={lastName}
+                  onChangeText={(t) => {
+                    setLastName(t);
+                    clearError('lastName');
+                  }}
+                  placeholder="Ton nom"
+                  autoCapitalize="words"
+                  error={errors.lastName}
+                />
+              </View>
+            </View>
+
+            <Txt variant="label" style={{ marginTop: spacing.xl }}>
+              TON CLUB
+            </Txt>
+            <Field
+              label="Nom du club"
+              value={clubName}
+              onChangeText={setClubName}
+              placeholder="ex. Padel Club Cocody"
+              autoCapitalize="words"
+            />
+            <Field label="Quartier / commune" value={clubArea} onChangeText={setClubArea} placeholder="ex. Cocody" autoCapitalize="words" />
+            <Txt variant="label" style={styles.fieldLabel}>
+              Type de terrains
+            </Txt>
+            <View style={styles.genderRow}>
+              {(['Couvert', 'Extérieur', 'Mixte'] as Club['type'][]).map((t) => (
+                <Chip key={t} label={t} active={clubType === t} onPress={() => setClubType(t)} size="lg" />
+              ))}
+            </View>
+            <Txt variant="label" style={styles.fieldLabel}>
+              Nombre de terrains
+            </Txt>
+            <View style={styles.genderRow}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Chip key={n} label={`${n}`} active={clubCourts === n} onPress={() => setClubCourts(n)} size="lg" />
+              ))}
+            </View>
+            <Field
+              label="Tarif indicatif d’une session 1h30 (FCFA — optionnel)"
+              value={clubPrice}
+              onChangeText={setClubPrice}
+              placeholder="ex. 15000"
+              keyboardType="number-pad"
+            />
+
+            <View style={styles.confirmHint}>
+              <Ionicons name="shield-checkmark-outline" size={16} color={colors.signature} />
+              <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
+                PadelConnect vérifie chaque club avant de l’activer. Tu recevras l’accès à ton Espace Club dès la validation.
+              </Txt>
+            </View>
+
+            {authError ? (
+              <View style={styles.authError}>
+                <Ionicons name="alert-circle" size={16} color={colors.danger} />
+                <Txt variant="small" color={colors.danger} style={{ flex: 1 }}>
+                  {authError}
+                </Txt>
+              </View>
+            ) : null}
+
+            <View style={styles.stepNav}>
+              <Button label="Retour" icon="arrow-back" variant="ghost" onPress={() => setAccountType(null)} disabled={busy} />
+              <View style={{ flex: 1 }}>
+                <Button label={busy ? 'Création…' : 'Créer mon compte club'} icon="checkmark" onPress={createClub} disabled={busy} full />
+              </View>
+            </View>
+
+            <Pressable onPress={() => setSignInOpen(true)} style={{ marginTop: spacing.lg, alignItems: 'center' }}>
+              <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center' }}>
+                Tu as déjà un compte ?{' '}
+                <Txt variant="small" color={colors.signature}>
+                  Se connecter →
+                </Txt>
+              </Txt>
+            </Pressable>
+          </View>
+        </ScrollView>
         <SignInSheet
           visible={signInOpen}
           mode={siMode}
@@ -915,6 +1235,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
   },
   fieldLabel: { marginTop: spacing.lg },
+  roleCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
   stepNav: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center', marginTop: spacing.xl },
   referralHint: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.xs },
   authError: {
