@@ -77,7 +77,7 @@ export const initialState: AppState = {
   customClubs: [],
   clubStatus: {},
   clubCommission: {},
-  tournamentFee: 5000, // frais fixe par défaut des tournois joueurs (réglable par l’opérateur)
+  tournamentFee: 10000, // frais fixe par défaut des tournois joueurs (réglable par l’opérateur)
   role: 'player',
   serverManagedClubId: null,
   serverUserId: null,

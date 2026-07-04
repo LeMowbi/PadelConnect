@@ -9,16 +9,16 @@
 --   • L'organisateur choisit des TERRAINS et des CRÉNEAUX précis (pas toute la journée /
 --     tous les terrains) et, au besoin, une PLAGE de jours (début → fin).
 --   • Frais fixe (commission PadelConnect) sur les tournois JOUEURS uniquement — montant
---     réglé par l'opérateur (par défaut 5 000 FCFA), figé à la création de chaque tournoi.
+--     réglé par l'opérateur (par défaut 10 000 FCFA), figé à la création de chaque tournoi.
 
 -- ─── Frais fixe des tournois joueurs (réglable par l'opérateur) ────────────────
 create table if not exists public.tournament_config (
   id boolean primary key default true,
-  player_fee int not null default 5000,
+  player_fee int not null default 10000,
   updated_at timestamptz not null default now(),
   constraint tournament_config_singleton check (id)
 );
-insert into public.tournament_config (id, player_fee) values (true, 5000) on conflict (id) do nothing;
+insert into public.tournament_config (id, player_fee) values (true, 10000) on conflict (id) do nothing;
 
 alter table public.tournament_config enable row level security;
 drop policy if exists "tournament_config_select" on public.tournament_config;
