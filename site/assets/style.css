@@ -14,7 +14,7 @@
   --ligne: #e4e0d4;
   --texte: #15211c;
   --texte-muted: #5b6b63;
-  --texte-faint: #7c857b;
+  --texte-faint: #65706a; /* assombri (audit a11y) : ~4,6:1 sur crème, repasse WCAG AA (était #7c857b ≈ 3,4:1) */
   --or: #c29a3a;
   --or-fonce: #785a10;
   --or-clair: #f3e7cc;
@@ -821,6 +821,24 @@ footer {
 .reveal.visible {
   opacity: 1;
   transform: none;
+}
+
+/* Accessibilité : on neutralise animations/transitions pour qui le demande (réglage système).
+   Sert AUSSI de filet si le JS d'apparition ne charge pas — les blocs .reveal restent visibles
+   au lieu de disparaître (opacity:0 figé). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ---------- Responsive ---------- */

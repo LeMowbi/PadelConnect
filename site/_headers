@@ -1,3 +1,11 @@
+# En-têtes de sécurité sur toutes les pages du site vitrine (statique). Le site charge son
+# propre JS/CSS, des données publiques Supabase (clé publishable) et ouvre Google Maps/stores.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+
 # Cloudflare : force le bon type MIME du fichier Apple (exigé pour les Universal Links), que le
 # fichier soit servi depuis /.well-known/… ou depuis la racine (via la réécriture ci-dessous).
 /.well-known/apple-app-site-association

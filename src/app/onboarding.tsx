@@ -1138,7 +1138,7 @@ function PasswordInput({
       />
       <Pressable
         onPress={() => setHidden((h) => !h)}
-        hitSlop={8}
+        hitSlop={12}
         style={styles.pwEye}
         accessibilityLabel={hidden ? 'Afficher le mot de passe' : 'Masquer le mot de passe'}
       >

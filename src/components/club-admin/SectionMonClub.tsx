@@ -580,9 +580,7 @@ export function SectionMonClub({ club }: { club: Club }) {
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Photos du club" />
         <Card>
-          <Txt variant="label">
-            Photo de profil
-          </Txt>
+          <Txt variant="label">Photo de profil</Txt>
           <Txt variant="muted" style={{ marginTop: 2 }}>
             C’est elle que les joueurs voient sur ta carte, avant d’ouvrir ta fiche.
           </Txt>
@@ -612,9 +610,7 @@ export function SectionMonClub({ club }: { club: Club }) {
             </View>
           </View>
           <View style={styles.coverDivider} />
-          <Txt variant="label">
-            Galerie
-          </Txt>
+          <Txt variant="label">Galerie</Txt>
           <Txt variant="muted" style={{ marginTop: 2 }}>
             Ajoute les vraies photos de ton club (visibles par les joueurs). Jusqu’à {MAX_CLUB_PHOTOS} photos.
           </Txt>
@@ -637,7 +633,7 @@ export function SectionMonClub({ club }: { club: Club }) {
                     })
                   }
                   style={styles.removeBadge}
-                  hitSlop={6}
+                  hitSlop={13}
                   accessibilityRole="button"
                   accessibilityLabel="Retirer cette photo"
                 >
@@ -886,7 +882,7 @@ export function SectionMonClub({ club }: { club: Club }) {
                         if (!ok) toast.show('Retrait impossible — réessaie', { icon: 'alert-circle' });
                       }}
                       style={styles.courtPhotoRemove}
-                      hitSlop={6}
+                      hitSlop={13}
                       accessibilityRole="button"
                       accessibilityLabel={`Retirer la photo du ${c}`}
                     >
@@ -1029,9 +1025,7 @@ export function SectionMonClub({ club }: { club: Club }) {
           {openSlots.length > 0 ? (
             <>
               <View style={styles.coverDivider} />
-              <Txt variant="label">
-                HORAIRES PAR TERRAIN
-              </Txt>
+              <Txt variant="label">HORAIRES PAR TERRAIN</Txt>
               <Txt variant="muted" style={{ marginTop: 2 }}>
                 Ferme un horaire sur UN terrain seulement — ex. Terrain 1 indisponible tous les jours à 18:00 (entretien, usage privé…). Il
                 n’est alors plus réservable par personne, cours compris ; les autres terrains restent ouverts.

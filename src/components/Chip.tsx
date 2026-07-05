@@ -51,7 +51,14 @@ export function Chip({
         style={[styles.base, size === 'lg' && styles.lg, active && styles.active, disabled && styles.disabled]}
       >
         {icon ? <Ionicons name={icon} size={13} color={active ? colors.onSignature : colors.textMuted} /> : null}
-        <Txt variant="small" color={active ? colors.onSignature : colors.text} style={{ fontWeight: '600' }}>
+        {/* Tronque un libellé long (nom de club personnalisable) au lieu de casser le pill en 2
+            lignes — même garde que Button/Tag. flexShrink borne la largeur dans la rangée wrap. */}
+        <Txt
+          variant="small"
+          color={active ? colors.onSignature : colors.text}
+          style={{ fontWeight: '600', flexShrink: 1 }}
+          numberOfLines={1}
+        >
           {label}
         </Txt>
       </Pressable>

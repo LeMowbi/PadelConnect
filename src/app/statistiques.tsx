@@ -33,7 +33,7 @@ function monthlyPlayed(timestamps: number[], now: number): { label: string; valu
 }
 
 export default function Statistiques() {
-  const { state } = useApp();
+  const { state, myReservations } = useApp();
   // Rang + ligne de classement (points, victoires de match, tournois) : chargés au montage.
   // undefined = pas encore chargé, null = échec réseau, nombre/objet = valeur réelle.
   const [rank, setRank] = useState<number | null | undefined>(undefined);
@@ -67,7 +67,10 @@ export default function Statistiques() {
   }, [state.serverUserId]);
 
   const now = Date.now();
-  const playedTs = state.reservations.filter((r) => isPlayed(r, now)).map((r) => r.startsAt);
+  // MES parties seulement : `state.reservations` contient, pour un compte club/opérateur, TOUTES
+  // les résas de son périmètre (RLS) → on part de `myReservations` (comme Profil) pour ne pas
+  // gonfler « parties jouées » et le graphe d'activité avec les résas des autres joueurs.
+  const playedTs = myReservations.filter((r) => isPlayed(r, now)).map((r) => r.startsAt);
   const played = playedTs.length;
   const tournamentsPlayed = state.officialResults.length;
   const tournamentsWon = state.officialResults.filter((o) => o.result === 'win').length;

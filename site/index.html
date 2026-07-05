@@ -38,6 +38,16 @@
     <meta name="twitter:image" content="https://padelconnectci.com/og.svg" />
 
     <link rel="stylesheet" href="/assets/style.css" />
+    <!-- Filet sans JavaScript : les blocs .reveal sont masqués (opacity:0) jusqu'à ce que le JS
+         les révèle. Si le script ne charge pas, ce style les garde visibles. -->
+    <noscript>
+      <style>
+        .reveal {
+          opacity: 1 !important;
+          transform: none !important;
+        }
+      </style>
+    </noscript>
   </head>
   <body>
     <!-- ============================= EN-TÊTE ============================= -->
@@ -121,7 +131,7 @@
                 </div>
               </div>
             </div>
-            <div class="carte-flottante haut-droite">⭐ 4,8 / 5</div>
+            <div class="carte-flottante haut-droite">⭐ 9 clubs</div>
             <div class="carte-flottante bas-gauche">✅ <span data-i18n="hero.mockup.confirme">Confirmé</span></div>
           </div>
         </div>

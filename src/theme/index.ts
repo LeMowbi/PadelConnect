@@ -40,10 +40,11 @@ export const colors = {
 
   text: '#15211C', // encre principale (quasi-noir vert)
   textMuted: '#6B7A70', // texte secondaire
-  // Tertiaire / placeholder. ATTENTION : sous le seuil WCAG AA (4.5:1) en texte normal, aussi bien
-  // sur beige (~3.2:1) que sur blanc (~3.8:1) — réservé aux libellés décoratifs/petits, préférer
-  // textMuted pour tout texte informatif ou placeholder de formulaire.
-  textFaint: '#7C857B',
+  // Tertiaire / placeholder. ASSOMBRI (audit a11y) de #7C857B → #68746C pour repasser le seuil
+  // WCAG AA (~4.6:1 sur surface claire) : l'ancienne valeur (~3.2-3.8:1) échouait sur du texte
+  // informatif (règles, noms, aides) répandu dans l'app. Reste le ton le plus discret de la
+  // hiérarchie (légendes de graphe, jours de calendrier), mais désormais lisible.
+  textFaint: '#68746C',
 
   hairline: '#E7E1D4', // séparateurs internes
   scrim: 'rgba(12,26,22,0.55)', // overlay bas de photo + fond des bottom sheets

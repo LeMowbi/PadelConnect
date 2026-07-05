@@ -268,6 +268,11 @@ revoke execute on function public.upsert_club_config(text, text[], text[], jsonb
 create or replace function public.reservations_insert_guard()
 returns trigger
 language plpgsql
+-- SECURITY DEFINER (comme son jumeau reservations_availability_guard, 27) : la garde lit
+-- club_config / blocked_ranges / reservations pour refuser un créneau fermé. En INVOKER, elle
+-- ne marchait QUE grâce aux policies SELECT `using(true)` de ces tables ; si un jour on resserre
+-- leur lecture, elle deviendrait aveugle en silence. DEFINER la rend robuste à ce changement.
+security definer
 set search_path = public
 as $$
 declare

@@ -71,14 +71,26 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, // accès complet, réservé au serveur
     );
 
-    // Jetons de push des gérants d'un club (managed_club_id = clubId).
+    // Jetons de push des gérants d'un club. Multi-clubs (55) : un compte gère PLUSIEURS clubs via
+    // `manager_clubs` ; `managed_club_id` n'est que le club ACTIF. On notifie donc TOUS les gérants
+    // dont la liste contient ce club (union avec `managed_club_id` pour couvrir les comptes mono-club
+    // antérieurs à la 55, qui n'ont pas forcément d'entrée dans manager_clubs). Sans ça, un gérant
+    // de A et B basculé sur B ne recevait plus aucune notif (réservation/annulation/tournoi) de A.
     const clubManagerTokens = async (clubId: string): Promise<string[]> => {
-      const { data } = await supabase
+      const tokens = new Set<string>();
+      const active = await supabase
         .from('profiles')
         .select('expo_push_token')
         .eq('managed_club_id', clubId)
         .not('expo_push_token', 'is', null);
-      return (data ?? []).map((m: { expo_push_token: string }) => m.expo_push_token).filter(Boolean);
+      for (const m of active.data ?? []) if (m.expo_push_token) tokens.add(m.expo_push_token);
+      const links = await supabase.from('manager_clubs').select('user_id').eq('club_id', clubId);
+      const ids = (links.data ?? []).map((r: { user_id: string }) => r.user_id).filter(Boolean);
+      if (ids.length) {
+        const profs = await supabase.from('profiles').select('expo_push_token').in('id', ids).not('expo_push_token', 'is', null);
+        for (const m of profs.data ?? []) if (m.expo_push_token) tokens.add(m.expo_push_token);
+      }
+      return [...tokens];
     };
     // Jeton de push d'un utilisateur précis (par id).
     const userToken = async (userId: string): Promise<string[]> => {

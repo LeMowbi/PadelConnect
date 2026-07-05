@@ -93,7 +93,7 @@ export default function ResetPasswordScreen() {
             />
             <Pressable
               onPress={() => setHidden((h) => !h)}
-              hitSlop={10}
+              hitSlop={12}
               accessibilityRole="button"
               accessibilityLabel={hidden ? 'Afficher le mot de passe' : 'Masquer le mot de passe'}
             >
