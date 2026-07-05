@@ -8,8 +8,16 @@ const KEY = 'padelco_pending_referral';
 let inMemory: string | null = null;
 
 // Nettoie un code brut (URL-decodé, alphanumérique majuscule) — évite d’injecter n’importe quoi.
+// `decodeURIComponent` LÈVE sur un `%` mal encodé (Universal Link malformé, ex. …/invite/%ZZ) :
+// on garde alors la valeur brute au lieu de laisser planter la route d’invitation.
 function clean(code: string): string {
-  return decodeURIComponent(code)
+  let decoded = code;
+  try {
+    decoded = decodeURIComponent(code);
+  } catch {
+    /* code mal encodé → on nettoie la valeur brute */
+  }
+  return decoded
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '')
     .slice(0, 24);

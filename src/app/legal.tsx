@@ -76,8 +76,9 @@ export default function Legal() {
         <Txt variant="h3">Tes données</Txt>
         <Txt variant="body" style={{ marginTop: spacing.sm }}>
           Pour faire fonctionner ton compte, tes informations (profil, niveau, réservations, parrainage) sont enregistrées sur un serveur
-          sécurisé (hébergé par Supabase) et synchronisées entre tes appareils. Tes <Txt style={{ fontWeight: '700' }}>coordonnées</Txt>{' '}
-          (e-mail, téléphone) ne sont jamais montrées aux autres joueurs. En revanche, certaines informations sont{' '}
+          sécurisé (hébergé par Supabase) et synchronisées entre tes appareils. Les notifications sont acheminées via le service push d’Expo
+          (un jeton technique d’appareil, sans donnée personnelle). Tes <Txt style={{ fontWeight: '700' }}>coordonnées</Txt> (e-mail,
+          téléphone) ne sont jamais montrées aux autres joueurs. En revanche, certaines informations sont{' '}
           <Txt style={{ fontWeight: '700' }}>visibles par la communauté</Txt> : ton nom sur les avis que tu publies, ton prénom (et
           l’initiale de ton nom) au classement avec tes points, ton prénom sur les matchs ouverts que tu crées ou rejoins, et ta fiche coach
           si un club t’a promu. Un club ne voit que les réservations le concernant, et l’opérateur de PadelConnect le strict nécessaire au

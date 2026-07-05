@@ -14,6 +14,9 @@ export function usePullToRefresh(extra?: () => Promise<void> | void) {
     setRefreshing(true);
     try {
       await Promise.all([refreshSession(), Promise.resolve(extra?.())]);
+    } catch {
+      /* rafraîchissement best-effort : un échec (réseau, extra de l'écran) ne doit pas remonter en
+         rejet non géré — le spinner s'arrête quand même via le finally. */
     } finally {
       setRefreshing(false);
     }

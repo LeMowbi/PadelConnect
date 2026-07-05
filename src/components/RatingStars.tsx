@@ -12,7 +12,13 @@ type Props = {
 export function RatingStars({ value, size = 16, onChange }: Props) {
   const stars = [1, 2, 3, 4, 5];
   return (
-    <View style={{ flexDirection: 'row', gap: 2 }}>
+    <View
+      style={{ flexDirection: 'row', gap: 2 }}
+      // En lecture seule, on annonce la note globale (les étoiles individuelles ne sont pas
+      // actionnables) ; en mode saisie, chaque étoile porte son propre label.
+      accessible={!onChange}
+      accessibilityLabel={onChange ? undefined : `Noté ${value} sur 5`}
+    >
       {stars.map((i) => {
         let name: keyof typeof Ionicons.glyphMap = 'star-outline';
         if (onChange) {

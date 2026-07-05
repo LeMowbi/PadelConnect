@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Txt } from './ui';
@@ -24,6 +24,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const slide = useRef(new Animated.Value(8)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
+  // Nettoyage du timer au démontage (cohérent avec le reste du projet) : pas de setState orphelin.
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
 
   const show = useCallback<ToastApi['show']>(
     (msg, opts) => {

@@ -21,7 +21,10 @@ export function perPlayerOf(sessionPrice: number, playerCount: number): string {
 // décimale à la virgule (« 12,5 »). Évite l'incohérence d'un taux affiché arrondi (Math.round)
 // alors que le MONTANT est calculé au taux réel — décompte WhatsApp et export CSV compris.
 export function pctLabel(rate: number): string {
-  const p = rate * 100;
+  // Arrondi à 1 décimale AVANT le test d'entier : sinon l'imprécision flottante (0.07*100 =
+  // 7.0000000000000001) fait échouer Number.isInteger → « 7,0 » au lieu de « 7 » (visible dans le
+  // décompte WhatsApp au club et l'export CSV pour des taux courants : 7, 14, 28 %…).
+  const p = Math.round(rate * 1000) / 10;
   return Number.isInteger(p) ? `${p}` : p.toFixed(1).replace('.', ',');
 }
 
