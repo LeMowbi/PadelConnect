@@ -22,6 +22,7 @@ function inRange(level: number, tab: (typeof TABS)[number]) {
 
 function CoachRow({ coach }: { coach: Coach }) {
   const router = useRouter();
+  const { state } = useApp();
   return (
     <Card onPress={() => router.push(`/coachs/${coach.id}`)} style={{ marginBottom: spacing.md }}>
       <View style={styles.row}>
@@ -33,7 +34,7 @@ function CoachRow({ coach }: { coach: Coach }) {
           <View style={styles.metaRow}>
             <Ionicons name="business-outline" size={13} color={colors.textMuted} />
             <Txt variant="small" color={colors.textMuted} numberOfLines={1} style={{ flex: 1 }}>
-              {coachClubName(coach)} · {coach.area}
+              {coachClubName(coach, state.customClubs, state.clubInfo)} · {coach.area}
             </Txt>
           </View>
           <View style={{ marginTop: spacing.sm }}>

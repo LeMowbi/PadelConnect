@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { StyleSheet, TextInput } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 import { useToast } from '@/components/Toast';
-import { Button, Card, Txt } from '@/components/ui';
-import { colors, radius, spacing } from '@/theme';
+import { Button, Card, Divider, IconCircle, Txt } from '@/components/ui';
+import { colors, font, radius, spacing } from '@/theme';
 
 // Lien de paiement Wave de l'opérateur (v2). Le créateur d'un tournoi validé l'ouvre pour
 // régler ses frais. Écriture HONNÊTE : on attend le serveur avant de dire « enregistré ».
@@ -29,6 +29,14 @@ export function WaveLink({
 
   return (
     <Card style={{ gap: spacing.sm }}>
+      {/* En-tête « argent » ambré, miroir de la carte « Frais à régler » vue par l'organisateur. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+        <IconCircle icon="wallet-outline" color={colors.amberDark} bg={colors.amberSoft} size={40} />
+        <Txt variant="h3" style={{ flex: 1 }}>
+          Paiement Wave
+        </Txt>
+      </View>
+      <Divider />
       <Txt variant="muted">
         Colle ici TON lien de paiement Wave (ex. https://pay.wave.com/…). C’est ce lien que les organisateurs de tournois ouvriront pour
         régler leurs frais.
@@ -64,6 +72,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    fontSize: 15,
+    fontSize: font.size.md,
   },
 });

@@ -1,7 +1,7 @@
 // Coachs partenaires. La réservation ne se fait PAS dans l’app : on affiche le numéro du coach
 // et son club. Liste vide au lancement (aucun profil fictif) — à remplir avec de vrais coachs.
 
-import { getClub } from './clubs';
+import { findClub, getClub, type ClubOverrides, type CustomClub } from './clubs';
 
 export type Coach = {
   id: string;
@@ -25,7 +25,10 @@ export function getCoach(id?: string | string[]): Coach | undefined {
   return coaches.find((c) => c.id === key);
 }
 
-// Nom du club où exerce le coach (sinon son quartier).
-export function coachClubName(coach: Coach): string {
-  return getClub(coach.clubId)?.name ?? coach.area;
+// Nom du club où exerce le coach (sinon son quartier). Si l'état est fourni (clubs inscrits +
+// surcharges gérant), on résout via findClub → un club fondateur RENOMMÉ par son gérant affiche
+// son nouveau nom (comme partout ailleurs) ; sans état, repli sur le nom seed (getClub).
+export function coachClubName(coach: Coach, custom?: CustomClub[], overrides?: ClubOverrides): string {
+  const name = custom ? findClub(coach.clubId, custom, overrides)?.name : getClub(coach.clubId)?.name;
+  return name ?? coach.area;
 }

@@ -6,7 +6,7 @@ import { Screen } from '@/components/Screen';
 import { Card, IconCircle, SectionHeader, StatTile, Txt } from '@/components/ui';
 import { fetchLeaderboard, fetchMyRank } from '@/lib/leaderboard';
 import { isPlayed, useApp } from '@/store/AppContext';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, shadows, spacing } from '@/theme';
 
 // Écran STATISTIQUES JOUEUR (Chantier 6, v2). 100 % réel : parties dérivées des
 // réservations passées (miroir local, marche hors-ligne), tournois des résultats
@@ -53,9 +53,12 @@ export default function Statistiques() {
         setMatchWins(null);
         return;
       }
+      // `fetchLeaderboard(100)` ne renvoie que le TOP 100 : un joueur classé au-delà a un vrai
+      // rang (fetchMyRank, sans limite) mais n'est pas dans ce lot. On laisse alors points/victoires
+      // à null (= « — », valeur inconnue) plutôt que d'afficher un faux 0 qui contredirait son rang.
       const mine = state.serverUserId ? board.find((row) => row.userId === state.serverUserId) : undefined;
-      setPoints(mine?.points ?? 0);
-      setMatchWins(mine?.matchWins ?? 0);
+      setPoints(mine ? mine.points : null);
+      setMatchWins(mine ? mine.matchWins : null);
     })();
     return () => {
       alive.current = false;
@@ -77,15 +80,37 @@ export default function Statistiques() {
     <Screen back title="Mes statistiques" subtitle="Ta progression, en vrai">
       {/* Classement — le vrai rang se gagne dans l'app (points), pas le niveau déclaré. */}
       <Reveal>
-        <Card style={{ marginTop: spacing.md }}>
+        <Card style={{ marginTop: spacing.md, ...shadows.e1 }}>
           <View style={styles.rankRow}>
-            <IconCircle icon="trophy" color={colors.amberDark} bg={colors.amberSoft} size={46} />
+            {/* Rang classé → pastille pleine signature (même « hero » que /classement) ; sinon
+                trophée ambré (non classé / indisponible), pour ne pas afficher un chiffre inventé. */}
+            {typeof rank === 'number' && rank > 0 ? (
+              <View style={styles.rankBadge}>
+                <Txt variant="h2" color={colors.onSignature}>
+                  {rank}
+                </Txt>
+              </View>
+            ) : (
+              <IconCircle icon="trophy" color={colors.amberDark} bg={colors.amberSoft} size={46} />
+            )}
             <View style={{ flex: 1 }}>
-              <Txt variant="h3">{typeof rank === 'number' && rank > 0 ? `${rank}ᵉ au classement` : 'Pas encore classé'}</Txt>
+              {/* On ne dit « Pas encore classé » QUE si le serveur a répondu rang 0 : un null/undefined
+                  (échec réseau ou chargement) ne doit pas faire mentir un joueur réellement classé (§8). */}
+              <Txt variant="h3">
+                {typeof rank === 'number' && rank > 0
+                  ? `${rank}ᵉ au classement`
+                  : rank === 0
+                    ? 'Pas encore classé'
+                    : 'Classement indisponible'}
+              </Txt>
               <Txt variant="muted">
                 {typeof points === 'number'
                   ? `${points} point${points > 1 ? 's' : ''} gagné${points > 1 ? 's' : ''} dans l’app`
-                  : 'Joue pour marquer tes premiers points'}
+                  : typeof rank === 'number' && rank > 0
+                    ? 'Tu es dans le classement'
+                    : rank === 0
+                      ? 'Joue pour marquer tes premiers points'
+                      : 'Reviens quand tu es en ligne'}
               </Txt>
             </View>
           </View>
@@ -146,6 +171,15 @@ export default function Statistiques() {
 
 const styles = StyleSheet.create({
   rankRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rankBadge: {
+    minWidth: 46,
+    height: 46,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.signature,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   grid: { flexDirection: 'row', gap: spacing.sm },
   note: {
     flexDirection: 'row',

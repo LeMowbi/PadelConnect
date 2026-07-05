@@ -330,7 +330,16 @@ export default function CompetitionDetail() {
               confirme la réception.
             </Txt>
             {state.waveLink ? (
-              <Button label="Payer par Wave" icon="card-outline" onPress={() => void Linking.openURL(state.waveLink!)} full />
+              <Button
+                label="Payer par Wave"
+                icon="card-outline"
+                onPress={() =>
+                  void Linking.openURL(state.waveLink!).catch(() =>
+                    showToast('Lien de paiement invalide — préviens PadelConnect.', 'error'),
+                  )
+                }
+                full
+              />
             ) : (
               <Txt variant="small" color={colors.amberDark}>
                 PadelConnect t’enverra le lien de paiement très vite.

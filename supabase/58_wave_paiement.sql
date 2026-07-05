@@ -33,6 +33,7 @@ begin
 end;
 $$;
 
+revoke execute on function public.set_wave_link(text) from public, anon;
 grant execute on function public.set_wave_link(text) to authenticated;
 
 -- ─── 4) L'opérateur confirme le paiement d'un tournoi ────────────────────────────────
@@ -53,6 +54,7 @@ begin
 end;
 $$;
 
+revoke execute on function public.operator_confirm_tournament_payment(uuid) from public, anon;
 grant execute on function public.operator_confirm_tournament_payment(uuid) to authenticated;
 
 -- ─── 5) fetch_competitions renvoie AUSSI le statut de paiement + le lien Wave courant ────
@@ -92,4 +94,5 @@ as $$
     or public.can_manage_club(c.club_id);
 $$;
 
+revoke execute on function public.fetch_competitions() from public, anon;
 grant execute on function public.fetch_competitions() to authenticated;

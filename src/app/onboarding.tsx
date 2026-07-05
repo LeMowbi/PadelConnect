@@ -545,6 +545,9 @@ export default function Onboarding() {
                   placeholder="Ton nom"
                   autoCapitalize="words"
                   error={errors.lastName}
+                  onLayout={(y) => {
+                    positions.current.lastName = y;
+                  }}
                 />
               </View>
             </View>

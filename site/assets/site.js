@@ -447,10 +447,16 @@
       });
 
       // 2) Nouveaux clubs (rejoints via l'app), surcharges appliquées, sans badge Partenaire.
-      //    Déjà filtrés « actifs » par la requête ; on retire aussi tout 'hidden' par sécurité.
+      //    Déjà filtrés « actifs » par la requête ; on retire aussi tout 'hidden' par sécurité,
+      //    ET tout id déjà présent chez les fondateurs (garde anti-doublon défensive : si un
+      //    fondateur se retrouvait un jour dans la table `clubs`, sa carte n'apparaîtrait pas deux fois).
+      var founderIds = {};
+      founders.forEach(function (c) {
+        founderIds[c.id] = true;
+      });
       var extra = (serverClubs || [])
         .filter(function (r) {
-          return statusById[r.id] !== 'hidden';
+          return statusById[r.id] !== 'hidden' && !founderIds[r.id];
         })
         .map(function (r) {
           var o = ovById[r.id] || {};

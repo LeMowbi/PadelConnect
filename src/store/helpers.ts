@@ -209,7 +209,10 @@ export function competitionSlices(
     compRegistrations,
     level: s.level,
     officialResults: s.officialResults,
-    waveLink: sc ? sc.waveLink : s.waveLink,
+    // Le lien Wave n'est porté que par les lignes de tournoi (fetch_competitions). Un fetch RÉUSSI
+    // mais VIDE (0 tournoi) renvoie waveLink=null : ce n'est pas un « lien effacé », on garde donc
+    // la valeur locale au lieu de l'écraser (un effacement volontaire renvoie '' quand un tournoi existe).
+    waveLink: sc ? (sc.waveLink ?? s.waveLink) : s.waveLink,
   };
   if (!sc || !s.account) return base;
 

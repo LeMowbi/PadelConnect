@@ -50,7 +50,10 @@ begin
       new.email,
       nullif(meta->>'birth_date', ''),
       nullif(meta->>'gender', ''),
-      coalesce((meta->>'level')::numeric, 3.0),
+      -- Niveau borné [1,7] à l'inscription (durcissement 36) : on RE-applique le clamp ici, car
+      -- cette redéfinition de handle_new_user écrase la précédente — sans lui, un signUp forgé
+      -- hors app (level=99) créerait un profil hors bornes. Via l'app c'est déjà clampé côté client.
+      least(7.0, greatest(1.0, coalesce((meta->>'level')::numeric, 3.0))),
       upper(substr(replace(new.id::text, '-', ''), 1, 12)),
       acct
     )

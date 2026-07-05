@@ -197,9 +197,16 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
                   <Txt variant="body" numberOfLines={1} style={{ fontWeight: '600' }}>
                     {m.clubName}
                   </Txt>
-                  <Txt variant="small" color={colors.textMuted} numberOfLines={1}>
-                    {m.capacity === 2 ? '1v1' : '2v2'} · par {m.creatorName}
-                    {m.level ? ` · niveau ${m.level}` : ' · tous niveaux'} · {m.placesLeft} place{m.placesLeft > 1 ? 's' : ''}
+                  {/* Format scannable (badge) + urgence corail « dernière place » (même idiome que
+                      les tournois, CompetitionCard) — plus lisible qu'une phrase grise noyée. */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.xs, marginTop: 2 }}>
+                    <Tag label={m.capacity === 2 ? '1v1' : '2v2'} tone={m.capacity === 2 ? 'blue' : 'purple'} />
+                    {m.placesLeft === 1 ? <Tag label="Dernière place !" tone="coral" icon="flame" /> : null}
+                  </View>
+                  <Txt variant="small" color={colors.textMuted} numberOfLines={1} style={{ marginTop: 2 }}>
+                    par {m.creatorName}
+                    {m.level ? ` · niveau ${m.level}` : ' · tous niveaux'}
+                    {m.placesLeft > 1 ? ` · ${m.placesLeft} places` : ''}
                   </Txt>
                 </View>
                 {mine ? (
@@ -218,7 +225,7 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
                 {!mine && me ? (
                   <Pressable
                     onPress={() => setModerating(m)}
-                    hitSlop={13}
+                    hitSlop={14}
                     accessibilityRole="button"
                     accessibilityLabel={`Signaler ce match ou bloquer ${m.creatorName}`}
                   >

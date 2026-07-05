@@ -11,7 +11,7 @@ import { Screen } from '@/components/Screen';
 import { StickyBar } from '@/components/StickyBar';
 import { Stepper } from '@/components/Stepper';
 import { useToast } from '@/components/Toast';
-import { Button, Card, EmptyState, Txt, type IconName } from '@/components/ui';
+import { Button, Card, EmptyState, IconCircle, Txt, type IconName } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { addReservationToCalendar } from '@/lib/calendar';
@@ -152,11 +152,11 @@ export default function ReserverScreen() {
   const participantCount = friendIds.length + extraNames.length;
   // Type de match affiché en clair (Privé / Ouvert 1v1 / Ouvert 2v2). Dérivé de l'état
   // existant (openMatch + openFormat). Le 1v1 n'est « ouvert 1v1 » que sans ami invité.
-  const matchType: 'private' | 'open1v1' | 'open2v2' = !openMatch
-    ? 'private'
-    : openFormat === 2 && participantCount === 0
-      ? 'open1v1'
-      : 'open2v2';
+  // Équipe complète (3 invités = 4 joueurs) : plus de place à ouvrir → on retombe sur « privé »
+  // pour l'affichage ET la confirmation (cohérent avec la garde openMatch du confirm ci-dessous),
+  // sans effacer l'intention `openMatch` (retirer un invité rouvre le choix « ouvert »).
+  const matchType: 'private' | 'open1v1' | 'open2v2' =
+    !openMatch || participantCount >= 3 ? 'private' : openFormat === 2 && participantCount === 0 ? 'open1v1' : 'open2v2';
   const toggleFriend = (id: string) =>
     setFriendIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : participantCount < 3 ? [...cur, id] : cur));
   const addExtra = () => {
@@ -552,13 +552,17 @@ export default function ReserverScreen() {
                   <Pressable
                     key={o.key}
                     onPress={o.set}
-                    style={[styles.openMatchBox, active && styles.openMatchBoxOn, { marginTop: spacing.sm }]}
+                    style={[styles.openMatchBox, active && styles.openMatchBoxOn, active && shadows.e1, { marginTop: spacing.sm }]}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: active }}
                     accessibilityLabel={o.title}
                   >
-                    <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={20} color={colors.signature} />
-                    <Ionicons name={o.icon} size={18} color={active ? colors.signature : colors.textMuted} />
+                    <IconCircle
+                      icon={o.icon}
+                      size={40}
+                      color={active ? colors.signature : colors.textMuted}
+                      bg={active ? colors.signatureSoft : colors.surfaceAlt}
+                    />
                     <View style={{ flex: 1 }}>
                       <Txt variant="body" style={{ fontWeight: '700' }}>
                         {o.title}
@@ -567,10 +571,15 @@ export default function ReserverScreen() {
                         {o.sub}
                       </Txt>
                     </View>
+                    <Ionicons
+                      name={active ? 'radio-button-on' : 'radio-button-off'}
+                      size={20}
+                      color={active ? colors.signature : colors.textFaint}
+                    />
                   </Pressable>
                 );
               })}
-            {openMatch ? (
+            {matchType !== 'private' ? (
               <>
                 <Txt variant="label" style={{ marginTop: spacing.md }}>
                   Niveau souhaité
@@ -651,10 +660,10 @@ const styles = StyleSheet.create({
   openMatchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.md,
     marginTop: spacing.md,
     padding: spacing.md,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,

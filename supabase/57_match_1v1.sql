@@ -8,6 +8,12 @@
 alter table public.reservations
   add column if not exists open_capacity int not null default 4; -- 2 = 1v1 · 4 = 2v2
 
+-- Garde serveur : seules 2 (1v1) et 4 (2v2) sont valides — l'app ne propose que ça, mais un appel
+-- REST direct pourrait forcer une valeur aberrante (fausserait places_left / la garde « complet »).
+-- Idempotent : on retire l'ancienne contrainte avant de la (re)poser. Les lignes existantes valent 4.
+alter table public.reservations drop constraint if exists reservations_open_capacity_chk;
+alter table public.reservations add constraint reservations_open_capacity_chk check (open_capacity in (2, 4));
+
 -- Matchs ouverts À VENIR avec au moins une place — places restantes = capacité − 1 (créateur)
 -- − joueurs déjà arrivés. On expose aussi open_capacity pour que l'app affiche « 1v1 »/« 2v2 ».
 -- La 45 renvoyait 11 colonnes ; on en ajoute une (capacity) → le TYPE DE RETOUR change,
@@ -44,6 +50,9 @@ as $$
     order by r.starts_at;
 $$;
 
+-- Convention audit 7 : on retire le grant EXECUTE que Postgres accorde à PUBLIC par défaut
+-- (sinon `anon` pourrait lire les matchs ouverts via REST — fuite lieu/horaire/prénom).
+revoke execute on function public.fetch_open_matches() from public, anon;
 grant execute on function public.fetch_open_matches() to authenticated;
 
 -- Rejoindre : la garde « complet » utilise la capacité du match (2 ou 4). `for update` : deux
@@ -92,4 +101,5 @@ begin
 end;
 $$;
 
+revoke execute on function public.join_open_match(uuid) from public, anon;
 grant execute on function public.join_open_match(uuid) to authenticated;

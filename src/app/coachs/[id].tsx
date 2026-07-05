@@ -8,11 +8,13 @@ import { getClub } from '@/data/clubs';
 import { coachClubName, getCoach } from '@/data/coaches';
 import { callNumber, openWhatsApp } from '@/lib/contact';
 import { initials } from '@/lib/format';
+import { useApp } from '@/store/AppContext';
 import { colors, font, radius, shadows, spacing } from '@/theme';
 
 export default function CoachDetail() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { state } = useApp();
   const coach = getCoach(id);
 
   if (!coach) {
@@ -87,7 +89,7 @@ export default function CoachDetail() {
           </View>
           <View style={styles.infoChip}>
             <Txt variant="body" style={styles.chipStrong} numberOfLines={1}>
-              {coachClubName(coach)}
+              {coachClubName(coach, state.customClubs, state.clubInfo)}
             </Txt>
             <Txt variant="small" color={colors.textFaint}>
               club
