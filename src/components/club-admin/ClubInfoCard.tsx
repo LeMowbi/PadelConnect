@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Chip } from '@/components/Chip';
@@ -46,6 +46,14 @@ export function ClubInfoCard({
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [tierError, setTierError] = useState<string | null>(null);
+  // Timer du « Enregistré ✓ » : nettoyé au démontage (comme le reste du projet).
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+    },
+    [],
+  );
 
   // Instantané des valeurs au MONTAGE : « Enregistrer » n'envoie que les champs réellement
   // modifiés. Un champ non touché n'écrase ainsi jamais une valeur serveur plus récente
@@ -117,7 +125,8 @@ export function ClubInfoCard({
         return;
       }
       setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+      savedTimer.current = setTimeout(() => setSaved(false), 2500);
     });
   };
 

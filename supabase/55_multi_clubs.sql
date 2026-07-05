@@ -49,6 +49,32 @@ $$;
 grant execute on function public.switch_managed_club(text) to authenticated;
 revoke execute on function public.switch_managed_club(text) from public, anon;
 
+-- ⚠️ Le trigger `protect_role` (02_roles.sql) ANNULE toute auto-modif de role/managed_club_id
+-- (auth.uid() = id) — il bloquait donc `switch_managed_club` (qui échouait silencieusement).
+-- On le redéfinit ici pour AUTORISER la seule bascule légitime : un gérant ('club') qui passe son
+-- club actif à un club dont il a l'ACCÈS (présent dans manager_clubs), en restant 'club'. Toute
+-- autre auto-promotion (→ operator, ou un club non autorisé) reste bloquée comme avant.
+create or replace function public.protect_role()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() = new.id
+     and (new.role is distinct from old.role or new.managed_club_id is distinct from old.managed_club_id) then
+    -- Exception multi-clubs : bascule autorisée entre clubs gérés (rôle 'club' inchangé).
+    if new.role = 'club' and old.role = 'club' and new.managed_club_id is not null
+       and exists (select 1 from public.manager_clubs mc where mc.user_id = new.id and mc.club_id = new.managed_club_id) then
+      return new;
+    end if;
+    new.role := old.role;
+    new.managed_club_id := old.managed_club_id;
+  end if;
+  return new;
+end;
+$$;
+
 -- ─── 3) Donner l'accès = AJOUTER un club (plus jamais écraser le précédent) ─────
 create or replace function public.grant_club_access_by_phone(p_phone text, p_club_id text)
 returns text

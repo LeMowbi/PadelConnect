@@ -7,7 +7,7 @@ import { Button, Card, Divider, Tag, Txt } from '@/components/ui';
 import { fetchLeaderboard, fetchMyRank, type LeaderboardRow } from '@/lib/leaderboard';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, shadows, spacing } from '@/theme';
 
 // CLASSEMENT GÉNÉRAL par POINTS (modèle « Race » FIP, 46) : le niveau est plafonné à 7 et
 // déclaré à l'inscription — il ne peut pas servir de rang. Les points, eux, se GAGNENT dans
@@ -53,7 +53,7 @@ export default function ClassementScreen() {
     <Screen back title="Classement" subtitle="Les joueurs PadelConnect, par points" refreshControl={refreshControl}>
       {/* Ma position — toujours visible, même 137ᵉ (objectif personnel avant tout). */}
       {me && (myRank != null || myRow) ? (
-        <Card style={styles.meCard}>
+        <Card style={[styles.meCard, shadows.e2]}>
           <View style={styles.meRank}>
             <Txt variant="h2" color={colors.onSignature}>
               {myRank ?? (rows ?? []).findIndex((r) => r.userId === me) + 1}

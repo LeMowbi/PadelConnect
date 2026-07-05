@@ -38,7 +38,7 @@ function CoachRow({ coach }: { coach: Coach }) {
             </Txt>
           </View>
           <View style={{ marginTop: spacing.sm }}>
-            <Tag label={`Niveau ${coach.levelValue.toFixed(1)}`} tone="blue" icon="ribbon" />
+            <Tag label={`Niveau ${coach.levelValue.toFixed(1)}`} tone="amber" icon="ribbon" />
           </View>
         </View>
       </View>

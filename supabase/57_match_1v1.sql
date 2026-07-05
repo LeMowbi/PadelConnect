@@ -75,6 +75,15 @@ begin
     for update;
   if r.id is null or r.starts_at <= (extract(epoch from now()) * 1000)::bigint then return 'gone'; end if;
   if r.user_id = auth.uid() then return 'own'; end if;
+  -- Blocage (exigé par l'App Store 1.2, garde ajoutée en 53) : un compte bloqué — dans un sens
+  -- OU l'autre — ne peut pas rejoindre le match. RÉ-INSÉRÉ ici car cette redéfinition de
+  -- join_open_match (57, pour open_capacity) écrase celle de la 53 : sans ce bloc, le blocage des
+  -- matchs ouverts serait silencieusement levé à l'application des migrations v2.
+  if exists (select 1 from public.blocked_users b
+             where (b.blocker_id = r.user_id and b.blocked_id = auth.uid())
+                or (b.blocker_id = auth.uid() and b.blocked_id = r.user_id)) then
+    return 'gone';
+  end if;
   if exists (select 1 from public.reservation_participants rp
              where rp.reservation_id = p_id and rp.user_id = auth.uid() and rp.status <> 'declined') then
     return 'already';

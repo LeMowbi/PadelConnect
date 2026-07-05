@@ -276,7 +276,7 @@ export function SectionHeader({ title, actionLabel, onAction }: { title: string;
     <View style={sh.row}>
       <Txt variant="h3">{title}</Txt>
       {actionLabel && onAction ? (
-        <Pressable onPress={onAction} hitSlop={8}>
+        <Pressable onPress={onAction} hitSlop={8} accessibilityRole="button" accessibilityLabel={actionLabel}>
           <Text style={sh.action}>{actionLabel}</Text>
         </Pressable>
       ) : null}

@@ -208,7 +208,7 @@ export function SectionTournois({ club, comps, onCloseComp }: { club: Club; comp
       />
       <View style={{ marginTop: spacing.md }}>
         {publishedComps.length === 0 ? (
-          <EmptyState icon="trophy-outline" title="Aucun tournoi" text="Crée le premier tournoi de ton club." />
+          <EmptyState icon="trophy-outline" title="Aucun tournoi" text="Crée le premier tournoi de ton club." tone="purple" />
         ) : (
           publishedComps.map((c) => {
             const finished = (c.endDateKey ?? c.dateKey) < todayKey;

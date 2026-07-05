@@ -966,7 +966,7 @@ export default function Operateur() {
               return (
                 <Card key={c.id} style={{ marginTop: spacing.sm }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                    <IconCircle icon="business" color={colors.green} bg={colors.greenSoft} size={40} />
+                    <IconCircle icon="business" color={colors.signature} bg={colors.signatureSoft} size={40} />
                     <View style={{ flex: 1 }}>
                       <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
                         {c.name}
@@ -1180,7 +1180,7 @@ export default function Operateur() {
               demoClubs.map((c) => (
                 <Card key={c.id} style={{ marginBottom: spacing.sm }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                    <IconCircle icon="business" color={colors.blue} bg={colors.blueSoft} size={40} />
+                    <IconCircle icon="business" color={colors.signature} bg={colors.signatureSoft} size={40} />
                     <View style={{ flex: 1 }}>
                       <Txt variant="h3" style={{ fontSize: 15 }}>
                         {c.name}

@@ -104,7 +104,9 @@ export default function HomeScreen() {
   const dotOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.4] });
 
   const fullName = `${state.account?.firstName ?? ''} ${state.account?.lastName ?? ''}`.trim();
-  const greeting = new Date().getHours() < 18 ? 'Bonjour' : 'Bonsoir';
+  // Heure en UTC (comme tout le projet — Abidjan est à UTC+0) : un appareil réglé sur un autre
+  // fuseau afficherait sinon « Bonsoir » à midi (ou l'inverse).
+  const greeting = new Date().getUTCHours() < 18 ? 'Bonjour' : 'Bonsoir';
 
   // Premier chargement du podium (retour porteur : le classement était « caché »).
   const serverUserId = state.serverUserId;

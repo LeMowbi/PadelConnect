@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Switch, TextInput, View } from 'react-native';
 import { Button, Card, Txt } from '@/components/ui';
 import { useToast } from '@/components/Toast';
@@ -25,6 +25,15 @@ export function NewsEditor({
   const [sendPush, setSendPush] = useState(false);
   const [saved, setSaved] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  // Timer du « Enregistré ✓ » : mémorisé et nettoyé au démontage (comme le reste du projet) —
+  // pas de setState orphelin si l'éditeur se ferme dans les 2,5 s suivant une publication.
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+    },
+    [],
+  );
 
   const publish = async () => {
     if (title.trim().length < 3 || publishing) return;
@@ -37,7 +46,8 @@ export function NewsEditor({
     }
     if (sendPush) setSendPush(false); // choix par actu — jamais mémorisé
     setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setSaved(false), 2500);
   };
 
   return (

@@ -99,7 +99,8 @@ les signalements sont traités sous 24 h. »_ Rien d'autre à coder — c'est en
 - **Export Compliance / chiffrement** : `usesNonExemptEncryption = false` est déjà dans `app.json`
   (HTTPS standard uniquement) → répondre **Non** à « utilise-t-il un chiffrement non exempté ».
 - **Content Rights** : tu détiens les droits du contenu.
-- **Coordonnées de contact** (Support URL / email) : `padelconnect.civ@gmail.com`.
+- **Coordonnées de contact** (Support URL / email) : `contact@padelconnectci.com` (adresse publique
+  officielle, routée vers ta boîte — n'expose jamais ton e-mail perso dans les stores).
 
 ## 6. Récapitulatif — ce qu'il te reste à faire
 

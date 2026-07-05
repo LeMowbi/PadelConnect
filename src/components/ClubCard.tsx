@@ -106,7 +106,7 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
               <Txt variant="small" style={{ fontWeight: '700' }}>
                 {rating.avg.toFixed(1)}
               </Txt>
-              <Txt variant="small" color={colors.textFaint}>
+              <Txt variant="small" color={colors.textMuted}>
                 ({rating.count})
               </Txt>
             </View>
@@ -184,7 +184,7 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
               <Txt variant="small" style={{ fontWeight: '700' }}>
                 {rating.avg.toFixed(1)}
               </Txt>
-              <Txt variant="small" color={colors.textFaint}>
+              <Txt variant="small" color={colors.textMuted}>
                 ({rating.count})
               </Txt>
             </View>

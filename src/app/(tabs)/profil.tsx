@@ -147,7 +147,7 @@ export default function ProfilScreen() {
           {/* Bandeau signature — avatar (anneau dégradé) + identité (maquette Profil) */}
           <LinearGradient colors={gradients.deepGreen} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.band}>
             <View style={styles.head}>
-              <Pressable onPress={() => setPhotoSheet(true)} hitSlop={6} accessibilityLabel="Photo de profil">
+              <Pressable onPress={() => setPhotoSheet(true)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Photo de profil">
                 <Avatar uri={account.photoUri} name={`${account.firstName} ${account.lastName}`} size={76} />
               </Pressable>
               <View style={{ flex: 1 }}>
@@ -165,7 +165,13 @@ export default function ProfilScreen() {
                   </Txt>
                 )}
               </View>
-              <Pressable onPress={() => setEditing(true)} hitSlop={8} style={styles.editBtn} accessibilityLabel="Modifier le profil">
+              <Pressable
+                onPress={() => setEditing(true)}
+                hitSlop={8}
+                style={styles.editBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Modifier le profil"
+              >
                 <Ionicons name="create-outline" size={18} color={colors.white} />
               </Pressable>
             </View>

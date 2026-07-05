@@ -845,7 +845,7 @@ export default function ReservationsScreen() {
                 value={d.me}
                 onChangeText={(t) => setSetDrafts((cur) => cur.map((s, j) => (j === i ? { ...s, me: t.replace(/\D/g, '') } : s)))}
                 placeholder="—"
-                placeholderTextColor={colors.textFaint}
+                placeholderTextColor={colors.textMuted}
                 keyboardType="number-pad"
                 maxLength={2}
                 style={styles.setInput}
@@ -858,7 +858,7 @@ export default function ReservationsScreen() {
                 value={d.them}
                 onChangeText={(t) => setSetDrafts((cur) => cur.map((s, j) => (j === i ? { ...s, them: t.replace(/\D/g, '') } : s)))}
                 placeholder="—"
-                placeholderTextColor={colors.textFaint}
+                placeholderTextColor={colors.textMuted}
                 keyboardType="number-pad"
                 maxLength={2}
                 style={styles.setInput}

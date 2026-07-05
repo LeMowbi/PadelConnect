@@ -82,6 +82,12 @@ npx eas-cli submit --platform ios --profile production
       horaires par terrain) — détail dans `docs/AUDIT-SERVEUR.md` §0-SEPTIES. ⚠️ AVANT le build #47.
 - [ ] Coller **`supabase/55_multi_clubs.sql`** (un compte peut gérer plusieurs clubs) — détail
       dans `docs/AUDIT-SERVEUR.md` §0-OCTIES. ⚠️ AVANT le build #47, APRÈS la 54.
+- [ ] Coller **`supabase/56_comptes_club.sql`** (choix « Joueur / Je gère un club » à l'inscription :
+      un compte club crée sa demande d'office, l'opérateur valide) — ⚠️ APRÈS la 55.
+- [ ] Coller **`supabase/57_match_1v1.sql`** (matchs ouverts à 2 joueurs en plus du 2v2) — ⚠️ APRÈS la 56.
+- [ ] Coller **`supabase/58_wave_paiement.sql`** (paiement Wave manuel des frais de tournoi) — ⚠️ APRÈS la 57.
+- [ ] Dans l'app, **Espace opérateur → Finances → coller ton lien de paiement Wave** (`pay.wave.com/…`)
+      pour que les organisateurs de tournois puissent régler leurs frais.
 - [x] **Edge Function `notify-club`** → **Edit** → recoller tout `supabase/functions/notify-club/index.ts`
       → **Deploy** — FAIT (confirmé 2026-07-03, voir AUDIT-SERVEUR §0-SEXIES).
 

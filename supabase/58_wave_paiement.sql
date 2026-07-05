@@ -96,3 +96,12 @@ $$;
 
 revoke execute on function public.fetch_competitions() from public, anon;
 grant execute on function public.fetch_competitions() to authenticated;
+
+-- ─── 6) Durcissement de convention (audit 7) : deux lectures définies avant la convention
+-- `revoke … from public, anon` restaient exécutables par anon (sans garde interne). Elles ne
+-- fuient que des données déjà visibles en app (notes moyennes, coachs d'un club) — le site public
+-- lit d'ailleurs les clubs par REST, pas par ces RPC — mais on aligne sur la convention. Idempotent.
+revoke execute on function public.fetch_club_ratings() from public, anon;
+grant execute on function public.fetch_club_ratings() to authenticated;
+revoke execute on function public.fetch_club_coaches(text) from public, anon;
+grant execute on function public.fetch_club_coaches(text) to authenticated;

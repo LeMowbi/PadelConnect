@@ -189,7 +189,12 @@ operator_news), fais-la D'ABORD, puis colle la 48.
 ---
 
 État au 2026-07-03 (confirmé par le porteur) : les migrations `30 → 53` sont appliquées et
-`notify-club` est redéployée. **Reste : §0-SEPTIES (54) puis §0-OCTIES (55), AVANT le build #47.**
+`notify-club` est redéployée.
+
+**Reste à coller (v2, DANS CET ORDRE) — voir la liste cochable dans `docs/CHECKLIST-STORES.md` §a :**
+`54` (créneaux modulables) → `55` (multi-clubs) → `56` (comptes club) → `57` (matchs 1v1) →
+`58` (paiement Wave). Puis, dans l'app : **Espace opérateur → Finances → coller le lien Wave**.
+Ces cinq fichiers sont idempotents (relançables sans risque).
 
 ---
 

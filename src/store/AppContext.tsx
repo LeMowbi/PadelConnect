@@ -1010,6 +1010,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       myReservations,
       setAccount: (a) => setState((s) => ({ ...s, account: a })),
       updateAccount: async (patch) => {
+        const prev = state.account; // snapshot AVANT l'écriture optimiste — pour un rollback honnête
         setState((s) => ({ ...s, account: s.account ? { ...s.account, ...patch } : s.account }));
         // Persistance SERVEUR des champs texte modifiés (si connecté) : sans ça, ils étaient
         // écrasés par l’ancienne valeur serveur au prochain chargement.
@@ -1029,7 +1030,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         let profileSaved = true;
         if (Object.keys(row).length > 0) {
           const { error } = await supabase.from('profiles').update(row).eq('id', userId);
-          if (error) profileSaved = false;
+          if (error) {
+            profileSaved = false;
+            // Échec serveur (hors-ligne…) : on REVIENT aux valeurs précédentes des champs texte
+            // concernés — comme le fait déjà la photo — sinon l'écran affiche un prénom/numéro
+            // « enregistré » à tort jusqu'au prochain loadSession, alors que le serveur garde l'ancien.
+            setState((s) => {
+              if (!s.account) return s;
+              const a = { ...s.account };
+              if (patch.firstName !== undefined) a.firstName = prev?.firstName ?? a.firstName;
+              if (patch.lastName !== undefined) a.lastName = prev?.lastName ?? a.lastName;
+              if (patch.phone !== undefined) a.phone = prev?.phone ?? a.phone;
+              if (patch.birthDate !== undefined) a.birthDate = prev?.birthDate;
+              if (patch.gender !== undefined) a.gender = prev?.gender;
+              return { ...s, account: a };
+            });
+          }
         }
         // PHOTO : on l’envoie au stockage (survit à une réinstallation, synchro multi-appareils).
         // On ATTEND le résultat (≠ fire-and-forget) pour que l’appelant sache honnêtement si la

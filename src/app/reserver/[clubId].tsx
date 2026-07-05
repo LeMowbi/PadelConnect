@@ -30,7 +30,14 @@ export default function ReserverScreen() {
   const router = useRouter();
   const { state, addReservation } = useApp();
   const toast = useToast();
-  const club = findClub(params.clubId, state.customClubs, state.clubInfo);
+  // Mémoïsé : `applyInfo` (findClub) crée un NOUVEL objet dès qu'un club a une surcharge gérant ou
+  // un statut explicite. Sans ce useMemo, `club` changeait de référence à chaque rendu (ex. frappe
+  // dans « Ou un autre nom… ») et défaisait la mémoïsation de `freeBySlot` → re-balayage inutile
+  // de l'occupation de tous les créneaux à chaque frappe pour ces clubs.
+  const club = useMemo(
+    () => findClub(params.clubId, state.customClubs, state.clubInfo),
+    [params.clubId, state.customClubs, state.clubInfo],
+  );
 
   // todayKey : la liste se recale après minuit (retour premier plan) — cf. reserver/index.tsx.
   const todayKey = useTodayKey();
