@@ -79,8 +79,11 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   l'écrire dans le dépôt).
 - Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
 --auto-submit --non-interactive --no-wait`.
-- **Dernier build : #46** (LANCEMENT, audit n°7 complet — SQL 49 re-corrigée → 53 collées ✅).
-  Le #47 (créneaux modulables + multi-clubs) exige SQL `54` PUIS `55` AVANT installation.
+- **Build courant : #51** (EAS `autoIncrement` gère le `buildNumber` — ne PAS s'en remettre au
+  suivi manuel ci-dessous, c'est `app.json` qui fait foi). Historique : #46 = lancement audit n°7 ;
+  #47 = créneaux modulables + multi-clubs ; #48+ = chantier v2 (comptes club, 1v1, Wave, stats).
+  ⚠️ SQL v2 à coller par le porteur AVANT le build v2 : `54`→`55`→`56`→`57`→`58` (voir
+  `docs/CHECKLIST-STORES.md` §a) + lien Wave dans l'Espace opérateur.
 - Un module natif nouveau (ex. `expo-contacts`) ⇒ **nouveau build requis** + config plugin dans
   `app.json` avec la chaîne de permission.
 

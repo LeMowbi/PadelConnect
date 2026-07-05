@@ -15,7 +15,7 @@ import { freeCourts, type AvailCtx } from '@/lib/availability';
 import { dateKeyLabel, slotTimestamp, type DayOption } from '@/lib/days';
 import { fcfa, perPlayer } from '@/lib/format';
 import { priceForSlot } from '@/lib/pricing';
-import { MAX_UPCOMING, useApp } from '@/store/AppContext';
+import { useApp } from '@/store/AppContext';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 // Réservation rapide « en place » : une fiche qui monte du bas, sans changer de page.
@@ -126,7 +126,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
     } else if (res.reason === 'limit') {
       // Même barrière anti-blocage que la fiche club (règle centralisée dans addReservation).
       hapticWarning();
-      toast.show(`Tu as déjà ${MAX_UPCOMING} réservations à venir — joue-les d’abord 😊`, { icon: 'alert-circle' });
+      toast.show('Tu as déjà trop de réservations à venir — joue-les d’abord 😊', { icon: 'alert-circle' });
     } else if (res.reason === 'network') {
       // Échec réseau/serveur : le terrain n’est PAS pris — réessayer suffit, on garde le choix.
       hapticWarning();

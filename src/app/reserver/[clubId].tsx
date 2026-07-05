@@ -22,7 +22,7 @@ import { dateKeyLabel, nextDays, slotTimestamp } from '@/lib/days';
 import { fcfa, perPlayer, perPlayerOf } from '@/lib/format';
 import { minPrice, priceForSlot, priceTiersFor } from '@/lib/pricing';
 import { useTodayKey } from '@/lib/useTodayKey';
-import { MAX_UPCOMING, useApp } from '@/store/AppContext';
+import { useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
 export default function ReserverScreen() {
@@ -225,7 +225,7 @@ export default function ReserverScreen() {
     } else if (res.reason === 'limit') {
       // Limite anti-blocage (appliquée dans addReservation) : trop de créneaux à venir.
       hapticWarning();
-      toast.show(`Tu as déjà ${MAX_UPCOMING} réservations à venir — joue-les d’abord 😊`, { icon: 'alert-circle' });
+      toast.show('Tu as déjà trop de réservations à venir — joue-les d’abord 😊', { icon: 'alert-circle' });
     } else if (res.reason === 'network') {
       // Échec réseau/serveur : le terrain n’est PAS pris — on invite à réessayer, sans toucher au choix.
       hapticWarning();

@@ -1,6 +1,6 @@
 # PadelConnect 🎾 — l'app du padel à Abidjan
 
-Application mobile (iOS, Expo/React Native) pour **réserver un terrain de padel à Abidjan,
+Application mobile (iOS **et** Android, Expo/React Native) pour **réserver un terrain de padel à Abidjan,
 s'inscrire à des tournois, jouer entre amis et trouver un coach**. Design « luxe sportif »
 (vert signature, crème, or). Espace dédié pour les **gérants de clubs** et console pour
 **l'opérateur** de la plateforme.
