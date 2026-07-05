@@ -37,30 +37,15 @@ begin
 end;
 $$;
 
+revoke execute on function public.set_club_status(text, text) from public, anon;
 grant execute on function public.set_club_status(text, text) to authenticated;
 
--- ─── Donner l'accès gérant à un compte pour un club (opérateur uniquement) ─────
--- Sert quand un club a été pré-chargé (coming_soon) puis son gérant crée son compte :
--- l'opérateur lui attribue role='club' + le club, sans passer par une demande.
-create or replace function public.grant_club_access(p_user_id uuid, p_club_id text)
-returns boolean
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if not exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'operator') then
-    return false; -- réservé à l'opérateur
-  end if;
-  if not exists (select 1 from public.clubs c where c.id = p_club_id) then
-    return false; -- club inconnu
-  end if;
-  update public.profiles set role = 'club', managed_club_id = p_club_id where id = p_user_id;
-  return found;
-end;
-$$;
-
-grant execute on function public.grant_club_access(uuid, text) to authenticated;
+-- ─── Donner l'accès gérant à un compte pour un club : voir la 55 (multi-clubs) ─
+-- ⚠️ `grant_club_access` N'EST PLUS définie ici. Elle vit UNIQUEMENT dans
+-- `55_multi_clubs.sql` (version « multi-clubs » : elle AJOUTE le club dans `manager_clubs`
+-- en plus de poser `managed_club_id`). L'ancienne version de ce fichier écrasait celle de la
+-- 55 quand on recollait la 11 après la 55 → le gérant perdait son 1ᵉʳ club. Ne jamais la
+-- redéfinir ici. (Si tu viens de recoller la 11, recolle la 55 pour restaurer la bonne version.)
 
 -- ─── Créer un club « Bientôt » directement (opérateur) ────────────────────────
 -- Pré-charge un club côté serveur sans demande préalable (statut coming_soon par défaut).
@@ -96,4 +81,5 @@ begin
 end;
 $$;
 
+revoke execute on function public.create_club(text, text, text, integer, integer) from public, anon;
 grant execute on function public.create_club(text, text, text, integer, integer) to authenticated;

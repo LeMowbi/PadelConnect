@@ -91,9 +91,13 @@ function reservationToRow(
     invited: r.invited,
     booked_by_name: bookedBy?.name ?? null,
     booked_by_phone: bookedBy?.phone ?? null,
-    // Colonnes 45 envoyées SEULEMENT pour un match ouvert : une réservation normale reste
-    // insérable même si la migration 45 n'est pas encore collée (colonnes inconnues sinon).
-    ...(r.openMatch ? { open_match: true, open_level: r.openLevel ?? '', open_capacity: r.openCapacity ?? 4 } : {}),
+    // Colonnes « match ouvert » (45) envoyées SEULEMENT pour un match ouvert : une réservation
+    // normale reste insérable même si la migration 45 n'est pas encore collée (colonnes inconnues).
+    ...(r.openMatch ? { open_match: true, open_level: r.openLevel ?? '' } : {}),
+    // open_capacity (57) persistée dès que la capacité DIFFÈRE du défaut serveur (4) : un 1v1
+    // PRIVÉ doit rester distinguable d'un 2v2 en aval (accueil, mes résas, part par joueur).
+    // Un 2v2 privé n'envoie rien (défaut serveur 4) → une résa normale reste insérable sans la 57.
+    ...(r.openMatch || (r.openCapacity && r.openCapacity !== 4) ? { open_capacity: r.openCapacity ?? 4 } : {}),
     status: 'booked',
   };
 }

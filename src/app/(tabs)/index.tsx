@@ -192,8 +192,10 @@ export default function HomeScreen() {
   const news = state.operatorNews;
   const showNews = !!news && state.dismissedNewsId !== news.id;
 
-  // Équipe du prochain match (toi + invités) pour la pile d’avatars.
-  const matchPlayers = upcoming ? [fullName || 'Toi', ...upcoming.invited.map((i) => i.name)].slice(0, 4) : [];
+  // Équipe du prochain match (toi + invités) pour la pile d’avatars. La capacité dépend du
+  // format de la résa (1v1 = 2, 2v2 = 4) : un 1v1 ne doit pas s'afficher « incomplet (1/4) ».
+  const matchCap = upcoming ? (upcoming.openCapacity ?? 4) : 4;
+  const matchPlayers = upcoming ? [fullName || 'Toi', ...upcoming.invited.map((i) => i.name)].slice(0, matchCap) : [];
   const [, mm, dd] = upcoming ? upcoming.dateKey.split('-') : ['', '', ''];
 
   // ── Nudge unique (priorité décroissante) ─────────────────────────────────
@@ -279,8 +281,8 @@ export default function HomeScreen() {
     );
   };
 
-  // B-R2 : équipe incomplète si toi + moins de 3 invités.
-  const teamIncomplete = upcoming ? upcoming.invited.length < 3 : false;
+  // B-R2 : équipe incomplète si toi + invités < capacité (1v1 → dès 0 invité, 2v2 → < 3).
+  const teamIncomplete = upcoming ? upcoming.invited.length < matchCap - 1 : false;
 
   return (
     <Screen refreshControl={refreshControl}>
@@ -288,9 +290,7 @@ export default function HomeScreen() {
         {/* En-tête : salutation + avatar (→ profil) */}
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
-            <Txt variant="label" color={colors.textFaint}>
-              {greeting}
-            </Txt>
+            <Txt variant="label">{greeting}</Txt>
             <Txt variant="h1" numberOfLines={1} style={{ marginTop: 2 }}>
               {fullName || 'Bienvenue'}
             </Txt>
@@ -352,7 +352,7 @@ export default function HomeScreen() {
               </Pressable>
               <Pressable
                 onPress={() => dismissNews(news.id)}
-                hitSlop={8}
+                hitSlop={10}
                 style={styles.newsClose}
                 accessibilityRole="button"
                 accessibilityLabel="Fermer l’actualité"
@@ -442,7 +442,7 @@ export default function HomeScreen() {
                   e.stopPropagation();
                   setNoviceNudgeDismissed(true);
                 }}
-                hitSlop={8}
+                hitSlop={10}
                 style={styles.nudgeClose}
                 accessibilityRole="button"
                 accessibilityLabel="Ignorer"
@@ -473,7 +473,7 @@ export default function HomeScreen() {
                   e.stopPropagation();
                   setProfileNudgeDismissed(true);
                 }}
-                hitSlop={8}
+                hitSlop={10}
                 style={styles.nudgeClose}
                 accessibilityRole="button"
                 accessibilityLabel="Ignorer"
@@ -541,7 +541,7 @@ export default function HomeScreen() {
                   e.stopPropagation();
                   setReferralNudgeDismissed(true);
                 }}
-                hitSlop={8}
+                hitSlop={10}
                 style={styles.nudgeClose}
                 accessibilityRole="button"
                 accessibilityLabel="Ignorer"
@@ -677,7 +677,7 @@ export default function HomeScreen() {
                   <View style={[styles.incompleteHint, { backgroundColor: colors.signatureSoft }]}>
                     <Ionicons name="people-outline" size={14} color={colors.signature} />
                     <Txt variant="small" color={colors.signature} style={{ flex: 1 }}>
-                      Équipe incomplète ({matchPlayers.length}/4)
+                      Équipe incomplète ({matchPlayers.length}/{matchCap})
                     </Txt>
                   </View>
                   <View style={{ flexDirection: 'row', gap: spacing.sm }}>

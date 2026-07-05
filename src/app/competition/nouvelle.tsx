@@ -35,7 +35,7 @@ function Field({
 }) {
   return (
     <>
-      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+      <Txt variant="label" style={{ marginTop: spacing.lg }}>
         {label}
       </Txt>
       <TextInput
@@ -222,7 +222,7 @@ export default function NouvelleCompetition() {
       <Field label="Frais d’inscription (optionnel)" value={fee} onChangeText={setFee} placeholder="Vide = Gratuit" />
 
       <View onLayout={(ev) => (datePos.current = ev.nativeEvent.layout.y)}>
-        <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+        <Txt variant="label" style={{ marginTop: spacing.lg }}>
           Date {day ? `— ${day.label}` : ''}
         </Txt>
         {/* Vrai calendrier mensuel (demande porteur) — remplace les 42 pastilles de jours. */}
@@ -249,7 +249,7 @@ export default function NouvelleCompetition() {
           `key={day.key}` remonte le calendrier quand le début change (mois recalé sur la borne). */}
       {day && day.key < dates[dates.length - 1].key ? (
         <View style={{ marginTop: spacing.lg }}>
-          <Txt variant="label" color={colors.textFaint}>
+          <Txt variant="label">
             Fin (optionnel — plusieurs jours){endDay ? ` — ${endDay.label}` : ''}
           </Txt>
           <View style={styles.wrap}>
@@ -268,7 +268,7 @@ export default function NouvelleCompetition() {
         </View>
       ) : null}
 
-      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+      <Txt variant="label" style={{ marginTop: spacing.lg }}>
         Format
       </Txt>
       <View style={styles.wrap}>
@@ -277,7 +277,7 @@ export default function NouvelleCompetition() {
         ))}
       </View>
 
-      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+      <Txt variant="label" style={{ marginTop: spacing.lg }}>
         Niveau
       </Txt>
       <View style={styles.wrap}>
@@ -286,7 +286,7 @@ export default function NouvelleCompetition() {
         ))}
       </View>
 
-      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+      <Txt variant="label" style={{ marginTop: spacing.lg }}>
         Nombre d’équipes (places limitées)
       </Txt>
       <View style={styles.wrap}>
@@ -301,7 +301,7 @@ export default function NouvelleCompetition() {
       {/* Club hôte — uniquement pour un tournoi créé par un joueur (modération) */}
       {!asClub ? (
         <View style={{ marginTop: spacing.lg }}>
-          <Txt variant="label" color={colors.textFaint}>
+          <Txt variant="label">
             Club hôte
           </Txt>
           <View style={styles.wrap}>
@@ -332,7 +332,7 @@ export default function NouvelleCompetition() {
           Disponible dès que le club hôte est connu. Rien de coché = tout le club ce(s) jour(s). */}
       {host ? (
         <>
-          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+          <Txt variant="label" style={{ marginTop: spacing.lg }}>
             Terrains réservés au tournoi
           </Txt>
           <View style={styles.wrap}>
@@ -341,7 +341,7 @@ export default function NouvelleCompetition() {
             ))}
           </View>
 
-          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+          <Txt variant="label" style={{ marginTop: spacing.lg }}>
             Créneaux réservés au tournoi
           </Txt>
           <View style={styles.wrap}>

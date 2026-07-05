@@ -536,7 +536,7 @@ export default function Operateur() {
         <>
           {/* Hero — commission cumulée depuis le lancement (chiffre vitrine) */}
           <Card style={styles.hero}>
-            <Txt variant="label" color={colors.textFaint}>
+            <Txt variant="label">
               Commission PadelConnect — cumulée
             </Txt>
             <Txt style={styles.heroValue}>{fcfa(allTimeCommission)}</Txt>
@@ -597,7 +597,7 @@ export default function Operateur() {
           </View>
 
           <Card>
-            <Txt variant="label" color={colors.textFaint}>
+            <Txt variant="label">
               Semaine {weekLabel(week)}
             </Txt>
             <View style={styles.totals}>

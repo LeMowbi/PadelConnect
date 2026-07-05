@@ -270,6 +270,11 @@ begin
   if not exists (select 1 from public.clubs c where c.id = p_club_id) then
     return false; -- club inconnu
   end if;
+  -- Le profil cible doit exister AVANT d'écrire dans manager_clubs : sinon l'update ne touchait
+  -- 0 ligne (found=false) mais l'insert avait déjà créé une entrée orpheline (compte sans profil).
+  if not exists (select 1 from public.profiles p where p.id = p_user_id) then
+    return false; -- compte inconnu
+  end if;
   -- Multi-clubs (55) : le club S'AJOUTE à la liste et devient l'actif.
   insert into public.manager_clubs (user_id, club_id) values (p_user_id, p_club_id)
     on conflict (user_id, club_id) do nothing;

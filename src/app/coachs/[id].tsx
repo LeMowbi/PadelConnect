@@ -99,7 +99,7 @@ export default function CoachDetail() {
 
         {/* Bio */}
         <Card style={{ marginTop: spacing.lg }}>
-          <Txt variant="label" color={colors.textFaint}>
+          <Txt variant="label">
             À propos
           </Txt>
           <Txt variant="body" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
@@ -108,7 +108,7 @@ export default function CoachDetail() {
         </Card>
 
         {/* Spécialités */}
-        <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg, marginBottom: spacing.sm }}>
+        <Txt variant="label" style={{ marginTop: spacing.lg, marginBottom: spacing.sm }}>
           Spécialités
         </Txt>
         <View style={styles.specs}>

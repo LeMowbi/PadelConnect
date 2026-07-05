@@ -94,7 +94,7 @@ export default function ParrainageScreen() {
             accessibilityLabel="Partager mon code de parrainage"
           >
             <View style={{ flex: 1 }}>
-              <Txt variant="label" color={colors.textFaint}>
+              <Txt variant="label">
                 MON CODE DE PARRAINAGE
               </Txt>
               <Txt variant="display" color={colors.signature} style={styles.code}>

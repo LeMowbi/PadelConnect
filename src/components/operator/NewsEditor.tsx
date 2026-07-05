@@ -83,7 +83,7 @@ export function NewsEditor({
           couleurs/typo que index.tsx) — l’opérateur ne publie plus à l’aveugle. */}
       {title.trim().length > 0 ? (
         <View style={{ marginTop: spacing.md }}>
-          <Txt variant="label" color={colors.textFaint}>
+          <Txt variant="label">
             Aperçu sur l’accueil joueur
           </Txt>
           <View style={styles.preview}>

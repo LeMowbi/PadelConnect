@@ -60,7 +60,10 @@ const txt = StyleSheet.create({
   label: {
     fontSize: font.size.xs,
     fontWeight: font.weight.semibold,
-    color: colors.textFaint,
+    // textMuted (et non textFaint) : les libellés de section portent une info (WCAG AA ≥ 4.5:1
+    // impossible avec textFaint à cette taille). textFaint reste pour le décoratif (mois d'un
+    // graphe, légende de calendrier).
+    color: colors.textMuted,
     letterSpacing: 1.1,
     textTransform: 'uppercase',
   },

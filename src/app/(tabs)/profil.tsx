@@ -184,7 +184,7 @@ export default function ProfilScreen() {
         <SectionHeader title="Mon niveau" />
         <Card>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }}>
-            <Txt variant="label" color={colors.textFaint}>
+            <Txt variant="label">
               Niveau de jeu
             </Txt>
             <Txt variant="display" color={colors.signature} style={{ fontSize: 28 }}>

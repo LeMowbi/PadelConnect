@@ -340,7 +340,7 @@ function CoachSettings({
           {priceError}
         </Txt>
       ) : null}
-      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+      <Txt variant="label" style={{ marginTop: spacing.md }}>
         Mes créneaux de cours (horaires ouverts par le club)
       </Txt>
       <View style={styles.wrap}>

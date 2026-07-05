@@ -211,7 +211,7 @@ export default function ReserverScreen() {
           ) : (
             <>
               {/* Grille de créneaux (maquette) : on choisit d’abord l’heure */}
-              <Txt variant="label" color={colors.textFaint} style={{ marginBottom: spacing.sm }}>
+              <Txt variant="label" style={{ marginBottom: spacing.sm }}>
                 Choisis un créneau · 1h30
               </Txt>
               <View style={styles.slotGrid}>

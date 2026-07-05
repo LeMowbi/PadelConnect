@@ -57,7 +57,7 @@ export function BlockRangeForm({
 
   return (
     <Card style={{ marginTop: spacing.sm, borderColor: colors.coral }}>
-      <Txt variant="label" color={colors.textFaint}>
+      <Txt variant="label">
         Terrain
       </Txt>
       <View style={styles.wrap}>
@@ -67,7 +67,7 @@ export function BlockRangeForm({
         ))}
       </View>
 
-      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+      <Txt variant="label" style={{ marginTop: spacing.md }}>
         Du {dateFrom ? `— ${dateKeyLabel(dateFrom)}` : ''}
       </Txt>
       <CalendarPicker
@@ -81,12 +81,12 @@ export function BlockRangeForm({
         }}
       />
 
-      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+      <Txt variant="label" style={{ marginTop: spacing.md }}>
         Au {dateTo ? `— ${dateKeyLabel(dateTo)}` : ''}
       </Txt>
       <CalendarPicker value={dateTo} minKey={dateFrom ?? todayKey} maxKey={maxKey} onSelect={(key) => setDateTo(key)} />
 
-      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+      <Txt variant="label" style={{ marginTop: spacing.md }}>
         Heures
       </Txt>
       <View style={styles.wrap}>
@@ -103,7 +103,7 @@ export function BlockRangeForm({
         ))}
       </View>
 
-      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+      <Txt variant="label" style={{ marginTop: spacing.md }}>
         Motif
       </Txt>
       {/* Promesse tenable depuis les grants de colonnes (54) : les joueurs ne téléchargent

@@ -169,7 +169,7 @@ export function ClubInfoCard({
       />
 
       {/* Tarifs par plage horaire — définis librement (nom optionnel + heures creuses / prime time / soirée). */}
-      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+      <Txt variant="label" style={{ marginTop: spacing.md }}>
         TARIFS PAR PLAGE (OPTIONNEL — SINON LE TARIF UNIQUE S’APPLIQUE)
       </Txt>
       {tiers.map((t, i) => (
@@ -232,7 +232,7 @@ export function ClubInfoCard({
 
       {/* Position Google Maps : nom + adresse. Ouvre Maps depuis la fiche → « Itinéraire ».
           Éditable pour TOUS les clubs (même les fondateurs, dont le nom peut changer). */}
-      <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+      <Txt variant="label" style={{ marginTop: spacing.md }}>
         POSITION GOOGLE MAPS
       </Txt>
       <TextInput

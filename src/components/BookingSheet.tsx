@@ -222,7 +222,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
                   </Pressable>
                 </View>
 
-                <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+                <Txt variant="label" style={{ marginTop: spacing.lg }}>
                   TERRAIN
                 </Txt>
                 {free.length === 0 ? (
@@ -246,7 +246,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
                   </View>
                 ) : (
                   <>
-                    <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+                    <Txt variant="label" style={{ marginTop: spacing.lg }}>
                       AVEC QUI ? (TOI + {participantCount}/{maxGuests})
                     </Txt>
                     <View style={styles.row}>
@@ -313,10 +313,10 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
                       bloqué, les places restantes se rejoignent depuis « Matchs ouverts »). */}
                     {state.serverUserId ? (
                       <>
-                        <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+                        <Txt variant="label" style={{ marginTop: spacing.lg }}>
                           FORMAT
                         </Txt>
-                        <View style={styles.row}>
+                        <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="Format du match">
                           {(
                             [
                               { f: 2, label: '1v1 · 2 joueurs' },
@@ -327,68 +327,70 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
                           ))}
                         </View>
 
-                        <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+                        <Txt variant="label" style={{ marginTop: spacing.lg }}>
                           TYPE DE MATCH
                         </Txt>
-                        {(
-                          [
-                            {
-                              key: 'private',
-                              icon: 'lock-closed' as const,
-                              title: 'Match privé',
-                              sub: 'Juste toi et tes invités',
-                              show: true,
-                              active: !effectiveOpen,
-                              set: () => setOpenMatch(false),
-                            },
-                            {
-                              key: 'open',
-                              icon: 'people' as const,
-                              title: 'Match ouvert',
-                              sub:
-                                format === 2
-                                  ? 'Un joueur inconnu te rejoint — 2 au total'
-                                  : `${maxGuests - participantCount} place${maxGuests - participantCount > 1 ? 's' : ''} à prendre — 4 au total`,
-                              show: openable,
-                              active: effectiveOpen,
-                              set: () => setOpenMatch(true),
-                            },
-                          ] as const
-                        )
-                          .filter((o) => o.show)
-                          .map((o) => (
-                            <Pressable
-                              key={o.key}
-                              onPress={o.set}
-                              style={[styles.openMatchBox, o.active && styles.openMatchBoxOn, o.active && shadows.e1]}
-                              accessibilityRole="radio"
-                              accessibilityState={{ selected: o.active }}
-                              accessibilityLabel={o.title}
-                            >
-                              <IconCircle
-                                icon={o.icon}
-                                size={40}
-                                color={o.active ? colors.signature : colors.textMuted}
-                                bg={o.active ? colors.signatureSoft : colors.surfaceAlt}
-                              />
-                              <View style={{ flex: 1 }}>
-                                <Txt variant="body" style={{ fontWeight: '700' }}>
-                                  {o.title}
-                                </Txt>
-                                <Txt variant="small" color={colors.textMuted}>
-                                  {o.sub}
-                                </Txt>
-                              </View>
-                              <Ionicons
-                                name={o.active ? 'radio-button-on' : 'radio-button-off'}
-                                size={20}
-                                color={o.active ? colors.signature : colors.textFaint}
-                              />
-                            </Pressable>
-                          ))}
+                        <View accessibilityRole="radiogroup" accessibilityLabel="Type de match">
+                          {(
+                            [
+                              {
+                                key: 'private',
+                                icon: 'lock-closed' as const,
+                                title: 'Match privé',
+                                sub: 'Juste toi et tes invités',
+                                show: true,
+                                active: !effectiveOpen,
+                                set: () => setOpenMatch(false),
+                              },
+                              {
+                                key: 'open',
+                                icon: 'people' as const,
+                                title: 'Match ouvert',
+                                sub:
+                                  format === 2
+                                    ? 'Un joueur inconnu te rejoint — 2 au total'
+                                    : `${maxGuests - participantCount} place${maxGuests - participantCount > 1 ? 's' : ''} à prendre — 4 au total`,
+                                show: openable,
+                                active: effectiveOpen,
+                                set: () => setOpenMatch(true),
+                              },
+                            ] as const
+                          )
+                            .filter((o) => o.show)
+                            .map((o) => (
+                              <Pressable
+                                key={o.key}
+                                onPress={o.set}
+                                style={[styles.openMatchBox, o.active && styles.openMatchBoxOn, o.active && shadows.e1]}
+                                accessibilityRole="radio"
+                                accessibilityState={{ selected: o.active }}
+                                accessibilityLabel={`${o.title}. ${o.sub}`}
+                              >
+                                <IconCircle
+                                  icon={o.icon}
+                                  size={40}
+                                  color={o.active ? colors.signature : colors.textMuted}
+                                  bg={o.active ? colors.signatureSoft : colors.surfaceAlt}
+                                />
+                                <View style={{ flex: 1 }}>
+                                  <Txt variant="body" style={{ fontWeight: '700' }}>
+                                    {o.title}
+                                  </Txt>
+                                  <Txt variant="small" color={colors.textMuted}>
+                                    {o.sub}
+                                  </Txt>
+                                </View>
+                                <Ionicons
+                                  name={o.active ? 'radio-button-on' : 'radio-button-off'}
+                                  size={20}
+                                  color={o.active ? colors.signature : colors.textFaint}
+                                />
+                              </Pressable>
+                            ))}
+                        </View>
                         {effectiveOpen ? (
                           <>
-                            <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+                            <Txt variant="label" style={{ marginTop: spacing.md }}>
                               NIVEAU SOUHAITÉ
                             </Txt>
                             <View style={styles.row}>
@@ -420,7 +422,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
                         disabled={!court || submitting}
                         full
                       />
-                      <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
+                      <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
                         Session de 1h30 · sans paiement en ligne — réglé au club. Annulation jusqu’à 5h avant.
                       </Txt>
                     </View>

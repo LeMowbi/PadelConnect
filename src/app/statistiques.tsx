@@ -161,7 +161,7 @@ export default function Statistiques() {
       </View>
 
       <View style={styles.note}>
-        <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
+        <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
           Tes points : 100 pour un tournoi officiel gagné, 10 pour un tournoi joué, 3 pour une victoire de match confirmée, 2 par partie
           jouée. Rien n’est inventé — tout se gagne sur le terrain.
         </Txt>

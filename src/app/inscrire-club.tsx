@@ -98,7 +98,7 @@ export default function InscrireClub() {
       </Card>
 
       <Card style={{ marginTop: spacing.md }}>
-        <Txt variant="label" color={colors.textFaint}>
+        <Txt variant="label">
           INFOS DU CLUB
         </Txt>
         <TextInput
@@ -139,7 +139,7 @@ export default function InscrireClub() {
       </Card>
 
       <Card style={{ marginTop: spacing.md }}>
-        <Txt variant="label" color={colors.textFaint}>
+        <Txt variant="label">
           POUR TE RECONTACTER
         </Txt>
         <TextInput

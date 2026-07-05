@@ -16,7 +16,7 @@ import { hapticSuccess } from '@/lib/haptics';
 import { fetchMyMatchScores, leaveOpenMatch, setMatchOpen, submitMatchScore, type MatchScore, type MatchSet } from '@/lib/matchResults';
 import { fetchCancelledReservations } from '@/lib/reservations';
 import { dateKeyLabel, dayKey } from '@/lib/days';
-import { fcfa, perPlayer, perPlayerOf } from '@/lib/format';
+import { fcfa, perPlayerOf } from '@/lib/format';
 import { APP_DOMAIN } from '@/lib/referrals';
 import { openMaps } from '@/lib/maps';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
@@ -177,11 +177,14 @@ export default function ReservationsScreen() {
   // lien Universal du club — un padel se joue à 4 et l'app démarre sans réseau d'amis (le
   // message circule là où les joueurs d'Abidjan sont déjà : leurs groupes WhatsApp).
   const findPlayers = (r: Reservation) => {
-    const missing = Math.max(1, 3 - r.invited.length);
+    // Capacité selon le format (1v1 = 2, 2v2 = 4) : le nombre de joueurs manquants et la part
+    // par joueur en dépendent — un 1v1 ne manque au plus que d'UN joueur, part divisée par 2.
+    const cap = r.openCapacity ?? 4;
+    const missing = Math.max(1, cap - 1 - r.invited.length);
     openWhatsApp(
       '',
       `Il me manque ${missing} joueur${missing > 1 ? 's' : ''} au padel ! 🎾\n` +
-        `${r.clubName} — ${dateKeyLabel(r.dateKey)} à ${r.time} (session 1h30)${r.price ? ` · ~${perPlayer(r.price)}/joueur` : ''}\n` +
+        `${r.clubName} — ${dateKeyLabel(r.dateKey)} à ${r.time} (session 1h30)${r.price ? ` · ~${perPlayerOf(r.price, cap)}/joueur` : ''}\n` +
         `Qui vient ? ${APP_DOMAIN}/club/${r.clubId}`,
     );
   };
@@ -447,7 +450,7 @@ export default function ReservationsScreen() {
                       </Txt>
                       {r.price ? (
                         <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
-                          {fcfa(r.price)} · ~{perPlayer(r.price)}/joueur à 4
+                          {fcfa(r.price)} · ~{perPlayerOf(r.price, r.openCapacity ?? 4)}/joueur à {r.openCapacity ?? 4}
                         </Txt>
                       ) : null}
                     </View>
@@ -535,10 +538,16 @@ export default function ReservationsScreen() {
                     <View style={{ flex: 1 }}>
                       <Button
                         size="sm"
-                        label={r.invited.length < 3 && owner && !r.coachName ? 'Chercher des joueurs' : 'Prévenir mes partenaires'}
+                        label={
+                          r.invited.length < (r.openCapacity ?? 4) - 1 && owner && !r.coachName
+                            ? 'Chercher des joueurs'
+                            : 'Prévenir mes partenaires'
+                        }
                         icon="logo-whatsapp"
                         variant="secondary"
-                        onPress={() => (r.invited.length < 3 && owner && !r.coachName ? findPlayers(r) : notifyPartners(r))}
+                        onPress={() =>
+                          r.invited.length < (r.openCapacity ?? 4) - 1 && owner && !r.coachName ? findPlayers(r) : notifyPartners(r)
+                        }
                         pill
                         full
                       />
@@ -554,7 +563,7 @@ export default function ReservationsScreen() {
                       joueur inscrit tant qu'il est un participant accepté. Un COURS de coach
                       (r.coachName) ne s'ouvre jamais : des inconnus rejoindraient un cours que le
                       coach n'a pas accepté de donner à 4 (le serveur le refuse aussi, SQL 53). */}
-                  {owner && !r.coachName && r.invited.length < 3 ? (
+                  {owner && !r.coachName && r.invited.length < (r.openCapacity ?? 4) - 1 ? (
                     <View style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}>
                       <Button
                         size="sm"

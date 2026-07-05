@@ -347,6 +347,11 @@ export default function ReserverScreen() {
                 setCourt(null);
                 setFriendIds([]);
                 setExtraNames([]);
+                // Remise à zéro du format/visibilité : sans ça, la résa suivante repartait
+                // silencieusement en 1v1 ouvert (maxGuests=1) sans re-choix explicite.
+                setFormat(4);
+                setOpenMatch(false);
+                setOpenLevel('');
               }}
               full
             />
@@ -531,7 +536,7 @@ export default function ReserverScreen() {
             <Txt variant="label" style={{ marginTop: spacing.md }}>
               Format
             </Txt>
-            <View style={[styles.wrap, { marginTop: spacing.sm }]}>
+            <View style={[styles.wrap, { marginTop: spacing.sm }]} accessibilityRole="radiogroup" accessibilityLabel="Format du match">
               {(
                 [
                   { f: 2, label: '1v1 · 2 joueurs' },
@@ -545,62 +550,64 @@ export default function ReserverScreen() {
             <Txt variant="label" style={{ marginTop: spacing.md }}>
               Type de match
             </Txt>
-            {(
-              [
-                {
-                  key: 'private',
-                  icon: 'lock-closed' as const,
-                  title: 'Match privé',
-                  sub: 'Juste toi et tes invités',
-                  show: true,
-                  active: !effectiveOpen,
-                  set: () => setOpenMatch(false),
-                },
-                {
-                  key: 'open',
-                  icon: 'people' as const,
-                  title: 'Match ouvert',
-                  sub:
-                    format === 2
-                      ? 'Un joueur inconnu te rejoint — 2 au total'
-                      : `${maxGuests - participantCount} place${maxGuests - participantCount > 1 ? 's' : ''} à prendre — 4 au total`,
-                  show: openable,
-                  active: effectiveOpen,
-                  set: () => setOpenMatch(true),
-                },
-              ] as const
-            )
-              .filter((o) => o.show)
-              .map((o) => (
-                <Pressable
-                  key={o.key}
-                  onPress={o.set}
-                  style={[styles.openMatchBox, o.active && styles.openMatchBoxOn, o.active && shadows.e1, { marginTop: spacing.sm }]}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: o.active }}
-                  accessibilityLabel={o.title}
-                >
-                  <IconCircle
-                    icon={o.icon}
-                    size={40}
-                    color={o.active ? colors.signature : colors.textMuted}
-                    bg={o.active ? colors.signatureSoft : colors.surfaceAlt}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Txt variant="body" style={{ fontWeight: '700' }}>
-                      {o.title}
-                    </Txt>
-                    <Txt variant="small" color={colors.textMuted}>
-                      {o.sub}
-                    </Txt>
-                  </View>
-                  <Ionicons
-                    name={o.active ? 'radio-button-on' : 'radio-button-off'}
-                    size={20}
-                    color={o.active ? colors.signature : colors.textFaint}
-                  />
-                </Pressable>
-              ))}
+            <View accessibilityRole="radiogroup" accessibilityLabel="Type de match">
+              {(
+                [
+                  {
+                    key: 'private',
+                    icon: 'lock-closed' as const,
+                    title: 'Match privé',
+                    sub: 'Juste toi et tes invités',
+                    show: true,
+                    active: !effectiveOpen,
+                    set: () => setOpenMatch(false),
+                  },
+                  {
+                    key: 'open',
+                    icon: 'people' as const,
+                    title: 'Match ouvert',
+                    sub:
+                      format === 2
+                        ? 'Un joueur inconnu te rejoint — 2 au total'
+                        : `${maxGuests - participantCount} place${maxGuests - participantCount > 1 ? 's' : ''} à prendre — 4 au total`,
+                    show: openable,
+                    active: effectiveOpen,
+                    set: () => setOpenMatch(true),
+                  },
+                ] as const
+              )
+                .filter((o) => o.show)
+                .map((o) => (
+                  <Pressable
+                    key={o.key}
+                    onPress={o.set}
+                    style={[styles.openMatchBox, o.active && styles.openMatchBoxOn, o.active && shadows.e1]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: o.active }}
+                    accessibilityLabel={`${o.title}. ${o.sub}`}
+                  >
+                    <IconCircle
+                      icon={o.icon}
+                      size={40}
+                      color={o.active ? colors.signature : colors.textMuted}
+                      bg={o.active ? colors.signatureSoft : colors.surfaceAlt}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Txt variant="body" style={{ fontWeight: '700' }}>
+                        {o.title}
+                      </Txt>
+                      <Txt variant="small" color={colors.textMuted}>
+                        {o.sub}
+                      </Txt>
+                    </View>
+                    <Ionicons
+                      name={o.active ? 'radio-button-on' : 'radio-button-off'}
+                      size={20}
+                      color={o.active ? colors.signature : colors.textFaint}
+                    />
+                  </Pressable>
+                ))}
+            </View>
             {effectiveOpen ? (
               <>
                 <Txt variant="label" style={{ marginTop: spacing.md }}>
@@ -624,7 +631,7 @@ export default function ReserverScreen() {
         <Card style={styles.priceRow}>
           <View>
             <Txt variant="muted">Tarif (session 1h30)</Txt>
-            <Txt variant="small" color={colors.textFaint}>
+            <Txt variant="small" color={colors.textMuted}>
               soit ~{perPlayerOf(slotPrice, format)} / joueur à {format}
             </Txt>
           </View>
@@ -632,7 +639,7 @@ export default function ReserverScreen() {
         </Card>
 
         <View style={{ marginTop: spacing.lg }}>
-          <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
+          <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
             Session de 1h30, sans paiement en ligne. Le tarif se règle directement au club. Annulation jusqu’à 5h avant.
           </Txt>
         </View>
@@ -657,7 +664,7 @@ function periodOf(slot: string): 'morning' | 'afternoon' | 'evening' {
 
 function Label({ text }: { text: string }) {
   return (
-    <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+    <Txt variant="label" style={{ marginTop: spacing.lg }}>
       {text}
     </Txt>
   );
@@ -683,7 +690,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
     padding: spacing.md,
     borderRadius: radius.lg,
     borderWidth: 1,

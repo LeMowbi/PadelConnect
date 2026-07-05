@@ -50,7 +50,7 @@ export function QuickBlock({
 
   return (
     <Card style={{ marginTop: spacing.sm, borderColor: colors.coral }}>
-      <Txt variant="label" color={colors.textFaint}>
+      <Txt variant="label">
         Jour
       </Txt>
       <View style={styles.wrap}>
@@ -76,7 +76,7 @@ export function QuickBlock({
         </View>
       ) : (
         <>
-          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+          <Txt variant="label" style={{ marginTop: spacing.md }}>
             Heure
           </Txt>
           <View style={styles.wrap}>
@@ -101,7 +101,7 @@ export function QuickBlock({
 
           {time ? (
             <>
-              <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+              <Txt variant="label" style={{ marginTop: spacing.md }}>
                 Terrain
               </Txt>
               <View style={{ marginTop: spacing.sm, gap: spacing.sm }}>
@@ -207,7 +207,7 @@ export function QuickBlock({
           {/* Motif de blocage */}
           {time && court ? (
             <>
-              <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+              <Txt variant="label" style={{ marginTop: spacing.md }}>
                 Motif
               </Txt>
               <View style={styles.wrap}>

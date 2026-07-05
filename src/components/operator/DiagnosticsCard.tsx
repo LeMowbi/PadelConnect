@@ -63,7 +63,7 @@ export function DiagnosticsCard() {
       ) : null}
       {errors.length > 0 ? (
         <View style={{ marginTop: spacing.md, gap: spacing.xs }}>
-          <Txt variant="label" color={colors.textFaint}>
+          <Txt variant="label">
             Dernières erreurs (anonymes)
           </Txt>
           {errors.map((e, i) => (

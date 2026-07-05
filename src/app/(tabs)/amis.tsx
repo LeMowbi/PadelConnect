@@ -158,7 +158,7 @@ export default function AmisScreen() {
                     <View style={styles.row}>
                       <Avatar name={r.name} size={44} />
                       <View style={styles.rowInfo}>
-                        <Txt variant="body" style={styles.rowName}>
+                        <Txt variant="body" style={styles.rowName} numberOfLines={1}>
                           {r.name}
                         </Txt>
                         <Txt variant="small" color={colors.textMuted}>
@@ -217,7 +217,7 @@ export default function AmisScreen() {
                     >
                       <Avatar name={f.name} size={44} />
                       <View style={styles.rowInfo}>
-                        <Txt variant="body" style={styles.rowName}>
+                        <Txt variant="body" style={styles.rowName} numberOfLines={1}>
                           {f.name}
                         </Txt>
                         <Txt variant="small" color={colors.textMuted}>

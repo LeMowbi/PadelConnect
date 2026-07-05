@@ -31,7 +31,9 @@ export function PhotoPlaceholder({
       ) : null}
       {showBadge ? (
         <View style={styles.badge}>
-          <Txt variant="label" color={colors.textMuted}>
+          {/* onPhoto (et non textMuted) : le badge est posé sur un scrim sombre — textMuted y
+              serait quasi invisible (~1:1). Cohérent avec tout texte sur overlay ailleurs. */}
+          <Txt variant="label" color={colors.onPhoto}>
             Visuel provisoire
           </Txt>
         </View>

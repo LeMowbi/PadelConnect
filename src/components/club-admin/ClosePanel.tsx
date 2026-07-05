@@ -80,7 +80,7 @@ export function ClosePanel({
 
       {step === 'winner' ? (
         <>
-          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+          <Txt variant="label" style={{ marginTop: spacing.sm }}>
             Équipe vainqueure · {teams.length} inscrite{teams.length > 1 ? 's' : ''}
           </Txt>
           <View style={{ marginTop: spacing.sm, gap: 6 }} accessibilityRole="radiogroup">
@@ -126,7 +126,7 @@ export function ClosePanel({
           <Txt variant="body" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
             1ʳᵉ place : <Txt style={{ fontWeight: '700' }}>{selected}</Txt>. Ajoute la 2ᵉ et la 3ᵉ place (facultatif).
           </Txt>
-          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+          <Txt variant="label" style={{ marginTop: spacing.md }}>
             🥈 2ᵉ place
           </Txt>
           <View style={{ marginTop: 6, gap: 6 }} accessibilityRole="radiogroup">
@@ -154,7 +154,7 @@ export function ClosePanel({
                 );
               })}
           </View>
-          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+          <Txt variant="label" style={{ marginTop: spacing.md }}>
             🥉 3ᵉ place
           </Txt>
           <View style={{ marginTop: 6, gap: 6 }} accessibilityRole="radiogroup">
@@ -198,7 +198,7 @@ export function ClosePanel({
         </>
       ) : (
         <>
-          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+          <Txt variant="label" style={{ marginTop: spacing.sm }}>
             Fin de tableau ? (facultatif)
           </Txt>
           <View style={{ marginTop: spacing.sm, gap: 6 }} accessibilityRole="radiogroup">

@@ -248,7 +248,7 @@ export default function CompetitionDetail() {
           </View>
         ) : null}
         <View style={styles.infoChip}>
-          <Txt variant="label" color={colors.textFaint}>
+          <Txt variant="label">
             {played ? 'Date' : 'Clôture'}
           </Txt>
           <Txt variant="h3" style={{ marginTop: 2 }}>
@@ -359,7 +359,7 @@ export default function CompetitionDetail() {
       {/* Places — limitées, en équipes */}
       <Card style={{ marginTop: spacing.md }}>
         <View style={styles.placesHead}>
-          <Txt variant="label" color={colors.textFaint}>
+          <Txt variant="label">
             ÉQUIPES INSCRITES
           </Txt>
           <Txt variant="h3">
@@ -509,7 +509,7 @@ export default function CompetitionDetail() {
               <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
                 1ʳᵉ place : <Txt style={{ fontWeight: '700' }}>{winnerName}</Txt>. Ajoute la 2ᵉ et la 3ᵉ place (facultatif).
               </Txt>
-              <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+              <Txt variant="label" style={{ marginTop: spacing.md }}>
                 🥈 2ᵉ place
               </Txt>
               <View style={{ marginTop: 6, gap: 6 }} accessibilityRole="radiogroup">
@@ -541,7 +541,7 @@ export default function CompetitionDetail() {
                     );
                   })}
               </View>
-              <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+              <Txt variant="label" style={{ marginTop: spacing.md }}>
                 🥉 3ᵉ place
               </Txt>
               <View style={{ marginTop: 6, gap: 6 }} accessibilityRole="radiogroup">
@@ -722,7 +722,7 @@ export default function CompetitionDetail() {
 
           {state.friends.length > 0 ? (
             <>
-              <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+              <Txt variant="label" style={{ marginTop: spacing.md }}>
                 PARMI TES AMIS
               </Txt>
               <View style={styles.wrap}>
@@ -739,7 +739,7 @@ export default function CompetitionDetail() {
             </>
           ) : null}
 
-          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+          <Txt variant="label" style={{ marginTop: spacing.md }}>
             OU UN AUTRE NOM
           </Txt>
           <TextInput
@@ -791,7 +791,7 @@ function ResultCard({ result, mine, official }: { result: CompResult; mine?: Off
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
         <Ionicons name="trophy" size={24} color={colors.amber} />
         <View style={{ flex: 1 }}>
-          <Txt variant="label" color={colors.textFaint}>
+          <Txt variant="label">
             Vainqueur
           </Txt>
           <Txt variant="h3" color={colors.amberDark}>

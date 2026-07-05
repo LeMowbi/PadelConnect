@@ -45,6 +45,9 @@ export function Chip({
         accessibilityRole="button"
         accessibilityState={{ selected: !!active, disabled: !!disabled }}
         accessibilityLabel={accessibilityLabel ?? label}
+        // La puce mesure ~32-34 px de haut : hitSlop pour atteindre la cible tactile de 44 pt
+        // (HIG Apple / 48 dp Android) sans changer le rendu visuel.
+        hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
         style={[styles.base, size === 'lg' && styles.lg, active && styles.active, disabled && styles.disabled]}
       >
         {icon ? <Ionicons name={icon} size={13} color={active ? colors.onSignature : colors.textMuted} /> : null}

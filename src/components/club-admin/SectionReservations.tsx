@@ -511,7 +511,7 @@ export function SectionReservations({
         {/* Remplissage par créneau sur la semaine (données réelles) */}
         {weekRes.length > 0 ? (
           <Card style={{ marginTop: spacing.md }}>
-            <Txt variant="label" color={colors.textFaint} style={{ marginBottom: spacing.md }}>
+            <Txt variant="label" style={{ marginBottom: spacing.md }}>
               Remplissage par créneau (7 j)
             </Txt>
             <BarChart data={planTimes.map((t) => ({ label: t, value: weekRes.filter((r) => r.time === t).length }))} />
@@ -523,7 +523,7 @@ export function SectionReservations({
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
             <IconCircle icon="cash-outline" color={colors.green} bg={colors.greenSoft} />
             <View style={{ flex: 1 }}>
-              <Txt variant="label" color={colors.textFaint}>
+              <Txt variant="label">
                 REVENU DES PARTIES JOUÉES (7 J)
               </Txt>
               <Txt variant="h2" color={colors.green}>
@@ -741,7 +741,7 @@ export function SectionReservations({
           pastByWeek.slice(0, weeksShown).map((g) => (
             <Card key={g.week} style={{ marginBottom: spacing.sm }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm }}>
-                <Txt variant="label" color={colors.textFaint}>
+                <Txt variant="label">
                   Semaine {weekLabel(g.week)}
                 </Txt>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>

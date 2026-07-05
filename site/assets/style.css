@@ -823,21 +823,6 @@ footer {
   transform: none;
 }
 
-/* ---------- Bascule de langue : masque le texte de la langue inactive ---------- */
-
-[data-en] {
-  display: none;
-}
-html[lang='en'] [data-fr] {
-  display: none;
-}
-html[lang='en'] [data-en] {
-  display: inline;
-}
-html[lang='en'] [data-en].bloc {
-  display: block;
-}
-
 /* ---------- Responsive ---------- */
 
 @media (max-width: 880px) {

@@ -348,7 +348,7 @@ export default function CoursScreen() {
 
 function Label({ text }: { text: string }) {
   return (
-    <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+    <Txt variant="label" style={{ marginTop: spacing.lg }}>
       {text}
     </Txt>
   );

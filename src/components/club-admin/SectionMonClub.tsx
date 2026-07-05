@@ -580,7 +580,7 @@ export function SectionMonClub({ club }: { club: Club }) {
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Photos du club" />
         <Card>
-          <Txt variant="label" color={colors.textFaint}>
+          <Txt variant="label">
             Photo de profil
           </Txt>
           <Txt variant="muted" style={{ marginTop: 2 }}>
@@ -612,7 +612,7 @@ export function SectionMonClub({ club }: { club: Club }) {
             </View>
           </View>
           <View style={styles.coverDivider} />
-          <Txt variant="label" color={colors.textFaint}>
+          <Txt variant="label">
             Galerie
           </Txt>
           <Txt variant="muted" style={{ marginTop: 2 }}>
@@ -960,7 +960,7 @@ export function SectionMonClub({ club }: { club: Club }) {
               onInc={() => applyRange(openTime, minutesToSlot(closeMin + SESSION_MIN))}
             />
           </View>
-          <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+          <Txt variant="label" style={{ marginTop: spacing.md }}>
             {removingSlot ? 'TES CRÉNEAUX — TOUCHE POUR RETIRER DÉFINITIVEMENT' : 'TES CRÉNEAUX — TOUCHE POUR FERMER / ROUVRIR'}
           </Txt>
           <View style={styles.wrap}>
@@ -1029,7 +1029,7 @@ export function SectionMonClub({ club }: { club: Club }) {
           {openSlots.length > 0 ? (
             <>
               <View style={styles.coverDivider} />
-              <Txt variant="label" color={colors.textFaint}>
+              <Txt variant="label">
                 HORAIRES PAR TERRAIN
               </Txt>
               <Txt variant="muted" style={{ marginTop: 2 }}>
