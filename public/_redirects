@@ -1,0 +1,5 @@
+# Fallback SPA pour l'export web (Espace Club / opérateur sur club.padelconnectci.com).
+# `web.output: "single"` = un seul index.html + routage client : sans ce repli, un rechargement
+# (F5) ou un lien direct vers /club-admin, /operateur, /reserver/... renvoie une 404 Cloudflare.
+# Expo copie le dossier public/ à la racine de l'export → ce fichier atterrit dans dist/_redirects.
+/*    /index.html    200

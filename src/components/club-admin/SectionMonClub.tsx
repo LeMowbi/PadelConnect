@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { AccessibilityInfo, Pressable, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native';
+import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { ClubPhoto } from '@/components/ClubPhoto';
 import { useToast } from '@/components/Toast';
@@ -12,6 +12,7 @@ import { clubAddCoach, clubRemoveCoach, clubSetCoachPrice, fetchClubCoaches, typ
 import { isPlayed, MAX_CLUB_PHOTOS, useApp } from '@/store/AppContext';
 import { fcfa, initials } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
+import { shareText } from '@/lib/share';
 import { priceTiersFor, timeToMinutes } from '@/lib/pricing';
 import {
   buildSlots,
@@ -468,7 +469,9 @@ export function SectionMonClub({ club }: { club: Club }) {
   };
 
   const shareBoost = () =>
-    Share.share({ message: `Bonjour PadelConnect, je souhaite booster le profil de ${club.name} (paiement par Wave).` }).catch(() => {});
+    void shareText(`Bonjour PadelConnect, je souhaite booster le profil de ${club.name} (paiement par Wave).`).then((r) => {
+      if (r === 'copied') toast.show('Message copié dans le presse-papiers ✅');
+    });
 
   const photosFull = photos.length >= MAX_CLUB_PHOTOS;
   const [uploadingPhoto, setUploadingPhoto] = useState(false);

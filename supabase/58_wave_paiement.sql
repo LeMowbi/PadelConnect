@@ -105,3 +105,12 @@ revoke execute on function public.fetch_club_ratings() from public, anon;
 grant execute on function public.fetch_club_ratings() to authenticated;
 revoke execute on function public.fetch_club_coaches(text) from public, anon;
 grant execute on function public.fetch_club_coaches(text) to authenticated;
+
+-- ─── 7) Durcissement des buckets Storage : borne de taille (5 Mo) + types IMAGE seulement.
+-- Jusqu'ici la limite reposait UNIQUEMENT sur le client (pickImage réduit à 512/1280 px) ; un
+-- client authentifié modifié pouvait pousser un fichier arbitrairement gros ou non-image dans
+-- SON dossier (pas de fuite inter-utilisateur, mais abus de stockage possible). Idempotent.
+update storage.buckets
+  set file_size_limit = 5242880, -- 5 Mo
+      allowed_mime_types = array['image/jpeg', 'image/png', 'image/webp']
+  where id in ('avatars', 'club-photos');

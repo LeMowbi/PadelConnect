@@ -6,17 +6,20 @@
 import { decode } from 'base64-arraybuffer';
 import { File } from 'expo-file-system';
 import { Platform } from 'react-native';
+import { decodeDataUri } from './avatar';
 import { supabase } from './supabase';
 
 const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
 
 export async function uploadClubPhoto(clubId: string, localUri: string): Promise<string | null> {
-  if (!isNative) return null;
   try {
-    const base64 = await new File(localUri).base64();
+    // Natif : fichier local (expo-file-system). Web (Espace Club de bureau) : data-URI décodé —
+    // sans ça, un gérant sur ordinateur ne pouvait ajouter aucune photo (cover, terrain, galerie).
+    const payload = isNative ? { bytes: decode(await new File(localUri).base64()), contentType: 'image/jpeg' } : decodeDataUri(localUri);
+    if (!payload) return null;
     const path = `${clubId}/${Date.now()}.jpg`;
-    const { error } = await supabase.storage.from('club-photos').upload(path, decode(base64), {
-      contentType: 'image/jpeg',
+    const { error } = await supabase.storage.from('club-photos').upload(path, payload.bytes, {
+      contentType: payload.contentType,
       upsert: true,
     });
     if (error) return null;

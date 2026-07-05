@@ -23,6 +23,13 @@ async function shareMessage(message: string): Promise<ShareResult> {
   }
 }
 
+// Partage d’un message libre (export CSV opérateur, demande de boost, parrainage…) — même
+// stratégie feuille native / repli presse-papiers web, pour ne plus laisser un rejet non géré
+// (le `Share.share` de RN-Web rejette quand le navigateur de bureau n’a pas `navigator.share`).
+export function shareText(message: string): Promise<ShareResult> {
+  return shareMessage(message);
+}
+
 // Partage la fiche d’un club — Universal Link /club/ID (déclaré dans l’AASA) : ouvre
 // directement la fiche dans l’app si elle est installée, sinon la page renvoie à l’App Store.
 export function shareClub(club: { id: string; name: string; area: string }): Promise<ShareResult> {

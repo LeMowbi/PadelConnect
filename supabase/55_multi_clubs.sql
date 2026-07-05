@@ -188,6 +188,10 @@ begin
     set role = 'player', managed_club_id = null
     where p.managed_club_id is null and p.role = 'club'
       and not exists (select 1 from public.manager_clubs mc where mc.user_id = p.id);
+  -- Nettoyage du STOCKAGE (bucket public 'club-photos') : sans ça, cover / photos de terrain /
+  -- galerie du club supprimé restaient téléchargeables par URL indéfiniment (asymétrie avec
+  -- delete_account qui purge bien les avatars). Le 1ᵉʳ segment du chemin = l'id du club.
+  delete from storage.objects where bucket_id = 'club-photos' and (storage.foldername(name))[1] = p_id;
   delete from public.clubs where id = p_id;
   return true;
 end;

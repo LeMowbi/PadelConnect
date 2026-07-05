@@ -130,10 +130,12 @@ joueur, auteur de la réservation, opérateur, organisateur du tournoi, ami invi
 **Au total, 8 webhooks** doivent exister : `reservations`, `reservation_participants`,
 `competitions`, `friend_requests`, `lessons`, `coaches`, `match_results`, `operator_news`.
 
-## 4 bis. (Recommandé) Sécuriser le webhook
+## 4 bis. ⚠️ IMPORTANT — Sécuriser le webhook (fortement recommandé avant d'ouvrir aux joueurs)
 
-La fonction `notify-club` peut désormais exiger un secret pour refuser les appels non légitimes
-(quelqu'un pourrait sinon déclencher des push en appelant l'URL) :
+La fonction `notify-club` DOIT exiger un secret : sans lui, n'importe qui connaissant l'URL (la clé
+publique est dans l'app) peut **envoyer de faux push aux gérants** avec un contenu arbitraire
+(risque de phishing : « Réservation annulée, appelez ce numéro »). Un audit l'a confirmé comme
+faille réelle. À poser dès que possible :
 1. Dashboard → **Edge Functions → notify-club → Settings → Secrets/Env** : ajoute
    `WEBHOOK_SECRET` = une longue valeur aléatoire.
 2. Pour CHAQUE Database Webhook qui appelle `notify-club` : ajoute un **HTTP header**

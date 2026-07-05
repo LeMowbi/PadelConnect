@@ -2,13 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState } from 'react';
-import { Pressable, Share, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { PopIn } from '@/components/PopIn';
 import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
 import { useToast } from '@/components/Toast';
 import { Button, Card, IconCircle, StatTile, Txt } from '@/components/ui';
 import { openWhatsApp } from '@/lib/contact';
+import { shareText } from '@/lib/share';
 import { DOWNLOAD_URL, fetchReferralCount, inviteUrl, referralCodeForUser } from '@/lib/referrals';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useApp } from '@/store/AppContext';
@@ -58,7 +59,10 @@ export default function ParrainageScreen() {
     `\n${link}`;
 
   const invite = () => openWhatsApp('', message);
-  const shareMore = () => Share.share({ message }).catch(() => {});
+  const shareMore = () =>
+    void shareText(message).then((r) => {
+      if (r === 'copied') toast.show('Copié dans le presse-papiers ✅');
+    });
   // Copie RÉELLE du code dans le presse-papiers (le bouton le promettait sans le faire).
   const copyCode = async () => {
     if (!myCode) return;

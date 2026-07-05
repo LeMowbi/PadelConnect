@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, Share, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
@@ -26,6 +26,7 @@ import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { addWeeks, dateKeyLabel, dayKey, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa, pctLabel } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
+import { shareText } from '@/lib/share';
 import { colors, font, radius, shadows, spacing } from '@/theme';
 
 // Onglets de l'Espace opérateur — même motif que l'Espace Club (SegmentedControl).
@@ -435,7 +436,11 @@ export default function Operateur() {
       .join('\n');
     const total = `TOTAL;${totalCount};${totalRevenue};;${totalCommission};`;
     const message = `PadelConnect — Décompte semaine ${weekLabel(week)}\n\n${header}\n${body}\n${total}`;
-    void Share.share({ message });
+    // Via lib/share : feuille native sur mobile, repli presse-papiers sur le web de bureau
+    // (l'Espace opérateur web est une cible réelle) — plus de rejet non géré ni d'export « muet ».
+    void shareText(message).then((r) => {
+      if (r === 'copied') toast.show('Décompte copié dans le presse-papiers ✅');
+    });
   };
 
   // Garde d’accès : l’Espace opérateur n’est rendu que si le RÔLE serveur === 'operator'.

@@ -7,6 +7,9 @@ node_modules/
 .expo/
 dist/
 
+# Cloudflare Wrangler (état/creds locaux — jamais versionnés)
+.wrangler/
+
 # Build web empaqueté (artefact, non versionné)
 *-web.zip
 *-web.tar.gz

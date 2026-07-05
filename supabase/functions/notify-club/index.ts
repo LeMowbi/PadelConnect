@@ -377,7 +377,8 @@ Deno.serve(async (req) => {
           .eq('reservation_id', record.reservation_id);
         const all = (entries ?? []) as { user_id: string; canon: string; i_won: boolean }[];
         // Joueurs identifiés (créateur + participants 'accepted') → vainqueurs légitimes max =
-        // floor(joueurs/2), STRICTEMENT comme la SQL 49. Chargé une fois, réutilisé plus bas.
+        // least(2, joueurs-1), STRICTEMENT comme la SQL 49 (le commentaire « floor(joueurs/2) »
+        // était une règle d'avant l'audit 7). Chargé une fois, réutilisé plus bas.
         const { data: parts } = await supabase
           .from('reservation_participants')
           .select('user_id, status')

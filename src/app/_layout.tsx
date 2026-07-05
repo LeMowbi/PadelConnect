@@ -82,7 +82,10 @@ function RootNav() {
   useEffect(() => {
     if (!hydrated) return;
     const onboarding = segments[0] === 'onboarding';
-    const publicRoute = onboarding || ['reset-password', 'legal', 'decouvrir'].includes(segments[0] ?? '');
+    // `auth-callback` (échange du code PKCE d'e-mail) est public : sans ça, un cold-start
+    // déconnecté via `padelco://auth-callback?code=` rebondissait brièvement vers /onboarding
+    // avant que useEmailConfirmLink ne pose le compte (micro-flash).
+    const publicRoute = onboarding || ['reset-password', 'auth-callback', 'legal', 'decouvrir'].includes(segments[0] ?? '');
     if (!state.account && !publicRoute) router.replace('/onboarding');
     else if (state.account && onboarding) router.replace('/');
   }, [hydrated, state.account, segments, router]);
