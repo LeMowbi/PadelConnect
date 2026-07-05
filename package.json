@@ -41,7 +41,8 @@
     "eslint": "^9.39.4",
     "eslint-config-expo": "^56.0.4",
     "prettier": "^3.9.0",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "wrangler": "^4.107.0"
   },
   "scripts": {
     "start": "expo start",
@@ -51,7 +52,9 @@
     "build:web": "expo export --platform web",
     "format": "prettier --write src tests",
     "format:check": "prettier --check src tests",
-    "test:logic": "TZ=UTC node --experimental-strip-types tests/days.test.ts && TZ=UTC node --experimental-strip-types tests/pricing.test.ts && TZ=UTC node --experimental-strip-types tests/slots.test.ts && TZ=UTC node --experimental-strip-types tests/ranges.test.ts && TZ=UTC node --experimental-strip-types tests/phone.test.ts && TZ=UTC node --experimental-strip-types tests/audit.test.ts && TZ=UTC node tests/reset.test.mjs && TZ=UTC node tests/seeds.test.mjs"
+    "test:logic": "TZ=UTC node --experimental-strip-types tests/days.test.ts && TZ=UTC node --experimental-strip-types tests/pricing.test.ts && TZ=UTC node --experimental-strip-types tests/slots.test.ts && TZ=UTC node --experimental-strip-types tests/ranges.test.ts && TZ=UTC node --experimental-strip-types tests/phone.test.ts && TZ=UTC node --experimental-strip-types tests/audit.test.ts && TZ=UTC node tests/reset.test.mjs && TZ=UTC node tests/seeds.test.mjs",
+    "deploy": "npx expo export -p web && wrangler deploy",
+    "preview": "npx expo export -p web && wrangler dev"
   },
   "private": true
 }
