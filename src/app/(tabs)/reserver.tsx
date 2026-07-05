@@ -204,7 +204,7 @@ export default function ReserverScreen() {
               <EmptyState
                 icon="time-outline"
                 title={isToday ? 'Plus de créneaux aujourd’hui' : 'Plus de créneaux'}
-                text={isToday ? 'La journée est terminée.' : 'Aucun horaire à venir ce jour. Choisis un autre jour.'}
+                text={isToday ? 'La journée est terminée.' : 'Aucun créneau à venir ce jour. Choisis un autre jour.'}
               />
               {isToday ? <Button label="Voir demain" icon="arrow-forward" onPress={goTomorrow} /> : null}
             </View>

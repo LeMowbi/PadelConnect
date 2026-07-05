@@ -12,6 +12,9 @@
 -- 07_clubs.sql n'autorisait que status='active'. On élargit aux 'coming_soon' pour
 -- l'affichage (la non-réservabilité est gérée côté app).
 drop policy if exists "clubs_select_active" on public.clubs;
+-- Idempotence : on droppe AUSSI le nom réellement créé ci-dessous, sinon un 2ᵉ rejeu du fichier
+-- (le porteur recolle régulièrement) échouait avec « policy clubs_select_visible already exists ».
+drop policy if exists "clubs_select_visible" on public.clubs;
 create policy "clubs_select_visible" on public.clubs
   for select using (status in ('active', 'coming_soon'));
 

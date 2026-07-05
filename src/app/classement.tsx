@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { SkeletonLines } from '@/components/Skeleton';
-import { Button, Card, Divider, Tag, Txt } from '@/components/ui';
+import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
 import { fetchLeaderboard, fetchMyRank, type LeaderboardRow } from '@/lib/leaderboard';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useApp } from '@/store/AppContext';
@@ -84,6 +84,12 @@ export default function ClassementScreen() {
             <Button size="sm" label="Réessayer" icon="refresh" variant="secondary" onPress={() => void load()} />
           </View>
         </Card>
+      ) : rows.length === 0 ? (
+        <EmptyState
+          icon="trophy-outline"
+          title="Classement encore vide"
+          text="Sois le premier à marquer des points : une partie jouée ou un tournoi comptent tout de suite."
+        />
       ) : (
         <Card style={{ marginTop: spacing.lg }}>
           {rows.map((r, i) => {

@@ -12,8 +12,8 @@ export default function NotFound() {
       <EmptyState
         icon="compass-outline"
         title="Page introuvable"
-        text="Ce lien n'existe plus ou est incorrect. Reviens à l'accueil pour continuer."
-        actionLabel="Retour à l'accueil"
+        text="Ce lien n’existe plus ou est incorrect. Reviens à l’accueil pour continuer."
+        actionLabel="Retour à l’accueil"
         onAction={() => router.replace('/')}
       />
     </Screen>

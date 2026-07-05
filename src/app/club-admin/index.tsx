@@ -231,7 +231,7 @@ export default function ClubAdmin() {
             ))}
           </View>
           <View style={{ marginTop: spacing.md }}>
-            <Button size="sm" label="C'est compris" icon="checkmark" variant="secondary" onPress={dismissGuide} full />
+            <Button size="sm" label="C’est compris" icon="checkmark" variant="secondary" onPress={dismissGuide} full />
           </View>
         </Card>
       ) : null}

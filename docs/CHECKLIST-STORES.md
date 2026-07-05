@@ -86,6 +86,8 @@ npx eas-cli submit --platform ios --profile production
       un compte club crée sa demande d'office, l'opérateur valide) — ⚠️ APRÈS la 55.
 - [ ] Coller **`supabase/57_match_1v1.sql`** (matchs ouverts à 2 joueurs en plus du 2v2) — ⚠️ APRÈS la 56.
 - [ ] Coller **`supabase/58_wave_paiement.sql`** (paiement Wave manuel des frais de tournoi) — ⚠️ APRÈS la 57.
+- [ ] Coller **`supabase/59_concurrency_hardening.sql`** (verrous anti-course : clôture de tournoi
+      et inscription — pas de double niveau ni de capacité dépassée) — ⚠️ APRÈS la 58.
 - [ ] Dans l'app, **Espace opérateur → Finances → coller ton lien de paiement Wave** (`pay.wave.com/…`)
       pour que les organisateurs de tournois puissent régler leurs frais.
 - [x] **Edge Function `notify-club`** → **Edit** → recoller tout `supabase/functions/notify-club/index.ts`

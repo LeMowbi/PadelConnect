@@ -245,7 +245,7 @@ export default function CoachAdmin() {
                   ) : l.status === 'cancelled' ? (
                     <Tag label="Annulé" tone="coral" />
                   ) : (
-                    <Tag label="Expirée" tone="neutral" />
+                    <Tag label="Expiré" tone="neutral" />
                   )}
                 </View>
               </View>
