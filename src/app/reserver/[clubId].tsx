@@ -19,7 +19,7 @@ import { openWhatsApp } from '@/lib/contact';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { courtsFor, freeCourts, hasFullDayCompetition, openSlotsFor, type AvailCtx } from '@/lib/availability';
 import { dateKeyLabel, nextDays, slotTimestamp } from '@/lib/days';
-import { fcfa, perPlayer, perPlayerOf } from '@/lib/format';
+import { fcfa, perPlayerOf } from '@/lib/format';
 import { minPrice, priceForSlot, priceTiersFor } from '@/lib/pricing';
 import { useTodayKey } from '@/lib/useTodayKey';
 import { useApp } from '@/store/AppContext';
@@ -67,9 +67,10 @@ export default function ReserverScreen() {
   // restantes deviennent rejoignables par les autres joueurs (« Matchs ouverts »).
   const [openMatch, setOpenMatch] = useState(false);
   const [openLevel, setOpenLevel] = useState('');
-  // Format d'un match ouvert : 4 = 2v2 (défaut), 2 = 1v1. Le 1v1 n'a qu'UNE place à côté
-  // du créateur → proposé seulement quand aucun ami n'est déjà invité (sinon déjà complet).
-  const [openFormat, setOpenFormat] = useState<2 | 4>(4);
+  // FORMAT du match, indépendant de la visibilité : 4 = 2v2 (défaut), 2 = 1v1. Un 1v1 comme un
+  // 2v2 peut rester PRIVÉ (toi + tes invités) ou être OUVERT (les places libres se rejoignent).
+  // Le format borne le nombre d'invités (1v1 = 1 invité max, 2v2 = 3).
+  const [format, setFormat] = useState<2 | 4>(4);
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [celebrate, setCelebrate] = useState(false); // confettis à l’écran de succès (motif amis.tsx)
@@ -157,21 +158,34 @@ export default function ReserverScreen() {
   const effectiveCourt = court ?? (day && slot && free.length > 0 ? free[0] : null);
 
   const participantCount = friendIds.length + extraNames.length;
-  // Type de match affiché en clair (Privé / Ouvert 1v1 / Ouvert 2v2). Dérivé de l'état
-  // existant (openMatch + openFormat). Le 1v1 n'est « ouvert 1v1 » que sans ami invité.
-  // Équipe complète (3 invités = 4 joueurs) : plus de place à ouvrir → on retombe sur « privé »
-  // pour l'affichage ET la confirmation (cohérent avec la garde openMatch du confirm ci-dessous),
-  // sans effacer l'intention `openMatch` (retirer un invité rouvre le choix « ouvert »).
-  const matchType: 'private' | 'open1v1' | 'open2v2' =
-    !openMatch || participantCount >= 3 ? 'private' : openFormat === 2 && participantCount === 0 ? 'open1v1' : 'open2v2';
+  // Nombre d'invités possible selon le format (1v1 = 1, 2v2 = 3) et places encore ouvrables.
+  const maxGuests = format === 2 ? 1 : 3;
+  const openable = participantCount < maxGuests; // reste au moins une place à faire rejoindre
+  // Un match n'est réellement « ouvert » que s'il reste une place : équipe complète → privé
+  // pour l'affichage ET la confirmation, sans effacer l'intention `openMatch` (retirer un
+  // invité, ou repasser en 2v2, rouvre le choix « ouvert »).
+  const effectiveOpen = openMatch && openable;
   const toggleFriend = (id: string) =>
-    setFriendIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : participantCount < 3 ? [...cur, id] : cur));
+    setFriendIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : participantCount < maxGuests ? [...cur, id] : cur));
   const addExtra = () => {
     const n = extraName.trim();
-    if (n.length < 2 || participantCount >= 3) return;
+    if (n.length < 2 || participantCount >= maxGuests) return;
     if (extraNames.includes(n)) return; // pas de doublon (clé de liste + retrait par nom)
     setExtraNames((cur) => [...cur, n]);
     setExtraName('');
+  };
+  // Choix du format : passer en 1v1 ne laisse qu'un invité — on garde le premier (ami en
+  // priorité) et on retire le surplus pour rester cohérent avec la capacité.
+  const selectFormat = (f: 2 | 4) => {
+    setFormat(f);
+    if (f === 2 && participantCount > 1) {
+      if (friendIds.length > 0) {
+        setFriendIds((cur) => cur.slice(0, 1));
+        setExtraNames([]);
+      } else {
+        setExtraNames((cur) => cur.slice(0, 1));
+      }
+    }
   };
 
   const ready = !!day && !!slot && !!effectiveCourt && !compToday;
@@ -193,8 +207,6 @@ export default function ReserverScreen() {
       ...state.friends.filter((f) => friendIds.includes(f.id)).map((f) => ({ id: f.id, name: f.name, confirmed: false })),
       ...extraNames.map((n, i) => ({ id: `x-${Date.now()}-${i}`, name: n, confirmed: false })),
     ];
-    // 1v1 (capacité 2) uniquement si personne n'est déjà invité — sinon on retombe sur le 2v2.
-    const openCap: 2 | 4 = invited.length >= 1 ? 4 : openFormat;
     const res = await addReservation({
       clubId: club.id,
       clubName: club.name,
@@ -206,10 +218,10 @@ export default function ReserverScreen() {
       price: priceForSlot(club, slot),
       players: 1 + invited.length,
       invited,
-      // Capacité : 1v1 (2) seulement sans ami déjà invité, sinon 2v2 (4). Match ouvert
-      // seulement s'il reste au moins une place à prendre (équipe déjà complète = inutile).
-      openCapacity: openCap,
-      openMatch: openMatch && invited.length < openCap - 1,
+      // Capacité = format choisi (2 = 1v1, 4 = 2v2). Match ouvert seulement s'il reste au
+      // moins une place à prendre (équipe déjà complète = inutile).
+      openCapacity: format,
+      openMatch: openMatch && invited.length < format - 1,
       openLevel: openMatch ? openLevel : '',
     });
     setSubmitting(false);
@@ -283,7 +295,7 @@ export default function ReserverScreen() {
             <Row label="Durée" value="1h30" />
             <Row label="Participants" value={`Toi${participantCount > 0 ? ` + ${participantCount}` : ''}`} />
             <Row label="Tarif (session 1h30)" value={fcfa(slotPrice)} />
-            <Row label="≈ par joueur (à 4)" value={perPlayer(slotPrice)} />
+            <Row label={`≈ par joueur (à ${format})`} value={perPlayerOf(slotPrice, format)} />
           </View>
           <View style={{ alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.lg }}>
             <Button label="Voir mes réservations" icon="calendar" onPress={() => router.push('/reservations')} full />
@@ -466,7 +478,7 @@ export default function ReserverScreen() {
           </Reveal>
         ) : null}
 
-        <Label text={`Avec qui ? (toi + ${participantCount}/3 — optionnel)`} />
+        <Label text={`Avec qui ? (toi + ${participantCount}/${maxGuests} — optionnel)`} />
         <View style={styles.wrap}>
           {state.friends.map((f) => (
             <Chip
@@ -496,7 +508,7 @@ export default function ReserverScreen() {
             </Txt>
           </Pressable>
         ) : null}
-        {participantCount < 3 ? (
+        {participantCount < maxGuests ? (
           <View style={styles.extraRow}>
             <TextInput
               value={extraName}
@@ -510,11 +522,26 @@ export default function ReserverScreen() {
           </View>
         ) : null}
 
-        {/* TYPE DE MATCH (choix clair) : Privé / Ouvert 1v1 / Ouvert 2v2. Un match « ouvert »
-            (modèle Playtomic) garde ton terrain bloqué, mais les places restantes deviennent
-            rejoignables depuis « Matchs ouverts ». Le 1v1 = 2 joueurs, seulement sans ami invité. */}
+        {/* FORMAT (1v1 = 2 joueurs / 2v2 = 4) puis TYPE (Privé / Ouvert), choisis séparément :
+            un 1v1 comme un 2v2 peut rester PRIVÉ (toi + tes invités) ou être OUVERT (modèle
+            Playtomic — ton terrain reste bloqué, les places restantes se rejoignent depuis
+            « Matchs ouverts »). L'option « Ouvert » disparaît quand l'équipe est déjà complète. */}
         {state.serverUserId ? (
           <>
+            <Txt variant="label" style={{ marginTop: spacing.md }}>
+              Format
+            </Txt>
+            <View style={[styles.wrap, { marginTop: spacing.sm }]}>
+              {(
+                [
+                  { f: 2, label: '1v1 · 2 joueurs' },
+                  { f: 4, label: '2v2 · 4 joueurs' },
+                ] as const
+              ).map((o) => (
+                <Chip key={o.f} label={o.label} active={format === o.f} onPress={() => selectFormat(o.f)} size="lg" />
+              ))}
+            </View>
+
             <Txt variant="label" style={{ marginTop: spacing.md }}>
               Type de match
             </Txt>
@@ -526,67 +553,55 @@ export default function ReserverScreen() {
                   title: 'Match privé',
                   sub: 'Juste toi et tes invités',
                   show: true,
+                  active: !effectiveOpen,
                   set: () => setOpenMatch(false),
                 },
                 {
-                  key: 'open1v1',
-                  icon: 'person' as const,
-                  title: 'Match ouvert · 1v1',
-                  sub: 'Un joueur inconnu te rejoint — 2 au total',
-                  show: participantCount === 0,
-                  set: () => {
-                    setOpenMatch(true);
-                    setOpenFormat(2);
-                  },
-                },
-                {
-                  key: 'open2v2',
+                  key: 'open',
                   icon: 'people' as const,
-                  title: 'Match ouvert · 2v2',
-                  sub: `${3 - participantCount} place${3 - participantCount > 1 ? 's' : ''} à prendre — 4 au total`,
-                  show: participantCount < 3,
-                  set: () => {
-                    setOpenMatch(true);
-                    setOpenFormat(4);
-                  },
+                  title: 'Match ouvert',
+                  sub:
+                    format === 2
+                      ? 'Un joueur inconnu te rejoint — 2 au total'
+                      : `${maxGuests - participantCount} place${maxGuests - participantCount > 1 ? 's' : ''} à prendre — 4 au total`,
+                  show: openable,
+                  active: effectiveOpen,
+                  set: () => setOpenMatch(true),
                 },
               ] as const
             )
               .filter((o) => o.show)
-              .map((o) => {
-                const active = matchType === o.key;
-                return (
-                  <Pressable
-                    key={o.key}
-                    onPress={o.set}
-                    style={[styles.openMatchBox, active && styles.openMatchBoxOn, active && shadows.e1, { marginTop: spacing.sm }]}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: active }}
-                    accessibilityLabel={o.title}
-                  >
-                    <IconCircle
-                      icon={o.icon}
-                      size={40}
-                      color={active ? colors.signature : colors.textMuted}
-                      bg={active ? colors.signatureSoft : colors.surfaceAlt}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Txt variant="body" style={{ fontWeight: '700' }}>
-                        {o.title}
-                      </Txt>
-                      <Txt variant="small" color={colors.textMuted}>
-                        {o.sub}
-                      </Txt>
-                    </View>
-                    <Ionicons
-                      name={active ? 'radio-button-on' : 'radio-button-off'}
-                      size={20}
-                      color={active ? colors.signature : colors.textFaint}
-                    />
-                  </Pressable>
-                );
-              })}
-            {matchType !== 'private' ? (
+              .map((o) => (
+                <Pressable
+                  key={o.key}
+                  onPress={o.set}
+                  style={[styles.openMatchBox, o.active && styles.openMatchBoxOn, o.active && shadows.e1, { marginTop: spacing.sm }]}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: o.active }}
+                  accessibilityLabel={o.title}
+                >
+                  <IconCircle
+                    icon={o.icon}
+                    size={40}
+                    color={o.active ? colors.signature : colors.textMuted}
+                    bg={o.active ? colors.signatureSoft : colors.surfaceAlt}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Txt variant="body" style={{ fontWeight: '700' }}>
+                      {o.title}
+                    </Txt>
+                    <Txt variant="small" color={colors.textMuted}>
+                      {o.sub}
+                    </Txt>
+                  </View>
+                  <Ionicons
+                    name={o.active ? 'radio-button-on' : 'radio-button-off'}
+                    size={20}
+                    color={o.active ? colors.signature : colors.textFaint}
+                  />
+                </Pressable>
+              ))}
+            {effectiveOpen ? (
               <>
                 <Txt variant="label" style={{ marginTop: spacing.md }}>
                   Niveau souhaité
@@ -610,7 +625,7 @@ export default function ReserverScreen() {
           <View>
             <Txt variant="muted">Tarif (session 1h30)</Txt>
             <Txt variant="small" color={colors.textFaint}>
-              soit ~{perPlayer(slotPrice)} / joueur à 4
+              soit ~{perPlayerOf(slotPrice, format)} / joueur à {format}
             </Txt>
           </View>
           <Txt variant="price">{slot ? fcfa(slotPrice) : `dès ${fcfa(slotPrice)}`}</Txt>

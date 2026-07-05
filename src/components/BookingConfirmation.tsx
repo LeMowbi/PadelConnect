@@ -8,7 +8,7 @@ import { useToast } from './Toast';
 import { Button, Txt } from './ui';
 import { addReservationToCalendar } from '@/lib/calendar';
 import { openWhatsApp } from '@/lib/contact';
-import { perPlayer } from '@/lib/format';
+import { perPlayerOf } from '@/lib/format';
 import { colors, gradients, radius, spacing } from '@/theme';
 
 // Écran de confirmation PLEIN ÉCRAN (handoff refonte) : dégradé vert, cercle blanc
@@ -56,7 +56,8 @@ export function BookingConfirmation({
 
   const notifyPartners = () => {
     const who = invitedNames.length ? `\nÉquipe : ${invitedNames.join(', ')}` : '';
-    const share = price ? `\nPrévois ${perPlayer(price)} chacun.` : '';
+    // Part sur l'effectif RÉEL (toi + invités) : diviser par 4 un match à 2 fausserait la part.
+    const share = price ? `\nPrévois ${perPlayerOf(price, 1 + invitedNames.length)} chacun.` : '';
     openWhatsApp(
       '',
       `On joue au padel ! 🎾\n${clubName} — ${dayLabel} à ${time} (session 1h30)\n${court}${who}${share}\nRéservé via PadelConnect.`,
