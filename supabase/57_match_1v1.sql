@@ -10,6 +10,9 @@ alter table public.reservations
 
 -- Matchs ouverts À VENIR avec au moins une place — places restantes = capacité − 1 (créateur)
 -- − joueurs déjà arrivés. On expose aussi open_capacity pour que l'app affiche « 1v1 »/« 2v2 ».
+-- La 45 renvoyait 11 colonnes ; on en ajoute une (capacity) → le TYPE DE RETOUR change,
+-- ce qu'un simple « create or replace » refuse (42P13). On DROP d'abord puis on recrée.
+drop function if exists public.fetch_open_matches();
 create or replace function public.fetch_open_matches()
 returns table (
   id uuid, club_id text, club_name text, date_key text, date_label text, "time" text, court text,
