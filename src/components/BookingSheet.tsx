@@ -380,7 +380,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
                                 return <Chip key={lv} label={lv} active={openLevel === value} onPress={() => setOpenLevel(value)} />;
                               })}
                             </View>
-                            <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                            <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
                               Ton terrain est bloqué quoi qu'il arrive. Les autres rejoignent depuis « Matchs ouverts » (tu es prévenu à
                               chaque arrivée). Le prix du terrain se partage entre les joueurs.
                             </Txt>

@@ -80,7 +80,7 @@ export default function Statistiques() {
     <Screen back title="Mes statistiques" subtitle="Ta progression, en vrai">
       {/* Classement — le vrai rang se gagne dans l'app (points), pas le niveau déclaré. */}
       <Reveal>
-        <Card style={{ marginTop: spacing.md, ...shadows.e1 }}>
+        <Card style={{ marginTop: spacing.md, ...shadows.e2 }}>
           <View style={styles.rankRow}>
             {/* Rang classé → pastille pleine signature (même « hero » que /classement) ; sinon
                 trophée ambré (non classé / indisponible), pour ne pas afficher un chiffre inventé. */}
