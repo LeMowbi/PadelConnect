@@ -316,13 +316,12 @@
     var texteTerrain = l === 'fr' ? 'terrain' : 'court';
     var texteDes = l === 'fr' ? 'dès' : 'from';
     var texteVoir = l === 'fr' ? 'Voir sur la carte ↗' : 'View on map ↗';
-    var texteVedette = l === 'fr' ? 'Club mis en avant' : 'Featured club';
 
+    // Padelta reste en tête (compareClubs) mais SANS badge « mis en avant » : discret (demande porteur).
     var triees = liveClubs.slice().sort(compareClubs);
     conteneur.innerHTML = triees
       .map(function (c) {
         var mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(c.mapsQuery);
-        var estVedette = c.id === FEATURED_CLUB_ID;
         var nbTerrains = c.courts + ' ' + (c.courts > 1 ? texteTerrains : texteTerrain);
         return (
           '<article class="carte-club reveal">' +
@@ -330,7 +329,6 @@
           couleurAccent(c.id) +
           ')">' +
           (c.partner ? '<span class="badge-partenaire">' + (l === 'fr' ? 'Partenaire' : 'Partner') + '</span>' : '') +
-          (estVedette ? '<span class="badge-featured">' + texteVedette + '</span>' : '') +
           c.icon +
           '</div>' +
           '<div class="club-corps">' +
