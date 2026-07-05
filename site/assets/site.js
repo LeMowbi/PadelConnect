@@ -256,6 +256,17 @@
     },
   ];
 
+  // Les 9 fondateurs portent le badge « Partenaire ». Les clubs qui rejoignent
+  // ensuite (via l'app, validés par l'opérateur) n'en ont pas.
+  CLUBS.forEach(function (c) {
+    c.partner = true;
+  });
+
+  // Liste RÉELLEMENT affichée : d'abord les fondateurs (statiques), puis complétée
+  // EN DIRECT depuis la base par loadServerClubs(). Un échec réseau garde les fondateurs.
+  var liveClubs = CLUBS.slice();
+  var currentLang = getLang();
+
   // Même comparateur que compareClubs (data/clubs.ts) : le club mis en avant
   // d'abord, puis ordre alphabétique — jamais de « classement » des clubs.
   function compareClubs(a, b) {
@@ -277,17 +288,37 @@
     return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' FCFA';
   }
 
+  // Échappe le HTML : les clubs venant de la base portent des noms/quartiers SAISIS
+  // par les gérants → on ne les injecte JAMAIS bruts dans le DOM (anti-injection).
+  function esc(s) {
+    return (s == null ? '' : String(s))
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Type serveur ('Couvert'/'Extérieur'/'Mixte') → clé locale ('couvert'/'exterieur'/'mixte').
+  function normType(t) {
+    var s = (t || '').toString().toLowerCase();
+    if (s.indexOf('couv') === 0) return 'couvert';
+    if (s.indexOf('ext') === 0) return 'exterieur';
+    return 'mixte';
+  }
+
   window.renderClubs = function renderClubs(lang) {
     var conteneur = document.getElementById('grille-clubs');
     if (!conteneur) return;
     var l = lang === 'en' ? 'en' : 'fr';
+    currentLang = l;
     var texteTerrains = l === 'fr' ? 'terrains' : 'courts';
     var texteTerrain = l === 'fr' ? 'terrain' : 'court';
     var texteDes = l === 'fr' ? 'dès' : 'from';
     var texteVoir = l === 'fr' ? 'Voir sur la carte ↗' : 'View on map ↗';
     var texteVedette = l === 'fr' ? 'Club mis en avant' : 'Featured club';
 
-    var triees = CLUBS.slice().sort(compareClubs);
+    var triees = liveClubs.slice().sort(compareClubs);
     conteneur.innerHTML = triees
       .map(function (c) {
         var mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(c.mapsQuery);
@@ -298,19 +329,17 @@
           '<div class="club-visuel" style="background:linear-gradient(155deg,' +
           couleurAccent(c.id) +
           ')">' +
-          '<span class="badge-partenaire">' +
-          (l === 'fr' ? 'Partenaire' : 'Partner') +
-          '</span>' +
+          (c.partner ? '<span class="badge-partenaire">' + (l === 'fr' ? 'Partenaire' : 'Partner') + '</span>' : '') +
           (estVedette ? '<span class="badge-featured">' + texteVedette + '</span>' : '') +
           c.icon +
           '</div>' +
           '<div class="club-corps">' +
           '<h3>' +
-          c.name +
+          esc(c.name) +
           '</h3>' +
           '<div class="club-meta">' +
           '<span class="club-puce">' +
-          c.area +
+          esc(c.area) +
           '</span>' +
           '<span class="club-puce">' +
           TYPE_LABEL[c.type][l] +
@@ -320,7 +349,7 @@
           '</span>' +
           '</div>' +
           '<p class="club-blurb">' +
-          c.blurb[l] +
+          esc(c.blurb[l]) +
           '</p>' +
           '<div class="club-pied">' +
           '<span class="club-prix">' +
@@ -353,6 +382,89 @@
   }
 
   // ------------------------------------------------------------------------
+  // 5) Clubs EN DIRECT depuis la base (Supabase). Le site affiche les 9 fondateurs
+  //    + tout club ajouté/validé dans l'app, et applique les modifications faites
+  //    dans l'Espace opérateur (renommage, quartier, tarif). Lecture publique
+  //    (RLS), clé « publishable » PUBLIQUE par conception. Un échec réseau garde
+  //    simplement les 9 fondateurs — la page ne casse jamais.
+  // ------------------------------------------------------------------------
+
+  var SUPA_URL = 'https://bqeoqcqvqrqcrvkccxij.supabase.co';
+  var SUPA_KEY = 'sb_publishable_n2_mCCNviA-fbtpSZiz2ew_mnEqGeG_';
+
+  function supaGet(path) {
+    return fetch(SUPA_URL + '/rest/v1/' + path, {
+      headers: { apikey: SUPA_KEY, Authorization: 'Bearer ' + SUPA_KEY },
+    })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      })
+      .catch(function () {
+        return null;
+      });
+  }
+
+  function loadServerClubs() {
+    Promise.all([
+      // Clubs AJOUTÉS via l'app (actifs). Les 9 fondateurs, eux, sont embarqués ci-dessus.
+      supaGet('clubs?select=id,name,area,type,courts,price_from&status=eq.active'),
+      // Surcharges de fiche (renommage, quartier, tarif) — vaut pour fondateurs ET nouveaux.
+      supaGet('club_overrides?select=club_id,name,area,type,price_from'),
+    ]).then(function (res) {
+      var serverClubs = res[0];
+      var overrides = res[1];
+      if (!serverClubs && !overrides) return; // échec total → on garde les fondateurs statiques
+      var ovById = {};
+      (overrides || []).forEach(function (o) {
+        ovById[o.club_id] = o;
+      });
+
+      // 1) Fondateurs, avec les modifications de l'opérateur appliquées.
+      var founders = CLUBS.map(function (c) {
+        var o = ovById[c.id];
+        if (!o) return c;
+        return {
+          id: c.id,
+          name: o.name || c.name,
+          area: o.area || c.area,
+          type: o.type ? normType(o.type) : c.type,
+          courts: c.courts,
+          priceFrom: o.price_from || c.priceFrom,
+          mapsQuery: c.mapsQuery,
+          icon: c.icon,
+          blurb: c.blurb,
+          partner: true,
+        };
+      });
+
+      // 2) Nouveaux clubs (rejoints via l'app), surcharges appliquées, sans badge Partenaire.
+      var extra = (serverClubs || []).map(function (r) {
+        var o = ovById[r.id] || {};
+        var name = o.name || r.name || 'Club';
+        var area = o.area || r.area || 'Abidjan';
+        return {
+          id: r.id,
+          name: name,
+          area: area,
+          type: normType(o.type || r.type),
+          courts: r.courts || 1,
+          priceFrom: o.price_from || r.price_from || 10000,
+          mapsQuery: name + ' ' + area + ' Abidjan',
+          icon: '🎾',
+          blurb: {
+            fr: 'Club de padel à ' + area + ', réservable sur PadelConnect.',
+            en: 'Padel club in ' + area + ', bookable on PadelConnect.',
+          },
+          partner: false,
+        };
+      });
+
+      liveClubs = founders.concat(extra);
+      renderClubs(currentLang);
+    });
+  }
+
+  // ------------------------------------------------------------------------
   // Initialisation
   // ------------------------------------------------------------------------
 
@@ -360,5 +472,6 @@
     initMenuMobile();
     initLangToggle(); // applique aussi renderClubs() si la grille est présente
     initReveal();
+    loadServerClubs(); // complète la grille avec les vrais clubs de la base
   });
 })();
