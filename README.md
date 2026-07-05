@@ -95,5 +95,6 @@ docs/                      # guides opérateur (push, serveur, App Store, Univer
 
 - **CLAUDE.md** — mémoire du projet : règles, architecture, feuille de route, état serveur.
 - **docs/** — guides cliquables pour l'opérateur (sans terminal) : push, serveur, App Store.
-- **[STRATEGIE.md](./STRATEGIE.md)** / **[GUIDE-LANCEMENT.md](./GUIDE-LANCEMENT.md)** — stratégie
-  et lancement ; **kit/** — supports de présentation aux clubs.
+- **kit/** — supports de présentation aux clubs. Les anciens docs de la phase prototype
+  (stratégie, lancement, handoff…) sont archivés dans **docs/archive/** (historique — voir CLAUDE.md
+  pour l'état réel).
