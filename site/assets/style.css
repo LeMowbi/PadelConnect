@@ -684,14 +684,6 @@ section {
   font-size: 14px;
 }
 
-.bloc-commission {
-  text-align: center;
-  color: var(--texte-faint);
-  font-size: 13.5px;
-  max-width: 620px;
-  margin: 0 auto 28px;
-}
-
 .cta-club {
   text-align: center;
   display: flex;
