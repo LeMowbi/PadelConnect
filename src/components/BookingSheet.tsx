@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BookingConfirmation } from './BookingConfirmation';
 import { Chip } from './Chip';
 import { Reveal } from './Reveal';
 import { useToast } from './Toast';
-import { Button, Txt } from './ui';
+import { Button, IconCircle, Txt } from './ui';
 import { hapticWarning } from '@/lib/haptics';
 import { activeClubs, type Club } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
@@ -61,10 +61,20 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
   const [friendIds, setFriendIds] = useState<string[]>([]);
   const [extraNames, setExtraNames] = useState<string[]>([]);
   const [extraName, setExtraName] = useState('');
+  // Match OUVERT (45, modèle Playtomic) : le terrain est bloqué normalement, les places restantes
+  // deviennent rejoignables (« Matchs ouverts »). Format 4 = 2v2 (défaut), 2 = 1v1. MÊME logique
+  // que la fiche club (reserver/[clubId].tsx) — la réservation rapide l'offre désormais aussi.
+  const [openMatch, setOpenMatch] = useState(false);
+  const [openLevel, setOpenLevel] = useState('');
+  const [openFormat, setOpenFormat] = useState<2 | 4>(4);
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false); // attente de la confirmation serveur
 
   const participantCount = friendIds.length + extraNames.length;
+  // Type de match affiché en clair (Privé / Ouvert 1v1 / Ouvert 2v2). Le 1v1 n'est proposé que
+  // sans invité ; équipe complète (3 invités) → on retombe sur « privé » (aucune place à ouvrir).
+  const matchType: 'private' | 'open1v1' | 'open2v2' =
+    !openMatch || participantCount >= 3 ? 'private' : openFormat === 2 && participantCount === 0 ? 'open1v1' : 'open2v2';
   const toggleFriend = (id: string) =>
     setFriendIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : participantCount < 3 ? [...cur, id] : cur));
   const addExtra = () => {
@@ -87,6 +97,8 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
       ...state.friends.filter((f) => friendIds.includes(f.id)).map((f) => ({ id: f.id, name: f.name, confirmed: false })),
       ...extraNames.map((n, i) => ({ id: `x-${Date.now()}-${i}`, name: n, confirmed: false })),
     ];
+    // 1v1 (capacité 2) uniquement si personne n'est déjà invité — sinon on retombe sur le 2v2.
+    const openCap: 2 | 4 = invited.length >= 1 ? 4 : openFormat;
     const res = await addReservation({
       clubId: club.id,
       clubName: club.name,
@@ -98,6 +110,10 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
       price,
       players: 1 + invited.length,
       invited,
+      // Match ouvert seulement s'il reste au moins une place à prendre (équipe déjà complète = inutile).
+      openCapacity: openCap,
+      openMatch: openMatch && invited.length < openCap - 1,
+      openLevel: openMatch ? openLevel : '',
     });
     setSubmitting(false);
     if (res.ok) {
@@ -170,125 +186,232 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
         <View style={[styles.sheet, { paddingBottom: spacing.xxl + insets.bottom }]}>
           <View style={styles.handle} />
 
-          {
-            // Contenu en fondu doux (même langage que Reveal ailleurs) après le slide-up natif.
-            <Reveal>
-              <View style={styles.head}>
-                <View style={{ flex: 1 }}>
-                  <Txt variant="h2" style={{ fontSize: 20 }} numberOfLines={1}>
-                    {club.name}
-                  </Txt>
-                  <Txt variant="muted">
-                    {day.label} · {time} · 1h30 · {fcfa(price)} la session
-                  </Txt>
+          {/* Contenu DÉFILABLE (même protection que BottomSheet) : le sélecteur « Type de match »
+              allonge la feuille — sans scroll, le haut (terrain, invités) sortirait de l'écran sur
+              petit iPhone et le clavier masquerait le bouton. */}
+          <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 520 }} keyboardShouldPersistTaps="handled">
+            {
+              // Contenu en fondu doux (même langage que Reveal ailleurs) après le slide-up natif.
+              <Reveal>
+                <View style={styles.head}>
+                  <View style={{ flex: 1 }}>
+                    <Txt variant="h2" style={{ fontSize: 20 }} numberOfLines={1}>
+                      {club.name}
+                    </Txt>
+                    <Txt variant="muted">
+                      {day.label} · {time} · 1h30 · {fcfa(price)} la session
+                    </Txt>
+                  </View>
+                  <Pressable onPress={onClose} hitSlop={8} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Fermer">
+                    <Ionicons name="close" size={20} color={colors.textMuted} />
+                  </Pressable>
                 </View>
-                <Pressable onPress={onClose} hitSlop={8} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Fermer">
-                  <Ionicons name="close" size={20} color={colors.textMuted} />
-                </Pressable>
-              </View>
 
-              <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
-                TERRAIN
-              </Txt>
-              {free.length === 0 ? (
-                <View style={styles.empty}>
-                  <Ionicons name="time-outline" size={22} color={colors.textMuted} />
-                  <Txt variant="muted" style={{ flex: 1 }}>
-                    Plus aucun terrain libre à cet horaire. Essaie un autre créneau ou un autre club.
-                  </Txt>
-                </View>
-              ) : (
-                <View style={styles.row}>
-                  {free.map((c) => (
-                    <Chip key={c} label={c} active={c === court} onPress={() => setCourt(c)} size="lg" />
-                  ))}
-                </View>
-              )}
-
-              {free.length === 0 ? (
-                <View style={{ marginTop: spacing.lg }}>
-                  <Button label="Voir d’autres créneaux" icon="calendar" variant="secondary" onPress={onClose} full />
-                </View>
-              ) : (
-                <>
-                  <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
-                    AVEC QUI ? (TOI + {participantCount}/3)
-                  </Txt>
+                <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+                  TERRAIN
+                </Txt>
+                {free.length === 0 ? (
+                  <View style={styles.empty}>
+                    <Ionicons name="time-outline" size={22} color={colors.textMuted} />
+                    <Txt variant="muted" style={{ flex: 1 }}>
+                      Plus aucun terrain libre à cet horaire. Essaie un autre créneau ou un autre club.
+                    </Txt>
+                  </View>
+                ) : (
                   <View style={styles.row}>
-                    {state.friends.map((f) => (
-                      <Chip
-                        key={f.id}
-                        label={f.name}
-                        icon={friendIds.includes(f.id) ? 'checkmark' : 'person-add'}
-                        active={friendIds.includes(f.id)}
-                        onPress={() => toggleFriend(f.id)}
-                      />
-                    ))}
-                    {extraNames.map((n) => (
-                      <Chip key={n} label={n} icon="checkmark" active onPress={() => setExtraNames((cur) => cur.filter((x) => x !== n))} />
+                    {free.map((c) => (
+                      <Chip key={c} label={c} active={c === court} onPress={() => setCourt(c)} size="lg" />
                     ))}
                   </View>
-                  {/* Tout nouveau joueur (0 ami) : on l’amorce vers l’ajout d’amis au moment le
-                      plus pertinent — le padel se joue à 4. */}
-                  {state.friends.length === 0 ? (
-                    <Pressable
-                      onPress={() => {
-                        onClose();
-                        router.push('/amis');
-                      }}
-                      style={styles.inviteLink}
-                      accessibilityRole="button"
-                      accessibilityLabel="Inviter un ami sur PadelConnect"
-                    >
-                      <Ionicons name="person-add-outline" size={14} color={colors.signature} />
-                      <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
-                        Invite tes amis sur PadelConnect pour les ajouter ici
-                      </Txt>
-                    </Pressable>
-                  ) : null}
-                  {participantCount < 3 ? (
-                    <View style={styles.extraRow}>
-                      <TextInput
-                        value={extraName}
-                        onChangeText={setExtraName}
-                        placeholder="Ou un autre nom…"
-                        placeholderTextColor={colors.textMuted}
-                        style={styles.extraInput}
-                        onSubmitEditing={addExtra}
-                      />
-                      <Button
-                        size="sm"
-                        label="Ajouter"
-                        icon="add"
-                        variant="secondary"
-                        onPress={addExtra}
-                        disabled={extraName.trim().length < 2}
-                      />
+                )}
+
+                {free.length === 0 ? (
+                  <View style={{ marginTop: spacing.lg }}>
+                    <Button label="Voir d’autres créneaux" icon="calendar" variant="secondary" onPress={onClose} full />
+                  </View>
+                ) : (
+                  <>
+                    <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+                      AVEC QUI ? (TOI + {participantCount}/3)
+                    </Txt>
+                    <View style={styles.row}>
+                      {state.friends.map((f) => (
+                        <Chip
+                          key={f.id}
+                          label={f.name}
+                          icon={friendIds.includes(f.id) ? 'checkmark' : 'person-add'}
+                          active={friendIds.includes(f.id)}
+                          onPress={() => toggleFriend(f.id)}
+                        />
+                      ))}
+                      {extraNames.map((n) => (
+                        <Chip
+                          key={n}
+                          label={n}
+                          icon="checkmark"
+                          active
+                          onPress={() => setExtraNames((cur) => cur.filter((x) => x !== n))}
+                        />
+                      ))}
                     </View>
-                  ) : null}
+                    {/* Tout nouveau joueur (0 ami) : on l’amorce vers l’ajout d’amis au moment le
+                      plus pertinent — le padel se joue à 4. */}
+                    {state.friends.length === 0 ? (
+                      <Pressable
+                        onPress={() => {
+                          onClose();
+                          router.push('/amis');
+                        }}
+                        style={styles.inviteLink}
+                        accessibilityRole="button"
+                        accessibilityLabel="Inviter un ami sur PadelConnect"
+                      >
+                        <Ionicons name="person-add-outline" size={14} color={colors.signature} />
+                        <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
+                          Invite tes amis sur PadelConnect pour les ajouter ici
+                        </Txt>
+                      </Pressable>
+                    ) : null}
+                    {participantCount < 3 ? (
+                      <View style={styles.extraRow}>
+                        <TextInput
+                          value={extraName}
+                          onChangeText={setExtraName}
+                          placeholder="Ou un autre nom…"
+                          placeholderTextColor={colors.textMuted}
+                          style={styles.extraInput}
+                          onSubmitEditing={addExtra}
+                        />
+                        <Button
+                          size="sm"
+                          label="Ajouter"
+                          icon="add"
+                          variant="secondary"
+                          onPress={addExtra}
+                          disabled={extraName.trim().length < 2}
+                        />
+                      </View>
+                    ) : null}
 
-                  <View style={styles.priceLine}>
-                    <Txt variant="small" color={colors.textMuted}>
-                      {fcfa(price)} la session · soit ~{perPlayer(price)}/joueur à 4
-                    </Txt>
-                  </View>
+                    {/* TYPE DE MATCH (Privé / Ouvert 1v1 / Ouvert 2v2) — même choix clair que la
+                      fiche club. Un match ouvert garde ton terrain bloqué, les places restantes
+                      deviennent rejoignables depuis « Matchs ouverts ». */}
+                    {state.serverUserId ? (
+                      <>
+                        <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.lg }}>
+                          TYPE DE MATCH
+                        </Txt>
+                        {(
+                          [
+                            {
+                              key: 'private',
+                              icon: 'lock-closed' as const,
+                              title: 'Match privé',
+                              sub: 'Juste toi et tes invités',
+                              show: true,
+                              set: () => setOpenMatch(false),
+                            },
+                            {
+                              key: 'open1v1',
+                              icon: 'person' as const,
+                              title: 'Match ouvert · 1v1',
+                              sub: 'Un joueur inconnu te rejoint — 2 au total',
+                              show: participantCount === 0,
+                              set: () => {
+                                setOpenMatch(true);
+                                setOpenFormat(2);
+                              },
+                            },
+                            {
+                              key: 'open2v2',
+                              icon: 'people' as const,
+                              title: 'Match ouvert · 2v2',
+                              sub: `${3 - participantCount} place${3 - participantCount > 1 ? 's' : ''} à prendre — 4 au total`,
+                              show: participantCount < 3,
+                              set: () => {
+                                setOpenMatch(true);
+                                setOpenFormat(4);
+                              },
+                            },
+                          ] as const
+                        )
+                          .filter((o) => o.show)
+                          .map((o) => {
+                            const active = matchType === o.key;
+                            return (
+                              <Pressable
+                                key={o.key}
+                                onPress={o.set}
+                                style={[styles.openMatchBox, active && styles.openMatchBoxOn, active && shadows.e1]}
+                                accessibilityRole="radio"
+                                accessibilityState={{ selected: active }}
+                                accessibilityLabel={o.title}
+                              >
+                                <IconCircle
+                                  icon={o.icon}
+                                  size={40}
+                                  color={active ? colors.signature : colors.textMuted}
+                                  bg={active ? colors.signatureSoft : colors.surfaceAlt}
+                                />
+                                <View style={{ flex: 1 }}>
+                                  <Txt variant="body" style={{ fontWeight: '700' }}>
+                                    {o.title}
+                                  </Txt>
+                                  <Txt variant="small" color={colors.textMuted}>
+                                    {o.sub}
+                                  </Txt>
+                                </View>
+                                <Ionicons
+                                  name={active ? 'radio-button-on' : 'radio-button-off'}
+                                  size={20}
+                                  color={active ? colors.signature : colors.textFaint}
+                                />
+                              </Pressable>
+                            );
+                          })}
+                        {matchType !== 'private' ? (
+                          <>
+                            <Txt variant="label" color={colors.textFaint} style={{ marginTop: spacing.md }}>
+                              NIVEAU SOUHAITÉ
+                            </Txt>
+                            <View style={styles.row}>
+                              {['Tous niveaux', '2–3', '3–4', '4–5', '5+'].map((lv) => {
+                                const value = lv === 'Tous niveaux' ? '' : lv;
+                                return <Chip key={lv} label={lv} active={openLevel === value} onPress={() => setOpenLevel(value)} />;
+                              })}
+                            </View>
+                            <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                              Ton terrain est bloqué quoi qu'il arrive. Les autres rejoignent depuis « Matchs ouverts » (tu es prévenu à
+                              chaque arrivée). Le prix du terrain se partage entre les joueurs.
+                            </Txt>
+                          </>
+                        ) : null}
+                      </>
+                    ) : null}
 
-                  <View style={{ marginTop: spacing.md }}>
-                    <Button
-                      label={submitting ? 'Réservation…' : 'Réserver le terrain'}
-                      icon="checkmark"
-                      onPress={confirm}
-                      disabled={!court || submitting}
-                      full
-                    />
-                    <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
-                      Session de 1h30 · sans paiement en ligne — réglé au club. Annulation jusqu’à 5h avant.
-                    </Txt>
-                  </View>
-                </>
-              )}
-            </Reveal>
-          }
+                    <View style={styles.priceLine}>
+                      <Txt variant="small" color={colors.textMuted}>
+                        {fcfa(price)} la session · soit ~{perPlayer(price)}/joueur à 4
+                      </Txt>
+                    </View>
+
+                    <View style={{ marginTop: spacing.md }}>
+                      <Button
+                        label={submitting ? 'Réservation…' : 'Réserver le terrain'}
+                        icon="checkmark"
+                        onPress={confirm}
+                        disabled={!court || submitting}
+                        full
+                      />
+                      <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
+                        Session de 1h30 · sans paiement en ligne — réglé au club. Annulation jusqu’à 5h avant.
+                      </Txt>
+                    </View>
+                  </>
+                )}
+              </Reveal>
+            }
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -339,6 +462,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  openMatchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  openMatchBoxOn: { borderColor: colors.signature, backgroundColor: colors.signatureSoft },
   extraRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
   inviteLink: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm, paddingVertical: spacing.xs },
   extraInput: {
