@@ -150,6 +150,13 @@ export default function ReserverScreen() {
   const effectiveCourt = court ?? (day && slot && free.length > 0 ? free[0] : null);
 
   const participantCount = friendIds.length + extraNames.length;
+  // Type de match affiché en clair (Privé / Ouvert 1v1 / Ouvert 2v2). Dérivé de l'état
+  // existant (openMatch + openFormat). Le 1v1 n'est « ouvert 1v1 » que sans ami invité.
+  const matchType: 'private' | 'open1v1' | 'open2v2' = !openMatch
+    ? 'private'
+    : openFormat === 2 && participantCount === 0
+      ? 'open1v1'
+      : 'open2v2';
   const toggleFriend = (id: string) =>
     setFriendIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : participantCount < 3 ? [...cur, id] : cur));
   const addExtra = () => {
@@ -496,47 +503,90 @@ export default function ReserverScreen() {
           </View>
         ) : null}
 
-        {/* Match OUVERT (modèle Playtomic) : il manque des joueurs → n'importe qui peut
-            rejoindre les places restantes depuis « Matchs ouverts ». Le terrain est bloqué
-            quoi qu'il arrive — s'il ne se remplit pas, la réservation reste normale. */}
-        {participantCount < 3 && state.serverUserId ? (
-          <Pressable
-            onPress={() => setOpenMatch((v) => !v)}
-            style={[styles.openMatchBox, openMatch && styles.openMatchBoxOn]}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: openMatch }}
-            accessibilityLabel="Ouvrir ce match aux autres joueurs"
-          >
-            <Ionicons name={openMatch ? 'radio-button-on' : 'radio-button-off'} size={20} color={colors.signature} />
-            <View style={{ flex: 1 }}>
-              <Txt variant="body" style={{ fontWeight: '700' }}>
-                Ouvrir ce match aux autres joueurs
-              </Txt>
-              <Txt variant="small" color={colors.textMuted}>
-                Ton terrain reste bloqué — les places restantes deviennent rejoignables (tu es prévenu à chaque arrivée).
-              </Txt>
-            </View>
-          </Pressable>
-        ) : null}
-        {openMatch && participantCount < 3 ? (
+        {/* TYPE DE MATCH (choix clair) : Privé / Ouvert 1v1 / Ouvert 2v2. Un match « ouvert »
+            (modèle Playtomic) garde ton terrain bloqué, mais les places restantes deviennent
+            rejoignables depuis « Matchs ouverts ». Le 1v1 = 2 joueurs, seulement sans ami invité. */}
+        {state.serverUserId ? (
           <>
-            {/* Format : 1v1 (2 joueurs) proposé seulement sans ami déjà invité — sinon 2v2. */}
             <Txt variant="label" style={{ marginTop: spacing.md }}>
-              Format
+              Type de match
             </Txt>
-            <View style={[styles.wrap, { marginTop: spacing.sm }]}>
-              {participantCount === 0 ? <Chip label="1v1 · 2 joueurs" active={openFormat === 2} onPress={() => setOpenFormat(2)} /> : null}
-              <Chip label="2v2 · 4 joueurs" active={openFormat === 4 || participantCount > 0} onPress={() => setOpenFormat(4)} />
-            </View>
-            <Txt variant="label" style={{ marginTop: spacing.md }}>
-              Niveau souhaité
-            </Txt>
-            <View style={[styles.wrap, { marginTop: spacing.sm }]}>
-              {['Tous niveaux', '2–3', '3–4', '4–5', '5+'].map((lv) => {
-                const value = lv === 'Tous niveaux' ? '' : lv;
-                return <Chip key={lv} label={lv} active={openLevel === value} onPress={() => setOpenLevel(value)} />;
+            {(
+              [
+                {
+                  key: 'private',
+                  icon: 'lock-closed' as const,
+                  title: 'Match privé',
+                  sub: 'Juste toi et tes invités',
+                  show: true,
+                  set: () => setOpenMatch(false),
+                },
+                {
+                  key: 'open1v1',
+                  icon: 'person' as const,
+                  title: 'Match ouvert · 1v1',
+                  sub: 'Un joueur inconnu te rejoint — 2 au total',
+                  show: participantCount === 0,
+                  set: () => {
+                    setOpenMatch(true);
+                    setOpenFormat(2);
+                  },
+                },
+                {
+                  key: 'open2v2',
+                  icon: 'people' as const,
+                  title: 'Match ouvert · 2v2',
+                  sub: `${3 - participantCount} place${3 - participantCount > 1 ? 's' : ''} à prendre — 4 au total`,
+                  show: participantCount < 3,
+                  set: () => {
+                    setOpenMatch(true);
+                    setOpenFormat(4);
+                  },
+                },
+              ] as const
+            )
+              .filter((o) => o.show)
+              .map((o) => {
+                const active = matchType === o.key;
+                return (
+                  <Pressable
+                    key={o.key}
+                    onPress={o.set}
+                    style={[styles.openMatchBox, active && styles.openMatchBoxOn, { marginTop: spacing.sm }]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={o.title}
+                  >
+                    <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={20} color={colors.signature} />
+                    <Ionicons name={o.icon} size={18} color={active ? colors.signature : colors.textMuted} />
+                    <View style={{ flex: 1 }}>
+                      <Txt variant="body" style={{ fontWeight: '700' }}>
+                        {o.title}
+                      </Txt>
+                      <Txt variant="small" color={colors.textMuted}>
+                        {o.sub}
+                      </Txt>
+                    </View>
+                  </Pressable>
+                );
               })}
-            </View>
+            {openMatch ? (
+              <>
+                <Txt variant="label" style={{ marginTop: spacing.md }}>
+                  Niveau souhaité
+                </Txt>
+                <View style={[styles.wrap, { marginTop: spacing.sm }]}>
+                  {['Tous niveaux', '2–3', '3–4', '4–5', '5+'].map((lv) => {
+                    const value = lv === 'Tous niveaux' ? '' : lv;
+                    return <Chip key={lv} label={lv} active={openLevel === value} onPress={() => setOpenLevel(value)} />;
+                  })}
+                </View>
+                <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                  Ton terrain est bloqué quoi qu'il arrive. Les autres rejoignent depuis « Matchs ouverts » (tu es prévenu à chaque
+                  arrivée). Le prix du terrain se partage entre les joueurs.
+                </Txt>
+              </>
+            ) : null}
           </>
         ) : null}
 
