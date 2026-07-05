@@ -53,12 +53,13 @@ export default function Statistiques() {
         setMatchWins(null);
         return;
       }
-      // `fetchLeaderboard(100)` ne renvoie que le TOP 100 : un joueur classé au-delà a un vrai
-      // rang (fetchMyRank, sans limite) mais n'est pas dans ce lot. On laisse alors points/victoires
-      // à null (= « — », valeur inconnue) plutôt que d'afficher un faux 0 qui contredirait son rang.
+      // `fetchLeaderboard(100)` ne renvoie que le TOP 100. Trois cas pour un joueur ABSENT du lot :
+      //  • rang 0 (serveur : « non classé ») → il a réellement 0 point / 0 victoire → on affiche 0 ;
+      //  • rang > 0 (classé au-delà du top 100) → valeur INCONNUE → « — » (on n'invente pas) ;
+      //  • rang null (échec réseau) → « — » aussi.
       const mine = state.serverUserId ? board.find((row) => row.userId === state.serverUserId) : undefined;
-      setPoints(mine ? mine.points : null);
-      setMatchWins(mine ? mine.matchWins : null);
+      setPoints(mine ? mine.points : r === 0 ? 0 : null);
+      setMatchWins(mine ? mine.matchWins : r === 0 ? 0 : null);
     })();
     return () => {
       alive.current = false;
