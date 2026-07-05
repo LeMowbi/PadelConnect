@@ -338,6 +338,7 @@
           esc(c.name) +
           '</h3>' +
           '<div class="club-meta">' +
+          (c.comingSoon ? '<span class="club-puce">' + (l === 'fr' ? '🔜 Bientôt' : '🔜 Soon') + '</span>' : '') +
           '<span class="club-puce">' +
           esc(c.area) +
           '</span>' +
@@ -410,54 +411,70 @@
       supaGet('clubs?select=id,name,area,type,courts,price_from&status=eq.active'),
       // Surcharges de fiche (renommage, quartier, tarif) — vaut pour fondateurs ET nouveaux.
       supaGet('club_overrides?select=club_id,name,area,type,price_from'),
+      // Statut piloté par l'opérateur (masqué / bientôt / actif) — vaut aussi pour les fondateurs.
+      supaGet('club_status?select=club_id,status'),
     ]).then(function (res) {
       var serverClubs = res[0];
       var overrides = res[1];
-      if (!serverClubs && !overrides) return; // échec total → on garde les fondateurs statiques
+      var statuses = res[2];
+      if (!serverClubs && !overrides && !statuses) return; // échec total → on garde les fondateurs
       var ovById = {};
       (overrides || []).forEach(function (o) {
         ovById[o.club_id] = o;
       });
+      var statusById = {};
+      (statuses || []).forEach(function (s) {
+        statusById[s.club_id] = s.status;
+      });
 
-      // 1) Fondateurs, avec les modifications de l'opérateur appliquées.
-      var founders = CLUBS.map(function (c) {
+      // 1) Fondateurs : on RETIRE ceux masqués par l'opérateur (statut 'hidden'), on marque
+      //    « Bientôt » ceux en 'coming_soon', et on applique les modifications de fiche.
+      var founders = CLUBS.filter(function (c) {
+        return statusById[c.id] !== 'hidden';
+      }).map(function (c) {
         var o = ovById[c.id];
-        if (!o) return c;
         return {
           id: c.id,
-          name: o.name || c.name,
-          area: o.area || c.area,
-          type: o.type ? normType(o.type) : c.type,
+          name: (o && o.name) || c.name,
+          area: (o && o.area) || c.area,
+          type: o && o.type ? normType(o.type) : c.type,
           courts: c.courts,
-          priceFrom: o.price_from || c.priceFrom,
+          priceFrom: (o && o.price_from) || c.priceFrom,
           mapsQuery: c.mapsQuery,
           icon: c.icon,
           blurb: c.blurb,
           partner: true,
+          comingSoon: statusById[c.id] === 'coming_soon',
         };
       });
 
       // 2) Nouveaux clubs (rejoints via l'app), surcharges appliquées, sans badge Partenaire.
-      var extra = (serverClubs || []).map(function (r) {
-        var o = ovById[r.id] || {};
-        var name = o.name || r.name || 'Club';
-        var area = o.area || r.area || 'Abidjan';
-        return {
-          id: r.id,
-          name: name,
-          area: area,
-          type: normType(o.type || r.type),
-          courts: r.courts || 1,
-          priceFrom: o.price_from || r.price_from || 10000,
-          mapsQuery: name + ' ' + area + ' Abidjan',
-          icon: '🎾',
-          blurb: {
-            fr: 'Club de padel à ' + area + ', réservable sur PadelConnect.',
-            en: 'Padel club in ' + area + ', bookable on PadelConnect.',
-          },
-          partner: false,
-        };
-      });
+      //    Déjà filtrés « actifs » par la requête ; on retire aussi tout 'hidden' par sécurité.
+      var extra = (serverClubs || [])
+        .filter(function (r) {
+          return statusById[r.id] !== 'hidden';
+        })
+        .map(function (r) {
+          var o = ovById[r.id] || {};
+          var name = o.name || r.name || 'Club';
+          var area = o.area || r.area || 'Abidjan';
+          return {
+            id: r.id,
+            name: name,
+            area: area,
+            type: normType(o.type || r.type),
+            courts: r.courts || 1,
+            priceFrom: o.price_from || r.price_from || 10000,
+            mapsQuery: name + ' ' + area + ' Abidjan',
+            icon: '🎾',
+            blurb: {
+              fr: 'Club de padel à ' + area + ', réservable sur PadelConnect.',
+              en: 'Padel club in ' + area + ', bookable on PadelConnect.',
+            },
+            partner: false,
+            comingSoon: statusById[r.id] === 'coming_soon',
+          };
+        });
 
       liveClubs = founders.concat(extra);
       renderClubs(currentLang);
