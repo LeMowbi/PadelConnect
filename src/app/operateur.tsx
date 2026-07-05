@@ -66,6 +66,14 @@ export default function Operateur() {
     [state.customClubs, state.clubInfo],
   );
 
+  // Les 9 clubs de base RÉSOLUS avec les surcharges gérant (nom/quartier renommés côté serveur) —
+  // sinon la section « Clubs de base » afficherait le nom d’origine même après un renommage
+  // (club_overrides). findClub applique applyInfo → même règle de fusion que partout ailleurs.
+  const baseClubsView = useMemo(
+    () => baseClubs.map((c) => findClub(c.id, state.customClubs, state.clubInfo) ?? c),
+    [state.customClubs, state.clubInfo],
+  );
+
   // ── Clubs serveur (Actif / Bientôt) : pré-chargement + bascule de statut ──────
   const serverClubs = state.customClubs.filter((c) => c.fromServer);
   const [ncName, setNcName] = useState('');
@@ -951,7 +959,7 @@ export default function Operateur() {
                 Comme ces 9 clubs sont intégrés à l’app, « Supprimer » = retrait réversible (tu peux les remettre ici).
               </Txt>
             </Card>
-            {baseClubs.map((c) => {
+            {baseClubsView.map((c) => {
               const status = state.clubStatus[c.id];
               const comingSoon = status === 'coming_soon';
               const hidden = status === 'hidden';
