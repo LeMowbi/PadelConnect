@@ -538,12 +538,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // départ et n’applique son résultat QUE si l’époque n’a pas changé entre-temps — sinon
   // une réponse tardive réécrirait les données d’un compte déjà déconnecté.
   const sessionEpochRef = useRef(0);
+  // Id du compte serveur COURANT, suivi dans une ref (comme remindersOnRef) : permet à
+  // loadSession de détecter une BASCULE de compte (A→B) au moment où elle s'exécute, sans
+  // remettre serverUserId dans ses dépendances — pour bumper l'époque et invalider toute
+  // requête en vol du compte A (ex. un refreshMirror premier-plan lancé juste avant la bascule).
+  const serverUserIdRef = useRef<string | null>(state.serverUserId);
+  useEffect(() => {
+    serverUserIdRef.current = state.serverUserId;
+  }, [state.serverUserId]);
 
   // Charge (ou recharge) la session serveur : profil + rôle, réservations, occupation,
   // participations et clubs serveur. Réutilisé au démarrage ET après la confirmation
   // d’e-mail (deep link) — d’où l’extraction en fonction stable.
   const loadSession = useCallback(async () => {
-    const epoch = sessionEpochRef.current;
+    let epoch = sessionEpochRef.current;
     const stillCurrent = () => sessionEpochRef.current === epoch;
     try {
       const {
@@ -551,6 +559,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } = await supabase.auth.getSession();
       const userId = session?.user?.id;
       if (!userId || !stillCurrent()) return;
+      // BASCULE de compte (A→B) : on bumpe l'époque AVANT de repartir sur un périmètre neuf, pour
+      // qu'une requête en vol du compte A (refreshMirror premier-plan qui avait capturé l'ancienne
+      // époque) ne réécrive plus rien après. On réaligne l'époque locale pour que les gardes
+      // PROPRES de loadSession (stillCurrent) restent valides après le bump.
+      if (serverUserIdRef.current && serverUserIdRef.current !== userId) {
+        sessionEpochRef.current += 1;
+        epoch = sessionEpochRef.current;
+        serverUserIdRef.current = userId;
+      }
       void registerPushToken(userId); // jeton de push → profil (pour les notifs serveur)
       // On connaît la session → mode « réservations serveur ». Si on CHANGE de compte
       // (userId différent de celui en mémoire), on repart d’un périmètre personnel NEUF
@@ -958,6 +975,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const slim = {
             ...state,
             clubPhotos: {},
+            // Aussi les covers / photos par terrain : en data-URI (web/démo) elles peuvent avoir
+            // rempli le quota à elles seules → sans ça, la 2ᵉ écriture échouait aussi et tout était perdu.
+            clubCovers: {},
+            clubCourtPhotos: {},
             account: state.account ? { ...state.account, photoUri: undefined } : null,
           };
           await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(slim));

@@ -37,11 +37,14 @@ export function levelLabel(n: number): string {
 }
 
 export function initials(name: string): string {
-  return name
+  const out = name
     .replace(/\(.*?\)/g, '')
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
+    // Array.from → première UNITÉ de graphème (un emoji n'est pas coupé au milieu d'une paire UTF-16).
+    .map((w) => Array.from(w)[0]?.toUpperCase() ?? '')
     .join('');
+  // Nom vide / entièrement entre parenthèses → au moins un caractère, jamais un avatar « blanc ».
+  return out || '?';
 }

@@ -121,7 +121,7 @@ export default function CompetitionDetail() {
       : undefined;
   const left = Math.max(0, comp.slots - teams);
   const full = left === 0 && !registered;
-  const pct = Math.min(100, Math.round((teams / comp.slots) * 100));
+  const pct = Math.min(100, Math.round((teams / Math.max(1, comp.slots)) * 100)); // Math.max(1,…) : jamais de NaN si slots=0
 
   const byClub = comp.organizerType === 'club';
   const partner = (partnerId ? state.friends.find((f) => f.id === partnerId)?.name : partnerName.trim()) ?? '';

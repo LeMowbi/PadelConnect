@@ -100,6 +100,17 @@ npx eas-cli submit --platform ios --profile production
 - [ ] Le mentionner à la revue (App Store Connect → « App Review Information » / Play → politique UGC) :
       _l'app permet de signaler tout avis et de bloquer son auteur ; les signalements sont traités sous 24 h._
 
+### b-bis. Compte de démo pour la revue Apple (Guideline 2.1) — **IMPORTANT, sinon rejet**
+
+L'inscription passe par une **confirmation e-mail** : un examinateur Apple ne peut pas dépasser
+l'écran « Vérifie ta boîte mail » sans un compte **déjà confirmé**. Un compte de démo prêt a été
+créé côté serveur (e-mail déjà validé) — **ses identifiants te sont communiqués à part** (jamais
+écrits ici).
+
+- [ ] Coller ces identifiants dans **App Store Connect → App Review Information → « Sign-In required »**
+      (nom d'utilisateur = l'e-mail de démo, mot de passe = celui communiqué).
+- [ ] (Optionnel) créer aussi un compte **gérant** de démo si tu veux qu'Apple voie l'Espace Club.
+
 ### c. Liens universels Android (App Links) + page de téléchargement
 
 - [ ] Récupérer l'**empreinte SHA-256** de la clé de signature de l'app dans **Play Console → Test

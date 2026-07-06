@@ -20,7 +20,7 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
   const teams = teamCount(comp, registered);
   const left = Math.max(0, comp.slots - teams);
   const full = left === 0;
-  const pct = Math.min(100, Math.round((teams / comp.slots) * 100));
+  const pct = Math.min(100, Math.round((teams / Math.max(1, comp.slots)) * 100)); // Math.max(1,…) : jamais de NaN si slots=0
   // Remplissage animé de la barre (0 → pct) — se rejoue si le nombre d’équipes change.
   const fill = useRef(new Animated.Value(0)).current;
   useEffect(() => {

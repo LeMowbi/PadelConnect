@@ -163,6 +163,11 @@ export function loggedOutState(s: AppState): AppState {
     compResults: {},
     officialResults: [],
     blockedUserIds: [], // liste liée au compte → purgée à la déconnexion
+    // Préférences liées au compte : sans reset, le compte SUIVANT sur le même appareil hérite des
+    // choix du précédent. dismissedNewsId : sinon B ne voit jamais l'actu GLOBALE que A avait fermée.
+    // managedClubId : remis au défaut (pilote seulement le filtre local, l'accès reste gardé par le rôle).
+    dismissedNewsId: null,
+    managedClubId: initialState.managedClubId,
   };
 }
 

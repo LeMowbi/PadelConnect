@@ -49,7 +49,8 @@ export function BarChart({
   return (
     <View style={styles.row}>
       {data.map((d, i) => (
-        <View key={d.label} style={styles.col}>
+        // clé = index + label : robuste même si deux libellés coïncidaient (pas de collision de key).
+        <View key={`${i}-${d.label}`} style={styles.col}>
           <Txt variant="small" color={colors.textFaint} style={{ fontSize: 10 }}>
             {d.value}
           </Txt>
