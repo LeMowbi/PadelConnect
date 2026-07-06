@@ -49,7 +49,11 @@ export function Screen({
       <View style={styles.headerRow}>
         {back ? (
           <TouchableOpacity
-            onPress={() => router.back()}
+            // Repli vers l'accueil quand il n'y a RIEN à dépiler : un écran ouvert « à froid »
+            // par Universal Link (ex. /club/[id] via « Partager ce club ») est seul dans la pile
+            // → router.back() serait un no-op et, sans onglets sous lui, l'utilisateur serait
+            // piégé (iOS = pas de retour matériel). canGoBack() distingue les deux cas.
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
             style={styles.backBtn}
             hitSlop={12}
             accessibilityRole="button"
