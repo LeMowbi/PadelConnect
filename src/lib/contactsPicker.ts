@@ -1,8 +1,11 @@
 // Sélection d’un contact du téléphone pour ajouter un ami plus vite (au lieu de taper le numéro).
-// iOS/Android uniquement, via le sélecteur SYSTÈME (expo-contacts) : on ne lit jamais tout le
-// carnet, l’utilisateur choisit UN contact et on ne récupère que son nom + son numéro.
-
-import * as Contacts from 'expo-contacts';
+// iOS/Android uniquement, via le sélecteur SYSTÈME : on ne lit jamais tout le carnet,
+// l’utilisateur choisit UN contact et on ne récupère que son nom + son numéro.
+//
+// ⚠️ SDK 56 : `presentContactPickerAsync` a été DÉPLACÉ. Importé depuis « expo-contacts » (racine),
+// il LÈVE une erreur (stub de dépréciation) → le picker ne s’ouvrait jamais (« rien ne se passe »).
+// La vraie implémentation vit dans le sous-module « expo-contacts/legacy » (chemin officiel).
+import * as Contacts from 'expo-contacts/legacy';
 import { Platform } from 'react-native';
 
 export type PickedContact = { name: string; phone: string };
