@@ -400,7 +400,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
                               })}
                             </View>
                             <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
-                              Ton terrain est bloqué quoi qu'il arrive. Les autres rejoignent depuis « Matchs ouverts » (tu es prévenu à
+                              Ton terrain est bloqué quoi qu’il arrive. Les autres rejoignent depuis « Matchs ouverts » (tu es prévenu à
                               chaque arrivée). Le prix du terrain se partage entre les joueurs.
                             </Txt>
                           </>

@@ -742,6 +742,9 @@ export default function ReservationsScreen() {
                     <Pressable
                       onPress={() => router.push(`/reserver/${r.clubId}?time=${encodeURIComponent(r.time)}`)}
                       style={styles.replayBtn}
+                      hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Rejouer à ${r.clubName}`}
                     >
                       <Ionicons name="refresh-outline" size={13} color={colors.signature} />
                       <Txt variant="small" color={colors.signature} style={{ fontWeight: '600' }}>
@@ -753,7 +756,13 @@ export default function ReservationsScreen() {
                     {state.serverUserId &&
                     (r.startsAt > now - 14 * 86400000 || !!scores[r.id]) &&
                     (!scores[r.id]?.mine || !scores[r.id].validated) ? (
-                      <Pressable onPress={() => openScore(r)} style={styles.replayBtn}>
+                      <Pressable
+                        onPress={() => openScore(r)}
+                        style={styles.replayBtn}
+                        hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={scores[r.id]?.mine ? 'Corriger mon score' : 'Mettre le score du match'}
+                      >
                         <Ionicons name="trophy-outline" size={13} color={colors.signature} />
                         <Txt variant="small" color={colors.signature} style={{ fontWeight: '600' }}>
                           {scores[r.id]?.mine ? 'Corriger mon score' : 'Mettre le score'}
@@ -763,7 +772,13 @@ export default function ReservationsScreen() {
                     {/* Partage du résultat en image — quand MON score est validé (mine = j'ai saisi,
                         donc iWon est fiable pour orienter le vainqueur sur la carte). */}
                     {scores[r.id]?.mine && scores[r.id]?.validated && scores[r.id]?.score ? (
-                      <Pressable onPress={() => openShare(r)} style={styles.replayBtn}>
+                      <Pressable
+                        onPress={() => openShare(r)}
+                        style={styles.replayBtn}
+                        hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Partager le résultat en image"
+                      >
                         <Ionicons name="share-social-outline" size={13} color={colors.signature} />
                         <Txt variant="small" color={colors.signature} style={{ fontWeight: '600' }}>
                           Partager le résultat

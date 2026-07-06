@@ -31,6 +31,9 @@ export const colors = {
   amber: '#C29A3A', // or « accent » (icônes/étoiles/jauges sur fond clair ou photo)
   amberDark: '#785A10', // or « texte » sur tint or (amberSoft) : contraste ≈ 5.2:1 → WCAG AA OK
   amberSoft: '#F3E7CC',
+  goldBright: '#F0D488', // or « champagne » LISIBLE sur fond vert sombre (carte de résultat) :
+  // ≈ 3.6:1 sur le palier le plus clair du dégradé (texte large OK) et ≈ 6.8:1 sur le vert foncé
+  // (petit texte OK) — l'`amber` accent, lui, échoue en TEXTE sur ce fond (audit a11y).
   // Balle de padel (touche d’énergie / point « live »).
   lime: '#C6F24A',
 

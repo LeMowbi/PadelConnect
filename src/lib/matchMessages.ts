@@ -30,11 +30,11 @@ export function matchTemplates(r: Reservation, clubUrl: string): MatchTemplate[]
       key: 'remind',
       label: 'Rappel',
       icon: 'alarm-outline',
-      body: `Petit rappel 🎾 on joue au padel : ${when}. À tout' !`,
+      body: `Petit rappel 🎾 on joue au padel : ${when}. À tout’ !`,
     },
     {
       key: 'cancel',
-      label: "J'annule",
+      label: 'J’annule',
       icon: 'close-circle-outline',
       body: `Désolé, je dois annuler notre padel : ${when} 😔 On remet ça très vite !`,
     },

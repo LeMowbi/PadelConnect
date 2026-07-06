@@ -30,13 +30,14 @@ export const ResultCard = forwardRef<View, ResultCardProps>(function ResultCard(
       <View style={styles.teamRow}>
         <View style={{ flex: 1 }}>
           {shown.map((n, i) => (
-            // Nom du camp gagnant en OR (fierté du vainqueur = raison d'être du partage).
-            <Txt key={i} variant="h3" color={winner ? colors.amber : colors.white} numberOfLines={1} style={styles.player}>
+            // Nom du camp gagnant en OR CHAMPAGNE (fierté du vainqueur = raison d'être du partage) :
+            // `goldBright` reste lisible sur le dégradé vert (l'`amber` accent échouait le contraste).
+            <Txt key={i} variant="h3" color={winner ? colors.goldBright : colors.white} numberOfLines={1} style={styles.player}>
               {n}
             </Txt>
           ))}
         </View>
-        {winner ? <Ionicons name="trophy" size={22} color={colors.amber} /> : null}
+        {winner ? <Ionicons name="trophy" size={22} color={colors.goldBright} /> : null}
       </View>
     );
   };
@@ -66,9 +67,9 @@ export const ResultCard = forwardRef<View, ResultCardProps>(function ResultCard(
             {clubName} · {dateLabel}
           </Txt>
         </View>
-        {/* Lien de téléchargement en pied — CTA viral, LISIBLE (or gras). La page /get route vers
-            l'App Store / Google Play selon l'appareil. Un seul rendu du lien (pas de doublon). */}
-        <Txt variant="small" color={colors.amber} numberOfLines={1} style={styles.link}>
+        {/* Lien de téléchargement en pied — CTA viral, LISIBLE (or champagne gras, contraste AA sur
+            le vert foncé). La page /get route vers l'App Store / Google Play selon l'appareil. */}
+        <Txt variant="small" color={colors.goldBright} numberOfLines={1} style={styles.link}>
           {DOWNLOAD_URL}
         </Txt>
       </LinearGradient>
