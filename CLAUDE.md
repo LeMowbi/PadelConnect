@@ -327,8 +327,9 @@ sur la branche de dev (build #48, mise à jour day-1 après approbation du #47) 
   **`60`** (rétablit la branche « tournoi officiel opérateur » de `create_competition` + RPC
   `reject_club_request`) — DANS CET ORDRE, après 54/55 ; coller le **lien de paiement Wave** dans
   Espace opérateur → Finances ; **re-déployer `site/`** (retrait commission/Wave du CGU) + le build
-  web sur `club.padelconnectci.com` ; créer l'e-mail pro `contact@padelconnectci.com` (Cloudflare
-  Email Routing) + WhatsApp Business « PadelConnect ».
+  web sur `club.padelconnectci.com` ; WhatsApp Business « PadelConnect ». **✅ FAIT** : l'e-mail pro
+  `contact@padelconnectci.com` est actif (Cloudflare Email Routing → transfert vers
+  `padelconnect.civ@gmail.com`, destination vérifiée le 2026-07-05) — vérifié via l'API Cloudflare.
   Améliorations « en plus » **livrées** : **image de résultat partageable** (carte Équipe A vs
   Équipe B, `ResultCard`/`shareImage`, modules natifs `react-native-view-shot` + `expo-sharing`
   ⇒ nouveau build requis) et **messages types WhatsApp** (`matchMessages`). Reste en idée : carte
