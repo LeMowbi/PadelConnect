@@ -232,7 +232,6 @@ export default function ReservationsScreen() {
     setScoreSending(true);
     const res = await submitMatchScore(scoreTarget.id, parsed.sets);
     setScoreSending(false);
-    setScoreTarget(null);
     if (res === 'validated') {
       hapticSuccess();
       toast.show('Score validé ✓ — le match compte au classement');
@@ -247,12 +246,17 @@ export default function ReservationsScreen() {
     } else if (res === 'conflict') {
       toast.show('Ton score ne correspond pas à celui déjà saisi — vérifiez ensemble.', { icon: 'alert-circle' });
     } else if (res === 'no_players') {
+      // On GARDE la feuille ouverte (pas de setScoreTarget(null)) : la saisie de sets reste
+      // à l'écran, l'utilisateur ajoute un partenaire sans avoir à tout ressaisir.
       toast.show('Ajoute un partenaire (compte PadelConnect) à la réservation pour compter le score.', { icon: 'alert-circle' });
       return;
     } else {
+      // Échec réseau : feuille laissée ouverte, la saisie est conservée pour un simple « réessaie ».
       toast.show('Enregistrement impossible — réessaie', { icon: 'alert-circle' });
       return;
     }
+    // Seuls les trois cas terminaux (validé / en attente / conflit) ferment la feuille.
+    setScoreTarget(null);
     void loadScores();
   };
 
@@ -904,8 +908,13 @@ export default function ReservationsScreen() {
                 </View>
               </>
             ) : null}
-            {/* Aperçu = la carte réellement capturée (même `ref`). */}
-            <View style={{ alignItems: 'center', marginTop: spacing.md }}>
+            {/* Aperçu = la carte réellement capturée (même `ref`). Regroupé pour le lecteur d'écran
+                (sinon chaque nom/score serait annoncé séparément sans cohérence). */}
+            <View
+              accessible
+              accessibilityLabel={`Aperçu de la carte de résultat : ${shareTeams.teamA.join(' et ') || 'ton équipe'} contre ${shareTeams.teamB.join(' et ') || 'l’adversaire'}, score ${(scores[shareTarget.id]?.score ?? '—').replace(/,\s*/g, ' · ')}`}
+              style={{ alignItems: 'center', marginTop: spacing.md }}
+            >
               <ResultCard
                 ref={cardRef}
                 teamA={shareTeams.teamA}

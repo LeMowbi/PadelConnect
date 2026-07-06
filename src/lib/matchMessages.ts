@@ -1,6 +1,6 @@
 // Messages types (réponses rapides) pour un match : au lieu d'UN message figé, on propose
 // quelques modèles pré-remplis (on joue / rappel / il manque des joueurs / j'annule) que le
-// joueur envoie en un tap sur WhatsApp. Fonctions PURES (testées sous node) : la couche UI
+// joueur envoie en un tap sur WhatsApp. Fonction PURE (aucune dépendance native) : la couche UI
 // ne fait que présenter la liste et ouvrir WhatsApp avec le `body` choisi.
 
 import { dateKeyLabel } from './days';
