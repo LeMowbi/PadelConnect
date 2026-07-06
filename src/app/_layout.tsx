@@ -8,7 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnimatedSplash } from '@/components/AnimatedSplash';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { ToastProvider, useToast } from '@/components/Toast';
+import { ToastProvider } from '@/components/Toast';
 import { installGlobalErrorLogging } from '@/lib/diagnostics';
 import { useNotificationTapRouter } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
@@ -72,7 +72,6 @@ function RootNav() {
   const { state, hydrated, refreshSession } = useApp();
   const segments = useSegments();
   const router = useRouter();
-  const toast = useToast();
 
   // Sans compte → onboarding obligatoire ; avec compte → on quitte l’onboarding.
   // reset-password, legal et decouvrir sont des routes PUBLIQUES : reset-password parce que
@@ -85,7 +84,8 @@ function RootNav() {
     // `auth-callback` (échange du code PKCE d'e-mail) est public : sans ça, un cold-start
     // déconnecté via `padelco://auth-callback?code=` rebondissait brièvement vers /onboarding
     // avant que useEmailConfirmLink ne pose le compte (micro-flash).
-    const publicRoute = onboarding || ['reset-password', 'auth-callback', 'legal', 'decouvrir'].includes(segments[0] ?? '');
+    const publicRoute =
+      onboarding || ['reset-password', 'auth-callback', 'email-confirmed', 'legal', 'decouvrir'].includes(segments[0] ?? '');
     if (!state.account && !publicRoute) router.replace('/onboarding');
     else if (state.account && onboarding) router.replace('/');
   }, [hydrated, state.account, segments, router]);
@@ -98,28 +98,25 @@ function RootNav() {
   const onConfirm = useCallback(
     async (r: 'confirmed' | 'error') => {
       if (r === 'error') {
-        toast.show('Lien de confirmation expiré — reconnecte-toi', { icon: 'alert-circle' });
+        router.replace('/email-confirmed?kind=error');
         return;
       }
       const alreadySignedIn = !!state.account;
       const prevUserId = state.serverUserId;
       await refreshSession();
-      // getSession() = lecture LOCALE (la session vient d'être posée par l'échange de code) :
-      // getUser() interrogeait le serveur et, en cas de réseau flanchant, rendait null → le
-      // toast « Adresse e-mail mise à jour ✓ » s'affichait à tort lors d'une BASCULE de compte.
+      // getSession() = lecture LOCALE (la session vient d'être posée) : getUser() interrogeait le
+      // serveur et, en cas de réseau flanchant, rendait null → faux « changement d'e-mail » lors
+      // d'une BASCULE de compte.
       const { data } = await supabase.auth.getSession();
       const newUserId = data.session?.user?.id ?? null;
-      if (alreadySignedIn && prevUserId && newUserId && newUserId !== prevUserId) {
-        toast.show('Tu es maintenant connecté avec un autre compte 🎾');
-        router.replace('/');
-      } else if (alreadySignedIn) {
-        toast.show('Adresse e-mail mise à jour ✓');
-      } else {
-        toast.show('E-mail confirmé — bienvenue ! 🎾');
-        router.replace('/');
-      }
+      const kind =
+        alreadySignedIn && prevUserId && newUserId && newUserId !== prevUserId ? 'switch' : alreadySignedIn ? 'change' : 'signup';
+      // Écran de succès DÉDIÉ (plus de simple toast) : la session est déjà posée → l'utilisateur est
+      // CONNECTÉ. Il n'y a PLUS de router.replace('/') qui, à froid, le faisait rebondir vers la
+      // connexion. Il entre dans l'app par le bouton de cet écran.
+      router.replace(`/email-confirmed?kind=${kind}`);
     },
-    [refreshSession, router, toast, state.account, state.serverUserId],
+    [refreshSession, router, state.account, state.serverUserId],
   );
   useEmailConfirmLink(onConfirm);
 
