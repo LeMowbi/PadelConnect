@@ -76,7 +76,12 @@ export function ManagerAccess({
         keyboardType="phone-pad"
         style={opStyles.clubInput}
       />
-      <Pressable onPress={() => setPickerOpen(true)} style={[opStyles.clubInput, opStyles.pickerRow]}>
+      <Pressable
+        onPress={() => setPickerOpen(true)}
+        style={[opStyles.clubInput, opStyles.pickerRow]}
+        accessibilityRole="button"
+        accessibilityLabel={selected ? `Club choisi : ${selected.name}. Changer` : 'Choisir le club'}
+      >
         <Txt variant="body" color={selected ? colors.text : colors.textFaint} numberOfLines={1} style={{ flex: 1 }}>
           {selected ? selected.name : 'Choisir le club…'}
         </Txt>
@@ -109,6 +114,9 @@ export function ManagerAccess({
               setPickerOpen(false);
             }}
             style={opStyles.pickerOption}
+            accessibilityRole="button"
+            accessibilityState={{ selected: clubId === c.id }}
+            accessibilityLabel={c.name}
           >
             <IconCircle icon="business" color={colors.green} bg={colors.greenSoft} size={36} />
             <View style={{ flex: 1 }}>

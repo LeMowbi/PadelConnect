@@ -376,7 +376,7 @@ export default function ClubDetail() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, marginTop: spacing.sm }}>
             {courtsWithPhoto.map((c, i) => (
               <Reveal key={c} delay={Math.min(i * 40, 200)}>
-                <Pressable onPress={() => setViewer(gallery.length + i)} accessibilityLabel={`Photo du ${c}`}>
+                <Pressable onPress={() => setViewer(gallery.length + i)} accessibilityRole="button" accessibilityLabel={`Photo du ${c}`}>
                   <ClubPhoto uri={courtPhotoMap[c]} accent={club.accent} height={84} width={128} rounded={radius.md} />
                   <Txt variant="small" color={colors.textMuted} style={{ marginTop: 4, textAlign: 'center' }} numberOfLines={1}>
                     {c}
@@ -563,6 +563,8 @@ export default function ClubDetail() {
               key={c.id}
               onPress={() => router.push(`/competition/${c.id}`)}
               style={[styles.eventRow, { marginTop: i === 0 && events.length === 0 ? 0 : spacing.sm }]}
+              accessibilityRole="button"
+              accessibilityLabel={`Tournoi ${c.title}`}
             >
               <IconCircle icon="trophy" color={colors.purple} bg={colors.purpleSoft} size={38} />
               <View style={{ flex: 1 }}>
@@ -641,6 +643,8 @@ export default function ClubDetail() {
             onPress={() => router.push('/coachs')}
             hitSlop={6}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.md }}
+            accessibilityRole="button"
+            accessibilityLabel="Voir tous les coachs"
           >
             <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
               Voir tous les coachs
@@ -899,6 +903,8 @@ export default function ClubDetail() {
           onPress={() => openWhatsApp(club.contactPhone!, `Bonjour, j’ai une question à propos de ${club.name}`)}
           style={{ alignItems: 'center', paddingVertical: spacing.xl, marginTop: spacing.sm }}
           hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={`Contacter ${club.name} sur WhatsApp`}
         >
           <Txt variant="small" color={colors.textFaint}>
             Une question ? Contacter le club

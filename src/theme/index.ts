@@ -38,12 +38,15 @@ export const colors = {
   lime: '#C6F24A',
 
   text: '#15211C', // encre principale (quasi-noir vert)
-  textMuted: '#6B7A70', // texte secondaire
-  // Tertiaire / placeholder. ASSOMBRI (audit a11y) de #7C857B → #68746C pour repasser le seuil
-  // WCAG AA (~4.6:1 sur surface claire) : l'ancienne valeur (~3.2-3.8:1) échouait sur du texte
-  // informatif (règles, noms, aides) répandu dans l'app. Reste le ton le plus discret de la
-  // hiérarchie (légendes de graphe, jours de calendrier), mais désormais lisible.
-  textFaint: '#68746C',
+  // Secondaire. ASSOMBRI (audit a11y tour 3) de #6B7A70 → #59655C : l'ancienne valeur passait AA
+  // sur une carte BLANCHE mais échouait (~3.78:1) sur le FOND d'app beige (#EFEADF), où ce ton est
+  // pourtant très utilisé (sous-titre de chaque écran via Screen, EmptyState). Nouveau ratio ≈ 5.1:1
+  // sur le fond, ≈ 6.1:1 sur carte blanche → WCAG AA partout.
+  textMuted: '#59655C', // texte secondaire
+  // Tertiaire / placeholder. ASSOMBRI (audit a11y tour 3) de #68746C → #5C685F : même motif que
+  // textMuted — l'ancienne valeur échouait (~4.07:1) sur le fond beige. Nouveau ratio ≈ 4.9:1 sur
+  // le fond. Reste le ton le plus discret de la hiérarchie (légendes de graphe, jours), lisible.
+  textFaint: '#5C685F',
 
   hairline: '#ECE7DB', // séparateurs INTERNES — plus clair que `border` (contour) pour hiérarchiser
   scrim: 'rgba(12,26,22,0.55)', // overlay bas de photo + fond des bottom sheets

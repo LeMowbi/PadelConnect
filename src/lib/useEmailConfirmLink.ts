@@ -64,7 +64,7 @@ export function useEmailConfirmLink(onResult: (r: Result) => void) {
       const p = paramsFrom(url);
       // Lien expiré / déjà utilisé : on prévient au lieu d’ignorer en silence.
       if (p.error || p.error_code || p.error_description) {
-        if (active) onResult('error');
+        if (active) cb.current('error');
         return;
       }
 
@@ -86,7 +86,7 @@ export function useEmailConfirmLink(onResult: (r: Result) => void) {
         return; // pas un lien de confirmation reconnu
       }
       if (!active) return;
-      onResult(error ? 'error' : 'confirmed');
+      cb.current(error ? 'error' : 'confirmed');
     };
 
     // 1) App ouverte « à froid » directement par le lien.
@@ -98,5 +98,8 @@ export function useEmailConfirmLink(onResult: (r: Result) => void) {
       active = false;
       sub.remove();
     };
-  }, [onResult]);
+    // Effet monté UNE seule fois : la livraison passe par `cb.current` (toujours le onConfirm
+    // le plus frais), donc aucun re-abonnement en cours d'échange réseau. `cb`/`handled` sont
+    // des refs stables ; `supabase`/`paramsFrom` sont au niveau module → deps vides correctes.
+  }, []);
 }

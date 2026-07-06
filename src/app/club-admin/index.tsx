@@ -302,7 +302,14 @@ export default function ClubAdmin() {
         )}
 
         {/* Inscription d’un nouveau club — validée par PadelConnect */}
-        <Pressable onPress={() => setShowSignup((v) => !v)} style={styles.signupLink}>
+        <Pressable
+          onPress={() => setShowSignup((v) => !v)}
+          style={styles.signupLink}
+          accessibilityRole="button"
+          accessibilityLabel="Inscrire un club qui n’est pas dans la liste"
+          accessibilityState={{ expanded: showSignup }}
+          hitSlop={8}
+        >
           <Ionicons name={showSignup ? 'chevron-down' : 'add-circle-outline'} size={16} color={colors.signature} />
           <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
             Ton club n’est pas dans la liste ? Inscris-le
@@ -377,6 +384,7 @@ export default function ClubAdmin() {
                 toast.show('Demande annulée');
               }}
               hitSlop={8}
+              accessibilityRole="button"
               accessibilityLabel="Annuler ma demande de club"
             >
               <Txt variant="small" color={colors.danger} style={{ fontWeight: '700' }}>

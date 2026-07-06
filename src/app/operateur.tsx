@@ -521,7 +521,12 @@ export default function Operateur() {
         <>
           {/* Relance : reste à encaisser TOUTES semaines passées (tap → la plus ancienne à traiter) */}
           {unpaid.total > 0 && unpaid.oldest ? (
-            <Pressable onPress={() => setWeek(unpaid.oldest!)} style={styles.reminder}>
+            <Pressable
+              onPress={() => setWeek(unpaid.oldest!)}
+              style={styles.reminder}
+              accessibilityRole="button"
+              accessibilityLabel={`Reste à encaisser ${fcfa(unpaid.total)} — voir la semaine la plus ancienne`}
+            >
               <Ionicons name="alarm-outline" size={16} color={colors.coral} />
               <Txt variant="small" color={colors.text} style={{ flex: 1, fontWeight: '600' }}>
                 Reste à encaisser : {fcfa(unpaid.total)} sur {unpaid.weeksCount} semaine{unpaid.weeksCount > 1 ? 's' : ''} passée
@@ -764,7 +769,7 @@ export default function Operateur() {
           <View style={{ marginTop: spacing.xl }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <SectionHeader title={`Demandes reçues · ${pendingRequests}`} />
-              <Pressable onPress={loadRequests} hitSlop={8} accessibilityLabel="Rafraîchir les demandes">
+              <Pressable onPress={loadRequests} hitSlop={12} accessibilityRole="button" accessibilityLabel="Rafraîchir les demandes">
                 <Ionicons name="refresh" size={18} color={colors.textMuted} />
               </Pressable>
             </View>

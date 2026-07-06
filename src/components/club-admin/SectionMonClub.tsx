@@ -642,7 +642,14 @@ export function SectionMonClub({ club }: { club: Club }) {
               </View>
             ))}
             {photosFull ? null : (
-              <Pressable onPress={addPhotoFromDevice} style={styles.addTile} disabled={uploadingPhoto}>
+              <Pressable
+                onPress={addPhotoFromDevice}
+                style={styles.addTile}
+                disabled={uploadingPhoto}
+                accessibilityRole="button"
+                accessibilityLabel="Ajouter une photo"
+                accessibilityState={{ disabled: uploadingPhoto }}
+              >
                 <Ionicons name={uploadingPhoto ? 'cloud-upload-outline' : 'camera-outline'} size={22} color={colors.signature} />
                 <Txt variant="small" color={colors.signature} style={{ marginTop: 4 }}>
                   {uploadingPhoto ? 'Envoi…' : 'Ajouter'}

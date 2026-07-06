@@ -337,7 +337,13 @@ export default function HomeScreen() {
           <PopIn delay={50}>
             <View style={styles.newsBanner}>
               <Ionicons name="megaphone" size={18} color={colors.purple} />
-              <Pressable style={{ flex: 1 }} disabled={!news.link} onPress={() => news.link && Linking.openURL(news.link).catch(() => {})}>
+              <Pressable
+                style={{ flex: 1 }}
+                disabled={!news.link}
+                onPress={() => news.link && Linking.openURL(news.link).catch(() => {})}
+                accessibilityRole={news.link ? 'link' : undefined}
+                accessibilityLabel={news.link ? `Actualité : ${news.title}` : undefined}
+              >
                 <Txt variant="body" style={{ fontWeight: '700' }} numberOfLines={2}>
                   {news.title}
                 </Txt>
@@ -427,7 +433,12 @@ export default function HomeScreen() {
         {/* a) C-S2 : carte « Nouveau au padel ? » (0 partie jouée) */}
         {activeNudge === 'novice' ? (
           <PopIn delay={50}>
-            <Pressable onPress={() => go('/decouvrir')} style={[styles.nudge, { backgroundColor: colors.coralSoft }]}>
+            <Pressable
+              onPress={() => go('/decouvrir')}
+              style={[styles.nudge, { backgroundColor: colors.coralSoft }]}
+              accessibilityRole="button"
+              accessibilityLabel="Nouveau au padel ? Découvrir les règles"
+            >
               <View style={[styles.nudgeIcon, { backgroundColor: colors.coral }]}>
                 <Ionicons name="help-circle" size={20} color={colors.white} />
               </View>
@@ -458,7 +469,12 @@ export default function HomeScreen() {
         {/* b) B-R4 : bandeau « Complète ton profil » */}
         {activeNudge === 'profile' ? (
           <PopIn delay={50}>
-            <Pressable onPress={() => go('/profil')} style={[styles.nudge, { backgroundColor: colors.amberSoft }]}>
+            <Pressable
+              onPress={() => go('/profil')}
+              style={[styles.nudge, { backgroundColor: colors.amberSoft }]}
+              accessibilityRole="button"
+              accessibilityLabel="Complète ton profil"
+            >
               <View style={[styles.nudgeIcon, { backgroundColor: colors.amber }]}>
                 <Ionicons name="person-circle" size={20} color={colors.white} />
               </View>
@@ -492,6 +508,8 @@ export default function HomeScreen() {
             <Pressable
               onPress={() => go(trophyNudge.cta === 'invite' ? '/amis' : trophyNudge.cta === 'tournament' ? '/competitions' : '/reserver')}
               style={[styles.nudge, { backgroundColor: colors.amberSoft }]}
+              accessibilityRole="button"
+              accessibilityLabel={`Trophée « ${trophyNudge.label} » : ${trophyNudge.current} sur ${trophyNudge.target}`}
             >
               <View style={[styles.nudgeIcon, { backgroundColor: colors.amber }]}>
                 <Ionicons name="trophy" size={20} color={colors.white} />
@@ -526,7 +544,12 @@ export default function HomeScreen() {
         {/* d) D2 : invitation au parrainage (si 0 ami) — sobre, fermable, sans récompense */}
         {activeNudge === 'referral' ? (
           <PopIn delay={50}>
-            <Pressable onPress={() => go('/parrainage')} style={[styles.nudge, { backgroundColor: colors.signatureSoft }]}>
+            <Pressable
+              onPress={() => go('/parrainage')}
+              style={[styles.nudge, { backgroundColor: colors.signatureSoft }]}
+              accessibilityRole="button"
+              accessibilityLabel="Inviter des amis sur PadelConnect"
+            >
               <View style={[styles.nudgeIcon, { backgroundColor: colors.signature }]}>
                 <Ionicons name="share-social" size={20} color={colors.white} />
               </View>
@@ -572,6 +595,8 @@ export default function HomeScreen() {
             <Pressable
               onPress={() => go(`/competition/${pendingResult.id}`)}
               style={[styles.alert, { backgroundColor: colors.purpleSoft }]}
+              accessibilityRole="button"
+              accessibilityLabel="Résultats du tournoi disponibles"
             >
               <Ionicons name="medal-outline" size={16} color={colors.purple} />
               <Txt variant="small" color={colors.text} style={{ flex: 1, fontWeight: '600' }}>
