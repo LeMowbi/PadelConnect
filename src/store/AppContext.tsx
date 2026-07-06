@@ -1943,6 +1943,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return { ok: true, requests: (data ?? []) as ServerClubRequest[] };
       },
       setClubRequestStatus: async (id, status) => {
+        // Refus : passe par la RPC serveur (SECURITY DEFINER) qui, en plus de marquer la demande
+        // 'rejected', repasse le demandeur en compte JOUEUR — sinon son app resterait bloquée sur
+        // « club en cours de validation » à jamais (account_type='club' non réinitialisé).
+        if (status === 'rejected') {
+          const { data, error } = await supabase.rpc('reject_club_request', { p_id: id });
+          return { ok: !error && data === true };
+        }
         const { error } = await supabase.from('club_requests').update({ status }).eq('id', id);
         return { ok: !error };
       },

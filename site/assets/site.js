@@ -404,6 +404,9 @@
   }
 
   function loadServerClubs() {
+    // Seule la page d'accueil a la grille de clubs. Sur cgu.html (qui charge aussi site.js), on
+    // sort tôt pour ne pas lancer 3 requêtes Supabase inutiles qui ne rendraient rien.
+    if (!document.getElementById('grille-clubs')) return;
     Promise.all([
       // Clubs AJOUTÉS via l'app (actifs). Les 9 fondateurs, eux, sont embarqués ci-dessus.
       supaGet('clubs?select=id,name,area,type,courts,price_from&status=eq.active'),

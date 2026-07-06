@@ -173,6 +173,11 @@ begin
   delete from public.blocked_ranges where club_id = p_id;
   -- Avis du club (les signalements liés partent en cascade) — comme promis à la confirmation.
   delete from public.reviews where club_id = p_id;
+  -- Réservations À VENIR du club supprimé : annulées (le club disparaît — plus de planning ni de
+  -- gérant ; le webhook prévient les joueurs). On garde l'historique passé, comme delete_account.
+  -- Sans ça, des joueurs conservaient une résa « booked » confirmée dans un club fantôme.
+  update public.reservations set status = 'cancelled'
+    where club_id = p_id and status = 'booked' and starts_at > (extract(epoch from now()) * 1000)::bigint;
   -- Ses coachs redeviennent de simples joueurs (sinon : coach fantôme, deadlock 'other_club',
   -- demandes de cours en attente sur un club disparu).
   update public.coaches set active = false where club_id = p_id;

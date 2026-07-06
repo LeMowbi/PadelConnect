@@ -355,10 +355,11 @@ export default function Operateur() {
   const totalCommission = rows.reduce((s, r) => s + r.commission, 0);
   const totalDue = rows.filter((r) => state.operatorPayments[`${r.clubId}:${week}`] !== 'paid').reduce((s, r) => s + r.commission, 0);
 
-  // Relance : impayés TOUTES SEMAINES PASSÉES confondues (pas seulement la précédente — une
-  // commission oubliée il y a 3 semaines restait sinon invisible à jamais). Total estimé au
-  // taux de chaque club + semaine la plus ancienne à traiter (le tap y amène directement).
-  // La semaine EN COURS est exclue : elle se facture à sa clôture.
+  // Relance : impayés des semaines passées PRÉSENTES DANS LE MIROIR (~6 derniers mois, cf.
+  // MIRROR_WINDOW_MS) — au-delà, les résas ne sont plus rapatriées, donc un impayé de plus de
+  // 6 mois n'apparaît pas ici (à traiter par une vraie RPC d'agrégat serveur si le volume grandit).
+  // Total estimé au taux de chaque club + semaine la plus ancienne à traiter (le tap y amène
+  // directement). La semaine EN COURS est exclue : elle se facture à sa clôture.
   const unpaid = useMemo(() => {
     let total = 0;
     const weeks = new Set<string>();
@@ -534,11 +535,11 @@ export default function Operateur() {
 
       {section === 'Aperçu' ? (
         <>
-          {/* Hero — commission cumulée depuis le lancement (chiffre vitrine) */}
+          {/* Hero — commission des 6 derniers mois. Le miroir local ne rapatrie que ~180 j de
+              réservations (MIRROR_WINDOW_MS) : le libellé dit « 6 mois » (et non « depuis le
+              lancement ») pour ne pas afficher un cumul faux qui baisserait avec le temps. */}
           <Card style={styles.hero}>
-            <Txt variant="label">
-              Commission PadelConnect — cumulée
-            </Txt>
+            <Txt variant="label">Commission PadelConnect — 6 derniers mois</Txt>
             <Txt style={styles.heroValue}>{fcfa(allTimeCommission)}</Txt>
             <Txt variant="small" color={colors.textMuted}>
               {allTimePlayed} partie{allTimePlayed > 1 ? 's' : ''} jouée{allTimePlayed > 1 ? 's' : ''} · réglées par Wave (hors app)
@@ -597,9 +598,7 @@ export default function Operateur() {
           </View>
 
           <Card>
-            <Txt variant="label">
-              Semaine {weekLabel(week)}
-            </Txt>
+            <Txt variant="label">Semaine {weekLabel(week)}</Txt>
             <View style={styles.totals}>
               <StatTile value={totalCount} label="Parties jouées" color={colors.green} bg={colors.greenSoft} />
               <StatTile value={fcfa(totalRevenue)} label="Volume" color={colors.green} bg={colors.greenSoft} />
