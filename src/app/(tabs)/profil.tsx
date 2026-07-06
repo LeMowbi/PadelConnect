@@ -598,6 +598,10 @@ export default function ProfilScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            textContentType="emailAddress"
+            autoComplete="email"
+            maxLength={120}
+            accessibilityLabel="Nouvelle adresse e-mail"
             style={styles.input}
           />
           {emailMsg ? (
@@ -699,6 +703,10 @@ function EditAccount({ onDone }: { onDone: () => void }) {
         onChangeText={setFirstName}
         placeholder="Prénom"
         placeholderTextColor={colors.textMuted}
+        autoCapitalize="words"
+        autoCorrect={false}
+        maxLength={40}
+        accessibilityLabel="Prénom"
         style={styles.input}
       />
       <TextInput
@@ -706,6 +714,10 @@ function EditAccount({ onDone }: { onDone: () => void }) {
         onChangeText={setLastName}
         placeholder="Nom"
         placeholderTextColor={colors.textMuted}
+        autoCapitalize="words"
+        autoCorrect={false}
+        maxLength={40}
+        accessibilityLabel="Nom"
         style={styles.input}
       />
       <TextInput
@@ -714,6 +726,10 @@ function EditAccount({ onDone }: { onDone: () => void }) {
         placeholder="Téléphone"
         placeholderTextColor={colors.textMuted}
         keyboardType="phone-pad"
+        autoCorrect={false}
+        textContentType="telephoneNumber"
+        maxLength={20}
+        accessibilityLabel="Numéro de téléphone"
         style={styles.input}
       />
       <TextInput
@@ -723,6 +739,7 @@ function EditAccount({ onDone }: { onDone: () => void }) {
         placeholderTextColor={colors.textMuted}
         keyboardType="phone-pad"
         maxLength={10}
+        accessibilityLabel="Date de naissance, format jour mois année"
         style={styles.input}
       />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md }}>

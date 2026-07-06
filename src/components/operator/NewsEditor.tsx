@@ -38,7 +38,7 @@ export function NewsEditor({
   const publish = async () => {
     if (title.trim().length < 3 || publishing) return;
     setPublishing(true);
-    const { ok } = await onPublish({ title, subtitle, link, push: sendPush });
+    const { ok } = await onPublish({ title: title.trim(), subtitle: subtitle.trim(), link: link.trim(), push: sendPush });
     setPublishing(false);
     if (!ok) {
       toast.show('Publication impossible — réessaie', { icon: 'alert-circle' });
@@ -61,6 +61,8 @@ export function NewsEditor({
         onChangeText={setTitle}
         placeholder="Titre (obligatoire)"
         placeholderTextColor={colors.textMuted}
+        maxLength={80}
+        accessibilityLabel="Titre de l’actualité"
         style={opStyles.newsInput}
       />
       <TextInput
@@ -68,6 +70,8 @@ export function NewsEditor({
         onChangeText={setSubtitle}
         placeholder="Sous-titre (optionnel)"
         placeholderTextColor={colors.textMuted}
+        maxLength={200}
+        accessibilityLabel="Sous-titre de l’actualité"
         style={opStyles.newsInput}
       />
       <TextInput
@@ -77,6 +81,8 @@ export function NewsEditor({
         placeholderTextColor={colors.textMuted}
         autoCapitalize="none"
         keyboardType="url"
+        maxLength={300}
+        accessibilityLabel="Lien de l’actualité"
         style={opStyles.newsInput}
       />
       {/* Aperçu EN DIRECT du bandeau tel qu’il apparaîtra sur l’accueil joueur (mêmes

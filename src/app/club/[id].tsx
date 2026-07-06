@@ -748,6 +748,8 @@ export default function ClubDetail() {
                 value={text}
                 onChangeText={setText}
                 multiline
+                maxLength={600}
+                accessibilityLabel="Ton avis sur le club"
                 style={styles.input}
               />
               <Button
@@ -839,6 +841,8 @@ export default function ClubDetail() {
                         placeholder="Ta réponse en tant que club…"
                         placeholderTextColor={colors.textMuted}
                         multiline
+                        maxLength={600}
+                        accessibilityLabel="Réponse du club à cet avis"
                         style={styles.input}
                       />
                       <View style={{ flexDirection: 'row', gap: spacing.sm }}>

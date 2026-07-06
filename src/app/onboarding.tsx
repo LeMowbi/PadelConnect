@@ -1074,6 +1074,8 @@ function SignInSheet({
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            textContentType="emailAddress"
+            autoComplete="email"
             accessibilityLabel="Adresse e-mail"
             style={styles.input}
           />
@@ -1089,6 +1091,7 @@ function SignInSheet({
             keyboardType="phone-pad"
             autoCorrect={false}
             textContentType="telephoneNumber"
+            autoComplete="tel"
             accessibilityLabel="Numéro de téléphone"
             style={styles.input}
           />
@@ -1174,6 +1177,9 @@ function PasswordInput({
         autoCorrect={false}
         autoFocus={autoFocus}
         returnKeyType="done"
+        textContentType="password"
+        autoComplete="password"
+        accessibilityLabel={placeholder}
         style={[styles.input, styles.pwInput, error ? { borderColor: colors.danger } : null]}
       />
       <Pressable
@@ -1232,6 +1238,9 @@ function Field({
           autoCapitalize={autoCapitalize}
           autoCorrect={false}
           returnKeyType="done"
+          textContentType={keyboardType === 'email-address' ? 'emailAddress' : undefined}
+          autoComplete={keyboardType === 'email-address' ? 'email' : undefined}
+          accessibilityLabel={label}
           style={[styles.input, error ? { borderColor: colors.danger } : null]}
         />
       )}

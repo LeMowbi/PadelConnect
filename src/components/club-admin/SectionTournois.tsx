@@ -139,6 +139,7 @@ export function SectionTournois({ club, comps, onCloseComp }: { club: Club; comp
                     placeholder="Motif (ex. ces créneaux sont pris — possible du 12 au 14 après 18h)"
                     placeholderTextColor={colors.textMuted}
                     multiline
+                    maxLength={300}
                     style={styles.reasonInput}
                     accessibilityLabel="Motif du refus, montré à l’organisateur"
                   />
@@ -162,7 +163,7 @@ export function SectionTournois({ club, comps, onCloseComp }: { club: Club; comp
                         icon="close"
                         variant="danger"
                         disabled={busyId === c.id}
-                        onPress={() => decide(c.id, false, rejectReason)}
+                        onPress={() => decide(c.id, false, rejectReason.trim())}
                         full
                       />
                     </View>

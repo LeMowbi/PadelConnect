@@ -64,11 +64,16 @@ export function BottomSheet({
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessible={false} importantForAccessibility="no-hide-descendants" />
       </Animated.View>
       <KeyboardAvoidingView style={styles.wrapper} pointerEvents="box-none" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <Animated.View style={[styles.sheet, { paddingBottom: spacing.xxl + insets.bottom, transform: [{ translateY: sheetY }] }]}>
+        {/* accessibilityViewIsModal : le lecteur d'écran reste PIÉGÉ dans la feuille (il ne
+            balaye pas le contenu d'arrière-plan derrière elle). Le titre porte le rôle « header ». */}
+        <Animated.View
+          accessibilityViewIsModal
+          style={[styles.sheet, { paddingBottom: spacing.xxl + insets.bottom, transform: [{ translateY: sheetY }] }]}
+        >
           <View style={styles.handle} />
           <View style={styles.head}>
             <View style={{ flex: 1 }}>
-              <Txt variant="h2" style={{ fontSize: 19 }}>
+              <Txt variant="h2" accessibilityRole="header" style={{ fontSize: 19 }}>
                 {title}
               </Txt>
               {subtitle ? (
