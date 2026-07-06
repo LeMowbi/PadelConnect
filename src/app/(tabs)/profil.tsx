@@ -241,10 +241,12 @@ export default function ProfilScreen() {
                       tone={o.result === 'win' ? 'amber' : o.result === 'last' ? 'coral' : 'signature'}
                     />
                     <Txt variant="muted" style={{ flex: 1 }}>
-                      {/* Tournoi serveur : delta seul (le « niveau après » serait périmé). */}
+                      {/* Tournoi serveur : delta seul (le « niveau après » serait périmé). Le serveur
+                          borne le niveau à [1,7] (close_competition) → on annonce le delta « au plus »,
+                          sinon un joueur déjà à 7 (ou 1) verrait un +0.50/−0.25 qui n'a pas bougé. */}
                       {o.levelAfter != null
                         ? `${o.title} → Niveau ${o.levelAfter.toFixed(2)}`
-                        : `${o.title}${o.result === 'win' ? ' → +0.50' : o.result === 'last' ? ' → −0.25' : ''}`}
+                        : `${o.title}${o.result === 'win' ? ' → +0.50 (plafond 7)' : o.result === 'last' ? ' → −0.25 (plancher 1)' : ''}`}
                     </Txt>
                   </View>
                 ))}

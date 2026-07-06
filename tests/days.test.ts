@@ -51,13 +51,13 @@ check(
 );
 
 // 4) v4.4.2 : les libellés relatifs portent le NUMÉRO du jour (anti-ambiguïté le soir).
-check(vendredi[0].label === "Aujourd’hui 12", "Vendredi 12 → chip 0 = « Aujourd’hui 12 »");
-check(jeudi[0].label === "Aujourd’hui 11" && jeudi[1].label === 'Demain 12', "Jeudi 11 → « Aujourd’hui 11 » · « Demain 12 »");
+check(vendredi[0].label === 'Aujourd’hui 12', 'Vendredi 12 → chip 0 = « Aujourd’hui 12 »');
+check(jeudi[0].label === 'Aujourd’hui 11' && jeudi[1].label === 'Demain 12', 'Jeudi 11 → « Aujourd’hui 11 » · « Demain 12 »');
 // Fin de mois : le numéro suit le calendrier (30 juin → « Demain 1 »).
 const finJuin = nextDays(7, new Date(2026, 5, 30, 23, 40));
 check(
-  finJuin[0].label === "Aujourd’hui 30" && finJuin[1].label === 'Demain 1',
-  "30 juin → « Aujourd’hui 30 » · « Demain 1 » (bascule de mois)",
+  finJuin[0].label === 'Aujourd’hui 30' && finJuin[1].label === 'Demain 1',
+  '30 juin → « Aujourd’hui 30 » · « Demain 1 » (bascule de mois)',
 );
 
 // 5) dateKey en UTC FIXE (getUTC*) : le jour ne dépend PAS du fuseau de l'appareil — une résa

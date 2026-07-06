@@ -371,9 +371,7 @@ export default function ClubDetail() {
       {/* Les terrains en photo — une vignette étiquetée par terrain (choisies par le club) */}
       {courtsWithPhoto.length > 0 ? (
         <View style={{ marginTop: spacing.md }}>
-          <Txt variant="label">
-            Les terrains en photo
-          </Txt>
+          <Txt variant="label">Les terrains en photo</Txt>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, marginTop: spacing.sm }}>
             {courtsWithPhoto.map((c, i) => (
               <Reveal key={c} delay={Math.min(i * 40, 200)}>
@@ -439,9 +437,7 @@ export default function ClubDetail() {
       </View>
 
       <Card style={{ marginTop: spacing.lg }}>
-        <Txt variant="label">
-          À propos
-        </Txt>
+        <Txt variant="label">À propos</Txt>
         <Txt variant="body" style={{ marginTop: spacing.sm }}>
           {club.blurb}
         </Txt>

@@ -50,9 +50,7 @@ export function QuickBlock({
 
   return (
     <Card style={{ marginTop: spacing.sm, borderColor: colors.coral }}>
-      <Txt variant="label">
-        Jour
-      </Txt>
+      <Txt variant="label">Jour</Txt>
       <View style={styles.wrap}>
         {days.map((d) => (
           <Chip
@@ -144,6 +142,8 @@ export function QuickBlock({
                         setCourt(c === court ? null : c);
                         setConfirmUnblock(null);
                       }}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: court === c, disabled: st.state === 'reserved' || st.state === 'tournoi' }}
                       style={[
                         styles.courtRow,
                         court === c && styles.courtRowSel,

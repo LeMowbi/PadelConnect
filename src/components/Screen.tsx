@@ -60,7 +60,7 @@ export function Screen({
         ) : null}
         <View style={{ flex: 1 }}>
           {title ? (
-            <Txt variant="h1" style={{ fontSize: 28 }}>
+            <Txt variant="h1" accessibilityRole="header" style={{ fontSize: 28 }}>
               {title}
             </Txt>
           ) : null}

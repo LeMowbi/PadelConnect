@@ -51,6 +51,7 @@
     "ios": "expo start --ios",
     "lint": "eslint src tests",
     "build:web": "expo export --platform web",
+    "typecheck:tests": "tsc -p tsconfig.tests.json",
     "format": "prettier --write src tests",
     "format:check": "prettier --check src tests",
     "test:logic": "TZ=UTC node --experimental-strip-types tests/days.test.ts && TZ=UTC node --experimental-strip-types tests/pricing.test.ts && TZ=UTC node --experimental-strip-types tests/slots.test.ts && TZ=UTC node --experimental-strip-types tests/ranges.test.ts && TZ=UTC node --experimental-strip-types tests/phone.test.ts && TZ=UTC node --experimental-strip-types tests/format.test.ts && TZ=UTC node --experimental-strip-types tests/audit.test.ts && TZ=UTC node tests/reset.test.mjs && TZ=UTC node tests/seeds.test.mjs"

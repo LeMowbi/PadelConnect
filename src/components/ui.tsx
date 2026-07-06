@@ -27,17 +27,21 @@ export function Txt({
   style,
   children,
   numberOfLines,
+  accessibilityRole,
 }: {
   variant?: TxtVariant;
   color?: string;
   style?: StyleProp<TextStyle>;
   children: React.ReactNode;
   numberOfLines?: number;
+  // Sémantique lecteur d'écran : `accessibilityRole="header"` sur un titre d'écran / en-tête de
+  // section permet la navigation par en-têtes (rotor « Titres » VoiceOver/TalkBack) — WCAG 1.3.1.
+  accessibilityRole?: React.ComponentProps<typeof Text>['accessibilityRole'];
 }) {
   const merged = (StyleSheet.flatten([txt[variant], color ? { color } : null, style]) || {}) as TextStyle;
   if (!merged.fontFamily) merged.fontFamily = bodyFamilyForWeight(merged.fontWeight);
   return (
-    <Text numberOfLines={numberOfLines} style={merged}>
+    <Text numberOfLines={numberOfLines} accessibilityRole={accessibilityRole} style={merged}>
       {children}
     </Text>
   );
@@ -281,7 +285,9 @@ const tag = StyleSheet.create({
 export function SectionHeader({ title, actionLabel, onAction }: { title: string; actionLabel?: string; onAction?: () => void }) {
   return (
     <View style={sh.row}>
-      <Txt variant="h3">{title}</Txt>
+      <Txt variant="h3" accessibilityRole="header">
+        {title}
+      </Txt>
       {actionLabel && onAction ? (
         <Pressable onPress={onAction} hitSlop={8} accessibilityRole="button" accessibilityLabel={actionLabel}>
           <Text style={sh.action}>{actionLabel}</Text>

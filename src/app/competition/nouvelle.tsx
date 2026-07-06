@@ -249,9 +249,7 @@ export default function NouvelleCompetition() {
           `key={day.key}` remonte le calendrier quand le début change (mois recalé sur la borne). */}
       {day && day.key < dates[dates.length - 1].key ? (
         <View style={{ marginTop: spacing.lg }}>
-          <Txt variant="label">
-            Fin (optionnel — plusieurs jours){endDay ? ` — ${endDay.label}` : ''}
-          </Txt>
+          <Txt variant="label">Fin (optionnel — plusieurs jours){endDay ? ` — ${endDay.label}` : ''}</Txt>
           <View style={styles.wrap}>
             <Chip label="1 seul jour" active={!endDay && !endOpen} onPress={() => (setEndDay(null), setEndOpen(false))} />
             <Chip label="Plusieurs jours" active={!!endDay || endOpen} onPress={() => setEndOpen(true)} />
@@ -301,9 +299,7 @@ export default function NouvelleCompetition() {
       {/* Club hôte — uniquement pour un tournoi créé par un joueur (modération) */}
       {!asClub ? (
         <View style={{ marginTop: spacing.lg }}>
-          <Txt variant="label">
-            Club hôte
-          </Txt>
+          <Txt variant="label">Club hôte</Txt>
           <View style={styles.wrap}>
             {hosts.map((h) => (
               <Chip

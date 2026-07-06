@@ -1,7 +1,7 @@
 // Contenu pédagogique « Découvrir le padel ». Règles vérifiées et simplifiées.
 
 export const padelIntro =
-  "Le padel est un sport de raquette qui se joue presque toujours en double (2 contre 2), sur un terrain fermé par des parois vitrées et grillagées que l’on peut utiliser pendant le jeu. C’est un mélange de tennis et de squash : facile à prendre en main, très tactique et surtout très convivial.";
+  'Le padel est un sport de raquette qui se joue presque toujours en double (2 contre 2), sur un terrain fermé par des parois vitrées et grillagées que l’on peut utiliser pendant le jeu. C’est un mélange de tennis et de squash : facile à prendre en main, très tactique et surtout très convivial.';
 
 export type PadelSection = { title: string; icon: string; points: string[] };
 

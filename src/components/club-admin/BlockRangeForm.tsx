@@ -57,9 +57,7 @@ export function BlockRangeForm({
 
   return (
     <Card style={{ marginTop: spacing.sm, borderColor: colors.coral }}>
-      <Txt variant="label">
-        Terrain
-      </Txt>
+      <Txt variant="label">Terrain</Txt>
       <View style={styles.wrap}>
         <Chip label="Tous les terrains" active={court === null} onPress={() => setCourt(null)} />
         {courts.map((c) => (

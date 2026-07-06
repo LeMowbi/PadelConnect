@@ -83,9 +83,7 @@ export function NewsEditor({
           couleurs/typo que index.tsx) — l’opérateur ne publie plus à l’aveugle. */}
       {title.trim().length > 0 ? (
         <View style={{ marginTop: spacing.md }}>
-          <Txt variant="label">
-            Aperçu sur l’accueil joueur
-          </Txt>
+          <Txt variant="label">Aperçu sur l’accueil joueur</Txt>
           <View style={styles.preview}>
             <Ionicons name="megaphone" size={18} color={colors.purple} />
             <View style={{ flex: 1 }}>

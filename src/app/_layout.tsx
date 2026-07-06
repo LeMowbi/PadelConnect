@@ -8,7 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnimatedSplash } from '@/components/AnimatedSplash';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { ToastProvider } from '@/components/Toast';
+import { ToastProvider, useToast } from '@/components/Toast';
 import { installGlobalErrorLogging } from '@/lib/diagnostics';
 import { useNotificationTapRouter } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
@@ -72,6 +72,7 @@ function RootNav() {
   const { state, hydrated, refreshSession } = useApp();
   const segments = useSegments();
   const router = useRouter();
+  const toast = useToast();
 
   // Sans compte → onboarding obligatoire ; avec compte → on quitte l’onboarding.
   // reset-password, legal et decouvrir sont des routes PUBLIQUES : reset-password parce que
@@ -86,9 +87,14 @@ function RootNav() {
     // avant que useEmailConfirmLink ne pose le compte (micro-flash).
     const publicRoute =
       onboarding || ['reset-password', 'auth-callback', 'email-confirmed', 'legal', 'decouvrir'].includes(segments[0] ?? '');
-    if (!state.account && !publicRoute) router.replace('/onboarding');
+    // « Connecté » = une SESSION existe (serverUserId), pas seulement un profil chargé : loadSession
+    // pose serverUserId dès que getSession() rend un userId, mais laisse account=null si le fetch
+    // profiles a flanché (réseau). Se baser sur account seul éjectait un inscrit fraîchement confirmé
+    // vers /onboarding malgré une session valide.
+    const signedIn = !!state.account || !!state.serverUserId;
+    if (!signedIn && !publicRoute) router.replace('/onboarding');
     else if (state.account && onboarding) router.replace('/');
-  }, [hydrated, state.account, segments, router]);
+  }, [hydrated, state.account, state.serverUserId, segments, router]);
 
   // Confirmation d’e-mail : le lien reçu par mail rouvre l’app → on échange le code contre
   // une session, on recharge le profil. Trois cas distincts : NOUVEL inscrit (bienvenue +
@@ -97,11 +103,18 @@ function RootNav() {
   // repartir de l’accueil, loadSession a déjà purgé les données du compte précédent).
   const onConfirm = useCallback(
     async (r: 'confirmed' | 'error') => {
+      const alreadySignedIn = !!state.account || !!state.serverUserId;
       if (r === 'error') {
+        // Lien expiré. Si l'utilisateur est DÉJÀ connecté (échec d'un CHANGEMENT d'e-mail), on ne
+        // l'envoie PAS vers l'écran « reconnecte-toi » (sa session est intacte, le garde le renverrait
+        // aussitôt à l'accueil → message mensonger) : un toast, et il reste dans l'app.
+        if (alreadySignedIn) {
+          toast.show('Lien expiré — relance un changement d’e-mail depuis ton profil.', { icon: 'alert-circle' });
+          return;
+        }
         router.replace('/email-confirmed?kind=error');
         return;
       }
-      const alreadySignedIn = !!state.account;
       const prevUserId = state.serverUserId;
       await refreshSession();
       // getSession() = lecture LOCALE (la session vient d'être posée) : getUser() interrogeait le
@@ -116,7 +129,7 @@ function RootNav() {
       // connexion. Il entre dans l'app par le bouton de cet écran.
       router.replace(`/email-confirmed?kind=${kind}`);
     },
-    [refreshSession, router, state.account, state.serverUserId],
+    [refreshSession, router, toast, state.account, state.serverUserId],
   );
   useEmailConfirmLink(onConfirm);
 

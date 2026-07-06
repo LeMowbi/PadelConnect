@@ -63,9 +63,7 @@ export function DiagnosticsCard() {
       ) : null}
       {errors.length > 0 ? (
         <View style={{ marginTop: spacing.md, gap: spacing.xs }}>
-          <Txt variant="label">
-            Dernières erreurs (anonymes)
-          </Txt>
+          <Txt variant="label">Dernières erreurs (anonymes)</Txt>
           {errors.map((e, i) => (
             <View key={`${e.createdAt}-${i}`} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm }}>
               <Ionicons name="bug-outline" size={13} color={colors.coral} style={{ marginTop: 2 }} />

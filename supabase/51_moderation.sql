@@ -62,6 +62,7 @@ end;
 $$;
 
 grant execute on function public.report_review(uuid, text) to authenticated;
+revoke execute on function public.report_review(uuid, text) from public, anon;
 
 -- Bloquer / débloquer un joueur (jamais soi-même). Idempotent.
 create or replace function public.block_user(p_user_id uuid)
@@ -80,6 +81,7 @@ end;
 $$;
 
 grant execute on function public.block_user(uuid) to authenticated;
+revoke execute on function public.block_user(uuid) from public, anon;
 
 create or replace function public.unblock_user(p_user_id uuid)
 returns boolean
@@ -95,6 +97,7 @@ end;
 $$;
 
 grant execute on function public.unblock_user(uuid) to authenticated;
+revoke execute on function public.unblock_user(uuid) from public, anon;
 
 -- Ma liste de comptes bloqués (pour filtrer avis + matchs ouverts côté app).
 create or replace function public.fetch_blocked_users()
@@ -108,6 +111,7 @@ as $$
 $$;
 
 grant execute on function public.fetch_blocked_users() to authenticated;
+revoke execute on function public.fetch_blocked_users() from public, anon;
 
 -- ── 2) Confidentialité des matchs ouverts : jamais le téléphone du créateur ──
 -- fetch_open_matches est PUBLIC et join_open_match rend l'appelant participant → la policy

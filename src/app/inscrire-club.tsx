@@ -98,9 +98,7 @@ export default function InscrireClub() {
       </Card>
 
       <Card style={{ marginTop: spacing.md }}>
-        <Txt variant="label">
-          INFOS DU CLUB
-        </Txt>
+        <Txt variant="label">INFOS DU CLUB</Txt>
         <TextInput
           value={name}
           onChangeText={setName}
@@ -139,9 +137,7 @@ export default function InscrireClub() {
       </Card>
 
       <Card style={{ marginTop: spacing.md }}>
-        <Txt variant="label">
-          POUR TE RECONTACTER
-        </Txt>
+        <Txt variant="label">POUR TE RECONTACTER</Txt>
         <TextInput
           value={phone}
           onChangeText={setPhone}
