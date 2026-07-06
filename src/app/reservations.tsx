@@ -1,12 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
+import { Chip } from '@/components/Chip';
 import { Reveal, staggerDelay } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, SectionHeader, Tag, Txt, type IconName } from '@/components/ui';
+import { ResultCard } from '@/components/ResultCard';
 import { matchTemplates } from '@/lib/matchMessages';
+import { shareViewAsImage } from '@/lib/shareImage';
 import { findClub } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { useToast } from '@/components/Toast';
@@ -63,6 +66,11 @@ export default function ReservationsScreen() {
   const [pastShownCount, setPastShownCount] = useState(PAST_PREVIEW);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null); // confirmation avant annulation
   const [msgTarget, setMsgTarget] = useState<Reservation | null>(null); // fiche « messages types » WhatsApp
+  // Partage de résultat (image) : la résa ciblée + le partenaire choisi (2v2) + garde anti double-tap.
+  const [shareTarget, setShareTarget] = useState<Reservation | null>(null);
+  const [sharePartner, setSharePartner] = useState('');
+  const [sharing, setSharing] = useState(false);
+  const cardRef = useRef<View>(null); // vue capturée en image
   const [cancellingLesson, setCancellingLesson] = useState<string | null>(null); // garde anti double-tap
 
   // SCORE DE MATCH (46) : chaque joueur saisit les sets de SON point de vue, l'app désigne
@@ -192,6 +200,30 @@ export default function ReservationsScreen() {
   const openScore = (r: Reservation) => {
     setScoreTarget(r);
     setSetDrafts(EMPTY_SETS);
+  };
+
+  // ── Partage du résultat en image ──────────────────────────────────────────────
+  const openShare = (r: Reservation) => {
+    setShareTarget(r);
+    setSharePartner(r.invited[0]?.name ?? ''); // 2v2 : partenaire par défaut = 1ᵉʳ invité
+  };
+  const myName = `${state.account?.firstName ?? ''} ${state.account?.lastName ?? ''}`.trim() || 'Moi';
+  // Équipes de la carte : MON équipe (moi + partenaire choisi) vs les autres joueurs.
+  const shareTeams = (() => {
+    if (!shareTarget) return null;
+    const others = shareTarget.invited.map((i) => i.name);
+    if (others.length <= 1) return { teamA: [myName], teamB: others }; // 1v1 : aucun partenaire
+    const idx = Math.max(0, others.indexOf(sharePartner)); // filtre PAR INDEX (noms possiblement égaux)
+    return { teamA: [myName, others[idx]], teamB: others.filter((_, i) => i !== idx) };
+  })();
+  const doShare = async () => {
+    if (sharing) return;
+    setSharing(true);
+    const res = await shareViewAsImage(cardRef);
+    setSharing(false);
+    if (res === 'error') toast.show('Partage impossible — réessaie', { icon: 'alert-circle' });
+    else if (res === 'unavailable') toast.show('Partage indisponible sur cet appareil.', { icon: 'alert-circle' });
+    else setShareTarget(null);
   };
 
   const parsed = parseSetDrafts(setDrafts);
@@ -724,6 +756,16 @@ export default function ReservationsScreen() {
                         </Txt>
                       </Pressable>
                     ) : null}
+                    {/* Partage du résultat en image — quand MON score est validé (mine = j'ai saisi,
+                        donc iWon est fiable pour orienter le vainqueur sur la carte). */}
+                    {scores[r.id]?.mine && scores[r.id]?.validated && scores[r.id]?.score ? (
+                      <Pressable onPress={() => openShare(r)} style={styles.replayBtn}>
+                        <Ionicons name="share-social-outline" size={13} color={colors.signature} />
+                        <Txt variant="small" color={colors.signature} style={{ fontWeight: '600' }}>
+                          Partager le résultat
+                        </Txt>
+                      </Pressable>
+                    ) : null}
                   </View>
                 </View>
               </Reveal>
@@ -838,6 +880,53 @@ export default function ReservationsScreen() {
             </Pressable>
           ))}
         </View>
+      </BottomSheet>
+
+      {/* Partage du résultat en image : carte capturée (react-native-view-shot) → partage système. */}
+      <BottomSheet
+        visible={shareTarget !== null}
+        title="Partager le résultat"
+        subtitle={shareTarget ? `${shareTarget.clubName} — ${dateKeyLabel(shareTarget.dateKey)}` : undefined}
+        onClose={() => setShareTarget(null)}
+      >
+        {shareTarget && shareTeams ? (
+          <>
+            {/* Partenaire (2v2 seulement) : qui était avec toi ? Les autres deviennent adversaires. */}
+            {shareTarget.invited.length >= 2 ? (
+              <>
+                <Txt variant="label" color={colors.textMuted}>
+                  Ton partenaire
+                </Txt>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm }}>
+                  {shareTarget.invited.map((p) => (
+                    <Chip key={p.id} label={p.name} active={sharePartner === p.name} onPress={() => setSharePartner(p.name)} />
+                  ))}
+                </View>
+              </>
+            ) : null}
+            {/* Aperçu = la carte réellement capturée (même `ref`). */}
+            <View style={{ alignItems: 'center', marginTop: spacing.md }}>
+              <ResultCard
+                ref={cardRef}
+                teamA={shareTeams.teamA}
+                teamB={shareTeams.teamB}
+                aWon={!!scores[shareTarget.id]?.iWon}
+                score={(scores[shareTarget.id]?.score ?? '').replace(/,\s*/g, ' · ')}
+                clubName={shareTarget.clubName}
+                dateLabel={dateKeyLabel(shareTarget.dateKey)}
+              />
+            </View>
+            <View style={{ marginTop: spacing.lg }}>
+              <Button
+                label={sharing ? 'Préparation…' : 'Partager l’image'}
+                icon="share-social"
+                onPress={() => void doShare()}
+                disabled={sharing}
+                full
+              />
+            </View>
+          </>
+        ) : null}
       </BottomSheet>
 
       {/* Saisie du score (46) : chaque joueur saisit les sets de SON point de vue — l'app

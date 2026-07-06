@@ -86,7 +86,8 @@
         {
           "contactsPermission": "PadelConnect accède à tes contacts, avec ton accord, uniquement pour t'aider à retrouver et inviter tes amis par leur numéro."
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": false,
