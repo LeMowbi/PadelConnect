@@ -46,7 +46,7 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
         <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', flex: 1 }}>
           <Tag
             label={byClub ? `Club · ${comp.organizer}` : byPadel ? comp.organizer : `Joueur · ${comp.organizer}`}
-            tone={byClub ? 'blue' : byPadel ? 'amber' : 'green'}
+            tone={byClub ? 'signature' : byPadel ? 'amber' : 'green'}
             icon={byClub ? 'business' : byPadel ? 'star' : 'person'}
           />
           {/* Officiel = compte pour le niveau ; sinon « Amical » (entre joueurs), dit explicitement.
@@ -91,7 +91,7 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
           ) : mine?.result === 'last' ? (
             <Tag label="Fin de tableau" tone="coral" icon="arrow-down" />
           ) : registered ? (
-            <Tag label="Participé" tone="blue" icon="checkmark" />
+            <Tag label="Participé" tone="signature" icon="checkmark" />
           ) : (
             <Tag label={`Vainqueur : ${result.winner}`} tone="neutral" icon="trophy" />
           )

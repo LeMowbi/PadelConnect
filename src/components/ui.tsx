@@ -51,9 +51,12 @@ const txt = StyleSheet.create({
     color: colors.text,
     letterSpacing: -0.5,
   },
-  h1: { fontSize: font.size.xxl, fontFamily: font.family.heavy, fontWeight: font.weight.bold, color: colors.text, letterSpacing: -0.3 },
+  // fontWeight ALIGNÉ sur la graisse réelle du fichier de police (famille) : un poids déclaré
+  // différent ne charge pas un autre fichier (polices statiques) et provoquait un ré-embossage
+  // synthétique sur Android (« double-gras »). heavy→800, bold→700.
+  h1: { fontSize: font.size.xxl, fontFamily: font.family.heavy, fontWeight: font.weight.heavy, color: colors.text, letterSpacing: -0.3 },
   h2: { fontSize: font.size.xl, fontFamily: font.family.bold, fontWeight: font.weight.bold, color: colors.text, letterSpacing: -0.2 },
-  h3: { fontSize: font.size.lg, fontFamily: font.family.bold, fontWeight: font.weight.semibold, color: colors.text },
+  h3: { fontSize: font.size.lg, fontFamily: font.family.bold, fontWeight: font.weight.bold, color: colors.text },
   body: { fontSize: font.size.md, fontWeight: font.weight.regular, color: colors.text, lineHeight: 22 },
   small: { fontSize: font.size.sm, fontWeight: font.weight.regular, color: colors.text },
   muted: { fontSize: font.size.sm, fontWeight: font.weight.regular, color: colors.textMuted, lineHeight: 19 },
@@ -231,7 +234,7 @@ const btn = StyleSheet.create({
 
 /* ---------------------------------- Tag ----------------------------------- */
 
-type TagTone = 'signature' | 'green' | 'neutral' | 'danger' | 'blue' | 'coral' | 'purple' | 'amber';
+type TagTone = 'signature' | 'green' | 'neutral' | 'danger' | 'coral' | 'purple' | 'amber';
 
 export function Tag({ label, tone = 'neutral', icon }: { label: string; tone?: TagTone; icon?: IconName }) {
   const t = tagTones[tone];
@@ -247,13 +250,14 @@ export function Tag({ label, tone = 'neutral', icon }: { label: string; tone?: T
   );
 }
 
+// fg ASSOMBRIS (audit a11y) pour passer WCAG AA (≥ 4.5:1) sur les tints clairs : green/coral/
+// danger échouaient (~4.1-4.3:1) sur greenSoft/coralSoft. On garde le même tint de fond.
 const tagTones: Record<TagTone, { bg: string; fg: string }> = {
   signature: { bg: colors.signatureSoft, fg: colors.signature },
-  green: { bg: colors.greenSoft, fg: colors.green },
+  green: { bg: colors.greenSoft, fg: colors.signatureDark }, // vert foncé lisible sur tint vert
   neutral: { bg: colors.surfaceAlt, fg: colors.text },
-  danger: { bg: colors.dangerSoft, fg: colors.danger },
-  blue: { bg: colors.blueSoft, fg: colors.blue },
-  coral: { bg: colors.coralSoft, fg: colors.coral },
+  danger: { bg: colors.dangerSoft, fg: colors.coralDark },
+  coral: { bg: colors.coralSoft, fg: colors.coralDark },
   purple: { bg: colors.purpleSoft, fg: colors.purpleDark }, // texte violet foncé lisible sur tint violet (WCAG AA)
   amber: { bg: colors.amberSoft, fg: colors.amberDark }, // texte or lisible sur tint or (WCAG AA)
 };

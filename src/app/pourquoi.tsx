@@ -37,7 +37,7 @@ const ARGS: { icon: keyof typeof Ionicons.glyphMap; tint: string; bg: string; ti
   },
   {
     icon: 'megaphone',
-    // colors.blue est un alias legacy de colors.signature (« pas de bleu dans la refonte ») —
+    // colors.signature est un alias legacy de colors.signature (« pas de bleu dans la refonte ») —
     // on référence directement le vrai token pour lever l’ambiguïté dans le code.
     tint: colors.signature,
     bg: colors.signatureSoft,

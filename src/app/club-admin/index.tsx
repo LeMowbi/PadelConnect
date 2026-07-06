@@ -302,14 +302,14 @@ export default function ClubAdmin() {
 
         {/* Inscription d’un nouveau club — validée par PadelConnect */}
         <Pressable onPress={() => setShowSignup((v) => !v)} style={styles.signupLink}>
-          <Ionicons name={showSignup ? 'chevron-down' : 'add-circle-outline'} size={16} color={colors.blue} />
-          <Txt variant="small" color={colors.blue} style={{ fontWeight: '700' }}>
+          <Ionicons name={showSignup ? 'chevron-down' : 'add-circle-outline'} size={16} color={colors.signature} />
+          <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
             Ton club n’est pas dans la liste ? Inscris-le
           </Txt>
         </Pressable>
 
         {showSignup ? (
-          <Card style={{ marginTop: spacing.sm, borderColor: colors.blue }}>
+          <Card style={{ marginTop: spacing.sm, borderColor: colors.signature }}>
             <Txt variant="h3">Inscrire mon club</Txt>
             <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
               Ta demande passe par PadelConnect : tu prépares ta page tout de suite, elle devient visible des joueurs dès l’activation.
@@ -362,7 +362,7 @@ export default function ClubAdmin() {
 
         {pendingOwn ? (
           <View style={styles.pendingBanner}>
-            <Ionicons name="hourglass-outline" size={16} color={colors.blue} />
+            <Ionicons name="hourglass-outline" size={16} color={colors.signature} />
             <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
               {club.name} est{' '}
               <Txt variant="small" style={{ fontWeight: '700' }}>
@@ -634,9 +634,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.blueSoft,
+    backgroundColor: colors.signatureSoft,
     borderWidth: 1,
-    borderColor: colors.blue,
+    borderColor: colors.signature,
     borderRadius: radius.md,
     padding: spacing.md,
     marginTop: spacing.md,

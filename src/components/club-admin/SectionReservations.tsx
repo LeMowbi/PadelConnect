@@ -234,7 +234,7 @@ export function SectionReservations({
       <View style={styles.stats}>
         <StatTile value={upcomingRes.length} label="À venir" color={colors.signature} bg={colors.signatureSoft} />
         <StatTile value={pastRes.length} label="Jouées" color={colors.green} bg={colors.greenSoft} />
-        <StatTile value={clubRes.length} label="Total" color={colors.blue} bg={colors.blueSoft} />
+        <StatTile value={clubRes.length} label="Total" color={colors.amberDark} bg={colors.amberSoft} />
       </View>
 
       {/* Bloquer un créneau réservé hors app (téléphone, WhatsApp, sur place) */}
@@ -523,9 +523,7 @@ export function SectionReservations({
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
             <IconCircle icon="cash-outline" color={colors.green} bg={colors.greenSoft} />
             <View style={{ flex: 1 }}>
-              <Txt variant="label">
-                REVENU DES PARTIES JOUÉES (7 J)
-              </Txt>
+              <Txt variant="label">REVENU DES PARTIES JOUÉES (7 J)</Txt>
               <Txt variant="h2" color={colors.green}>
                 {fcfa(last7DaysRevenue)}
               </Txt>
@@ -741,9 +739,7 @@ export function SectionReservations({
           pastByWeek.slice(0, weeksShown).map((g) => (
             <Card key={g.week} style={{ marginBottom: spacing.sm }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm }}>
-                <Txt variant="label">
-                  Semaine {weekLabel(g.week)}
-                </Txt>
+                <Txt variant="label">Semaine {weekLabel(g.week)}</Txt>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
                   <Tag label={fcfa(revenueOf(g.items))} tone="green" icon="cash-outline" />
                   <Tag label={`${g.items.length} jouée${g.items.length > 1 ? 's' : ''}`} tone="neutral" />

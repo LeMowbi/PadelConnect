@@ -252,7 +252,7 @@ export default function ReserverScreen() {
               {selectedRow ? (
                 <View style={{ marginTop: spacing.lg }}>
                   <View style={styles.infoPill}>
-                    <Ionicons name="business-outline" size={15} color={colors.blue} />
+                    <Ionicons name="business-outline" size={15} color={colors.signature} />
                     <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
                       {selectedRow.clubs.length} club{selectedRow.clubs.length > 1 ? 's ont' : ' a'} ce créneau libre · {slot}
                     </Txt>
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.blueSoft,
+    backgroundColor: colors.signatureSoft,
     borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.md,

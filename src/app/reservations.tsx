@@ -669,7 +669,7 @@ export default function ReservationsScreen() {
                           // Organisateur non inscrit à son propre tournoi : « Participé » serait faux.
                           <Tag label="Terminé" tone="neutral" />
                         ) : (
-                          <Tag label="Participé" tone="blue" />
+                          <Tag label="Participé" tone="signature" />
                         )
                       ) : finished ? (
                         <Tag label="Résultats à venir" tone="neutral" />
@@ -720,7 +720,7 @@ export default function ReservationsScreen() {
                       if (s?.validated && s.mine && s.iWon) return <Tag label="Victoire" tone="amber" icon="trophy" />;
                       if (s?.conflict) return <Tag label="Scores différents" tone="coral" />;
                       if (s && !s.validated) return <Tag label="Score en attente" tone="purple" icon="hourglass-outline" />;
-                      return <Tag label="Jouée" tone="blue" />;
+                      return <Tag label="Jouée" tone="signature" />;
                     })()}
                   </View>
                   {/* A-R7 : « Rejouer ici » → réservation du club, avec l’HEURE habituelle

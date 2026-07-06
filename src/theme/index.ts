@@ -10,8 +10,7 @@ export const colors = {
   surface: '#FFFFFF', // surface carte
   surfaceAlt: '#F5F2EA', // champs / surfaces secondaires
   surfaceBeige: '#E4DFD2', // puce / track segmenté (beige foncé)
-  border: '#E7E1D4', // bordure / ligne
-  borderSoft: 'rgba(21,33,28,0.06)',
+  border: '#E7E1D4', // bordure / ligne (contour de carte)
 
   // VERT primaire (actions, réservation, sélection). Texte blanc dessus.
   signature: '#0C6A57',
@@ -19,13 +18,10 @@ export const colors = {
   signatureSoft: 'rgba(12,106,87,0.12)',
   // Vert (disponibilité, succès, jauges) + tints clairs de la refonte.
   green: '#0E7A64',
-  greenDark: '#0C6A57',
   greenSoft: '#DCEBE4', // vert tint (fond doux)
-  // « Bleu » (legacy) → vert signature (pas de bleu dans la refonte).
-  blue: '#0C6A57',
-  blueSoft: 'rgba(12,106,87,0.12)',
   // CORAIL — urgence (« + que X places »).
   coral: '#C0492F',
+  coralDark: '#9A3220', // corail « texte » sur coralSoft/dangerSoft : WCAG AA (≈ 5:1) pour les Tags
   coralSoft: '#FBE7DF',
   // VIOLET — tournois & récompenses.
   purple: '#7B6CE8',
@@ -46,7 +42,7 @@ export const colors = {
   // hiérarchie (légendes de graphe, jours de calendrier), mais désormais lisible.
   textFaint: '#68746C',
 
-  hairline: '#E7E1D4', // séparateurs internes
+  hairline: '#ECE7DB', // séparateurs INTERNES — plus clair que `border` (contour) pour hiérarchiser
   scrim: 'rgba(12,26,22,0.55)', // overlay bas de photo + fond des bottom sheets
   scrimStrong: 'rgba(12,26,22,0.85)',
 
@@ -64,11 +60,11 @@ export const colors = {
   viewerBg: '#000000',
 } as const;
 
-// Dégradés réutilisables (tokens — pas de hex en dur dans les écrans).
+// Dégradés réutilisables (tokens — pas de hex en dur dans les écrans). Ils référencent les
+// couleurs par token pour suivre automatiquement un changement de palette.
 export const gradients = {
-  heroSoft: ['#DCEBE4', '#EFE9DA', colors.bg] as const, // accueil / onboarding
-  deepGreen: ['#0E7A64', '#0C6A57', '#084C3F'] as const, // héros vert (refonte, 3 paliers)
-  deepPurple: ['#7B6CE8', '#5B4FC9'] as const, // bandeau univers Tournois (violet)
+  deepGreen: [colors.green, colors.signature, colors.signatureDark] as const, // héros vert (3 paliers)
+  deepPurple: [colors.purple, colors.purpleDark] as const, // bandeau univers Tournois (violet)
 } as const;
 
 // Palette d’accents pour les visuels de club (placeholders) — référence les tokens.

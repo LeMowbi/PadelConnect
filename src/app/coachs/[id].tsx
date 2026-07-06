@@ -99,9 +99,7 @@ export default function CoachDetail() {
 
         {/* Bio */}
         <Card style={{ marginTop: spacing.lg }}>
-          <Txt variant="label">
-            À propos
-          </Txt>
+          <Txt variant="label">À propos</Txt>
           <Txt variant="body" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
             {coach.bio}
           </Txt>
@@ -113,13 +111,13 @@ export default function CoachDetail() {
         </Txt>
         <View style={styles.specs}>
           {coach.specialties.map((s) => (
-            <Tag key={s} label={s} tone="blue" />
+            <Tag key={s} label={s} tone="signature" />
           ))}
         </View>
 
         {/* Disponibilité — secteur où le coach exerce */}
         <View style={styles.availRow}>
-          <Ionicons name="time-outline" size={16} color={colors.blue} />
+          <Ionicons name="time-outline" size={16} color={colors.signature} />
           <Txt variant="muted">Disponible sur {coach.area} — horaires à convenir.</Txt>
         </View>
 
@@ -165,7 +163,7 @@ const HERO_HEIGHT = 240;
 const styles = StyleSheet.create({
   hero: {
     height: HERO_HEIGHT,
-    backgroundColor: colors.blue,
+    backgroundColor: colors.signature,
     justifyContent: 'flex-end',
   },
   heroFooter: {
@@ -179,7 +177,7 @@ const styles = StyleSheet.create({
     width: 74,
     height: 74,
     borderRadius: radius.lg,
-    backgroundColor: colors.blueSoft,
+    backgroundColor: colors.signatureSoft,
     borderWidth: 1,
     borderColor: colors.white,
     alignItems: 'center',
@@ -242,7 +240,7 @@ const styles = StyleSheet.create({
     height: 52,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.pill,
-    backgroundColor: colors.blue,
+    backgroundColor: colors.signature,
     ...shadows.e2,
   },
   callBtnPressed: { opacity: 0.9, transform: [{ scale: 0.97 }] },

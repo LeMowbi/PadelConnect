@@ -102,7 +102,7 @@ export function ClosePanel({
                   <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
                     {t}
                   </Txt>
-                  {myTeam === t ? <Tag label="Ton équipe" tone="blue" /> : null}
+                  {myTeam === t ? <Tag label="Ton équipe" tone="signature" /> : null}
                 </Pressable>
               );
             })}
@@ -149,7 +149,7 @@ export function ClosePanel({
                     <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
                       {t}
                     </Txt>
-                    {myTeam === t ? <Tag label="Ton équipe" tone="blue" /> : null}
+                    {myTeam === t ? <Tag label="Ton équipe" tone="signature" /> : null}
                   </Pressable>
                 );
               })}
@@ -174,7 +174,7 @@ export function ClosePanel({
                     <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
                       {t}
                     </Txt>
-                    {myTeam === t ? <Tag label="Ton équipe" tone="blue" /> : null}
+                    {myTeam === t ? <Tag label="Ton équipe" tone="signature" /> : null}
                   </Pressable>
                 );
               })}
@@ -218,7 +218,7 @@ export function ClosePanel({
                     <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
                       {t}
                     </Txt>
-                    {myTeam === t ? <Tag label="Ton équipe" tone="blue" /> : null}
+                    {myTeam === t ? <Tag label="Ton équipe" tone="signature" /> : null}
                   </Pressable>
                 );
               })}

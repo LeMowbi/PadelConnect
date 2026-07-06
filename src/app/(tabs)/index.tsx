@@ -35,8 +35,8 @@ const ACTIONS: Action[] = [
 ];
 
 const MONTHS_SHORT = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
-// 4 teintes DISTINCTES pour varier les avatars (colors.blue est un alias legacy de signature →
-// il faisait doublon avec la 1ʳᵉ ; amber donne une vraie 4ᵉ couleur).
+// 4 teintes DISTINCTES pour varier les avatars (l'ancien colors.blue faisait doublon avec
+// signature ; amber donne une vraie 4ᵉ couleur).
 const AVATAR_TONES = [colors.signature, colors.amber, colors.purple, colors.coral];
 
 // ─── Compte à rebours doux ────────────────────────────────────────────────────

@@ -184,9 +184,7 @@ export default function ProfilScreen() {
         <SectionHeader title="Mon niveau" />
         <Card>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }}>
-            <Txt variant="label">
-              Niveau de jeu
-            </Txt>
+            <Txt variant="label">Niveau de jeu</Txt>
             <Txt variant="display" color={colors.signature} style={{ fontSize: 28 }}>
               {level.toFixed(2)}
             </Txt>
@@ -240,7 +238,7 @@ export default function ProfilScreen() {
                   <View key={o.id} style={styles.row}>
                     <Tag
                       label={o.result === 'win' ? 'Vainqueur' : o.result === 'last' ? 'Fin de tableau' : 'Participant'}
-                      tone={o.result === 'win' ? 'amber' : o.result === 'last' ? 'coral' : 'blue'}
+                      tone={o.result === 'win' ? 'amber' : o.result === 'last' ? 'coral' : 'signature'}
                     />
                     <Txt variant="muted" style={{ flex: 1 }}>
                       {/* Tournoi serveur : delta seul (le « niveau après » serait périmé). */}
@@ -358,7 +356,7 @@ export default function ProfilScreen() {
           <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
         </Card>
         <Card onPress={() => router.push('/amis')} style={styles.cta}>
-          <IconCircle icon="people" color={colors.blue} bg={colors.blueSoft} />
+          <IconCircle icon="people" color={colors.signature} bg={colors.signatureSoft} />
           <View style={{ flex: 1 }}>
             <Txt variant="h3">Mes amis · {friends.length}</Txt>
             <Txt variant="muted">Tes partenaires de jeu.</Txt>

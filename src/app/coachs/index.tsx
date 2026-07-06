@@ -68,7 +68,7 @@ export default function CoachsScreen() {
   return (
     <Screen back title="Coachs" subtitle="Classés par niveau — contacte-les directement">
       <View style={styles.note}>
-        <IconCircle icon="information-circle" color={colors.blue} bg={colors.blueSoft} size={34} />
+        <IconCircle icon="information-circle" color={colors.signature} bg={colors.signatureSoft} size={34} />
         <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
           La réservation se fait directement avec le coach, par téléphone. Tu trouves ici son numéro et son club.
         </Txt>

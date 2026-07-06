@@ -223,7 +223,7 @@ export default function CompetitionDetail() {
                   ? 'Organisé par PadelConnect'
                   : `Créé par ${comp.organizer} (joueur)`
             }
-            tone={byClub ? 'blue' : comp.organizerType === 'operator' ? 'amber' : 'green'}
+            tone={byClub ? 'signature' : comp.organizerType === 'operator' ? 'amber' : 'green'}
             icon={byClub ? 'business' : comp.organizerType === 'operator' ? 'star' : 'person'}
           />
         </View>
@@ -248,9 +248,7 @@ export default function CompetitionDetail() {
           </View>
         ) : null}
         <View style={styles.infoChip}>
-          <Txt variant="label">
-            {played ? 'Date' : 'Clôture'}
-          </Txt>
+          <Txt variant="label">{played ? 'Date' : 'Clôture'}</Txt>
           <Txt variant="h3" style={{ marginTop: 2 }}>
             {compDateLabel(comp)}
           </Txt>
@@ -359,9 +357,7 @@ export default function CompetitionDetail() {
       {/* Places — limitées, en équipes */}
       <Card style={{ marginTop: spacing.md }}>
         <View style={styles.placesHead}>
-          <Txt variant="label">
-            ÉQUIPES INSCRITES
-          </Txt>
+          <Txt variant="label">ÉQUIPES INSCRITES</Txt>
           <Txt variant="h3">
             {teams}/{comp.slots}
           </Txt>
@@ -382,7 +378,7 @@ export default function CompetitionDetail() {
             <View style={styles.teamsWrap}>
               {teamList.map((t) => (
                 <Pressable key={t} onPress={() => setOpenPlayer({ id: `team:${comp.id}:${t}`, name: t, isTeam: true })}>
-                  <Tag label={t} tone={t === myTeam && registered ? 'blue' : 'neutral'} icon="people" />
+                  <Tag label={t} tone={t === myTeam && registered ? 'signature' : 'neutral'} icon="people" />
                 </Pressable>
               ))}
             </View>
@@ -483,7 +479,7 @@ export default function CompetitionDetail() {
                       <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
                         {t}
                       </Txt>
-                      {registered && t === myTeam ? <Tag label="Ton équipe" tone="blue" /> : null}
+                      {registered && t === myTeam ? <Tag label="Ton équipe" tone="signature" /> : null}
                     </Pressable>
                   );
                 })}
@@ -536,7 +532,7 @@ export default function CompetitionDetail() {
                         <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
                           {t}
                         </Txt>
-                        {registered && t === myTeam ? <Tag label="Ton équipe" tone="blue" /> : null}
+                        {registered && t === myTeam ? <Tag label="Ton équipe" tone="signature" /> : null}
                       </Pressable>
                     );
                   })}
@@ -565,7 +561,7 @@ export default function CompetitionDetail() {
                         <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
                           {t}
                         </Txt>
-                        {registered && t === myTeam ? <Tag label="Ton équipe" tone="blue" /> : null}
+                        {registered && t === myTeam ? <Tag label="Ton équipe" tone="signature" /> : null}
                       </Pressable>
                     );
                   })}
@@ -607,7 +603,7 @@ export default function CompetitionDetail() {
                         <Txt variant="body" style={{ flex: 1, fontWeight: sel ? '700' : '400' }}>
                           {t}
                         </Txt>
-                        {registered && t === myTeam ? <Tag label="Ton équipe" tone="blue" /> : null}
+                        {registered && t === myTeam ? <Tag label="Ton équipe" tone="signature" /> : null}
                       </Pressable>
                     );
                   })}
@@ -791,9 +787,7 @@ function ResultCard({ result, mine, official }: { result: CompResult; mine?: Off
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
         <Ionicons name="trophy" size={24} color={colors.amber} />
         <View style={{ flex: 1 }}>
-          <Txt variant="label">
-            Vainqueur
-          </Txt>
+          <Txt variant="label">Vainqueur</Txt>
           <Txt variant="h3" color={colors.amberDark}>
             {result.winner}
           </Txt>
@@ -801,7 +795,7 @@ function ResultCard({ result, mine, official }: { result: CompResult; mine?: Off
         {mine ? (
           <Tag
             label={mine.result === 'win' ? 'Vainqueur !' : mine.result === 'last' ? 'Fin de tableau' : 'Participé'}
-            tone={mine.result === 'win' ? 'amber' : mine.result === 'last' ? 'coral' : 'blue'}
+            tone={mine.result === 'win' ? 'amber' : mine.result === 'last' ? 'coral' : 'signature'}
             icon={mine.result === 'win' ? 'trophy' : mine.result === 'last' ? 'arrow-down' : 'checkmark'}
           />
         ) : null}
