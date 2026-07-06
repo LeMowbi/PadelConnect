@@ -295,8 +295,10 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   collées DANS L'ORDRE, notify-club redéployée, dossier `site/` re-déployé (privacy + /get, AASA ok)
   — voir docs/AUDIT-SERVEUR.md §0-SEXIES.
 - **Reste à faire par le porteur, AVANT le build #47** : coller SQL `54` (§0-SEPTIES) PUIS `55`
-  (§0-OCTIES), dans cet ordre. Plus tard : empreinte SHA-256 d'assetlinks (Android) ; optionnel :
-  `WEBHOOK_SECRET` + en-tête `x-webhook-secret` sur les webhooks (§3).
+  (§0-OCTIES), dans cet ordre. Plus tard : empreinte SHA-256 d'assetlinks (Android).
+- **Webhook sécurisé ✅ FAIT (2026-07-06)** : `WEBHOOK_SECRET` posé dans les secrets des Edge
+  Functions + en-tête `x-webhook-secret` sur les 8 webhooks + `notify-club` redéployée (le secret
+  vit UNIQUEMENT côté Supabase, jamais dans le dépôt) — cf. docs/PUSH-SETUP.md §4bis.
 
 ### Chantier v2 (2026-07-04) — comptes club, web, Wave, stats, 1v1
 

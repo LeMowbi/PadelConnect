@@ -130,19 +130,22 @@ joueur, auteur de la réservation, opérateur, organisateur du tournoi, ami invi
 **Au total, 8 webhooks** doivent exister : `reservations`, `reservation_participants`,
 `competitions`, `friend_requests`, `lessons`, `coaches`, `match_results`, `operator_news`.
 
-## 4 bis. ⚠️ IMPORTANT — Sécuriser le webhook (fortement recommandé avant d'ouvrir aux joueurs)
+## 4 bis. ✅ FAIT (2026-07-06) — Webhook sécurisé par secret
 
-La fonction `notify-club` DOIT exiger un secret : sans lui, n'importe qui connaissant l'URL (la clé
-publique est dans l'app) peut **envoyer de faux push aux gérants** avec un contenu arbitraire
+La fonction `notify-club` exige un secret : sans lui, n'importe qui connaissant l'URL (la clé
+publique est dans l'app) pouvait **envoyer de faux push aux gérants** avec un contenu arbitraire
 (risque de phishing : « Réservation annulée, appelez ce numéro »). Un audit l'a confirmé comme
-faille réelle. À poser dès que possible :
-1. Dashboard → **Edge Functions → notify-club → Settings → Secrets/Env** : ajoute
-   `WEBHOOK_SECRET` = une longue valeur aléatoire.
-2. Pour CHAQUE Database Webhook qui appelle `notify-club` : ajoute un **HTTP header**
-   `x-webhook-secret` avec la MÊME valeur.
+faille réelle. **Configuré par le porteur le 2026-07-06** :
+1. `WEBHOOK_SECRET` posé dans les **secrets des Edge Functions**
+   (`…/dashboard/project/<ref>/functions/secrets` → « Add new secret »). Valeur aléatoire, hors dépôt.
+2. En-tête HTTP `x-webhook-secret` (même valeur) ajouté aux **8** Database Webhooks
+   (`reservations`, `reservation_participants`, `competitions`, `friend_requests`, `lessons`,
+   `coaches`, `match_results`, `operator_news`).
+3. `notify-club` redéployée.
 
-Tant que `WEBHOOK_SECRET` n'est pas défini, la fonction marche comme avant (compat). Une fois
-défini, tout appel sans le bon en-tête reçoit **401**.
+Comportement : tant que `WEBHOOK_SECRET` n'est pas défini, la fonction marche comme avant (compat) ;
+une fois défini, tout appel sans le bon en-tête reçoit **401**. ⚠️ Si tu ajoutes un 9ᵉ webhook plus
+tard, pense à lui mettre l'en-tête, sinon ses push seront bloqués.
 
 ## 5. Tester
 
