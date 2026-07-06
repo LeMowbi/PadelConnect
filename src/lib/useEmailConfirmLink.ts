@@ -1,49 +1,81 @@
-// Confirmation d’e-mail par DEEP LINK. Quand l’utilisateur clique le lien reçu par mail,
-// l’app s’ouvre sur une URL « padelco://auth-callback?code=… ». Ce hook échange ce `code`
-// contre une vraie session (flux PKCE), puis prévient l’app (onConfirmed) pour qu’elle
-// recharge le profil et entre dans l’écran d’accueil.
+// Confirmation d’e-mail par DEEP LINK. Quand l’utilisateur clique le lien reçu par mail, l’app
+// s’ouvre sur une URL de retour. Ce hook établit la session à partir de cette URL, puis prévient
+// l’app (onResult) pour qu’elle recharge le profil et entre dans l’accueil.
+//
+// ⚠️ Supabase peut renvoyer TROIS formats de retour selon la config du projet — on les gère tous
+// pour ne jamais laisser une confirmation « bloquée » :
+//   1) FRAGMENT implicite  padelco://#access_token=…&refresh_token=…   → setSession (cas réel du
+//      lien /auth/v1/verify) ; expo-linking ne lit PAS le `#`, on l’extrait à la main.
+//   2) PKCE                 padelco://auth-callback?code=…             → exchangeCodeForSession
+//   3) OTP moderne          padelco://auth-callback?token_hash=…&type=…→ verifyOtp
+// L’ancienne version ne lisait que le `code` (?code=) → le lien réel (jetons dans le #) n’était
+// jamais traité → « on n’arrive pas à confirmer ».
 
+import type { EmailOtpType } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 import { useEffect, useRef } from 'react';
 import { supabase } from './supabase';
 
 type Result = 'confirmed' | 'error';
 
-// Extrait le `code` de confirmation d’une URL d’ouverture (ou null si ce n’en est pas une).
-function codeFromUrl(url: string | null): string | null {
-  if (!url) return null;
-  const code = Linking.parse(url).queryParams?.code;
-  return typeof code === 'string' ? code : null;
-}
-
-// Un lien expiré / déjà utilisé revient avec `error` / `error_code` au lieu de `code`.
-function hasAuthError(url: string | null): boolean {
-  if (!url) return false;
-  const q = Linking.parse(url).queryParams ?? {};
-  return Boolean(q.error || q.error_code || q.error_description);
+// Extrait les paramètres d’une URL de retour, à la fois depuis la QUERY (?a=b) ET le FRAGMENT
+// (#a=b) — Supabase met les jetons dans le fragment, le `code`/`token_hash` dans la query.
+function paramsFrom(url: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const part of url.split(/[?#]/).slice(1)) {
+    for (const kv of part.split('&')) {
+      if (!kv) continue;
+      const eq = kv.indexOf('=');
+      const k = eq >= 0 ? kv.slice(0, eq) : kv;
+      const v = eq >= 0 ? kv.slice(eq + 1) : '';
+      try {
+        out[decodeURIComponent(k)] = decodeURIComponent(v);
+      } catch {
+        out[k] = v; // valeur non décodable : on garde brut plutôt que de tout perdre
+      }
+    }
+  }
+  return out;
 }
 
 export function useEmailConfirmLink(onResult: (r: Result) => void) {
-  // Codes déjà échangés (PKCE consomme le code au 1er échange) : garde d’idempotence pour éviter
-  // un 2ᵉ échange (via getInitialURL stable + ré-run de l’effet) qui échouerait et afficherait un
-  // faux « lien expiré » alors que la confirmation a RÉUSSI. Persiste entre les re-renders.
-  const handledCodes = useRef<Set<string>>(new Set());
+  // Clés déjà traitées (les jetons/code sont consommés au 1er usage) : garde d’idempotence pour
+  // éviter un 2ᵉ traitement (getInitialURL stable + ré-run de l’effet) qui échouerait et
+  // afficherait un faux « lien expiré » alors que la confirmation a RÉUSSI.
+  const handled = useRef<Set<string>>(new Set());
   useEffect(() => {
     let active = true;
 
     const handle = async (url: string | null) => {
+      if (!url) return;
       // Le lien de RÉINITIALISATION du mot de passe rouvre l’app sur « reset-password » : c’est
-      // l’écran dédié qui échange le code et fait saisir un nouveau mot de passe — pas ici.
-      if (url && /(^|[/:])reset-password(\?|$)/.test(url)) return;
-      // Lien expiré / déjà utilisé : on prévient l’utilisateur au lieu d’ignorer en silence.
-      if (hasAuthError(url)) {
+      // l’écran dédié qui traite le code et fait saisir un nouveau mot de passe — pas ici.
+      if (/(^|[/:])reset-password(\?|#|$)/.test(url)) return;
+
+      const p = paramsFrom(url);
+      // Lien expiré / déjà utilisé : on prévient au lieu d’ignorer en silence.
+      if (p.error || p.error_code || p.error_description) {
         if (active) onResult('error');
         return;
       }
-      const code = codeFromUrl(url);
-      if (!code || handledCodes.current.has(code)) return; // déjà traité → on n’échange pas 2 fois
-      handledCodes.current.add(code);
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+      // Clé d’idempotence = le premier jeton présent (selon le format reçu).
+      const key = p.access_token || p.code || p.token_hash;
+      if (!key || handled.current.has(key)) return;
+
+      let error = null as { message: string } | null;
+      if (p.access_token && p.refresh_token) {
+        handled.current.add(key);
+        ({ error } = await supabase.auth.setSession({ access_token: p.access_token, refresh_token: p.refresh_token }));
+      } else if (p.code) {
+        handled.current.add(key);
+        ({ error } = await supabase.auth.exchangeCodeForSession(p.code));
+      } else if (p.token_hash && p.type) {
+        handled.current.add(key);
+        ({ error } = await supabase.auth.verifyOtp({ token_hash: p.token_hash, type: p.type as EmailOtpType }));
+      } else {
+        return; // pas un lien de confirmation reconnu
+      }
       if (!active) return;
       onResult(error ? 'error' : 'confirmed');
     };
