@@ -82,7 +82,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   l'écrire dans le dépôt).
 - Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
 --auto-submit --non-interactive --no-wait`.
-- **`app.json` `buildNumber` courant : 55** (EAS `autoIncrement` le bump à chaque build — ne PAS
+- **`app.json` `buildNumber` courant : 56** (EAS `autoIncrement` le bump à chaque build — ne PAS
   s'en remettre au suivi manuel ci-dessous, c'est `app.json` qui fait foi). Historique : #46 =
   lancement audit n°7 ; #47 = créneaux modulables + multi-clubs ; #48+ = chantier v2 (comptes club,
   1v1, Wave, stats) ; suivi des 10 audits « chaque audit renforce le précédent » (tours 2→10) sur la
