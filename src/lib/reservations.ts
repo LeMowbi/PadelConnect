@@ -40,8 +40,8 @@ type Row = {
   created_at: string | null;
 };
 
-// Ligne serveur → modèle local.
-export function rowToReservation(row: Row): Reservation {
+// Ligne serveur → modèle local. Interne au module (surface publique volontairement réduite).
+function rowToReservation(row: Row): Reservation {
   // startsAt CANONIQUE : recalculé depuis (date_key + time) en heure fixe Abidjan, pour
   // neutraliser un éventuel fuseau erroné de l’appareil qui a créé la résa (le starts_at
   // stocké ne sert que de repli si la date/heure manquent). Repli sûr contre NaN.

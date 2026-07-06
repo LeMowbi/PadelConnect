@@ -30,8 +30,9 @@ export function closedSlot(time: string): string {
 }
 
 // Bornes par défaut quand un club n’a pas encore d’horaires personnalisés (pré-remplissage).
-export const DEFAULT_OPEN = '08:00';
-export const DEFAULT_CLOSE = '23:00';
+// Internes au module (surface publique volontairement réduite).
+const DEFAULT_OPEN = '08:00';
+const DEFAULT_CLOSE = '23:00';
 
 // « HH:MM » → minutes depuis minuit (24:00 = 1440). Renvoie null si le format est invalide.
 export function slotToMinutes(hhmm: string): number | null {

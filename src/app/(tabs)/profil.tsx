@@ -13,6 +13,7 @@ import { Screen } from '@/components/Screen';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt, type IconName } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
+import { canAccessOperator, canSeeClubSpace } from '@/lib/access';
 import { levelLabel } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
@@ -78,11 +79,11 @@ export default function ProfilScreen() {
 
   if (!account) return null;
 
-  // Visibilité des espaces pro = RÔLE vérifié côté serveur. Un joueur normal ne voit
-  // NI l’opérateur NI l’Espace Club. (Plus de geste secret ni de code PIN : c’est le
-  // compte lui-même, validé par le serveur, qui fait foi.)
-  const showOperator = state.role === 'operator';
-  const showClub = state.role === 'club' || state.role === 'operator';
+  // Visibilité des espaces pro = RÔLE vérifié côté serveur (helpers centralisés dans lib/access).
+  // Un joueur normal ne voit NI l’opérateur NI l’Espace Club. (Plus de geste secret ni de code
+  // PIN : c’est le compte lui-même, validé par le serveur, qui fait foi.)
+  const showOperator = canAccessOperator(state.role);
+  const showClub = canSeeClubSpace(state.role);
   // Compte CLUB inscrit mais PAS ENCORE validé par l’opérateur (Chantier 1) : on affiche
   // « en cours de validation » à la place de l’Espace Club, tant que le rôle n’est pas 'club'.
   const showClubPending = state.accountType === 'club' && !showClub;

@@ -24,6 +24,9 @@ export function SegmentedControl<T extends string>({
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
             accessibilityLabel={opt}
+            // hitSlop vertical seulement : la cible tactile atteint 44 pt sans déborder sur le
+            // segment voisin (les segments sont côte à côte, un hitSlop horizontal les ferait chevaucher).
+            hitSlop={{ top: 8, bottom: 8 }}
           >
             <Txt variant="small" color={active ? colors.onSignature : colors.textMuted} numberOfLines={1} style={{ fontWeight: '600' }}>
               {opt}

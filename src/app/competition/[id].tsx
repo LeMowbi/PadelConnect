@@ -377,7 +377,13 @@ export default function CompetitionDetail() {
             <Divider style={{ marginVertical: spacing.md }} />
             <View style={styles.teamsWrap}>
               {teamList.map((t) => (
-                <Pressable key={t} onPress={() => setOpenPlayer({ id: `team:${comp.id}:${t}`, name: t, isTeam: true })}>
+                <Pressable
+                  key={t}
+                  onPress={() => setOpenPlayer({ id: `team:${comp.id}:${t}`, name: t, isTeam: true })}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Voir l’équipe ${t}`}
+                  hitSlop={8}
+                >
                   <Tag label={t} tone={t === myTeam && registered ? 'signature' : 'neutral'} icon="people" />
                 </Pressable>
               ))}

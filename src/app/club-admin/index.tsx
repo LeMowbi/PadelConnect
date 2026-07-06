@@ -13,6 +13,7 @@ import { SectionMonClub } from '@/components/club-admin/SectionMonClub';
 import { SectionReservations } from '@/components/club-admin/SectionReservations';
 import { SectionTournois } from '@/components/club-admin/SectionTournois';
 import { clubsByName, findClub, manageableClubs, type Club } from '@/data/clubs';
+import { canSeeClubSpace } from '@/lib/access';
 import { fetchMyManagedClubs, switchManagedClub } from '@/lib/clubsServer';
 import { seedCompetitions } from '@/data/competitions';
 import { competitionBlockedCourts, courtsFor, hasFullDayCompetition, rangeBlocks } from '@/lib/availability';
@@ -168,7 +169,7 @@ export default function ClubAdmin() {
 
   // Espace réservé aux comptes CLUB (et à l’opérateur). Un joueur normal est bloqué —
   // l’entrée n’apparaît déjà pas dans son profil, et un accès direct est refusé ici.
-  if (state.role !== 'club' && state.role !== 'operator') {
+  if (!canSeeClubSpace(state.role)) {
     return (
       <Screen back title="Espace Club">
         <Card style={{ marginTop: spacing.md, alignItems: 'center', paddingVertical: spacing.xl }}>

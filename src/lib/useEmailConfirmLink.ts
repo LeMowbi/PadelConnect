@@ -43,6 +43,15 @@ export function useEmailConfirmLink(onResult: (r: Result) => void) {
   // éviter un 2ᵉ traitement (getInitialURL stable + ré-run de l’effet) qui échouerait et
   // afficherait un faux « lien expiré » alors que la confirmation a RÉUSSI.
   const handled = useRef<Set<string>>(new Set());
+  // On garde `onResult` dans une ref (rafraîchie à chaque rendu) au lieu de le mettre en
+  // dépendance de l’effet. SINON : `onConfirm` (l’appelant) change d’identité dès que la session
+  // s’hydrate (account/serverUserId) → l’effet se nettoierait (`active = false`) EN PLEIN milieu
+  // de l’échange réseau (setSession/exchangeCodeForSession, lent), et le résultat serait perdu
+  // au `if (!active) return` → confirmation réussie côté serveur mais spinner infini (H1). Avec
+  // la ref + effet monté UNE fois, `active` reste stable et `cb.current` pointe toujours sur le
+  // `onConfirm` le plus frais (kind correct, comportement « rester connecté » préservé).
+  const cb = useRef(onResult);
+  cb.current = onResult;
   useEffect(() => {
     let active = true;
 

@@ -409,7 +409,13 @@ export default function Onboarding() {
               </View>
               <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
             </Card>
-            <Pressable onPress={() => setSignInOpen(true)} style={{ marginTop: spacing.lg, alignItems: 'center' }}>
+            <Pressable
+              onPress={() => setSignInOpen(true)}
+              style={{ marginTop: spacing.lg, alignItems: 'center' }}
+              accessibilityRole="button"
+              accessibilityLabel="Se connecter"
+              hitSlop={8}
+            >
               <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center' }}>
                 Tu as déjà un compte ?{' '}
                 <Txt variant="small" color={colors.signature}>
@@ -610,7 +616,13 @@ export default function Onboarding() {
               </View>
             </View>
 
-            <Pressable onPress={() => setSignInOpen(true)} style={{ marginTop: spacing.lg, alignItems: 'center' }}>
+            <Pressable
+              onPress={() => setSignInOpen(true)}
+              style={{ marginTop: spacing.lg, alignItems: 'center' }}
+              accessibilityRole="button"
+              accessibilityLabel="Se connecter"
+              hitSlop={8}
+            >
               <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center' }}>
                 Tu as déjà un compte ?{' '}
                 <Txt variant="small" color={colors.signature}>
@@ -921,7 +933,13 @@ export default function Onboarding() {
           </View>
 
           {/* Mode « Se connecter » : accessible depuis TOUTES les étapes. */}
-          <Pressable onPress={() => setSignInOpen(true)} style={{ marginTop: spacing.lg, alignItems: 'center' }}>
+          <Pressable
+            onPress={() => setSignInOpen(true)}
+            style={{ marginTop: spacing.lg, alignItems: 'center' }}
+            accessibilityRole="button"
+            accessibilityLabel="Se connecter"
+            hitSlop={8}
+          >
             <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center' }}>
               Tu as déjà un compte ?{' '}
               <Txt variant="small" color={colors.signature}>
@@ -933,7 +951,13 @@ export default function Onboarding() {
           {step === 0 ? (
             <>
               {/* C-S2 : lien discret vers /decouvrir pour les débutants */}
-              <Pressable onPress={() => router.push('/decouvrir')} style={{ marginTop: spacing.lg, alignItems: 'center' }}>
+              <Pressable
+                onPress={() => router.push('/decouvrir')}
+                style={{ marginTop: spacing.lg, alignItems: 'center' }}
+                accessibilityRole="button"
+                accessibilityLabel="Découvrir les règles du padel"
+                hitSlop={8}
+              >
                 <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center' }}>
                   Nouveau au padel ?{' '}
                   <Txt variant="small" color={colors.signature}>
@@ -942,7 +966,13 @@ export default function Onboarding() {
                 </Txt>
               </Pressable>
 
-              <Pressable onPress={() => router.push('/legal')} style={{ marginTop: spacing.md }}>
+              <Pressable
+                onPress={() => router.push('/legal')}
+                style={{ marginTop: spacing.md }}
+                accessibilityRole="button"
+                accessibilityLabel="Lire nos CGU et notre politique de confidentialité"
+                hitSlop={8}
+              >
                 <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center' }}>
                   En continuant, tu acceptes nos{' '}
                   <Txt variant="small" color={colors.signature}>
@@ -1084,7 +1114,14 @@ function SignInSheet({
         <Button label={busy ? 'Connexion…' : 'Se connecter'} icon="log-in" onPress={onSubmit} disabled={busy} full />
         {/* Mot de passe oublié : seulement pertinent en connexion par e-mail. */}
         {byEmail ? (
-          <Pressable onPress={onForgot} disabled={busy} style={{ alignItems: 'center', paddingVertical: spacing.xs }}>
+          <Pressable
+            onPress={onForgot}
+            disabled={busy}
+            style={{ alignItems: 'center', paddingVertical: spacing.xs }}
+            accessibilityRole="button"
+            accessibilityLabel="Mot de passe oublié"
+            hitSlop={8}
+          >
             <Txt variant="small" color={colors.textFaint}>
               Mot de passe oublié ?
             </Txt>
@@ -1096,6 +1133,9 @@ function SignInSheet({
             setMode(byEmail ? 'phone' : 'email');
           }}
           style={{ alignItems: 'center', paddingVertical: spacing.xs }}
+          accessibilityRole="button"
+          accessibilityLabel={byEmail ? 'Se connecter par téléphone' : 'Se connecter par e-mail'}
+          hitSlop={8}
         >
           <Txt variant="small" color={colors.signature}>
             {byEmail ? 'Se connecter par téléphone' : 'Se connecter par e-mail'}

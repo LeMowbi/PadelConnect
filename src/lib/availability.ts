@@ -42,12 +42,6 @@ export function courtsFor(club: Club, clubCourts: Record<string, string[]>): str
   return clubCourts[club.id] ?? defaultCourts(club);
 }
 
-// Un tournoi a-t-il lieu à ce club ce jour-là ? (n’importe lequel, plage début → fin incluse)
-// Sert aux vues CLUB (planning) : le gérant veut savoir qu’un tournoi se tient, même partiel.
-export function hasCompetition(clubId: string, dateKey: string, comps: Competition[]): boolean {
-  return comps.some((c) => c.clubId === clubId && dateKey >= c.dateKey && dateKey <= (c.endDateKey ?? c.dateKey));
-}
-
 // Un tournoi SANS terrains ni créneaux précis (seeds de démo) bloque TOUT le club ce jour-là.
 // Les tournois serveur ciblent des terrains/créneaux précis → blocage géré créneau par créneau
 // dans freeCourts (ce helper ne signale donc QUE le blocage « journée entière »).

@@ -27,6 +27,7 @@ import { clubGallery, defaultCourts, findClub, offersForClub } from '@/data/club
 import { coaches } from '@/data/coaches';
 import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { isPlayed, useApp } from '@/store/AppContext';
+import { canAccessClub } from '@/lib/access';
 import { fetchClubCoaches, type ServerCoach } from '@/lib/coachesServer';
 import { deleteMyReview, fetchClubReviews, replyToReview, submitReview, type ServerReview } from '@/lib/reviewsServer';
 import { reportReview } from '@/lib/moderation';
@@ -213,7 +214,7 @@ export default function ClubDetail() {
   const showAsNew = ratingCount === 0 && !reviewsError;
   // Mon avis (modifiable / supprimable) et mon rôle de gérant de CE club (pour répondre).
   const myReview = state.serverUserId ? reviews.find((r) => r.userId === state.serverUserId) : undefined;
-  const isManager = state.serverManagedClubId === club.id || state.role === 'operator';
+  const isManager = canAccessClub(state.role, state.serverManagedClubId, club.id);
   // Plages tarifaires définies par le gérant (vide → tarif unique).
   const tiers = priceTiersFor(club);
   // Plages NOMMÉES → onglets (sinon liste à plat). Purement présentation.
