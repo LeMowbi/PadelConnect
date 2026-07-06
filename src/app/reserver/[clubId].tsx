@@ -520,6 +520,8 @@ export default function ReserverScreen() {
               onChangeText={setExtraName}
               placeholder="Ou un autre nom…"
               placeholderTextColor={colors.textMuted}
+              maxLength={40}
+              accessibilityLabel="Nom d’un invité"
               style={styles.extraInput}
               onSubmitEditing={addExtra}
             />

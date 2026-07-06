@@ -294,6 +294,8 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
                           onChangeText={setExtraName}
                           placeholder="Ou un autre nom…"
                           placeholderTextColor={colors.textMuted}
+                          maxLength={40}
+                          accessibilityLabel="Nom d’un invité"
                           style={styles.extraInput}
                           onSubmitEditing={addExtra}
                         />

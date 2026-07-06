@@ -60,6 +60,8 @@ export default function ClubsScreen() {
           placeholder="Rechercher un club ou un quartier…"
           placeholderTextColor={colors.textMuted}
           autoCapitalize="none"
+          maxLength={60}
+          accessibilityLabel="Rechercher un club ou un quartier"
           style={styles.searchInput}
         />
         {query.length > 0 ? (

@@ -137,6 +137,8 @@ export function ClubInfoCard({
         onChangeText={setName}
         placeholder="Nom du club"
         placeholderTextColor={colors.textMuted}
+        maxLength={60}
+        accessibilityLabel="Nom du club"
         style={styles.input}
       />
       <TextInput
@@ -144,6 +146,8 @@ export function ClubInfoCard({
         onChangeText={setArea}
         placeholder="Quartier / commune"
         placeholderTextColor={colors.textMuted}
+        maxLength={60}
+        accessibilityLabel="Quartier ou commune du club"
         style={styles.input}
       />
       <TextInput
@@ -152,6 +156,8 @@ export function ClubInfoCard({
         placeholder="Description (visible par les joueurs)"
         placeholderTextColor={colors.textMuted}
         multiline
+        maxLength={500}
+        accessibilityLabel="Description du club, visible par les joueurs"
         style={[styles.input, { minHeight: 64, textAlignVertical: 'top' }]}
       />
       <View style={[styles.wrap, { marginTop: spacing.md }]}>
@@ -165,6 +171,8 @@ export function ClubInfoCard({
         placeholder="Tarif unique de la session 1h30 (FCFA)"
         placeholderTextColor={colors.textMuted}
         keyboardType="numeric"
+        maxLength={7}
+        accessibilityLabel="Tarif unique de la session, en FCFA"
         style={styles.input}
       />
 
@@ -179,6 +187,8 @@ export function ClubInfoCard({
             onChangeText={(v) => setTier(i, { label: v })}
             placeholder="Nom de la plage (ex. Journée — optionnel)"
             placeholderTextColor={colors.textMuted}
+            maxLength={30}
+            accessibilityLabel={`Nom de la plage tarifaire ${i + 1} (optionnel)`}
             style={[styles.input, { marginTop: 0 }]}
           />
           <View style={[styles.tierRow, { marginTop: spacing.xs }]}>
@@ -187,6 +197,8 @@ export function ClubInfoCard({
               onChangeText={(v) => setTier(i, { start: v })}
               placeholder={openLabel}
               placeholderTextColor={colors.textMuted}
+              maxLength={5}
+              accessibilityLabel={`Heure de début de la plage tarifaire ${i + 1}`}
               style={[styles.input, styles.tierCell, { marginTop: 0 }]}
             />
             <Txt variant="muted">→</Txt>
@@ -195,6 +207,8 @@ export function ClubInfoCard({
               onChangeText={(v) => setTier(i, { end: v })}
               placeholder="16:00"
               placeholderTextColor={colors.textMuted}
+              maxLength={5}
+              accessibilityLabel={`Heure de fin de la plage tarifaire ${i + 1}`}
               style={[styles.input, styles.tierCell, { marginTop: 0 }]}
             />
             <TextInput
@@ -203,6 +217,8 @@ export function ClubInfoCard({
               placeholder="FCFA"
               placeholderTextColor={colors.textMuted}
               keyboardType="numeric"
+              maxLength={7}
+              accessibilityLabel={`Prix de la plage tarifaire ${i + 1}, en FCFA`}
               style={[styles.input, styles.tierPrice, { marginTop: 0 }]}
             />
           </View>
@@ -227,6 +243,8 @@ export function ClubInfoCard({
         placeholder="WhatsApp du club (optionnel — affiche « Contacter le club »)"
         placeholderTextColor={colors.textMuted}
         keyboardType="phone-pad"
+        maxLength={20}
+        accessibilityLabel="Numéro WhatsApp du club (optionnel)"
         style={styles.input}
       />
 
@@ -240,6 +258,8 @@ export function ClubInfoCard({
         onChangeText={setMapsQuery}
         placeholder="Nom + adresse (ex. Padelta, Cocody Danga, Abidjan)"
         placeholderTextColor={colors.textMuted}
+        maxLength={120}
+        accessibilityLabel="Position Google Maps du club : nom et adresse"
         style={styles.input}
       />
       <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>

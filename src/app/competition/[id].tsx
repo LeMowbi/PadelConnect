@@ -753,6 +753,8 @@ export default function CompetitionDetail() {
             }}
             placeholder="Nom du coéquipier"
             placeholderTextColor={colors.textMuted}
+            maxLength={40}
+            accessibilityLabel="Nom du coéquipier"
             style={styles.input}
           />
 

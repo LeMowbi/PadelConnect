@@ -22,8 +22,10 @@ export function TournamentFee({
 
   const save = async () => {
     const amount = Number(draft.replace(/[^\d]/g, ''));
-    if (busy || !Number.isFinite(amount) || amount < 0) {
-      toast.show('Entre un montant valide (FCFA)', { icon: 'alert-circle' });
+    // Borne haute : un frais de tournoi au-delà de 200 000 F est forcément une faute de frappe
+    // (c'est un joueur qui le règle) — on refuse au lieu de figer un montant aberrant à la création.
+    if (busy || !Number.isFinite(amount) || amount < 0 || amount > 200000) {
+      toast.show('Entre un montant valide (0 à 200 000 FCFA)', { icon: 'alert-circle' });
       return;
     }
     setBusy(true);
@@ -56,6 +58,8 @@ export function TournamentFee({
           placeholder={`${fee}`}
           placeholderTextColor={colors.textMuted}
           keyboardType="numeric"
+          maxLength={6}
+          accessibilityLabel="Nouveau montant des frais de tournoi, en FCFA"
           style={[opStyles.clubInput, { width: 96, marginTop: 0, textAlign: 'center' }]}
         />
         <Button size="sm" label={busy ? '…' : 'OK'} onPress={save} disabled={busy || !draft.trim()} />

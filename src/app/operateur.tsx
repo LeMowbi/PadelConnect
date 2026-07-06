@@ -903,6 +903,8 @@ export default function Operateur() {
                 onChangeText={setNcName}
                 placeholder="Nom du club"
                 placeholderTextColor={colors.textMuted}
+                maxLength={60}
+                accessibilityLabel="Nom du club à ajouter"
                 style={opStyles.clubInput}
               />
               <View style={{ flexDirection: 'row', gap: spacing.sm }}>
@@ -911,6 +913,8 @@ export default function Operateur() {
                   onChangeText={setNcArea}
                   placeholder="Quartier"
                   placeholderTextColor={colors.textMuted}
+                  maxLength={60}
+                  accessibilityLabel="Quartier du club"
                   style={[opStyles.clubInput, { flex: 1 }]}
                 />
                 <TextInput
@@ -919,6 +923,8 @@ export default function Operateur() {
                   placeholder="Tarif dès (FCFA)"
                   placeholderTextColor={colors.textMuted}
                   keyboardType="numeric"
+                  maxLength={7}
+                  accessibilityLabel="Tarif à partir de, en FCFA"
                   style={[opStyles.clubInput, { flex: 1 }]}
                 />
               </View>

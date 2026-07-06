@@ -664,6 +664,8 @@ export function SectionMonClub({ club }: { club: Club }) {
               placeholder="…ou coller un lien d’image (https://)"
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
+              maxLength={300}
+              accessibilityLabel="Lien d’une image de terrain (https)"
               style={styles.input}
             />
             <Button size="sm" label="Ajouter" icon="add" onPress={addPhotoFromUrl} />
@@ -689,6 +691,8 @@ export function SectionMonClub({ club }: { club: Club }) {
             onChangeText={setOfferTitle}
             placeholder={offerKind === 'evenement' ? 'Titre (ex. Soirée Americano vendredi 20h)' : 'Titre (ex. -20% le mardi)'}
             placeholderTextColor={colors.textMuted}
+            maxLength={80}
+            accessibilityLabel="Titre de l’offre, actu ou événement"
             style={styles.input}
           />
           <TextInput
@@ -696,6 +700,8 @@ export function SectionMonClub({ club }: { club: Club }) {
             onChangeText={setOfferDetail}
             placeholder="Détail (optionnel)"
             placeholderTextColor={colors.textMuted}
+            maxLength={200}
+            accessibilityLabel="Détail de l’offre (optionnel)"
             style={styles.input}
           />
           <View style={{ marginTop: spacing.sm }}>
@@ -760,6 +766,7 @@ export function SectionMonClub({ club }: { club: Club }) {
                 placeholder="Numéro du coach (+225…)"
                 placeholderTextColor={colors.textMuted}
                 keyboardType="phone-pad"
+                maxLength={20}
                 style={styles.input}
                 accessibilityLabel="Numéro de téléphone du coach"
               />
@@ -768,6 +775,7 @@ export function SectionMonClub({ club }: { club: Club }) {
                 onChangeText={setPromoteSpec}
                 placeholder="Spécialité (ex. Initiation, Compétition — optionnel)"
                 placeholderTextColor={colors.textMuted}
+                maxLength={60}
                 style={styles.input}
                 accessibilityLabel="Spécialité du coach"
               />
@@ -848,6 +856,7 @@ export function SectionMonClub({ club }: { club: Club }) {
                             placeholder="Tarif d’une session de cours (FCFA) — vide = non affiché"
                             placeholderTextColor={colors.textMuted}
                             keyboardType="numeric"
+                            maxLength={7}
                             style={[styles.input, { marginTop: 0, flex: 1 }]}
                             accessibilityLabel={`Tarif d’une session de cours de ${c.name} en FCFA`}
                           />
@@ -925,6 +934,8 @@ export function SectionMonClub({ club }: { club: Club }) {
               onChangeText={setCourtName}
               placeholder="Nom du terrain (ex. Terrain 4, Central…)"
               placeholderTextColor={colors.textMuted}
+              maxLength={40}
+              accessibilityLabel="Nom du terrain à ajouter"
               style={styles.input}
             />
             <Button size="sm" label="Ajouter" icon="add" onPress={addCourt} />

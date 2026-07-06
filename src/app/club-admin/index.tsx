@@ -327,6 +327,8 @@ export default function ClubAdmin() {
               onChangeText={setNcName}
               placeholder="Nom du club"
               placeholderTextColor={colors.textMuted}
+              maxLength={60}
+              accessibilityLabel="Nom du club à inscrire"
               style={styles.input}
             />
             <TextInput
@@ -334,6 +336,8 @@ export default function ClubAdmin() {
               onChangeText={setNcArea}
               placeholder="Quartier / commune (ex. Cocody)"
               placeholderTextColor={colors.textMuted}
+              maxLength={60}
+              accessibilityLabel="Quartier ou commune du club"
               style={styles.input}
             />
             <View style={[styles.wrap, { marginTop: spacing.md }]}>
@@ -352,6 +356,8 @@ export default function ClubAdmin() {
               placeholder="Tarif de la session 1h30 (FCFA, ex. 15000)"
               placeholderTextColor={colors.textMuted}
               keyboardType="numeric"
+              maxLength={7}
+              accessibilityLabel="Tarif de la session, en FCFA"
               style={styles.input}
             />
             <TextInput
@@ -360,6 +366,8 @@ export default function ClubAdmin() {
               placeholder="Téléphone du club (optionnel)"
               placeholderTextColor={colors.textMuted}
               keyboardType="phone-pad"
+              maxLength={20}
+              accessibilityLabel="Téléphone du club (optionnel)"
               style={styles.input}
             />
             <View style={{ marginTop: spacing.md }}>
