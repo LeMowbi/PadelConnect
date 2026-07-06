@@ -100,7 +100,11 @@ export default function ClubAdmin() {
   // (serverManagedClubId). L’opérateur, lui, peut basculer librement.
   const isOperator = state.role === 'operator';
   const managedId = isOperator ? state.managedClubId : (state.serverManagedClubId ?? undefined);
-  const club = findClub(managedId, state.customClubs, state.clubInfo) ?? clubsByName[0];
+  // `resolved` distingue « club géré vraiment chargé » d'un repli : pour un gérant d'un club
+  // SERVEUR dont le fetch a échoué, on n'affiche PAS la config publique d'un club fondateur
+  // arbitraire dans un formulaire éditable (trompeur) — on montre un état « indisponible » (plus bas).
+  const resolvedClub = findClub(managedId, state.customClubs, state.clubInfo);
+  const club = resolvedClub ?? clubsByName[0];
   const pendingOwn = state.customClubs.find((c) => c.id === club.id)?.status === 'pending';
 
   const comps = [...state.myCompetitions.filter((c) => c.clubId === club.id), ...seedCompetitions.filter((c) => c.clubId === club.id)];
@@ -197,6 +201,25 @@ export default function ClubAdmin() {
           </Txt>
           <Txt variant="muted" style={{ marginTop: 4, textAlign: 'center' }}>
             Ton compte n’est rattaché à aucun club pour l’instant. Contacte PadelConnect pour activer ton club.
+          </Txt>
+        </Card>
+      </Screen>
+    );
+  }
+
+  // Club géré RATTACHÉ mais pas encore chargé (club serveur + fetch échoué au démarrage) : on
+  // n'affiche PAS la config d'un club fondateur arbitraire (repli clubsByName[0]) dans un
+  // formulaire éditable — on montre un état « indisponible / réessaie » (tiré vers le bas rafraîchit).
+  if (!isOperator && !resolvedClub) {
+    return (
+      <Screen back title="Espace Club" refreshControl={refreshControl}>
+        <Card style={{ marginTop: spacing.md, alignItems: 'center', paddingVertical: spacing.xl }}>
+          <Ionicons name="cloud-offline-outline" size={28} color={colors.textFaint} />
+          <Txt variant="h3" style={{ marginTop: spacing.sm }}>
+            Club momentanément indisponible
+          </Txt>
+          <Txt variant="muted" style={{ marginTop: 4, textAlign: 'center' }}>
+            Ton club se charge… Tire vers le bas pour réessayer si rien n’apparaît.
           </Txt>
         </Card>
       </Screen>

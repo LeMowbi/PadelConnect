@@ -67,7 +67,12 @@ export default function NouvelleCompetition() {
   // et le tournoi part EN ATTENTE : le club le valide dans son Espace Club (sa permission,
   // dans l'app — décision porteur : on n'entre pas dans le planning d'un club sans son accord).
   const asPadel = params.as === 'padelconnect' && state.role === 'operator';
-  const club = asClub ? findClub(params.clubId, state.customClubs, state.clubInfo) : undefined;
+  // Club hôte d'un tournoi « officiel club » : pour un GÉRANT, on FORCE le club géré (jamais le
+  // clubId de l'URL). Sinon un deep link forgé « ?as=club&clubId=<autre> » laissait un gérant
+  // publier un tournoi officiel chez un club qu'il ne gère PAS (défense en profondeur, le RPC
+  // create_competition le refuse déjà côté serveur). L'opérateur garde le libre choix de l'hôte.
+  const asClubId = state.role === 'operator' ? params.clubId : (state.serverManagedClubId ?? undefined);
+  const club = asClub ? findClub(asClubId, state.customClubs, state.clubInfo) : undefined;
   // Tournoi créé par un JOUEUR : il choisit le club hôte, qui devra valider.
   const hosts = useMemo(
     () => activeClubs(state.customClubs, state.clubInfo),

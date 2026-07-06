@@ -12,7 +12,7 @@ import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt, type IconName } from '@/components/ui';
-import { useApp } from '@/store/AppContext';
+import { isPlayed, useApp } from '@/store/AppContext';
 import { canAccessOperator, canSeeClubSpace } from '@/lib/access';
 import { levelLabel } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
@@ -93,7 +93,11 @@ export default function ProfilScreen() {
   // opérateur voit trop de clubs pour qu’un total ait du sens — réservé au rôle club).
   const clubPending =
     state.role === 'club' && state.serverManagedClubId
-      ? state.reservations.filter((r) => r.clubId === state.serverManagedClubId && !r.clubConfirmed && r.startsAt > Date.now()).length
+      ? state.reservations.filter(
+          // MÊME prédicat que la liste de l'Espace Club (!isPlayed) : une partie EN COURS non
+          // confirmée reste à confirmer → la pastille doit la compter comme l'écran l'affiche.
+          (r) => r.clubId === state.serverManagedClubId && !r.clubConfirmed && !isPlayed(r, Date.now()),
+        ).length
       : 0;
 
   const changePhoto = async () => {
@@ -393,7 +397,7 @@ export default function ProfilScreen() {
       {/* Espaces pro — affichés UNIQUEMENT selon le rôle vérifié côté serveur (state.role) :
           « club » → Espace Club, « operator » → Espace opérateur. Aucun geste secret ; la
           vraie barrière reste la Row Level Security Supabase. */}
-      {showClub || showOperator || showCoach ? (
+      {showClub || showOperator || showCoach || showClubPending ? (
         <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
           {showCoach ? (
             <Card onPress={() => router.push('/coach-admin')} style={styles.cta}>

@@ -453,8 +453,24 @@ export default function Operateur() {
   };
 
   // Garde d’accès : l’Espace opérateur n’est rendu que si le RÔLE serveur === 'operator'.
-  // (La vraie barrière reste la Row Level Security côté Supabase.)
-  if (!canAccessOperator(state.role)) return null;
+  // (La vraie barrière reste la Row Level Security côté Supabase.) Accès direct (deep link) par
+  // un non-opérateur → carte « Réservé » AVEC retour, comme l’Espace Club/Coach (jamais un écran
+  // blanc sans issue).
+  if (!canAccessOperator(state.role)) {
+    return (
+      <Screen back title="Espace opérateur">
+        <Card style={{ marginTop: spacing.md, alignItems: 'center', paddingVertical: spacing.xl }}>
+          <Ionicons name="lock-closed-outline" size={28} color={colors.textFaint} />
+          <Txt variant="h3" style={{ marginTop: spacing.sm }}>
+            Réservé à PadelConnect
+          </Txt>
+          <Txt variant="muted" style={{ marginTop: 4, textAlign: 'center' }}>
+            Cet espace est réservé à l’équipe PadelConnect.
+          </Txt>
+        </Card>
+      </Screen>
+    );
+  }
 
   return (
     <Screen back title="Espace opérateur" subtitle="PadelConnect — suivi & commissions" refreshControl={refreshControl}>
