@@ -1843,11 +1843,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // on n’applique le miroir local qu’au succès : sinon un « Enregistré ✓ » mentait hors-ligne
       // (la modif n’était que locale et se rétablissait silencieusement au prochain chargement).
       setClubInfo: async (clubId, patch) => {
+        const epoch = sessionEpochRef.current;
         const merged = { ...state.clubInfo[clubId], ...patch };
         if (state.serverUserId) {
           const ok = await upsertClubOverride(clubId, merged);
           if (!ok) return { ok: false };
         }
+        if (sessionEpochRef.current !== epoch) return { ok: false }; // déconnexion entre-temps (comme setBoost)
         setState((s) => ({ ...s, clubInfo: { ...s.clubInfo, [clubId]: { ...s.clubInfo[clubId], ...patch } } }));
         return { ok: true };
       },
@@ -2134,6 +2136,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // une réservation PadelConnect, jamais en double.
       blockSlot: async (b, startsAt) => {
         if (startsAt <= Date.now()) return false;
+        const epoch = sessionEpochRef.current;
         const sameSlot = (x: { clubId: string; dateKey: string; time: string; court: string }) =>
           x.clubId === b.clubId && x.dateKey === b.dateKey && x.time === b.time && x.court === b.court;
         if (state.reservations.some(sameSlot)) return false;
@@ -2155,7 +2158,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const ok = await blockSlotRow(b);
           if (!ok) return false;
         }
-        setState((s) => ({ ...s, blockedSlots: [...s.blockedSlots, b] }));
+        if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps (comme setBoost)
+        // Ajout IDEMPOTENT : sur un double-tap concurrent, le garde d'entrée (lu sur l'état capturé)
+        // laisse passer deux appels — on re-teste sur l'état FRAIS pour ne jamais dupliquer le créneau.
+        setState((s) => (s.blockedSlots.some(sameSlot) ? s : { ...s, blockedSlots: [...s.blockedSlots, b] }));
         return true;
       },
       unblockSlot: async (clubId, dateKey, time, court) => {
