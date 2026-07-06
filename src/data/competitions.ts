@@ -97,4 +97,21 @@ export function formatFee(s: string | undefined): string {
   return v.replace(/\d{4,}/g, (n) => n.replace(/\B(?=(\d{3})+(?!\d))/g, ' '));
 }
 
+// Cycle de vie d’un tournoi : « terminé » = jour de fin STRICTEMENT passé (le jour même = en
+// cours, on ne clôture pas avant que ça se joue ; pour un multi-jours c’est la date de FIN qui
+// fait foi). `todayKey` passé par l’appelant (dayKey(new Date()) ou useTodayKey) — même règle
+// partout (carte, fiche joueur, Espace Club).
+export function isCompFinished(comp: Competition, todayKey: string): boolean {
+  return (comp.endDateKey ?? comp.dateKey) < todayKey;
+}
+
+// Remplissage d’un tournoi : places restantes + pourcentage (barre). `full` se dérive au besoin
+// côté appelant (la fiche joueur exclut l’inscrit courant du « complet »). Math.max(1,…) : jamais
+// de NaN si slots vaut 0.
+export function compFill(comp: Competition, teams: number): { left: number; pct: number } {
+  const left = Math.max(0, comp.slots - teams);
+  const pct = Math.min(100, Math.round((teams / Math.max(1, comp.slots)) * 100));
+  return { left, pct };
+}
+
 export const COMP_FORMATS = ['Poules + tableau final', 'Americano (rotation)', 'Mini-tournoi', 'Élimination directe'];

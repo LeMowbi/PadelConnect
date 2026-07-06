@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { Card, Tag, Txt } from './ui';
-import { compDateLabel, formatFee, teamCount, type Competition } from '@/data/competitions';
+import { compDateLabel, compFill, formatFee, isCompFinished, teamCount, type Competition } from '@/data/competitions';
 import { dayKey } from '@/lib/days';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
@@ -18,9 +18,8 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
   const byPadel = comp.organizerType === 'operator';
   const registered = !!state.compRegistrations[comp.id];
   const teams = teamCount(comp, registered);
-  const left = Math.max(0, comp.slots - teams);
+  const { left, pct } = compFill(comp, teams);
   const full = left === 0;
-  const pct = Math.min(100, Math.round((teams / Math.max(1, comp.slots)) * 100)); // Math.max(1,…) : jamais de NaN si slots=0
   // Remplissage animé de la barre (0 → pct) — se rejoue si le nombre d’équipes change.
   const fill = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -28,7 +27,7 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
   }, [pct, fill]);
   const fillWidth = fill.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] });
   // Cycle de vie : à venir → terminé (jour STRICTEMENT passé) → clôturé (vainqueur désigné).
-  const finished = (comp.endDateKey ?? comp.dateKey) < dayKey(new Date());
+  const finished = isCompFinished(comp, dayKey(new Date()));
   const result = state.compResults[comp.id];
   const mine = state.officialResults.find((o) => o.compId === comp.id);
 

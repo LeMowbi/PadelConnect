@@ -93,7 +93,9 @@ export default function NouvelleCompetition() {
   const [day, setDay] = useState<DayOption | null>(null);
   const [endDay, setEndDay] = useState<DayOption | null>(null); // fin optionnelle (tournoi multi-jours)
   const [endOpen, setEndOpen] = useState(false); // calendrier de fin affiché (« Plusieurs jours »)
-  const [hostId, setHostId] = useState<string | null>(null);
+  // Club hôte pré-sélectionné depuis l'URL (?clubId=…) : après un refus, « Recréer en tenant
+  // compte du motif » ramène ici avec le même club — plus besoin de le re-choisir à la main.
+  const [hostId, setHostId] = useState<string | null>(typeof params.clubId === 'string' ? params.clubId : null);
   const [format, setFormat] = useState(COMP_FORMATS[2]);
   const [level, setLevel] = useState('Tous niveaux');
   const [slots, setSlots] = useState(8);

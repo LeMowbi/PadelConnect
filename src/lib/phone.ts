@@ -14,3 +14,19 @@ export function normalizePhone(phone: string): string {
   if (d.length === 10) return `225${d}`; // numéro local → on préfixe l'indicatif
   return d; // tout le reste (étranger, format inhabituel) : laissé tel quel
 }
+
+// Un numéro saisi est-il exploitable ? Règle UNIQUE de l'app : au moins 8 chiffres significatifs
+// (les indicatifs/espaces ne comptent pas). Centralisé ici pour ne pas re-coder « length >= 8 »
+// dans chaque écran (onboarding, amis, profil, inscription club…) — un seul endroit à ajuster.
+export function isValidPhone(phone: string): boolean {
+  return phone.replace(/\D/g, '').length >= 8;
+}
+
+// Deux numéros désignent-ils la même personne ? On compare les 10 DERNIERS chiffres (règle
+// serveur « 10 derniers chiffres », CLAUDE.md §8) ; en-dessous de 8 chiffres significatifs on
+// refuse le rapprochement (numéro incomplet). Helper partagé pour la déduplication d'amis.
+export function samePhone(a: string | undefined, b: string | undefined): boolean {
+  const da = (a ?? '').replace(/\D/g, '').slice(-10);
+  const db = (b ?? '').replace(/\D/g, '').slice(-10);
+  return da.length >= 8 && da === db;
+}

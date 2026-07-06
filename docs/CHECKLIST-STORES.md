@@ -38,7 +38,7 @@
 
 - [ ] iOS `bundleIdentifier` = `ci.padelco.app` (IMMUABLE après publication — confirmer avant le 1er envoi).
 - [ ] Android `package` = `ci.padelco.app`.
-- [ ] `version` = 1.0.0 ; `ios.buildNumber` s'auto-incrémente à chaque build (profil `production` d'eas.json — actuellement 46) ; `android.versionCode` = 1 au premier envoi Android.
+- [ ] `version` = 1.0.0 ; `ios.buildNumber` s'auto-incrémente à chaque build (profil `production` d'eas.json — actuellement 55) ; `android.versionCode` = 1 au premier envoi Android.
 
 ## 5. Fabriquer et envoyer (commandes EAS, depuis un ordinateur)
 
@@ -78,18 +78,15 @@ npx eas-cli submit --platform ios --profile production
       refuser un tournoi ÉCHOUE en production) — FAIT (confirmé 2026-07-03, voir AUDIT-SERVEUR §0-SEXIES).
 - [x] Coller **`supabase/53_audit7_hardening.sql`** (durcissements de l'audit n°7) — FAIT
       (confirmé le 2026-07-03, vérifié à distance).
-- [ ] Coller **`supabase/54_creneaux_modulables.sql`** (fermetures de période, grille libre,
-      horaires par terrain) — détail dans `docs/AUDIT-SERVEUR.md` §0-SEPTIES. ⚠️ AVANT le build #47.
-- [ ] Coller **`supabase/55_multi_clubs.sql`** (un compte peut gérer plusieurs clubs) — détail
-      dans `docs/AUDIT-SERVEUR.md` §0-OCTIES. ⚠️ AVANT le build #47, APRÈS la 54.
-- [ ] Coller **`supabase/56_comptes_club.sql`** (choix « Joueur / Je gère un club » à l'inscription :
-      un compte club crée sa demande d'office, l'opérateur valide) — ⚠️ APRÈS la 55.
-- [ ] Coller **`supabase/57_match_1v1.sql`** (matchs ouverts à 2 joueurs en plus du 2v2) — ⚠️ APRÈS la 56.
-- [ ] Coller **`supabase/58_wave_paiement.sql`** (paiement Wave manuel des frais de tournoi) — ⚠️ APRÈS la 57.
-- [ ] Coller **`supabase/59_concurrency_hardening.sql`** (verrous anti-course : clôture de tournoi
-      et inscription — pas de double niveau ni de capacité dépassée) — ⚠️ APRÈS la 58.
+- [x] **`supabase/54`→`64` TOUS APPLIQUÉS EN BASE** — vérifié à distance le **2026-07-06**
+      (Management API : chaque table/colonne/fonction confirmée présente). Détail : `54` créneaux
+      modulables, `55` multi-clubs, `56` comptes club à l'inscription, `57` matchs 1v1, `58` paiement
+      Wave, `59` verrous anti-course (clôture/inscription), `60` durcissement audit 9
+      (`reject_club_request` + branche tournoi officiel opérateur), `61` diagnostics anonymes,
+      `62` téléphone organisateur privé, `63` `with check` sur les policies UPDATE de Storage,
+      `64` cycle de vie compte/tournoi. **Plus rien à coller côté SQL avant le prochain build.**
 - [ ] Dans l'app, **Espace opérateur → Finances → coller ton lien de paiement Wave** (`pay.wave.com/…`)
-      pour que les organisateurs de tournois puissent régler leurs frais.
+      pour que les organisateurs de tournois puissent régler leurs frais. ⚠️ (seule action serveur restante)
 - [x] **Edge Function `notify-club`** → **Edit** → recoller tout `supabase/functions/notify-club/index.ts`
       → **Deploy** — FAIT (confirmé 2026-07-03, voir AUDIT-SERVEUR §0-SEXIES).
 

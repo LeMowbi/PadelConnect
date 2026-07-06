@@ -5,7 +5,7 @@ import { StyleSheet, TextInput, View } from 'react-native';
 import { useToast } from '@/components/Toast';
 import { Button, Card, EmptyState, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
 import { type Club } from '@/data/clubs';
-import { compDateLabel, formatFee, isTournamentPublic, teamCount, type Competition } from '@/data/competitions';
+import { compDateLabel, formatFee, isCompFinished, isTournamentPublic, teamCount, type Competition } from '@/data/competitions';
 import { openWhatsApp } from '@/lib/contact';
 import { dayKey } from '@/lib/days';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
@@ -212,7 +212,7 @@ export function SectionTournois({ club, comps, onCloseComp }: { club: Club; comp
           <EmptyState icon="trophy-outline" title="Aucun tournoi" text="Crée le premier tournoi de ton club." tone="purple" />
         ) : (
           publishedComps.map((c) => {
-            const finished = (c.endDateKey ?? c.dateKey) < todayKey;
+            const finished = isCompFinished(c, todayKey);
             const result = state.compResults[c.id];
             return (
               <Card key={c.id} style={{ marginBottom: spacing.sm }}>

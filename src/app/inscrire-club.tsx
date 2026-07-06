@@ -6,6 +6,7 @@ import { Chip } from '@/components/Chip';
 import { PopIn } from '@/components/PopIn';
 import { Screen } from '@/components/Screen';
 import { useToast } from '@/components/Toast';
+import { isValidPhone } from '@/lib/phone';
 import { Button, Card, IconCircle, Txt } from '@/components/ui';
 import { type Club } from '@/data/clubs';
 import { useApp } from '@/store/AppContext';
@@ -32,7 +33,7 @@ export default function InscrireClub() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const ready = name.trim().length >= 2 && area.trim().length >= 2 && phone.replace(/\D/g, '').length >= 8;
+  const ready = name.trim().length >= 2 && area.trim().length >= 2 && isValidPhone(phone);
 
   const submit = async () => {
     if (!ready || sending) return;

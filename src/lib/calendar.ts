@@ -6,10 +6,10 @@
 
 import * as Calendar from 'expo-calendar';
 import { Platform } from 'react-native';
-import { HOUR_MS, MINUTE_MS } from './days';
+import { SESSION_MIN } from './slots';
 
 const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
-const SESSION_MS = HOUR_MS + 30 * MINUTE_MS; // 1h30
+const SESSION_MS = SESSION_MIN * 60000; // 1h30 — durée de session UNIQUE (slots.ts)
 
 export type CalendarResult = 'added' | 'canceled' | 'unavailable';
 

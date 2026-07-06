@@ -5,12 +5,14 @@ s'inscrire à des tournois, jouer entre amis et trouver un coach**. Design « lu
 (vert signature, crème, or). Espace dédié pour les **gérants de clubs** et console pour
 **l'opérateur** de la plateforme.
 
-> **Statut : production (TestFlight, build #34+)** — backend **Supabase** : comptes par e-mail
+> **Statut : production (TestFlight)** — backend **Supabase** : comptes par e-mail
 > (confirmation par lien, mot de passe oublié in-app), réservations cross-device, tournois réels
 > validés par les clubs, avis vérifiés, demandes d'ami avec notifications push, parrainage avec
-> **Universal Links** (padelconnectci.com). **Sans paiement en ligne** : le tarif se règle au club.
-> Sécurité par rôle (joueur / club / opérateur) via Row Level Security ; migrations SQL numérotées
-> `02` → `37` dans `supabase/` (à appliquer dans l'ordre — voir CLAUDE.md).
+> **Universal Links** (padelconnectci.com). Matchs ouverts 1v1/2v2, classement par points, coachs
+> & cours, comptes club à l'inscription, paiement Wave manuel des frais de tournoi. **Sans paiement
+> en ligne pour les réservations** : le tarif du terrain se règle au club. Sécurité par rôle
+> (joueur / club / opérateur) via Row Level Security ; migrations SQL numérotées `02` → `64` dans
+> `supabase/` (à appliquer dans l'ordre — voir CLAUDE.md).
 
 ## Fonctionnalités
 
@@ -57,19 +59,20 @@ npx tsc --noEmit && npm run lint && TZ=UTC npm run test:logic
 
 ```
 src/
-  app/                     # écrans (expo-router) — pas de tabbar : l'Accueil est le hub
-    index.tsx              # Accueil (héro, accès rapides, prochain match, clubs, tournois)
+  app/                     # écrans (expo-router)
+    (tabs)/                # barre d'onglets : Accueil / Réserver / Tournois / Amis / Profil
+      index.tsx            #   Accueil (héro, accès rapides, prochain match, clubs, tournois)
+      reserver.tsx         #   Réserver (par heure / par club) · reserver/[clubId] = tunnel guidé
+      competitions.tsx     #   Tournois (liste) · competition/[id] + nouvelle
+      amis.tsx             #   demandes d'ami, recherche par numéro, contacts
+      profil.tsx           #   compte, niveau, trophées, palmarès, espaces pro
     onboarding.tsx         # inscription e-mail + connexion (+ reset-password.tsx)
-    reserver/              # index = par heure/par club · [clubId] = tunnel guidé
     clubs/ + club/[id]     # annuaire (recherche, filtres) + fiche club (avis, tarifs, galerie)
-    competitions.tsx       # liste des tournois · competition/[id] + nouvelle
     reservations.tsx       # Mes réservations (annuler, partager, calendrier) + mes tournois
-    amis.tsx               # demandes d'ami, recherche par numéro, contacts
+    classement.tsx, statistiques.tsx  # classement par points + stats joueur
     parrainage.tsx         # code + lien d'invitation · invite/[code] = route entrante
-    coachs/                # liste + fiche coach (appel/WhatsApp)
-    profil.tsx             # compte, niveau, trophées, palmarès, espaces pro
-    club-admin/            # Espace Club (gérants)
-    operateur.tsx          # console opérateur (rôle serveur requis)
+    coachs/ + cours/       # annuaire coachs + demande de cours · coach-admin (Espace Coach)
+    club-admin/            # Espace Club (gérants) · operateur.tsx = console opérateur
     support.tsx, legal.tsx, pourquoi.tsx, decouvrir.tsx, inscrire-club.tsx
   components/              # kit UI (ui.tsx, Chip, Toast, Skeleton, Reveal, PopIn, Stepper…)
   data/                    # clubs réels (9 fondateurs), coachs (vide au lancement), tournois

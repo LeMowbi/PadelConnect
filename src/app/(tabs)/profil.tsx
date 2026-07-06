@@ -15,6 +15,7 @@ import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt, t
 import { isPlayed, useApp } from '@/store/AppContext';
 import { canAccessOperator, canSeeClubSpace } from '@/lib/access';
 import { levelLabel } from '@/lib/format';
+import { isValidPhone } from '@/lib/phone';
 import { pickImage } from '@/lib/pickImage';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { GENDERS, ageFrom, genderLabel, maskBirthDate, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
@@ -656,7 +657,7 @@ function EditAccount({ onDone }: { onDone: () => void }) {
       setError('Indique ton nom.');
       return;
     }
-    if (phone.replace(/\D/g, '').length < 8) {
+    if (!isValidPhone(phone)) {
       setError('Numéro invalide — au moins 8 chiffres.');
       return;
     }

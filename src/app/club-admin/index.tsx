@@ -449,7 +449,7 @@ export default function ClubAdmin() {
 
       {section === 'Mon club' ? <SectionMonClub key={club.id} club={club} /> : null}
 
-      {section === 'Tournois' ? <SectionTournois club={club} comps={comps} onCloseComp={setClosingId} /> : null}
+      {section === 'Tournois' ? <SectionTournois key={club.id} club={club} comps={comps} onCloseComp={setClosingId} /> : null}
 
       {/* Détail d’un créneau (bottom sheet) — état de chaque terrain + Bloquer / Débloquer */}
       <BottomSheet

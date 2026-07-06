@@ -12,6 +12,7 @@ import { Stepper } from '@/components/Stepper';
 import { Button, Card, IconCircle, Txt } from '@/components/ui';
 import { type Club } from '@/data/clubs';
 import { levelLabel } from '@/lib/format';
+import { isValidPhone } from '@/lib/phone';
 import { clearPendingReferral, getPendingReferral } from '@/lib/pendingReferral';
 import { pickImage } from '@/lib/pickImage';
 import { GENDERS, ageFrom, maskBirthDate, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
@@ -116,7 +117,7 @@ export default function Onboarding() {
     const e: Partial<Record<FieldKey, string>> = {};
     if (!isEmail(email)) e.email = 'Adresse e-mail invalide.';
     if (password.length < 6) e.password = 'Mot de passe : 6 caractères minimum.';
-    if (phone.replace(/\D/g, '').length < 8) e.phone = 'Numéro invalide — au moins 8 chiffres.';
+    if (!isValidPhone(phone)) e.phone = 'Numéro invalide — au moins 8 chiffres.';
     if (firstName.trim().length < 2) e.firstName = 'Indique ton prénom (2 lettres minimum).';
     if (lastName.trim().length < 1) e.lastName = 'Indique ton nom.';
     // Date de naissance optionnelle : on ne signale une erreur QUE si elle est mal saisie.
@@ -198,7 +199,7 @@ export default function Onboarding() {
     const e: Partial<Record<FieldKey, string>> = {};
     if (!isEmail(email)) e.email = 'Adresse e-mail invalide.';
     if (password.length < 6) e.password = 'Mot de passe : 6 caractères minimum.';
-    if (phone.replace(/\D/g, '').length < 8) e.phone = 'Numéro invalide — au moins 8 chiffres.';
+    if (!isValidPhone(phone)) e.phone = 'Numéro invalide — au moins 8 chiffres.';
     if (firstName.trim().length < 2) e.firstName = 'Indique ton prénom (2 lettres minimum).';
     if (lastName.trim().length < 1) e.lastName = 'Indique ton nom.';
     setErrors(e);
@@ -235,7 +236,7 @@ export default function Onboarding() {
   const signIn = async () => {
     if (siBusy) return; // garde anti double-tap
     const byEmail = siMode === 'email';
-    const idOk = byEmail ? isEmail(siEmail) : siPhone.replace(/\D/g, '').length >= 8;
+    const idOk = byEmail ? isEmail(siEmail) : isValidPhone(siPhone);
     if (!idOk) {
       setSiError(byEmail ? 'Adresse e-mail invalide.' : 'Numéro invalide.');
       return;

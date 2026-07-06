@@ -85,6 +85,8 @@ import {
   type SlotOccupancy,
 } from '@/lib/reservations';
 import { blockUser as blockUserRpc, fetchBlockedUserIds } from '@/lib/moderation';
+import { samePhone } from '@/lib/phone';
+import { SESSION_MIN } from '@/lib/slots';
 import { cancelMatchReminder, onPushReceivedInForeground, scheduleMatchReminder, syncMatchReminders } from '@/lib/notifications';
 import { registerPushToken } from '@/lib/push';
 import { uploadAvatar } from '@/lib/avatar';
@@ -165,8 +167,9 @@ export type Reservation = {
   createdAt: number;
 };
 
-// Durée d’une session (1h30) — sert à savoir quand une réservation est « jouée ».
-export const SESSION_MS = 90 * 60000;
+// Durée d’une session (1h30) — sert à savoir quand une réservation est « jouée ». Dérivée de
+// SESSION_MIN (slots.ts) : une SEULE source pour la durée de session dans toute l’app.
+export const SESSION_MS = SESSION_MIN * 60000;
 
 // Une réservation est « jouée » dès que son heure de fin est passée (automatique, jamais déclaré).
 export function isPlayed(r: Reservation, now = Date.now()): boolean {
@@ -1636,8 +1639,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // avec des boutons Accepter/Refuser qui n’avaient plus rien à confirmer côté serveur.
             const friendRequests = s.friendRequests.filter((r) => r.fromId !== friend.id);
             if (s.friends.some((f) => f.id === friend.id)) return { ...s, friendRequests };
-            const digits = phone.replace(/\D/g, '').slice(-10);
-            if (digits.length >= 8 && s.friends.some((f) => (f.phone ?? '').replace(/\D/g, '').slice(-10) === digits)) {
+            // Anti-doublon par NUMÉRO (10 derniers chiffres) via le helper partagé samePhone.
+            if (s.friends.some((f) => samePhone(phone, f.phone))) {
               return { ...s, friendRequests };
             }
             return { ...s, friends: [friend, ...s.friends], friendRequests };

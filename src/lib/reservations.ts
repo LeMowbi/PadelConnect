@@ -3,6 +3,7 @@
 // On écrit ici, puis on met à jour le miroir dans AppContext.
 
 import { dayKey, slotTimestamp } from './days';
+import { isValidPhone } from './phone';
 import type { BlockedRange } from './ranges';
 import { supabase } from './supabase';
 import type { BlockedSlot, Invited, Reservation } from '@/store/AppContext';
@@ -13,6 +14,11 @@ import type { BlockedSlot, Invited, Reservation } from '@/store/AppContext';
 // tomberaient silencieusement → dispo faussée). L'agrégat « depuis le lancement » de l'Espace
 // opérateur devra devenir une RPC serveur si l'historique dépasse cette fenêtre.
 const MIRROR_WINDOW_MS = 180 * 86400000;
+
+// Annulation gratuite jusqu'à 5 h avant le créneau — règle UNIQUE côté client (miroir de la garde
+// serveur 09_cancel_security). Consommée par l'écran « Mes réservations » (bouton Annuler) ET par
+// le rappel « dernière fenêtre » (notifications.ts) : un seul endroit à ajuster pour les deux.
+export const CANCEL_DEADLINE_MS = 5 * 60 * 60 * 1000;
 
 // Occupation d’un créneau (sans identité) — alimente la disponibilité cross-joueur.
 export type SlotOccupancy = { clubId: string; dateKey: string; time: string; court: string };
@@ -343,7 +349,7 @@ export async function fetchReliability(userIds: string[]): Promise<Record<string
 // false = le rattachement a échoué (réseau) : les invités ne recevront ni push ni la résa
 // chez eux — l'appelant doit le dire (la réservation elle-même, elle, reste valide).
 export async function linkParticipants(reservationId: string, phones: string[]): Promise<boolean> {
-  const clean = phones.map((p) => p.trim()).filter((p) => p.replace(/\D/g, '').length >= 8);
+  const clean = phones.map((p) => p.trim()).filter((p) => isValidPhone(p));
   if (clean.length === 0) return true;
   const { error } = await supabase.rpc('link_participants', { p_reservation_id: reservationId, p_phones: clean });
   return !error;

@@ -49,8 +49,11 @@ shipper sur TestFlight.
   - pas de `useCallback` avant un `return` anticipé ;
   - **jamais** de `setState` synchrone dans le corps d'un effet (utiliser un callback après
     `await`, ou un initialiseur `useState`).
-- **react-native-reanimated 4** dispo. Animations simples via l'API `Animated` (composants
-  réutilisables : `src/components/Reveal.tsx` = fondu, `src/components/PopIn.tsx` = ressort).
+- **Animations** via l'API `Animated` du cœur React Native (composants réutilisables :
+  `src/components/Reveal.tsx` = fondu, `src/components/PopIn.tsx` = ressort). ⚠️ `react-native-reanimated`
+  est dans les deps mais **PAS câblé** (aucun `babel.config.js` avec le plugin worklets, jamais
+  importé dans `src/`) : ne PAS l'importer tel quel — il faudrait d'abord ajouter le plugin Babel.
+  Suppression des deps `react-native-reanimated`/`react-native-worklets` à décider post-lancement.
 - État global : Context + `AsyncStorage` (`src/store/AppContext.tsx`, ~1700 lignes ; helpers purs
   et testables dans `src/store/helpers.ts`).
 - Deep links : **scheme `padelco`** (choix assumé). `reset-password` routé vers
@@ -79,11 +82,14 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   l'écrire dans le dépôt).
 - Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
 --auto-submit --non-interactive --no-wait`.
-- **Build courant : #51** (EAS `autoIncrement` gère le `buildNumber` — ne PAS s'en remettre au
-  suivi manuel ci-dessous, c'est `app.json` qui fait foi). Historique : #46 = lancement audit n°7 ;
-  #47 = créneaux modulables + multi-clubs ; #48+ = chantier v2 (comptes club, 1v1, Wave, stats).
-  ⚠️ SQL v2 à coller par le porteur AVANT le build v2 : `54`→`55`→`56`→`57`→`58` (voir
-  `docs/CHECKLIST-STORES.md` §a) + lien Wave dans l'Espace opérateur.
+- **`app.json` `buildNumber` courant : 55** (EAS `autoIncrement` le bump à chaque build — ne PAS
+  s'en remettre au suivi manuel ci-dessous, c'est `app.json` qui fait foi). Historique : #46 =
+  lancement audit n°7 ; #47 = créneaux modulables + multi-clubs ; #48+ = chantier v2 (comptes club,
+  1v1, Wave, stats) ; suivi des 10 audits « chaque audit renforce le précédent » (tours 2→10) sur la
+  branche de dev. ✅ **Tout le SQL `02`→`64` est appliqué EN BASE** (vérifié à distance le
+  2026-07-06 — Management API) : plus rien à coller côté serveur avant le prochain build. Reste au
+  porteur : coller le lien Wave dans l'Espace opérateur, redéployer `notify-club` (compare HMAC en
+  temps constant), FCM Android + empreinte assetlinks.
 - Un module natif nouveau (ex. `expo-contacts`) ⇒ **nouveau build requis** + config plugin dans
   `app.json` avec la chaîne de permission.
 
@@ -96,7 +102,10 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `55` (voir dossier `supabase/`).
+  **SQL Editor → Run**. Migrations actuelles : `02` → `64` (voir dossier `supabase/`) — **toutes
+  appliquées en base** (vérifié le 2026-07-06). `60`→`64` couvrent des durcissements de sécurité
+  (61 diagnostics anonymes, 62 téléphone organisateur privé, 63 `with check` sur les policies
+  UPDATE de Storage, 64 cycle de vie compte/tournoi).
 - **Edge Function** `supabase/functions/notify-club/index.ts` (Deno) : envoie les push via
   l'API Expo. Déclenchée par des **Database Webhooks** (INSERT + UPDATE). Redéploiement **sans
   terminal** : Dashboard → Edge Functions → notify-club → Edit → coller le code → Deploy.
@@ -294,8 +303,10 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - **Serveur post-audit 7 ✅ FAIT (confirmé porteur, 2026-07-03)** : SQL `49` (re-corrigée) → `53`
   collées DANS L'ORDRE, notify-club redéployée, dossier `site/` re-déployé (privacy + /get, AASA ok)
   — voir docs/AUDIT-SERVEUR.md §0-SEXIES.
-- **Reste à faire par le porteur, AVANT le build #47** : coller SQL `54` (§0-SEPTIES) PUIS `55`
-  (§0-OCTIES), dans cet ordre. Plus tard : empreinte SHA-256 d'assetlinks (Android).
+- **SQL serveur ✅ FAIT** : `54`→`64` **tous appliqués en base** (vérifié à distance le 2026-07-06,
+  Management API). Il ne reste au porteur que : le lien Wave (Espace opérateur → Finances), le
+  redéploiement de `notify-club` (compare HMAC en temps constant), FCM Android + empreinte SHA-256
+  d'assetlinks (Android).
 - **Webhook sécurisé ✅ FAIT (2026-07-06)** : `WEBHOOK_SECRET` posé dans les secrets des Edge
   Functions + en-tête `x-webhook-secret` sur les 8 webhooks + `notify-club` redéployée (le secret
   vit UNIQUEMENT côté Supabase, jamais dans le dépôt) — cf. docs/PUSH-SETUP.md §4bis.
@@ -322,12 +333,10 @@ sur la branche de dev (build #48, mise à jour day-1 après approbation du #47) 
   `fetch_competitions` renvoie les 2. Organisateur : carte « Frais à régler » (ouvre le lien Wave)
   une fois le club validé ; opérateur : champ lien Wave + « Paiement reçu ». API Wave = plus tard.
 - **Frais tournoi joueur** : défaut passé de 5 000 à **10 000 FCFA** (`helpers.ts`, `26`).
-- **Reste à faire par le porteur (v2), AVANT le prochain build** : coller SQL `56`, `57`, `58`,
-  puis **`59`** (durcissement concurrence : verrous consultatifs tournois + clôture atomique) et
-  **`60`** (rétablit la branche « tournoi officiel opérateur » de `create_competition` + RPC
-  `reject_club_request`) — DANS CET ORDRE, après 54/55 ; coller le **lien de paiement Wave** dans
-  Espace opérateur → Finances ; **re-déployer `site/`** (retrait commission/Wave du CGU) + le build
-  web sur `club.padelconnectci.com` ; WhatsApp Business « PadelConnect ». **✅ FAIT** : l'e-mail pro
+- **Reste à faire par le porteur (v2)** : SQL `56`→`60` **✅ appliqués en base** (avec `54`→`64`,
+  vérifié le 2026-07-06). Il reste : coller le **lien de paiement Wave** dans Espace opérateur →
+  Finances ; **re-déployer `site/`** (retrait commission/Wave du CGU) + le build web sur
+  `club.padelconnectci.com` ; WhatsApp Business « PadelConnect ». **✅ FAIT** : l'e-mail pro
   `contact@padelconnectci.com` est actif (Cloudflare Email Routing → transfert vers
   `padelconnect.civ@gmail.com`, destination vérifiée le 2026-07-05) — vérifié via l'API Cloudflare.
   Améliorations « en plus » **livrées** : **image de résultat partageable** (carte Équipe A vs

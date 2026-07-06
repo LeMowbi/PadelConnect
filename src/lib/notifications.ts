@@ -8,12 +8,13 @@
 import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
+import { CANCEL_DEADLINE_MS } from './reservations';
 
 const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
 const REMINDER_LEAD_MS = 2 * 60 * 60 * 1000; // 1ᵉʳ rappel : 2 h avant le créneau
-// 2ᵉ rappel : 15 min AVANT la limite d’annulation gratuite (5 h avant le match), pour laisser
-// le temps d’annuler sans frais si on ne peut plus venir → 5 h 15 min avant le créneau.
-const CANCEL_DEADLINE_MS = 5 * 60 * 60 * 1000; // doit rester aligné avec la règle serveur (09_cancel_security)
+// 2ᵉ rappel : 15 min AVANT la limite d’annulation gratuite (5 h avant le match, CANCEL_DEADLINE_MS
+// partagé avec l’écran Réservations), pour laisser le temps d’annuler sans frais si on ne peut plus
+// venir → 5 h 15 min avant le créneau.
 const CANCEL_WARNING_LEAD_MS = CANCEL_DEADLINE_MS + 15 * 60 * 1000;
 
 // Affichage en premier plan (app ouverte) : bannière + son, sans pastille.

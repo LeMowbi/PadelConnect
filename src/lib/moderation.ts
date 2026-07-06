@@ -16,12 +16,6 @@ export async function blockUser(userId: string): Promise<boolean> {
   return !error && data === true;
 }
 
-// Débloque un joueur.
-export async function unblockUser(userId: string): Promise<boolean> {
-  const { data, error } = await supabase.rpc('unblock_user', { p_user_id: userId });
-  return !error && data === true;
-}
-
 // Ma liste de comptes bloqués. Convention réseau (CLAUDE.md §8) : `null` en cas d'échec réseau
 // (≠ [] = aucun blocage) pour que l'appelant ne réaffiche pas à tort un contenu masqué.
 export async function fetchBlockedUserIds(): Promise<string[] | null> {

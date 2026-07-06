@@ -10,6 +10,7 @@ import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, SectionHeader, Tag, Txt } from '@/components/ui';
 import { useToast } from '@/components/Toast';
 import { findPlayerByPhone } from '@/lib/friends';
+import { isValidPhone } from '@/lib/phone';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { openWhatsApp } from '@/lib/contact';
 import { contactsSupported, pickContact } from '@/lib/contactsPicker';
@@ -44,7 +45,7 @@ export default function AmisScreen() {
 
   const openFriend = (f: { id: string; name: string; level?: number }) => setOpenPlayer({ id: f.id, name: f.name, level: f.level });
 
-  const phoneReady = phone.replace(/\D/g, '').length >= 8;
+  const phoneReady = isValidPhone(phone);
   const requests = state.friendRequests;
 
   // Cherche le joueur par son numéro côté serveur. On n’invite que s’il a un VRAI compte.

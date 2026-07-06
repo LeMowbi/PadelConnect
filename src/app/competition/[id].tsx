@@ -10,7 +10,17 @@ import { PopIn } from '@/components/PopIn';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
 import { findClub } from '@/data/clubs';
-import { compDateLabel, formatFee, hasEntryFee, isTournamentPublic, seedCompetitions, teamCount, teamsToShow } from '@/data/competitions';
+import {
+  compDateLabel,
+  compFill,
+  formatFee,
+  hasEntryFee,
+  isCompFinished,
+  isTournamentPublic,
+  seedCompetitions,
+  teamCount,
+  teamsToShow,
+} from '@/data/competitions';
 import { openWhatsApp } from '@/lib/contact';
 import { dayKey } from '@/lib/days';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
@@ -96,7 +106,7 @@ export default function CompetitionDetail() {
   // Cycle de vie : à venir → terminé (jour STRICTEMENT passé) → clôturé (vainqueur désigné).
   // Le jour même = en cours, pas encore « terminé » (on ne clôture pas avant que ça se joue).
   // Pour un tournoi multi-jours, c’est la date de FIN qui fait foi.
-  const played = (comp.endDateKey ?? comp.dateKey) < dayKey(new Date());
+  const played = isCompFinished(comp, dayKey(new Date()));
   // Dès le JOUR MÊME du tournoi, le serveur refuse la désinscription (53) : on ne montre plus
   // le bouton — un « réessaie » en boucle sur un refus définitif serait mensonger.
   const started = dayKey(new Date()) >= comp.dateKey;
@@ -119,9 +129,8 @@ export default function CompetitionDetail() {
           `Bonjour, je viens de m’inscrire au tournoi « ${comp.title} » sur PadelConnect — comment régler les frais d’inscription (${formatFee(comp.fee)}) ?`,
         )
       : undefined;
-  const left = Math.max(0, comp.slots - teams);
+  const { left, pct } = compFill(comp, teams);
   const full = left === 0 && !registered;
-  const pct = Math.min(100, Math.round((teams / Math.max(1, comp.slots)) * 100)); // Math.max(1,…) : jamais de NaN si slots=0
 
   const byClub = comp.organizerType === 'club';
   const partner = (partnerId ? state.friends.find((f) => f.id === partnerId)?.name : partnerName.trim()) ?? '';

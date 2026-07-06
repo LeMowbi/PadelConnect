@@ -18,7 +18,7 @@ import { addReservationToCalendar } from '@/lib/calendar';
 import { openWhatsApp } from '@/lib/contact';
 import { hapticSuccess } from '@/lib/haptics';
 import { fetchMyMatchScores, leaveOpenMatch, setMatchOpen, submitMatchScore, type MatchScore, type MatchSet } from '@/lib/matchResults';
-import { fetchCancelledReservations } from '@/lib/reservations';
+import { CANCEL_DEADLINE_MS, fetchCancelledReservations } from '@/lib/reservations';
 import { dateKeyLabel, dayKey } from '@/lib/days';
 import { fcfa, perPlayerOf } from '@/lib/format';
 import { APP_DOMAIN } from '@/lib/referrals';
@@ -26,7 +26,6 @@ import { openMaps } from '@/lib/maps';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { colors, radius, spacing } from '@/theme';
 
-const FIVE_H = 5 * 3600000;
 const PAST_PREVIEW = 5; // passées : 5 dernières + « Voir tout »
 const MONTHS = ['JANV.', 'FÉVR.', 'MARS', 'AVR.', 'MAI', 'JUIN', 'JUIL.', 'AOÛT', 'SEPT.', 'OCT.', 'NOV.', 'DÉC.'];
 
@@ -438,7 +437,7 @@ export default function ReservationsScreen() {
         ) : (
           upcoming.map((r, idx) => {
             const owner = isOwner(r);
-            const canCancel = owner && r.startsAt - now > FIVE_H;
+            const canCancel = owner && r.startsAt - now > CANCEL_DEADLINE_MS;
             const [, mm, dd] = r.dateKey.split('-');
             // Sans zéro initial pour rester cohérent avec dateKeyLabel (« 1 juil. », pas « 01 »).
             const day = dd ? String(Number(dd)) : '';
