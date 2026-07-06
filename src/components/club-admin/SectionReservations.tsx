@@ -571,7 +571,7 @@ export function SectionReservations({
                   ) : null}
                   {r.coachName ? (
                     // Réservation née d’un cours accepté par le coach (double validation).
-                    <Txt variant="small" color={colors.purple} style={{ fontWeight: '600' }}>
+                    <Txt variant="small" color={colors.purpleDark} style={{ fontWeight: '600' }}>
                       Cours avec {r.coachName}
                     </Txt>
                   ) : null}

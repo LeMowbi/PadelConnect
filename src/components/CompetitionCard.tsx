@@ -70,7 +70,7 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
       {comp.reward.trim() ? (
         <View style={styles.reward}>
           <Ionicons name="gift-outline" size={16} color={colors.purple} />
-          <Txt variant="small" color={colors.purple} style={{ flex: 1, fontWeight: '600' }}>
+          <Txt variant="small" color={colors.purpleDark} style={{ flex: 1, fontWeight: '600' }}>
             {formatFee(comp.reward)}
           </Txt>
         </View>

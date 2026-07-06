@@ -1239,8 +1239,8 @@ function Field({
           autoCapitalize={autoCapitalize}
           autoCorrect={false}
           returnKeyType="done"
-          textContentType={keyboardType === 'email-address' ? 'emailAddress' : undefined}
-          autoComplete={keyboardType === 'email-address' ? 'email' : undefined}
+          textContentType={keyboardType === 'email-address' ? 'emailAddress' : keyboardType === 'phone-pad' ? 'telephoneNumber' : undefined}
+          autoComplete={keyboardType === 'email-address' ? 'email' : keyboardType === 'phone-pad' ? 'tel' : undefined}
           accessibilityLabel={label}
           style={[styles.input, error ? { borderColor: colors.danger } : null]}
         />

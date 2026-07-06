@@ -353,7 +353,7 @@ export default function HomeScreen() {
                   </Txt>
                 ) : null}
                 {news.link ? (
-                  <Txt variant="small" color={colors.purple} style={{ fontWeight: '600', marginTop: 2 }}>
+                  <Txt variant="small" color={colors.purpleDark} style={{ fontWeight: '600', marginTop: 2 }}>
                     En savoir plus →
                   </Txt>
                 ) : null}

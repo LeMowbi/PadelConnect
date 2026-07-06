@@ -207,7 +207,7 @@ export default function CompetitionDetail() {
       <LinearGradient colors={gradients.deepPurple} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
         <View style={styles.heroTopRow}>
           <View style={styles.heroPill}>
-            <Txt variant="label" color={colors.purple} style={styles.heroPillText}>
+            <Txt variant="label" color={colors.purpleDark} style={styles.heroPillText}>
               Tournoi · {comp.level}
             </Txt>
           </View>
@@ -248,10 +248,10 @@ export default function CompetitionDetail() {
       <View style={styles.chipsRow}>
         {comp.reward.trim() ? (
           <View style={[styles.infoChip, styles.infoChipReward]}>
-            <Txt variant="label" color={colors.purple}>
+            <Txt variant="label" color={colors.purpleDark}>
               Récompense
             </Txt>
-            <Txt variant="h3" color={colors.purple} numberOfLines={2} style={{ marginTop: 2 }}>
+            <Txt variant="h3" color={colors.purpleDark} numberOfLines={2} style={{ marginTop: 2 }}>
               {formatFee(comp.reward)}
             </Txt>
           </View>
@@ -888,7 +888,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     alignSelf: 'flex-start',
   },
-  heroPillText: { color: colors.purple },
+  heroPillText: { color: colors.purpleDark },
   heroTitle: { fontSize: 26, marginTop: spacing.md },
   heroMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm },
   heroMeta: { opacity: 0.9 },
