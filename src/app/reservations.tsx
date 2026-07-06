@@ -244,7 +244,7 @@ export default function ReservationsScreen() {
           : 'Score enregistré — validé dès qu’un joueur du camp gagnant saisit le même score.',
       );
     } else if (res === 'conflict') {
-      toast.show('Ton score ne correspond pas à celui déjà saisi — vérifiez ensemble.', { icon: 'alert-circle' });
+      toast.show('Ton score ne correspond pas à celui déjà saisi — vérifie ça avec l’autre joueur.', { icon: 'alert-circle' });
     } else if (res === 'no_players') {
       // On GARDE la feuille ouverte (pas de setScoreTarget(null)) : la saisie de sets reste
       // à l'écran, l'utilisateur ajoute un partenaire sans avoir à tout ressaisir.
@@ -358,7 +358,7 @@ export default function ReservationsScreen() {
                 </View>
                 <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
                   {s.conflict
-                    ? 'Les scores déjà saisis ne correspondent pas — demandez à celui qui s’est trompé de corriger sa saisie.'
+                    ? 'Les scores déjà saisis ne correspondent pas — demande à celui qui s’est trompé de corriger sa saisie.'
                     : `${s.enteredNames || 'Un joueur'} a mis ${s.score}. Si tu as perdu, saisis ton score pour valider tout de suite.`}
                 </Txt>
                 <Divider style={{ marginVertical: spacing.md }} />

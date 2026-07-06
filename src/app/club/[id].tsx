@@ -133,9 +133,10 @@ export default function ClubDetail() {
     if (clubId)
       void fetchClubReviews(clubId).then((r) => {
         if (!alive) return;
-        if (r)
+        if (r) {
           setServerReviews(r); // null = échec réseau → on ne vide pas la liste
-        else setReviewsError(true); // 1er chargement en échec → distinct de « club sans avis »
+          setReviewsError(false); // succès (même à 0 avis) → on lève un éventuel échec précédent
+        } else setReviewsError(true); // 1er chargement en échec → distinct de « club sans avis »
         setReviewsLoading(false);
       });
     // Coachs réservables du club (serveur) : chargés à l’ouverture, comme les avis.
@@ -154,14 +155,23 @@ export default function ClubDetail() {
 
   // Signaler un avis (envoi à la modération) ou bloquer son auteur (ses avis disparaissent
   // aussitôt de ma vue) — actions requises par l'App Store (Guideline 1.2) sur tout contenu UGC.
+  // Garde in-flight : « Signaler » ne change rien à l'écran avant le toast → sans ça, un
+  // double-tap créait deux entrées `report_review` dans la file de modération de l'opérateur.
+  const [moderationBusy, setModerationBusy] = useState<string | null>(null);
   const reportReviewItem = async (reviewId: string) => {
+    if (moderationBusy) return;
+    setModerationBusy(reviewId);
     const ok = await reportReview(reviewId);
+    setModerationBusy(null);
     showToast(ok ? 'Avis signalé — merci, on le vérifie.' : 'Signalement impossible — réessaie.', ok ? 'success' : 'error');
   };
   const blockReviewAuthor = async (userId: string, author: string) => {
+    if (moderationBusy) return;
+    setModerationBusy(userId);
     // Miroir du STORE (persisté, convention §8) : un échec réseau au prochain montage ne
     // réaffiche plus les avis d'un compte déjà bloqué.
     const ok = await blockUserAccount(userId);
+    setModerationBusy(null);
     if (ok) {
       showToast(`${author} bloqué — tu ne verras plus ses avis.`);
     } else {
@@ -870,13 +880,21 @@ export default function ClubDetail() {
                     proposé sur les avis des AUTRES joueurs, à tout compte connecté. */}
                 {state.serverUserId && state.serverUserId !== r.userId ? (
                   <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-                    <Button size="sm" label="Signaler" variant="ghost" icon="flag-outline" onPress={() => void reportReviewItem(r.id)} />
+                    <Button
+                      size="sm"
+                      label="Signaler"
+                      variant="ghost"
+                      icon="flag-outline"
+                      onPress={() => void reportReviewItem(r.id)}
+                      disabled={!!moderationBusy}
+                    />
                     <Button
                       size="sm"
                       label="Bloquer"
                       variant="ghost"
                       icon="ban-outline"
                       onPress={() => void blockReviewAuthor(r.userId, r.author)}
+                      disabled={!!moderationBusy}
                     />
                   </View>
                 ) : null}

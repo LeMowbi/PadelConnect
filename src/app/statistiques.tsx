@@ -102,7 +102,7 @@ export default function Statistiques() {
                   (échec réseau ou chargement) ne doit pas faire mentir un joueur réellement classé (§8). */}
               <Txt variant="h3">
                 {typeof rank === 'number' && rank > 0
-                  ? `${rank}ᵉ au classement`
+                  ? `${rank === 1 ? '1ᵉʳ' : `${rank}ᵉ`} au classement`
                   : rank === 0
                     ? 'Pas encore classé'
                     : 'Classement indisponible'}
@@ -133,7 +133,7 @@ export default function Statistiques() {
           <StatTile value={tournamentsPlayed} label="Tournois joués" color={colors.purple} bg={colors.purpleSoft} />
           <StatTile value={tournamentsWon} label="Tournois gagnés" color={colors.amberDark} bg={colors.amberSoft} />
           <StatTile
-            value={typeof rank === 'number' && rank > 0 ? `${rank}ᵉ` : '—'}
+            value={typeof rank === 'number' && rank > 0 ? (rank === 1 ? '1ᵉʳ' : `${rank}ᵉ`) : '—'}
             label="Classement"
             color={colors.green}
             bg={colors.greenSoft}

@@ -519,9 +519,12 @@ export default function ProfilScreen() {
               label="Retirer la photo"
               icon="trash-outline"
               variant="danger"
-              onPress={() => {
-                void updateAccount({ photoUri: undefined });
+              onPress={async () => {
                 setPhotoSheet(false);
+                // On ATTEND le serveur (≠ fire-and-forget) : un retrait échoué hors-ligne ne doit
+                // pas faire croire à la suppression, sinon la photo réapparaît au prochain lancement.
+                const { photoSaved } = await updateAccount({ photoUri: undefined });
+                if (!photoSaved) toast.show('Retrait non enregistré — vérifie ta connexion', { icon: 'alert-circle' });
               }}
               full
             />
@@ -627,12 +630,14 @@ function EditAccount({ onDone }: { onDone: () => void }) {
   const [gender, setGender] = useState<Gender | undefined>(a.gender);
   const [photoUri, setPhotoUri] = useState<string | undefined>(a.photoUri);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const choose = async () => {
     const uri = await pickImage({ square: true });
     if (uri) setPhotoUri(uri);
   };
   const save = async () => {
+    if (saving) return; // garde anti double-tap : sinon deux updateAccount → deux uploads photo
     // Mêmes règles qu’à l’inscription : on refuse d’écraser prénom/nom/téléphone par du vide
     // (le téléphone sert d’ailleurs à l’appariement des amis/participants aux 10 derniers chiffres).
     if (firstName.trim().length < 2) {
@@ -648,6 +653,7 @@ function EditAccount({ onDone }: { onDone: () => void }) {
       return;
     }
     setError(null);
+    setSaving(true);
     const { photoSaved, profileSaved } = await updateAccount({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
@@ -656,6 +662,7 @@ function EditAccount({ onDone }: { onDone: () => void }) {
       birthDate: parseBirthDate(birth) ? birth.trim() : a.birthDate,
       gender,
     });
+    setSaving(false);
     // On ne ment plus : si les champs texte n'ont pas atteint le serveur (réseau), le formulaire
     // RESTE OUVERT — sinon l'ancien prénom/numéro serveur revenait en silence au prochain
     // lancement (et le numéro sert aux clubs + à l'appariement amis/coachs).
@@ -730,7 +737,7 @@ function EditAccount({ onDone }: { onDone: () => void }) {
       ) : null}
       <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
         <View style={{ flex: 1 }}>
-          <Button label="Enregistrer" icon="checkmark" onPress={save} full />
+          <Button label={saving ? 'Enregistrement…' : 'Enregistrer'} icon="checkmark" onPress={save} disabled={saving} full />
         </View>
         <Button label="Annuler" variant="ghost" onPress={onDone} />
       </View>

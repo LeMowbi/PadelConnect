@@ -106,11 +106,19 @@ export default function Operateur() {
     const { ok } = await operatorSetClubStatus(clubId, current ? 'active' : 'coming_soon');
     if (!ok) toast.show('Changement impossible — réessaie', { icon: 'alert-circle' });
   };
-  // Boost serveur (visible par tous) : on prévient si l’écriture échoue.
-  const doBoost = (clubId: string, days: number) =>
+  // Boost serveur (visible par tous) : on prévient si l’écriture échoue. Garde in-flight —
+  // `setBoost` écrit une expiration ABSOLUE, donc enchaîner « 30 j » puis « Arrêter » sans
+  // attendre pouvait faire arriver les deux RPC dans le désordre et laisser le club boosté
+  // alors qu'on voulait l'arrêter. Une action de boost à la fois.
+  const [boostBusy, setBoostBusy] = useState<string | null>(null);
+  const doBoost = (clubId: string, days: number) => {
+    if (boostBusy) return;
+    setBoostBusy(clubId);
     void setBoost(clubId, days).then(({ ok }) => {
+      setBoostBusy(null);
       if (!ok) toast.show('Boost impossible — réessaie', { icon: 'alert-circle' });
     });
+  };
 
   // ── Clubs de base (les 9 embarqués) : statut piloté Actif ⇄ Bientôt côté serveur ──
   const [baseBusy, setBaseBusy] = useState<string | null>(null);
@@ -1250,10 +1258,19 @@ export default function Operateur() {
                       {/* 7j / 14j / 30j toujours accessibles (on peut prolonger/changer la durée) ;
                       « Arrêter » apparaît quand le boost est actif. */}
                       <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
-                        <Button size="sm" label="7 j" variant="secondary" onPress={() => doBoost(c.id, 7)} />
-                        <Button size="sm" label="14 j" variant="secondary" onPress={() => doBoost(c.id, 14)} />
-                        <Button size="sm" label="30 j" onPress={() => doBoost(c.id, 30)} />
-                        {on ? <Button size="sm" label="Arrêter" icon="close" variant="ghost" onPress={() => doBoost(c.id, 0)} /> : null}
+                        <Button size="sm" label="7 j" variant="secondary" onPress={() => doBoost(c.id, 7)} disabled={!!boostBusy} />
+                        <Button size="sm" label="14 j" variant="secondary" onPress={() => doBoost(c.id, 14)} disabled={!!boostBusy} />
+                        <Button size="sm" label="30 j" onPress={() => doBoost(c.id, 30)} disabled={!!boostBusy} />
+                        {on ? (
+                          <Button
+                            size="sm"
+                            label="Arrêter"
+                            icon="close"
+                            variant="ghost"
+                            onPress={() => doBoost(c.id, 0)}
+                            disabled={!!boostBusy}
+                          />
+                        ) : null}
                       </View>
                     </View>
                   </View>

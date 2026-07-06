@@ -34,10 +34,26 @@ export default function ResetPasswordScreen() {
     // proche ouvert sur ce téléphone) : le store l'adopte tout de suite (refreshSession purge
     // le périmètre de l'ancien compte). Sinon, un abandon en cours de flux laissait l'identité
     // affichée A sur une session serveur B — miroirs mélangés au retour au premier plan.
-    void supabase.auth.exchangeCodeForSession(code).then(async ({ error }) => {
-      if (!error) await refreshSession();
-      setStatus(error ? 'error' : 'ready');
-    });
+    let done = false;
+    const finish = (s: 'ready' | 'error') => {
+      if (!done) {
+        done = true;
+        setStatus(s);
+      }
+    };
+    // `.catch` + timeout de secours : si l'échange REJETTE (exception, ≠ résolution {error}) ou
+    // ne revient jamais (réseau coupé), on ne laisse pas l'utilisateur bloqué sur « Vérification
+    // du lien… » dans ce parcours critique — on bascule en « lien invalide/expiré » avec une
+    // issue (même filet que auth-callback.tsx).
+    void supabase.auth
+      .exchangeCodeForSession(code)
+      .then(async ({ error }) => {
+        if (!error) await refreshSession();
+        finish(error ? 'error' : 'ready');
+      })
+      .catch(() => finish('error'));
+    const t = setTimeout(() => finish('error'), 12000);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 

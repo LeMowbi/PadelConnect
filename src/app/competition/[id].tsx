@@ -676,6 +676,7 @@ export default function CompetitionDetail() {
                 label="Se désinscrire"
                 icon="close"
                 variant="danger"
+                disabled={registering}
                 onPress={async () => {
                   if (registering) return;
                   setRegistering(true);

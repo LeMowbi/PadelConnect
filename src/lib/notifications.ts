@@ -26,7 +26,22 @@ if (isNative) {
       shouldSetBadge: false,
     }),
   });
+  // Android 8+ : sans canal EXPLICITE, les rappels/push retombent sur un canal d'importance
+  // moyenne → pas d'affichage « heads-up ». On crée un canal HIGH pour que les alertes
+  // (rappel d'annulation, match qui approche, push du gérant) apparaissent bien en avant-plan.
+  if (Platform.OS === 'android') {
+    void Notifications.setNotificationChannelAsync('default', {
+      name: 'Rappels & alertes',
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: 'default',
+    });
+  }
 }
+
+// iOS ne conserve que les 64 notifications locales programmées les plus PROCHES et jette le
+// reste en silence. On borne donc le nombre de réservations planifiées (2 rappels chacune) pour
+// rester bien sous ce plafond — on garde les créneaux les plus proches, ceux qui comptent.
+const MAX_SCHEDULED_RESERVATIONS = 28;
 
 // `isOwner` : true si JE suis l’auteur de la réservation (celui qui peut l’annuler). Un ami
 // simplement INVITÉ n’a ni bouton « Annuler » ni « équipe » à confirmer — ses rappels doivent
@@ -101,7 +116,10 @@ export async function syncMatchReminders(reservations: ReminderInput[], enabled:
   await Promise.all(all.filter(isMatchReminder).map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)));
   if (!enabled) return;
   if (!(await ensureNotificationPermission())) return;
-  for (const r of reservations) await scheduleMatchReminder(r);
+  // On ne planifie que les créneaux les PLUS PROCHES (≤ MAX_SCHEDULED_RESERVATIONS), pour rester
+  // sous le plafond iOS de 64 notifications locales — sinon les rappels lointains seraient jetés.
+  const soonest = [...reservations].sort((a, b) => a.startsAt - b.startsAt).slice(0, MAX_SCHEDULED_RESERVATIONS);
+  for (const r of soonest) await scheduleMatchReminder(r);
 }
 
 // ─── Tap sur une notification → navigation ────────────────────────────────────

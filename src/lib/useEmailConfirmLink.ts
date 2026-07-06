@@ -83,7 +83,12 @@ export function useEmailConfirmLink(onResult: (r: Result) => void) {
         handled.current.add(key);
         ({ error } = await supabase.auth.verifyOtp({ token_hash: p.token_hash, type: p.type as EmailOtpType }));
       } else {
-        return; // pas un lien de confirmation reconnu
+        // Un jeton est présent (key truthy, cf. garde ci-dessus) mais le format est INCOMPLET
+        // (access_token sans refresh_token, ou token_hash sans type) → lien de confirmation
+        // invalide : on le signale au lieu de rester muet (sinon spinner jusqu'au timeout de
+        // secours d'auth-callback, sans explication pour l'utilisateur).
+        if (active) cb.current('error');
+        return;
       }
       if (!active) return;
       cb.current(error ? 'error' : 'confirmed');

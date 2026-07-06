@@ -100,7 +100,14 @@ export default function Support() {
       </Card>
 
       {/* Email direct */}
-      <Card onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`).catch(() => {})} style={[styles.row, { marginTop: spacing.md }]}>
+      <Card
+        onPress={() =>
+          // Pas d'app e-mail configurée (émulateur / certains Android) → on ne laisse pas le tap
+          // sans réponse : on affiche l'adresse pour qu'elle soit notée/copiée à la main.
+          Linking.openURL(`mailto:${SUPPORT_EMAIL}`).catch(() => toast.show(`Écris-nous à ${SUPPORT_EMAIL}`, { icon: 'mail-outline' }))
+        }
+        style={[styles.row, { marginTop: spacing.md }]}
+      >
         <IconCircle icon="mail-outline" color={colors.purple} bg={colors.purpleSoft} />
         <View style={{ flex: 1 }}>
           <Txt variant="h3">Nous écrire par e-mail</Txt>
