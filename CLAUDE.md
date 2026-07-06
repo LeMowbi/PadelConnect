@@ -322,12 +322,17 @@ sur la branche de dev (build #48, mise à jour day-1 après approbation du #47) 
   `fetch_competitions` renvoie les 2. Organisateur : carte « Frais à régler » (ouvre le lien Wave)
   une fois le club validé ; opérateur : champ lien Wave + « Paiement reçu ». API Wave = plus tard.
 - **Frais tournoi joueur** : défaut passé de 5 000 à **10 000 FCFA** (`helpers.ts`, `26`).
-- **Reste à faire par le porteur (v2), AVANT le build #48** : coller SQL `56`, `57`, `58` (dans
-  cet ordre, après 54/55) ; coller le **lien de paiement Wave** dans Espace opérateur → Finances ;
-  déployer `site/` (vitrine) + le build web sur `club.padelconnectci.com` ; créer l'e-mail pro
-  `contact@padelconnectci.com` (Cloudflare Email Routing) + WhatsApp Business « PadelConnect ».
-  Améliorations « en plus » (carte clubs app, image de résultat, messages types, happy hours…)
-  = lots suivants, non encore codés.
+- **Reste à faire par le porteur (v2), AVANT le prochain build** : coller SQL `56`, `57`, `58`,
+  puis **`59`** (durcissement concurrence : verrous consultatifs tournois + clôture atomique) et
+  **`60`** (rétablit la branche « tournoi officiel opérateur » de `create_competition` + RPC
+  `reject_club_request`) — DANS CET ORDRE, après 54/55 ; coller le **lien de paiement Wave** dans
+  Espace opérateur → Finances ; **re-déployer `site/`** (retrait commission/Wave du CGU) + le build
+  web sur `club.padelconnectci.com` ; créer l'e-mail pro `contact@padelconnectci.com` (Cloudflare
+  Email Routing) + WhatsApp Business « PadelConnect ».
+  Améliorations « en plus » **livrées** : **image de résultat partageable** (carte Équipe A vs
+  Équipe B, `ResultCard`/`shareImage`, modules natifs `react-native-view-shot` + `expo-sharing`
+  ⇒ nouveau build requis) et **messages types WhatsApp** (`matchMessages`). Reste en idée : carte
+  clubs app, etc.
 
 ### Feuille de route (décidée avec le porteur le 2026-07-01)
 
