@@ -5,7 +5,8 @@ import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Reveal, staggerDelay } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
-import { Button, Card, Divider, EmptyState, SectionHeader, Tag, Txt } from '@/components/ui';
+import { Button, Card, Divider, EmptyState, SectionHeader, Tag, Txt, type IconName } from '@/components/ui';
+import { matchTemplates } from '@/lib/matchMessages';
 import { findClub } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { useToast } from '@/components/Toast';
@@ -61,6 +62,7 @@ export default function ReservationsScreen() {
   // lignes animées dans un ScrollView non virtualisé chez un joueur assidu.
   const [pastShownCount, setPastShownCount] = useState(PAST_PREVIEW);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null); // confirmation avant annulation
+  const [msgTarget, setMsgTarget] = useState<Reservation | null>(null); // fiche « messages types » WhatsApp
   const [cancellingLesson, setCancellingLesson] = useState<string | null>(null); // garde anti double-tap
 
   // SCORE DE MATCH (46) : chaque joueur saisit les sets de SON point de vue, l'app désigne
@@ -161,33 +163,9 @@ export default function ReservationsScreen() {
     .filter((c): c is NonNullable<typeof c> => !!c)
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
 
-  // Récap envoyé aux partenaires (WhatsApp s’ouvre avec le message, tu choisis le destinataire).
-  // La part se calcule sur le PRIX RÉEL du créneau et l'EFFECTIF RÉEL du match (créateur +
-  // invités) : « /4 » sur une résa à 2 annoncerait la moitié de la vraie part à payer au club.
-  const notifyPartners = (r: Reservation) => {
-    const who = r.invited.length ? `\nÉquipe : ${r.invited.map((i) => i.name).join(', ')}` : '';
-    const share = r.price ? `\nPrévois ${perPlayerOf(r.price, 1 + r.invited.length)} chacun.` : '';
-    openWhatsApp(
-      '',
-      `On joue au padel ! 🎾\n${r.clubName} — ${dateKeyLabel(r.dateKey)} à ${r.time} (session 1h30)\n${r.court}${who}${share}\nRéservé via PadelConnect.`,
-    );
-  };
-
-  // Il manque des joueurs : appel à recrues sur WhatsApp (groupe/contact au choix), avec le
-  // lien Universal du club — un padel se joue à 4 et l'app démarre sans réseau d'amis (le
-  // message circule là où les joueurs d'Abidjan sont déjà : leurs groupes WhatsApp).
-  const findPlayers = (r: Reservation) => {
-    // Capacité selon le format (1v1 = 2, 2v2 = 4) : le nombre de joueurs manquants et la part
-    // par joueur en dépendent — un 1v1 ne manque au plus que d'UN joueur, part divisée par 2.
-    const cap = r.openCapacity ?? 4;
-    const missing = Math.max(1, cap - 1 - r.invited.length);
-    openWhatsApp(
-      '',
-      `Il me manque ${missing} joueur${missing > 1 ? 's' : ''} au padel ! 🎾\n` +
-        `${r.clubName} — ${dateKeyLabel(r.dateKey)} à ${r.time} (session 1h30)${r.price ? ` · ~${perPlayerOf(r.price, cap)}/joueur` : ''}\n` +
-        `Qui vient ? ${APP_DOMAIN}/club/${r.clubId}`,
-    );
-  };
+  // Messages types (réponses rapides) : au lieu d'UN message figé, la fiche `msgTarget` propose
+  // plusieurs modèles pré-remplis (on joue / rappel / il manque des joueurs / j'annule) — le
+  // joueur en envoie un en un tap sur WhatsApp. Modèles PURS dans src/lib/matchMessages.ts.
 
   const respond = async (r: Reservation, accept: boolean) => {
     const ok = await respondInvitation(r.id, accept);
@@ -541,13 +519,11 @@ export default function ReservationsScreen() {
                         label={
                           r.invited.length < (r.openCapacity ?? 4) - 1 && owner && !r.coachName
                             ? 'Chercher des joueurs'
-                            : 'Prévenir mes partenaires'
+                            : 'Message WhatsApp'
                         }
                         icon="logo-whatsapp"
                         variant="secondary"
-                        onPress={() =>
-                          r.invited.length < (r.openCapacity ?? 4) - 1 && owner && !r.coachName ? findPlayers(r) : notifyPartners(r)
-                        }
+                        onPress={() => setMsgTarget(r)}
                         pill
                         full
                       />
@@ -827,6 +803,43 @@ export default function ReservationsScreen() {
         </View>
       </BottomSheet>
 
+      {/* Messages types (réponses rapides) : modèles pré-remplis → WhatsApp en un tap. */}
+      <BottomSheet
+        visible={msgTarget !== null}
+        title="Message rapide"
+        subtitle={msgTarget ? `${msgTarget.clubName} — ${dateKeyLabel(msgTarget.dateKey)} à ${msgTarget.time}` : undefined}
+        onClose={() => setMsgTarget(null)}
+      >
+        <Txt variant="body" color={colors.textMuted}>
+          Choisis un message — il s’ouvre pré-rempli dans WhatsApp, tu choisis le destinataire.
+        </Txt>
+        <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
+          {(msgTarget ? matchTemplates(msgTarget, `${APP_DOMAIN}/club/${msgTarget.clubId}`) : []).map((t) => (
+            <Pressable
+              key={t.key}
+              onPress={() => {
+                openWhatsApp('', t.body);
+                setMsgTarget(null);
+              }}
+              style={styles.msgRow}
+              accessibilityRole="button"
+              accessibilityLabel={t.label}
+            >
+              <Ionicons name={t.icon as IconName} size={18} color={colors.signature} />
+              <View style={{ flex: 1 }}>
+                <Txt variant="body" style={{ fontWeight: '600' }}>
+                  {t.label}
+                </Txt>
+                <Txt variant="small" color={colors.textMuted} numberOfLines={1}>
+                  {t.body.split('\n')[0]}
+                </Txt>
+              </View>
+              <Ionicons name="logo-whatsapp" size={16} color={colors.textFaint} />
+            </Pressable>
+          ))}
+        </View>
+      </BottomSheet>
+
       {/* Saisie du score (46) : chaque joueur saisit les sets de SON point de vue — l'app
           désigne le vainqueur automatiquement dès que deux saisies concordent. */}
       <BottomSheet
@@ -945,6 +958,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     alignSelf: 'flex-start',
     paddingVertical: 2,
+  },
+  msgRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   setRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   setInput: {
