@@ -37,7 +37,9 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files (jamais versionner de secret : tokens EAS/Supabase/Brevo… vivent hors dépôt)
+.env
+.env.*
 .env*.local
 
 # typescript

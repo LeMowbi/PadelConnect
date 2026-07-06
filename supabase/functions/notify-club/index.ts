@@ -49,13 +49,26 @@ type Notif = {
   };
 };
 
+// Comparaison à temps CONSTANT du secret : un `!==` classique s'arrête au 1ᵉʳ caractère qui
+// diffère → fuite d'information de timing. On XOR tous les octets pour ne pas trahir la position
+// de la 1ʳᵉ différence. (Attaque peu praticable sur Internet, mais durcissement gratuit.)
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const ba = enc.encode(a);
+  const bb = enc.encode(b);
+  if (ba.length !== bb.length) return false;
+  let out = 0;
+  for (let i = 0; i < ba.length; i++) out |= ba[i] ^ bb[i];
+  return out === 0;
+}
+
 Deno.serve(async (req) => {
   try {
     // Authenticité du webhook : si WEBHOOK_SECRET est configuré (variable d'env de la fonction),
     // on exige l'en-tête `x-webhook-secret` correspondant → refuse les appels arbitraires qui
     // pourraient déclencher des push. Tant que le secret n'est pas posé, comportement inchangé.
     const expectedSecret = Deno.env.get('WEBHOOK_SECRET');
-    if (expectedSecret && req.headers.get('x-webhook-secret') !== expectedSecret) {
+    if (expectedSecret && !timingSafeEqual(req.headers.get('x-webhook-secret') ?? '', expectedSecret)) {
       return new Response('unauthorized', { status: 401 });
     }
 
