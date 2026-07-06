@@ -13,3 +13,7 @@
 # directement l'app AVANT d'atteindre cette page, via Universal Links / App Links.)
 /invite/*  /get.html  200
 /club/*  /get.html  200
+
+# L'app partage le lien COURT /get (DOWNLOAD_URL) : on garantit qu'il sert bien la page /get.html
+# (Cloudflare Pages le fait déjà par convention, mais on l'écrit noir sur blanc — zéro divergence).
+/get  /get.html  200
