@@ -154,13 +154,20 @@ export function SectionReservations({
   // « Jouée » = heure de fin passée (la même règle que côté joueur — base de la commission).
   const upcomingRes = clubRes.filter((r) => !isPlayed(r, now)).sort((a, b) => a.startsAt - b.startsAt);
   const pastRes = clubRes.filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt);
-  // Historique regroupé PAR SEMAINE (le décompte de la commission est hebdomadaire).
+  // Historique regroupé PAR SEMAINE (le décompte de la commission est hebdomadaire). Groupage en
+  // O(n) via une Map d'index (au lieu d'un `.find` par item = O(n²)) : un club actif accumule des
+  // centaines de résas passées, et cette section se recalcule à chaque tap (confirmer/bloquer).
   const pastByWeek: { week: string; items: Reservation[] }[] = [];
+  const weekIndex = new Map<string, { week: string; items: Reservation[] }>();
   for (const r of pastRes) {
     const wk = weekKeyOf(r.startsAt);
-    const g = pastByWeek.find((x) => x.week === wk);
-    if (g) g.items.push(r);
-    else pastByWeek.push({ week: wk, items: [r] });
+    let g = weekIndex.get(wk);
+    if (!g) {
+      g = { week: wk, items: [] };
+      weekIndex.set(wk, g);
+      pastByWeek.push(g); // pastRes déjà trié desc → l'ordre des semaines est préservé
+    }
+    g.items.push(r);
   }
   // Blocages hors app de ce club.
   const clubBlocked = state.blockedSlots.filter((b) => b.clubId === club.id);

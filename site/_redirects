@@ -8,12 +8,9 @@
 
 # Utilisateur SANS l'app : un lien /invite/CODE ou /club/ID ouvert dans le navigateur → page
 # d'atterrissage /get qui envoie vers le BON store selon l'appareil (App Store iOS OU Google Play
-# Android). On RÉÉCRIT (200) au lieu de rediriger vers Apple en dur — sinon un ami Android tombait
-# sur l'App Store iOS et ne pouvait pas installer l'app. (Avec l'app installée, iOS/Android ouvre
-# directement l'app AVANT d'atteindre cette page, via Universal Links / App Links.)
-/invite/*  /get.html  200
-/club/*  /get.html  200
-
-# L'app partage le lien COURT /get (DOWNLOAD_URL) : on garantit qu'il sert bien la page /get.html
-# (Cloudflare Pages le fait déjà par convention, mais on l'écrit noir sur blanc — zéro divergence).
-/get  /get.html  200
+# Android). On RÉÉCRIT (200) vers l'URL PROPRE /get (Cloudflare Pages sert get.html à cette URL).
+# ⚠️ NE PAS cibler /get.html : le « clean URL » de Cloudflare Pages le redirige (308) vers /get,
+# ce qui BOUCLAIT à l'infini (ERR_TOO_MANY_REDIRECTS) et cassait toute la page de téléchargement.
+# Vérifié au curl après déploiement : /get, /invite/*, /club/* doivent répondre 200 (pas 308).
+/invite/*  /get  200
+/club/*  /get  200

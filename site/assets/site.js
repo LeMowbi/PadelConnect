@@ -319,6 +319,10 @@
 
     // Padelta reste en tête (compareClubs) mais SANS badge « mis en avant » : discret (demande porteur).
     var triees = liveClubs.slice().sort(compareClubs);
+    // Badge « N clubs » du héros : reflète le nombre RÉELLEMENT affiché (l'opérateur peut masquer
+    // des clubs) — plus de « 9 clubs » figé qui mentait dès qu'un club passait en masqué.
+    var badgeNb = document.getElementById('badge-nb-clubs');
+    if (badgeNb) badgeNb.textContent = '⭐ ' + triees.length + ' clubs';
     conteneur.innerHTML = triees
       .map(function (c) {
         var mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(c.mapsQuery);
