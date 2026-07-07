@@ -360,6 +360,16 @@ sur la branche de dev (build #48, mise à jour day-1 après approbation du #47) 
   re-déployer `site/` à la main après toute modification du dossier.
 - 🔒 **Programme de fidélité** (idée 5) — **gardé pour plus tard** (X parties jouées = récompense).
 - ❌ **Paiement en ligne** (idée 7) — pas pour l'instant.
+- 🔒 **2 durcissements sécurité MEDIUM (audit tour 9) — GARDÉS POUR PLUS TARD (décision porteur
+  2026-07-07)** : (1) `profiles.phone` non vérifié → dans les flux « par téléphone »
+  (`grant_club_access_by_phone`, `club_add_coach`) un squatteur peut recevoir un rôle destiné à
+  une victime PAS encore inscrite ; fix = OTP SMS (idéal) ou trigger `protect_phone` (fige le
+  numéro, mais bloque l'édition légitime). (2) un compte **club** validé + un joueur complice
+  peuvent forger +100 pts de classement via un tournoi bidon (`create_competition` club publié
+  direct + `close_competition`) ; fix = exiger un minimum d'inscrits distincts avant d'attribuer
+  points/niveau, ou plafond de tournois officiels/club/mois. Barrières actuelles : garde
+  d'ambiguïté téléphone (victime déjà inscrite → refus) et validation manuelle des clubs par
+  l'opérateur. Non bloquant pour le lancement. SQL prêt à écrire le jour où le porteur tranche.
 - Autres post-lancement : vrai SMTP de confirmation, perf, éventuel kit `PlanningGrid`.
 
 ## 11. Où regarder
