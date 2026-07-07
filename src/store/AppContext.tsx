@@ -169,11 +169,6 @@ export type Reservation = {
   createdAt: number;
 };
 
-// Durée par DÉFAUT d’une session (1h30), dérivée de SESSION_MIN (slots.ts). Repli quand une
-// réservation n'a pas de durée figée (ancien binaire / donnée héritée) — chaque résa porte
-// désormais SA `durationMin` (créneaux modulables 1h/1h30, 68).
-export const SESSION_MS = SESSION_MIN * 60000;
-
 // Une réservation est « jouée » dès que son heure de FIN est passée (automatique, jamais déclaré).
 // La fin dépend de la durée PROPRE du créneau (1h ou 1h30), pas d'une durée fixe.
 export function isPlayed(r: Reservation, now = Date.now()): boolean {
