@@ -44,6 +44,10 @@ export function NewsEditor({
       toast.show('Publication impossible — réessaie', { icon: 'alert-circle' });
       return;
     }
+    // Toast de succès INDÉPENDANT du « Publiée ✓ » du bouton : à la 1ʳᵉ publication, l'éditeur se
+    // remonte (la clé du parent passe de 'vide' à 'edit') et perdrait le setSaved — le toast, lui,
+    // vit au niveau du fournisseur, donc l'opérateur voit toujours une confirmation.
+    toast.show(sendPush ? 'Actu publiée + notification envoyée ✅' : 'Actu publiée ✅');
     if (sendPush) setSendPush(false); // choix par actu — jamais mémorisé
     setSaved(true);
     if (savedTimer.current) clearTimeout(savedTimer.current);

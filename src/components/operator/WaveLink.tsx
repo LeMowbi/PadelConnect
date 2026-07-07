@@ -15,6 +15,10 @@ export function WaveLink({
   onSet: (link: string) => Promise<{ ok: boolean }>;
   toast: ReturnType<typeof useToast>;
 }) {
+  // `value` s'initialise sur le lien courant. Le parent REMONTE ce composant via `key={link}`
+  // quand `state.waveLink` arrive/évolue (chargé APRÈS le 1er rendu : démarrage à froid, réseau
+  // lent…) → `value` se ré-initialise alors sur le vrai lien. Sans ce remount, le champ restait
+  // vide alors qu'un lien existe et « Enregistrer » l'écrasait par une chaîne vide (accusé menteur).
   const [value, setValue] = useState(link ?? '');
   const [saving, setSaving] = useState(false);
   const dirty = value.trim() !== (link ?? '').trim();

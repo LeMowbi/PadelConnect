@@ -410,15 +410,19 @@
     Promise.all([
       // Clubs AJOUTÉS via l'app (actifs). Les 9 fondateurs, eux, sont embarqués ci-dessus.
       supaGet('clubs?select=id,name,area,type,courts,price_from&status=eq.active'),
-      // Surcharges de fiche (renommage, quartier, tarif) — vaut pour fondateurs ET nouveaux.
-      supaGet('club_overrides?select=club_id,name,area,type,price_from'),
+      // Surcharges de fiche (renommage, quartier, tarif, DESCRIPTION, Maps) — fondateurs ET nouveaux.
+      supaGet('club_overrides?select=club_id,name,area,type,price_from,blurb,maps_query'),
       // Statut piloté par l'opérateur (masqué / bientôt / actif) — vaut aussi pour les fondateurs.
       supaGet('club_status?select=club_id,status'),
+      // Config du gérant : `courts` = tableau des terrains → le NOMBRE réel de terrains (édité
+      // dans l'app) vit ici, pas dans le chiffre figé. Sans ce fetch, le site montrait l'ancien nb.
+      supaGet('club_config?select=club_id,courts'),
     ]).then(function (res) {
       var serverClubs = res[0];
       var overrides = res[1];
       var statuses = res[2];
-      if (!serverClubs && !overrides && !statuses) return; // échec total → on garde les fondateurs
+      var configs = res[3];
+      if (!serverClubs && !overrides && !statuses && !configs) return; // échec total → on garde les fondateurs
       var ovById = {};
       (overrides || []).forEach(function (o) {
         ovById[o.club_id] = o;
@@ -427,6 +431,20 @@
       (statuses || []).forEach(function (s) {
         statusById[s.club_id] = s.status;
       });
+      var cfgById = {};
+      (configs || []).forEach(function (cf) {
+        cfgById[cf.club_id] = cf;
+      });
+      // Nb de terrains RÉEL : longueur du tableau club_config.courts (édité par le gérant), sinon
+      // la valeur fondateur embarquée. Description : texte gérant (une langue) s'il existe, sinon
+      // le blurb bilingue seed.
+      function liveCourts(id, seed) {
+        var cf = cfgById[id];
+        return cf && Array.isArray(cf.courts) && cf.courts.length ? cf.courts.length : seed;
+      }
+      function liveBlurb(o, seed) {
+        return o && o.blurb && String(o.blurb).trim() ? { fr: o.blurb, en: o.blurb } : seed;
+      }
 
       // 1) Fondateurs : on RETIRE ceux masqués par l'opérateur (statut 'hidden'), on marque
       //    « Bientôt » ceux en 'coming_soon', et on applique les modifications de fiche.
@@ -439,11 +457,11 @@
           name: (o && o.name) || c.name,
           area: (o && o.area) || c.area,
           type: o && o.type ? normType(o.type) : c.type,
-          courts: c.courts,
+          courts: liveCourts(c.id, c.courts),
           priceFrom: (o && o.price_from) || c.priceFrom,
-          mapsQuery: c.mapsQuery,
+          mapsQuery: (o && o.maps_query) || c.mapsQuery,
           icon: c.icon,
-          blurb: c.blurb,
+          blurb: liveBlurb(o, c.blurb),
           partner: true,
           comingSoon: statusById[c.id] === 'coming_soon',
         };
@@ -470,14 +488,14 @@
             name: name,
             area: area,
             type: normType(o.type || r.type),
-            courts: r.courts || 1,
+            courts: liveCourts(r.id, r.courts || 1),
             priceFrom: o.price_from || r.price_from || 10000,
-            mapsQuery: name + ' ' + area + ' Abidjan',
+            mapsQuery: o.maps_query || name + ' ' + area + ' Abidjan',
             icon: '🎾',
-            blurb: {
+            blurb: liveBlurb(o, {
               fr: 'Club de padel à ' + area + ', réservable sur PadelConnect.',
               en: 'Padel club in ' + area + ', bookable on PadelConnect.',
-            },
+            }),
             partner: false,
             comingSoon: statusById[r.id] === 'coming_soon',
           };

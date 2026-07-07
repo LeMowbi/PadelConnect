@@ -769,7 +769,9 @@ export default function Operateur() {
           {/* Lien de paiement Wave (v2) : les organisateurs l'ouvrent pour régler leurs frais. */}
           <View style={{ marginTop: spacing.xl }}>
             <SectionHeader title="Lien de paiement Wave" />
-            <WaveLink link={state.waveLink} onSet={setWaveLink} toast={toast} />
+            {/* key = lien courant : remonte l'éditeur quand le lien serveur arrive/change, pour que
+                le champ reflète toujours la valeur réelle (jamais vide alors qu'un lien existe). */}
+            <WaveLink key={state.waveLink ?? 'none'} link={state.waveLink} onSet={setWaveLink} toast={toast} />
           </View>
 
           {/* Frais à encaisser (Wave) sur les tournois publiés par des joueurs. Confirmation
