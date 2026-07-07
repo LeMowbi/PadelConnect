@@ -173,7 +173,12 @@ export default function ReserverScreen() {
   // sur un autre, 68) : si une seule durée est proposée, elle est retenue automatiquement ;
   // sinon le joueur choisit via les puces « Durée » (cf. rendu plus bas).
   const durationsAtSlot = day && slot ? [...new Set((slotsByTime?.get(slot) ?? []).map((x) => x.durationMin))].sort((a, b) => a - b) : [];
-  const effectiveDuration = duration ?? (durationsAtSlot.length === 1 ? durationsAtSlot[0] : null);
+  // On IGNORE une durée choisie/préréglée qui n'est plus offerte à ce créneau (ex. deep-link
+  // « Rejouer ici ?durationMin=90 » alors que le club est passé ce créneau en 1h-seulement) :
+  // sinon `free` serait vide sans qu'aucune puce de durée ne s'affiche (cul-de-sac). Dérivation
+  // PURE (pas de setState en effet) : la durée invalide retombe sur l'auto-choix / le sélecteur.
+  const validDuration = duration && durationsAtSlot.includes(duration) ? duration : null;
+  const effectiveDuration = validDuration ?? (durationsAtSlot.length === 1 ? durationsAtSlot[0] : null);
   const free = day && slot && effectiveDuration ? freeCourts(club, day.key, slot, effectiveDuration, ctx) : [];
 
   // A-L2 : pré-sélectionner le 1er terrain libre dès que jour + créneau + durée sont choisis.

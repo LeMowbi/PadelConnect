@@ -16,7 +16,8 @@ import { clubsByName, findClub, manageableClubs, type Club } from '@/data/clubs'
 import { canSeeClubSpace } from '@/lib/access';
 import { fetchMyManagedClubs, switchManagedClub } from '@/lib/clubsServer';
 import { seedCompetitions } from '@/data/competitions';
-import { competitionBlockedCourts, courtsFor, hasFullDayCompetition, rangeBlocks } from '@/lib/availability';
+import { competitionBlockedCourts, courtsFor, hasFullDayCompetition, rangeBlocks, resolvedGridFor } from '@/lib/availability';
+import { overlaps, slotDurationAt } from '@/lib/courtSchedule';
 import { openWhatsApp } from '@/lib/contact';
 import { dateKeyLabel, slotTimestamp } from '@/lib/days';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
@@ -126,11 +127,14 @@ export default function ClubAdmin() {
   // Repli sur les terrains par défaut : la fiche détail d’un créneau doit lister les terrains
   // même si le gérant n’a pas encore personnalisé sa configuration.
   const courts = courtsFor(club, state.clubCourts);
-  const cellRes = selectedCell
-    ? clubRes
-        .filter((r) => r.dateKey === selectedCell.dateKey && r.time === selectedCell.time)
-        .sort((a, b) => a.court.localeCompare(b.court))
-    : [];
+  // Grille EFFECTIVE par terrain (créneaux 1h/1h30) : la fiche détail d'un créneau lit la durée
+  // RÉELLE de chaque terrain à cette heure pour raisonner en chevauchement (pas d'égalité d'heure).
+  const grid = resolvedGridFor(club, {
+    clubSlots: state.clubSlots,
+    clubCourts: state.clubCourts,
+    courtSlots: state.courtSlots,
+    courtClosed: state.clubCourtClosed,
+  });
 
   const signupReady = ncName.trim().length >= 2 && ncArea.trim().length >= 2 && Number(ncPrice) > 0;
   const [sendingSignup, setSendingSignup] = useState(false);
@@ -484,10 +488,19 @@ export default function ClubAdmin() {
               );
               return courts.map((c, i) => {
                 const isTournoi = compBlocked === 'all' || compBlocked.includes(c);
-                const resa = cellRes.find((r) => r.court === c);
-                const blk = clubBlocked.find((b) => b.dateKey === selectedCell.dateKey && b.time === selectedCell.time && b.court === c);
-                const rng = clubRanges.find((r) => rangeBlocks(r, selectedCell.dateKey, selectedCell.time, c));
-                const closedHere = (closedByCourt[c] ?? []).includes(selectedCell.time);
+                // Durée RÉELLE du créneau ouvert de CE terrain à cette heure (null = pas de créneau
+                // ouvert ici sur ce terrain). Détection en CHEVAUCHEMENT d'intervalle (créneaux
+                // 1h/1h30) : un 08:00·1h30 « occupe » aussi la cellule 09:00 du même terrain.
+                const courtDur = slotDurationAt(grid, c, selectedCell.time);
+                const cellDur = courtDur ?? selectedCell.durationMin;
+                const overlapsCell = (x: { time: string; durationMin: number }) =>
+                  overlaps({ t: selectedCell.time, d: cellDur as 60 | 90 }, { t: x.time, d: x.durationMin as 60 | 90 });
+                const resa = clubRes.find((r) => r.dateKey === selectedCell.dateKey && r.court === c && overlapsCell(r));
+                const blk = clubBlocked.find((b) => b.dateKey === selectedCell.dateKey && b.court === c && overlapsCell(b));
+                const rng = clubRanges.find((r) => rangeBlocks(r, selectedCell.dateKey, selectedCell.time, c, cellDur));
+                // Fermé (grille par terrain `x:true` → pas de créneau ouvert ici) OU ancienne map
+                // court_closed héritée. Dans les deux cas, rien à bloquer sur ce terrain.
+                const closedHere = courtDur === null || (closedByCourt[c] ?? []).includes(selectedCell.time);
                 const isBlocking = blockingCourt === c;
                 return (
                   <View key={c} style={{ marginTop: spacing.sm }}>
@@ -538,7 +551,9 @@ export default function ClubAdmin() {
                             icon="lock-open"
                             variant="secondary"
                             onPress={() => {
-                              void unblockSlot(club.id, selectedCell.dateKey, selectedCell.time, c).then((ok) =>
+                              // blk.time (pas selectedCell.time) : le créneau bloqué peut débuter à
+                              // une autre heure et seulement CHEVAUCHER la cellule affichée.
+                              void unblockSlot(club.id, selectedCell.dateKey, blk.time, c).then((ok) =>
                                 toast.show(
                                   ok ? 'Créneau rouvert' : 'Impossible de rouvrir — réessaie',
                                   ok ? undefined : { icon: 'alert-circle' },
@@ -592,7 +607,9 @@ export default function ClubAdmin() {
                                   time: selectedCell.time,
                                   court: c,
                                   reason,
-                                  durationMin: selectedCell.durationMin,
+                                  // durée RÉELLE du créneau de CE terrain (aligne le miroir local
+                                  // sur ce que block_slot re-dérive côté serveur).
+                                  durationMin: cellDur,
                                 },
                                 cellTs,
                               ).then((ok) =>
