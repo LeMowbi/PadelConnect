@@ -508,3 +508,53 @@ jamais une réservation pré-remplie).
 **Plan CONVERGÉ.** SQL 68/69 inventoriés statement par statement (voir ronde 3). API pure figée
 (§7.4). Specs UI concrètes (§7.6 + §8.4). Plan de tests défini (§7.7). Rollout sûr pour le #57 (§6.0).
 Prêt à démarrer le **Lot 1** (logique pure + tests).
+
+---
+
+# 9. Gate final — 1 défaut réel trouvé + corrigé (2026-07-07)
+
+Passe-gate (2 relectures : cohérence §8 = **GATE PASSED**, attaque fraîche = **1 défaut réel**).
+
+## 9.1 🔴 DÉFAUT (pré-existant, mais le §6.6 s'appuyait dessus à tort) — verrou tournoi multi-jours
+**Problème** : le pair **réservation↔tournoi** n'est PAS couvert par la contrainte d'exclusion GiST
+(intra-table `reservations` seulement) → il repose UNIQUEMENT sur le verrou consultatif. Or
+`approve_competition` (`53:322`) et la branche club de `create_competition` (`53:356`) ne verrouillent
+que **le jour de DÉBUT** (`hashtext(club || ':' || date_key)`), alors qu'un tournoi bloque toute la
+plage `date_key..end_date_key`. Scénario de double-occupation :
+1. Tx A (joueur) insère une résa club C, **jour D2**, terrain X, 08:00 → verrouille `C:D2`, ne voit
+   pas encore le tournoi (Tx B non committée) → passe, pas encore committée.
+2. Tx B (gérant) `approve_competition` tournoi D1→D3 → verrouille **`C:D1`** (clé différente),
+   `competition_slot_conflict` (SELECT sous READ COMMITTED) ne voit pas la résa non committée → publie.
+3. Les deux committent → tournoi ET résa sur D2/08:00/X = **double-occupation réelle**.
+Les clés `C:D2` et `C:D1` ne se sérialisent jamais. (Vrai seulement pour un tournoi MULTI-jours ;
+mono-jour les clés coïncident — d'où le fait que tous les reviewers « mono-jour » l'ont laissé passer.)
+
+**Fix (déjà présent ailleurs)** : `block_range` (`54:109-110`) verrouille DÉJÀ **chaque jour** de sa
+plage (boucle ascendante). Appliquer la même boucle à `approve_competition` ET à la branche club de
+`create_competition` : `for d in 0..(coalesce(end_date_key,date_key)::date - date_key::date) loop
+pg_advisory_xact_lock(hashtext(club || ':' || (date_key::date + d))) end loop` (ascendant → pas de
+deadlock, même discipline que `block_range`). → **SQL 69** (tables vides, zéro risque données).
+Corriger aussi l'affirmation §6.6 (vraie seulement pour un tournoi mono-jour).
+
+## 9.2 Secondaire (même classe) — `block_slot` sans verrou
+`block_slot` (`27:28`) ne prend **aucun** verrou consultatif → une fermeture gérant et une résa joueur
+qui se chevauchent peuvent committer toutes deux. §8.1 passe `block_slot` en overlap mais n'ajoute pas
+le verrou. Ajouter `pg_advisory_xact_lock(hashtext(club || ':' || date_key))` en tête de `block_slot`.
+→ SQL 68 (ou 69 avec le reste des durcissements de garde).
+
+## 9.3 Propreté doc (§8 gate) — textes périmés « tournois modulables » à barrer
+Superséder explicitement (par §6.7 « tournois 1h30 fixe ») : ligne 7 (intro), règle 3 (§1), §2
+`competitions.slot_durations`, Lot 5 « créneaux de tournoi 1h/1h30 », checklist §4 ligne tournois.
+Tous CADUCS → à retirer/annoter à l'écriture du code pour ne pas induire en erreur.
+
+## 9.4 Sous-specs mineures à figer (dans Lot 1/Lot 2)
+- **`resolveCourtSlots` avec `court_slots` non-null mais clé terrain MANQUANTE** (un terrain ajouté
+  après migration) : repli **@90 pour ce terrain** (pas grille vide = non réservable). À coder + tester.
+- **Sync défaut client↔serveur** : la grille par défaut serveur (`resolve_court_slots`, clubs sans
+  config) doit rester **identique aux 8 valeurs `SAMPLE_SLOTS`** (`clubs.ts:315`) → test d'équivalence.
+- **« Rejouer ici » échec** : si le créneau prérempli n'existe plus dans la grille actuelle → ne pas
+  auto-sélectionner + toast « ce créneau n'existe plus, choisis-en un autre » (UX de repli).
+
+## 9.5 État
+Gate a trouvé 1 défaut réel (9.1) → **corrigé dans le plan**. Une ronde de confirmation est relancée
+(discipline : ne pas s'arrêter tant qu'une passe ne revient pas vide). Le reste = propreté + 3 sous-specs.
