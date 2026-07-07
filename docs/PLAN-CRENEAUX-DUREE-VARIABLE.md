@@ -148,3 +148,144 @@ les **tournois** aussi peuvent être 1h/1h30.
   l'extension `btree_gist`. Je te confirme après vérification en base.
 - **Nouveau build** iOS (la fonction est côté app) — après la revue du #57.
 - Aucune donnée à migrer : tout est rétro-compatible (défaut 90).
+
+---
+
+# 6. Révision après vérification 10 angles (2026-07-07)
+
+10 relectures adversariales indépendantes (migration/rollout, concurrence, tarifs, tournois, cours,
+fenêtres temporelles, UI, maths d'intervalle/éditeur, contrat app↔serveur, complétude) ont trouvé
+**~40 manques réels**. Corrections ci-dessous — elles **priment** sur les §2-§5 quand il y a conflit.
+
+## 6.0 ⚠️ Stratégie de déploiement CORRIGÉE (le plan initial était faux sur ce point)
+« Poser tout le SQL avant le build » **casserait le #57 en revue**. On **scinde** :
+- **SQL 68 (maintenant, rétro-compatible)** : uniquement les **colonnes** (`reservations.duration_min`,
+  `lessons.duration_min`, `blocked_slots.duration_min` — tous `not null default 90` + **CHECK ∈ {60,90}**,
+  `competitions.slot_durations int[]`, `club_config.court_slots jsonb`) et les **RPC rétro-compatibles**
+  dont les **nouveaux paramètres sont DEFAULTés** (`p_court_slots jsonb default null`,
+  `p_duration int default 90`) — l'ancienne signature est droppée mais tous les params existants
+  restent défaultés (le #57 appelle en arité réduite → OK).
+- **SQL 69 (livré AVEC le nouveau build)** : la **contrainte d'exclusion GiST** + le drop de
+  `reservations_slot_unique` + les bascules de code d'erreur `23505→23P01` (guards, `mark_no_show`).
+  Raison : la contrainte fait passer les conflits de **23505 à 23P01** ; or le #57 détecte « créneau
+  pris » via `code === '23505'` (`reservations.ts:139`) → il faut le nouveau client (qui gère 23P01)
+  en même temps. Tant que seul l'ancien client tourne, l'index unique suffit (il ne crée que des
+  créneaux 90 exacts). La table `reservations` est **vide** en base → aucun conflit de données.
+
+## 6.1 CRITIQUES (sécurité / intégrité) — à intégrer obligatoirement
+- **`starts_at` nullable → range infini** (concurrence G1) : `int8range(NULL,…)` chevauche TOUT →
+  un seul `booked` à `starts_at` null briquerait un terrain. Avant la contrainte (SQL 69) :
+  `starts_at not null` (backfill depuis `date_key`+`time`, Abidjan=UTC) + `where starts_at is not null`
+  dans l'exclusion. (0 ligne en base aujourd'hui → sûr.)
+- **`starts_at` non validé vs `date_key`+`time`** (G2) : `starts_at` devient la clé d'unicité →
+  `reservations_insert_guard` doit **recalculer `starts_at` serveur** depuis `date_key`+`time` (ou
+  refuser un écart), sinon un `starts_at` forgé passe la contrainte et double-vend le vrai créneau.
+- **CHECK `duration_min in (60,90)` + not null** (G4) : durée 0 → range `empty` → **double-vente
+  silencieuse** ; durée nulle → range non borné. Sur `reservations`, `lessons`, `blocked_slots`.
+- **Vue `slot_occupancy` doit exposer `duration_min`** (contrat #1) : sinon l'app ne peut PAS
+  calculer le chevauchement des réservations des AUTRES joueurs — le cœur de la feature. `alter`
+  la vue (`03_reservations.sql:66`) + `SlotOccupancy`/mapper client.
+- **Créneaux fermés « ! » réouverts à la dérivation** (intervalle #2) : `resolve_court_slots`
+  (serveur ET client) doit porter le flag fermé → `{t, d:90, x:true}` pour les entrées `!` des
+  clubs pas encore re-sauvegardés. Sinon toutes les pauses déjeuner deviennent réservables.
+- **`blocked_ranges` hors conversion intervalle** (intervalle #5, tournois G3) : `ranges.times`
+  n'a pas de durée → une période fermée « 18:00 » ne bloque pas un 17:00·1h30 qui déborde.
+  Décider : donner une durée aux ranges, ou définir « ferme la session commençant à cette heure »
+  et l'appliquer partout (client `rangeBlocks` + guards serveur, dont `reservations_availability_guard`).
+- **Garde « créneau déjà réservé » AUSSI côté serveur** (intervalle #8) : `upsert_club_config` doit
+  refuser un `court_slots` qui retire/raccourcit un créneau couvrant une réservation `booked` à venir
+  (la contrainte d'exclusion ne garde que les INSERT, pas les édits de grille). Rule 5 = client + serveur.
+- **« Copier sur tous les terrains » sans garde** (intervalle #7) : refuser/sauter tout terrain cible
+  portant une réservation à venir non couverte à l'identique par la grille source.
+- **Client : mapper `23P01` en conflit** (contrat #2, concurrence G3) : `reservations.ts:139` ajouter
+  `code === '23P01'` (dans le nouveau build) ; MAJ commentaires « 23505 ».
+
+## 6.2 Tarifs (angle tarifs)
+- `upsert_club_override` doit **valider les bornes de `price60`** (comme `price`), sinon un prix 1h à 0
+  ou 5 M passe (SQL 66/40). `validateTiers` (client) idem.
+- **Défaut `price60 = round(price90*2/3)` peut tomber < 1000** (plancher) → 1h irréservable en
+  silence. Clamp `max(PRICE_MIN, …)` ou revoir le plancher 1h (client `pricing.ts:86` + guard serveur).
+- **`minPrice`/`priceForSlot` en « Par heure »** ne connaissent pas la durée au point d'appel
+  (`reserver.tsx`) : l'unité réservable devient un couple `(début, durée)` ; afficher « dès price60 »
+  ou déplacer prix/durée à l'étape choix-du-club (voir 6.3 UI).
+- **`minPrice` ne doit compter que les durées réellement proposées** par la grille (sinon « dès 1h »
+  pour un club 100 % 1h30). `minPrice(club, courtSlots)`.
+- **Bornes `validateTiers` = UNION des terrains** (min ouverture → max fermeture, fin = début+durée).
+
+## 6.3 UI — surfaces oubliées + UX « Par heure »
+- **`club/[id].tsx`** (fiche club, cible des liens `/club/*`) : double prix + `début→fin` + badge ;
+  textes « 1h30 » (`:312,:523`). **Ajouté au Lot 5.**
+- **Planning gérant `SectionReservations.tsx`** : grille `(heure×terrain)` à **repenser** (les
+  terrains ne partagent plus un axe horaire), + stats d'occupation/`byHour`/BarChart + `QuickBlock`
+  + `BlockRangeForm` (reçoivent la grille club unique). **Ajouté au Lot 4** (pas juste des textes).
+- **Matchs ouverts** : `OpenMatch` + `fetch_open_matches` (RPC) + `OpenMatches.tsx` gagnent la durée
+  (`début→fin`, badge) ; la capacité 1v1/2v2 est indépendante de la durée. **Ajouté.**
+- **`club-admin/index.tsx:379`** placeholder « session 1h30 ». **3ᵉ appelant calendrier**
+  `reservations.tsx:189` (durée manquante). Textes « 1h30 » internes à `SectionMonClub`
+  (`:951-953,:970,:1098`).
+- **« Par heure » (UX concrète)** : tuile = heure seule + « N clubs » ; le **choix 1h/1h30 + prix**
+  passe à l'étape club (deux sous-lignes ou segment `1h/1h30`), chips « Par club » clés par
+  `(heure,durée)`, `BookingSheet` reçoit un `durationMin` explicite.
+- **Éditeur par terrain** : états **terrain vide** / **club à 1 terrain** ; a11y (cibles 44 pt,
+  labels, erreurs annoncées) ; stepper d'ajout borné selon la durée (**23:00 pour 1h**, 22:30 pour 1h30).
+
+## 6.4 Cours coach (angle cours + contrat)
+- Modèle client `Lesson`/`LessonRow`/`toLesson`/`requestLesson` + `coachesServer.ts` gagnent
+  `durationMin` (**fichier ajouté aux lots**) ; `coach-admin.tsx:120` fenêtre « à venir » en durée réelle.
+- **Ambiguïté durée du cours** : `coaches.slots` = simples heures. Règle : l'heure coach n'est qu'un
+  **filtre de disponibilité** ; la **durée+terrain+prix** se lient au `(terrain, heure)` que l'élève
+  choisit (comme une résa), recalculés à la sélection du terrain. `request_lesson` envoie cette durée
+  et valide contre `court_slots` (pas l'ancienne grille club).
+- `respond_lesson` : re-valider `(court, time, duration)` contre `court_slots` ; si le club a changé la
+  grille entre-temps → `'conflict'` (la règle « figée » ne vaut qu'APRÈS création de la résa) ;
+  l'INSERT sélectionne `l.duration_min`.
+
+## 6.5 Tournois (angle tournois — le plus lourd) — voir DÉCISION §6.7
+- **Parité `slot_durations`↔`slots`** : CHECK `cardinality(slot_durations) in (0, cardinality(slots))`
+  + `d∈{60,90}` par élément (sinon durée NULL → range non borné → double-vente).
+- **Conflit tournoi↔tournoi en vrai intervalle** : `competition_slot_conflict` /
+  `competition_overlaps_reservations` doivent enfiler les durées des DEUX côtés (double
+  `unnest WITH ORDINALITY`, comparaison en **minutes-de-journée**, PAS `int8range` — un tournoi n'a
+  pas de `starts_at`).
+- **Modèle client `Competition`** (`timeSlots`, `CompetitionRow.slots`, `rowToCompetition`,
+  `CreateCompetitionInput`, `createCompetition`, `fetch_competitions`) : câbler `slotDurations`.
+- **`competitionBlockedCourts` (client)** : reçoit les durées des créneaux tournoi + la grille du
+  terrain candidat → overlap par terrain (sinon un joueur réserve 09:00 sur un terrain qu'un
+  tournoi 08:00·1h30 occupe encore).
+- **Divergence par terrain** : un tournoi bloque le produit (terrains × créneaux) ; si deux terrains
+  divergent à la même heure, la durée par créneau ne suffit pas → l'organisateur choisit une durée
+  de créneau tournoi validée contre chaque terrain sélectionné.
+- **`nouvelle.tsx`** : sélecteur de durée par créneau + garde anti-chevauchement des créneaux tournoi ;
+  lit `court_slots` (pas l'ancienne grille).
+
+## 6.6 Fenêtres temporelles + divers
+- **`submit_match_score`** : ajouter `duration_min` au `SELECT INTO` (sinon ne compile pas).
+- **Compte exact** des `90*60000` : **2** (`fetch_leaderboard`) + **2** (`my_leaderboard_rank`) +
+  **1** (`submit_match_score`) = **5** sur 3 fonctions (le « 4 dans fetch_leaderboard » du plan était faux).
+- Consommateurs `SESSION_MS` bruts à lister : `(tabs)/index.tsx:149`, `coach-admin.tsx:120`.
+- `clubConfigSlices` : brancher `courtSlots` **avec** la branche « remise à défaut » (null ⇒ retirer
+  du miroir) — corriger au passage le même oubli latent sur `courtClosed`.
+- `blockSlot` (garde locale) + dédup local-mode (`AppContext:1553`) : passer en overlap.
+- Push d'occupation optimiste (`AppContext:1535`) : porter `durationMin`.
+- **`court_closed`** : replier la fermeture récurrente par terrain dans `court_slots` (`x:true`) et
+  retirer `court_closed` pour ce cas (sinon double maintenance + match par chaîne exacte cassé).
+- **Contrainte d'exclusion NON idempotente** : `drop constraint if exists` avant (SQL 69).
+- **Verrou consultatif** : le GARDER (les tournois ne sont pas dans la contrainte → il sérialise
+  encore résa↔tournoi). Ne pas ajouter d'`exists(reservations overlap)` redondant dans le guard.
+
+## 6.7 DÉCISION à prendre — tournois modulables ?
+La modularité des tournois ajoute à elle seule ~8 chantiers risqués (parité de tableaux, minutes-de-
+journée, divergence par terrain, blocage joueur, UI organisateur). Comme un tournoi **bloque de toute
+façon des plages entières**, **RECOMMANDATION : garder les tournois en 1h30 fixe** (l'option initiale)
+et livrer la modularité seulement pour joueur + cours. À trancher avec le porteur.
+
+## 6.8 Docs / porteur / hors-scope
+- **Porteur en plus** : re-déployer la **web app** (`npm run build:web` → Cloudflare Pages) après le
+  build (le gérant édite ses horaires sur le web aussi).
+- **Docs à réécrire** (pas juste appendre) : `CLAUDE.md` §5 + §9 (« 1h30 PARTOUT, décision assumée »
+  → réversée), `docs/AUDIT-SERVEUR.md:93,257`, `docs/ESPACE-CLUB-WEB.md`, `docs/CHECKLIST-STORES.md`.
+- **Diagnostics** (mineur) : ajouter `duration` à `reservation_created`, event `court_slots_edited`.
+- **Hors-scope confirmé (ne rien toucher)** : `notify-club`, `ResultCard`/partage, liens
+  `/invite`·`/club` (pas d'heure), **site vitrine** (n'affiche que le nombre de terrains), finances
+  opérateur (somme des `price` figés), fiabilité/no-show/annulation-5h (basés sur le début),
+  `submit_review` (début), rappels (avant match), `mark_no_show`/MAX_UPCOMING (début), seeds.
