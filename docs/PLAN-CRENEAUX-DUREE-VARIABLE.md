@@ -431,3 +431,80 @@ l'ancien `canAddSlot`) — c'est une SÉMANTIQUE nouvelle, ne pas porter l'ancie
 - §2 « ⚠️ 4 occurrences dans fetch_leaderboard » → **2+2+1=5 sur 3 fonctions** (§6.6).
 - §2 « fermetures ponctuelles » pour `court_closed` → `court_closed` est **récurrent** (retiré, §7.1) ;
   le ponctuel = `blocked_slots`/`blocked_ranges`.
+
+---
+
+# 8. Révision 3 — verrouillage final après ronde 3 (2026-07-07)
+
+3ᵉ ronde (convergence, SQL écrivable, complétude finale). **Aucun nouveau défaut critique** — que des
+affinages + 2 petites surfaces + l'inventaire SQL. Décisions ci-dessous **FINALES**, priment sur tout.
+
+## 8.1 Décisions SQL (blockers levés)
+- **`resolve_court_slots(club_id, court)` → `returns table(t text, d int, x boolean)`** ; fusionne
+  `court_slots[court]` ∪ (si null : `slots`@90) ∪ `court_closed[court]`→x:true ∪ `'!'`→x:true.
+  **Défaut clubs SANS config** : si `court_slots` ET `slots` sont null ⇒ renvoyer la grille par défaut
+  (équivalent serveur de `SAMPLE_SLOTS`, @90) — sinon les **7 clubs seed sur 9** (sans ligne
+  `club_config`) auraient une grille vide = non réservable. Côté client, `resolveCourtSlots` prend un
+  `fallback = SAMPLE_SLOTS` (thread explicite ; sa signature §7.4 gagne ce défaut).
+- **Miroir `slots` dérivé (compat ancien client)** : à la sauvegarde, si `court_slots` non-null,
+  `upsert_club_config` **ignore tout `p_slots` client et RE-DÉRIVE** le miroir = **union des débuts
+  de créneaux OUVERTS 90 min** de tous les terrains (les 60 min **omis**) ; un début marqué `'!'`
+  seulement s'il n'est ouvert à 90 sur **aucun** terrain. Les deux colonnes ne peuvent donc pas
+  désync (le nouveau client ne lit jamais `slots`). Un ancien client éditant un tel club est refusé
+  (il ne peut pas exprimer une grille par terrain).
+- **`court_closed` vidé** : quand `p_court_slots` est non-null, `upsert_club_config` **remet
+  `court_closed` à `'{}'`** (les fermetures récurrentes vivent désormais dans `court_slots.x`).
+- **`date_key`/`time` validés** (regex `^\d{4}-\d{2}-\d{2}$` / `^([01]\d|2[0-3]):([0-5]\d)$`) AVANT le
+  cast dans `reservations_insert_guard` (refus propre, pas d'erreur brute). Formule de dérivation
+  confirmée = `Date.UTC` client (Abidjan=UTC).
+- **`block_slot`** : passe aussi en **overlap d'intervalle** (refuser une fermeture qui chevauche une
+  résa à venir) + `duration_min` depuis `resolve_court_slots`.
+
+## 8.2 Corrections de rattachement (surprises live)
+- **`reservations_availability_guard` NE LIT PAS `reservations`** → l'instruction `id <> new.id`
+  (§6.1/§7.3) est un **no-op** : la SUPPRIMER (la contrainte d'exclusion gère l'auto-exclusion sur
+  UPDATE). 
+- **`blocked_ranges` overlap** : la branche vit dans **`reservations_insert_guard`** (pas
+  l'availability guard). Les 3 lecteurs `blocked_ranges` = `reservations_insert_guard` +
+  `competition_slot_conflict` + `block_range`.
+- **`competitions.slot_durations` : NE PAS AJOUTER** (§6.0 le listait, §6.7 l'interdit → §6.7 gagne).
+  Les tournois restent `slots text[]`@90 ; on traite juste un créneau tournoi comme `[t,t+90)` face à
+  une résa `[t,t+duration_min)`.
+- **`mark_no_show`** → **SQL 69** (le flip `unique_violation`→`exclusion_violation` n'a de sens
+  qu'avec la contrainte). **`slot_occupancy` view (+ duration_min)** → **SQL 68**.
+- `reservations_price_guard` : **aucun changement** (borne `price` seulement — les 2 prix vivent dans
+  `upsert_club_override`/tiers). `respond_lesson` : `when others → 'conflict'` déjà présent → 23P01
+  déjà capté.
+- Code d'erreur client final (`reservations.ts:139`) = `23505 || 23514 || P0001 || 23P01`.
+
+## 8.3 Affinages convergence (ronde 3)
+- **Test serveur #4 reformulé** : un `starts_at` forgé sur un intervalle libre alors que
+  `date_key+time` visent un créneau pris est **réécrit** par le guard sur le vrai intervalle **puis
+  rejeté par la contrainte d'exclusion → 23P01** (pas un « refus au guard »).
+- **`blocked_ranges [T,T+90)` sur-bloque** jusqu'à 30 min (un `19:00·60` libre après un range « 18:00 »).
+  Accepté comme conservateur (ne double-vend jamais). Option fine (lire la durée réelle en `T`) =
+  post-lancement.
+
+## 8.4 Nouvelles petites surfaces (ronde 3)
+- **« Rejouer ici » / « Rejouer au dernier club »** (`reservations.tsx:745`, `(tabs)/index.tsx:757`
+  → `reserver/[clubId].tsx:49`) : le prefill ne passe que `time`. Doit **porter `durationMin`** (le
+  but de l'habitué = rejouer le MÊME créneau) **et re-valider `presetTime` contre la grille actuelle**
+  du terrain (le créneau peut avoir changé/disparu) au lieu de l'auto-sélectionner aveuglément.
+  → Ajouté au **Lot 5**.
+- **Site vitrine** : le héros a un créneau en dur `« 18h00 — 19h30 »` (FR+EN, `site/index.html:328`) —
+  la justification « le site n'affiche pas d'heures » (§6.8) est fausse. Cosmétique (statique) : au
+  choix, laisser tel quel ou passer en `18h00 — 19h00`. Seule string durée bilingue du produit (l'app
+  est FR only → pas d'autre i18n durée).
+
+## 8.5 Confirmés FERMÉS en ronde 3 (rien à faire)
+Realtime (aucun abonnement `postgres_changes` sur `reservations` — seul l'auth écoute) ; perf (même
+ordre asymptotique qu'aujourd'hui, `reservations` vide, clubs à un chiffre) ; multi-clubs (les
+sections sont montées avec `key={club.id}` → l'état par terrain se réinitialise proprement au
+changement de club) ; export CSV opérateur (agrégé, sans heure) ; fuseau/DST (Abidjan=UTC toute
+l'année) ; `reserverView` (pas de couplage durée) ; tap notification (route vers `/reservations`,
+jamais une réservation pré-remplie).
+
+## 8.6 État de préparation
+**Plan CONVERGÉ.** SQL 68/69 inventoriés statement par statement (voir ronde 3). API pure figée
+(§7.4). Specs UI concrètes (§7.6 + §8.4). Plan de tests défini (§7.7). Rollout sûr pour le #57 (§6.0).
+Prêt à démarrer le **Lot 1** (logique pure + tests).
