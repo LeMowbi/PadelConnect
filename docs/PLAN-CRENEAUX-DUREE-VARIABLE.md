@@ -240,7 +240,10 @@ fenêtres temporelles, UI, maths d'intervalle/éditeur, contrat app↔serveur, c
   grille entre-temps → `'conflict'` (la règle « figée » ne vaut qu'APRÈS création de la résa) ;
   l'INSERT sélectionne `l.duration_min`.
 
-## 6.5 Tournois (angle tournois — le plus lourd) — voir DÉCISION §6.7
+## 6.5 Tournois — ⚠️ CADUC : voir DÉCISION §6.7 (tournois RESTENT 1h30 fixe)
+> Le porteur a choisi de garder les tournois en 1h30 fixe. Tout ce §6.5 (slot_durations, parité,
+> minutes-de-journée, divergence par terrain, sélecteur `nouvelle.tsx`) est ABANDONNÉ. Ne subsiste
+> que le point « overlap tournoi(90) ↔ réservation(60/90) » décrit au §6.7.
 - **Parité `slot_durations`↔`slots`** : CHECK `cardinality(slot_durations) in (0, cardinality(slots))`
   + `d∈{60,90}` par élément (sinon durée NULL → range non borné → double-vente).
 - **Conflit tournoi↔tournoi en vrai intervalle** : `competition_slot_conflict` /
@@ -273,11 +276,18 @@ fenêtres temporelles, UI, maths d'intervalle/éditeur, contrat app↔serveur, c
 - **Verrou consultatif** : le GARDER (les tournois ne sont pas dans la contrainte → il sérialise
   encore résa↔tournoi). Ne pas ajouter d'`exists(reservations overlap)` redondant dans le guard.
 
-## 6.7 DÉCISION à prendre — tournois modulables ?
-La modularité des tournois ajoute à elle seule ~8 chantiers risqués (parité de tableaux, minutes-de-
-journée, divergence par terrain, blocage joueur, UI organisateur). Comme un tournoi **bloque de toute
-façon des plages entières**, **RECOMMANDATION : garder les tournois en 1h30 fixe** (l'option initiale)
-et livrer la modularité seulement pour joueur + cours. À trancher avec le porteur.
+## 6.7 DÉCISION PORTEUR (2026-07-07) — tournois en 1h30 FIXE ✅
+Le porteur a tranché : **les tournois RESTENT en 1h30 fixe** ; la modularité 1h/1h30 ne concerne que
+les **réservations joueur + cours coach**. Conséquences (le §6.5 tombe presque entièrement) :
+- **PAS** de `competitions.slot_durations`, PAS de parité de tableaux, PAS de minutes-de-journée
+  tournoi↔tournoi, PAS de sélecteur de durée dans `nouvelle.tsx`, PAS de changement du modèle client
+  `Competition`. Les tournois gardent `slots text[]` @90 comme aujourd'hui.
+- **SEUL** point restant côté tournoi : quand on teste le chevauchement **tournoi (90) ↔ réservation
+  (60/90)**, traiter le créneau tournoi comme l'intervalle `[t, t+90)` et le comparer à l'intervalle
+  de la réservation. Concerne : `competition_slot_conflict` / `competition_overlaps_reservations` /
+  `reservations_availability_guard` (branche tournoi) serveur, et `competitionBlockedCourts` client
+  (un tournoi 90 min bloque le terrain jusqu'à t+90 → masquer les créneaux joueur qui débordent).
+  Changement contenu, pas 8 chantiers.
 
 ## 6.8 Docs / porteur / hors-scope
 - **Porteur en plus** : re-déployer la **web app** (`npm run build:web` → Cloudflare Pages) après le
