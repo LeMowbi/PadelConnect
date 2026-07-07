@@ -33,7 +33,10 @@ export type Club = {
 
 // Tarif d’une plage horaire défini librement par le gérant : [start, end[ → prix FCFA.
 // Heures « HH:MM » comparées en chaînes (format fixe). Une plage vide (prix 0) est ignorée.
-export type PriceTier = { start: string; end: string; price: number; label?: string };
+// `price` = prix d’une session 1h30 (base) ; `price60` = prix d’une session 1h (optionnel, dérivé
+// si absent — cf. pricing.ts). On garde `price` comme base plutôt que renommer en `price90` : ça
+// évite de réécrire toutes les données de tarif déjà en base.
+export type PriceTier = { start: string; end: string; price: number; price60?: number; label?: string };
 
 export const CITY = 'Abidjan';
 

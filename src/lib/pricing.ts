@@ -6,24 +6,46 @@
 
 import type { Club, PriceTier } from '@/data/clubs';
 
-// Plages valides d’un club (prix > 0 et bornes renseignées).
+// Plages valides d’un club (prix 1h30 > 0 et bornes renseignées). On n’exige PAS `price60` :
+// il est OPTIONNEL (dérivé si absent), donc un club 100 % 1h30 reste valide.
 export function priceTiersFor(club: Club): PriceTier[] {
   return (club.priceTiers ?? []).filter((t) => t.price > 0 && t.start && t.end);
 }
 
-// Prix « dès » affiché : le minimum des plages, sinon le tarif unique.
-export function minPrice(club: Club): number {
-  const tiers = priceTiersFor(club);
-  return tiers.length ? Math.min(...tiers.map((t) => t.price)) : club.priceFrom;
+// Prix 1h d’une plage : `price60` s’il est saisi, sinon dérivé au prorata (⅔) et borné au plancher.
+export function price60Of(tier: PriceTier): number {
+  return tier.price60 && tier.price60 > 0 ? tier.price60 : Math.max(PRICE_MIN, Math.round((tier.price * 2) / 3));
 }
 
-// Prix d’un créneau « HH:MM » : la plage qui le contient, sinon le tarif unique.
-// Le repli `minPrice` est une CEINTURE DE SÉCURITÉ silencieuse : grâce à
-// validateTiers (à l’enregistrement), une saisie valide couvre les heures
-// d’ouverture du club sans trou, donc ce repli n’est en pratique jamais atteint.
-// Comparaison NUMÉRIQUE (pas lexicographique) : une heure non paddée (« 9:00 »)
-// serait sinon mal classée face à « 16:00 ».
-export function priceForSlot(club: Club, time: string): number {
+// Prix 1h dérivé du tarif unique d’un club sans plage (priceFrom = prix 1h30 indicatif).
+function flat60(club: Club): number {
+  return Math.max(PRICE_MIN, Math.round((club.priceFrom * 2) / 3));
+}
+
+// Prix d’une session selon sa DURÉE (60|90) pour une plage.
+function priceOfTier(tier: PriceTier, durationMin: number): number {
+  return durationMin === 60 ? price60Of(tier) : tier.price;
+}
+
+// Prix « dès » affiché : le minimum sur (plages × durées RÉELLEMENT proposées). `offered` par défaut
+// = {90} (comportement historique : un club sans grille par terrain ne propose que du 1h30). On ne
+// compte que les durées offertes → jamais un « dès [prix 1h] » pour un club qui n’a que du 1h30.
+export function minPrice(club: Club, offered: Set<60 | 90> = new Set([90])): number {
+  const durs: (60 | 90)[] = offered.size ? [...offered] : [90];
+  const tiers = priceTiersFor(club);
+  if (tiers.length) {
+    const cands: number[] = [];
+    for (const t of tiers) for (const d of durs) cands.push(priceOfTier(t, d));
+    return Math.min(...cands);
+  }
+  return Math.min(...durs.map((d) => (d === 60 ? flat60(club) : club.priceFrom)));
+}
+
+// Prix d’un créneau « HH:MM » pour une DURÉE (défaut 1h30) : l’heure choisit la plage, la durée
+// choisit la colonne (1h/1h30). Sinon le tarif unique. Le repli `minPrice` est une CEINTURE DE
+// SÉCURITÉ silencieuse : grâce à validateTiers, une saisie valide couvre les heures d’ouverture sans
+// trou. Comparaison NUMÉRIQUE (« 9:00 » serait sinon mal classée face à « 16:00 »).
+export function priceForSlot(club: Club, time: string, durationMin: number = 90): number {
   const tiers = priceTiersFor(club);
   if (tiers.length) {
     const tm = timeToMinutes(time);
@@ -35,9 +57,10 @@ export function priceForSlot(club: Club, time: string): number {
             const e = timeToMinutes(t.end);
             return s !== null && e !== null && tm >= s && tm < e;
           });
-    return match ? match.price : minPrice(club);
+    if (match) return priceOfTier(match, durationMin);
+    return minPrice(club, new Set([durationMin === 60 ? 60 : 90]));
   }
-  return club.priceFrom;
+  return durationMin === 60 ? flat60(club) : club.priceFrom;
 }
 
 // ——— Regroupement d’affichage par plage nommée (fiche club, purement visuel) ———
@@ -112,7 +135,11 @@ export function validateTiers(
     if (p.e === null) return { ok: false, error: `Heure de fin invalide « ${p.t.end} » (format attendu HH:MM, ex. ${fmt(closeMin)}).` };
     if (p.s >= p.e) return { ok: false, error: `Plage incohérente : ${p.t.start} doit être avant ${p.t.end}.` };
     if (p.t.price < PRICE_MIN || p.t.price > PRICE_MAX) {
-      return { ok: false, error: `Tarif invalide (${p.t.price} F) : entre 1 000 et 1 000 000 FCFA la session.` };
+      return { ok: false, error: `Tarif 1h30 invalide (${p.t.price} F) : entre 1 000 et 1 000 000 FCFA la session.` };
+    }
+    // price60 est OPTIONNEL (dérivé si absent) ; s'il est saisi, il respecte les mêmes bornes.
+    if (p.t.price60 != null && (p.t.price60 < PRICE_MIN || p.t.price60 > PRICE_MAX)) {
+      return { ok: false, error: `Tarif 1h invalide (${p.t.price60} F) : entre 1 000 et 1 000 000 FCFA la session.` };
     }
   }
 

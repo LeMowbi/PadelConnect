@@ -3,7 +3,7 @@
 //   node --experimental-strip-types tests/pricing.test.ts
 // (les imports de types de pricing.ts sont effacés à l'exécution — aucun double).
 
-import { groupTiersByLabel, minPrice, priceForSlot, priceTiersFor, validateTiers } from '../src/lib/pricing.ts';
+import { groupTiersByLabel, minPrice, price60Of, priceForSlot, priceTiersFor, validateTiers } from '../src/lib/pricing.ts';
 import { perPlayer } from '../src/lib/format.ts';
 
 let failed = 0;
@@ -171,6 +171,35 @@ check(shared[0].label === 'Journée' && shared[0].items.length === 2, 'Onglet «
 
 // Aucune plage → aucun onglet.
 check(groupTiersByLabel([]).length === 0, 'Aucune plage → aucun onglet');
+
+// ——— Deux prix par plage (1h / 1h30) — modularité des durées ———
+// price60 saisi : utilisé tel quel ; absent : dérivé au prorata (⅔) et borné au plancher (1000).
+const twoPrice = {
+  priceFrom: 10000,
+  priceTiers: [
+    { start: '08:00', end: '16:00', price: 9000, price60: 6000, label: 'Journée' },
+    { start: '16:00', end: '22:00', price: 12000, label: 'Soirée' }, // pas de price60 → dérivé
+  ],
+} as Parameters<typeof priceForSlot>[0];
+check(priceForSlot(twoPrice, '09:00', 90) === 9000, 'Plage journée · 1h30 → 9 000');
+check(priceForSlot(twoPrice, '09:00', 60) === 6000, 'Plage journée · 1h → 6 000 (price60 saisi)');
+check(priceForSlot(twoPrice, '17:00', 90) === 12000, 'Plage soirée · 1h30 → 12 000');
+check(priceForSlot(twoPrice, '17:00', 60) === 8000, 'Plage soirée · 1h → 8 000 (dérivé ⅔ de 12 000)');
+check(priceForSlot(twoPrice, '09:00') === 9000, 'Défaut sans durée = 1h30 (rétro-compat) → 9 000');
+// price60Of : dérivation + plancher.
+check(price60Of({ start: '', end: '', price: 12000 }) === 8000, 'price60Of(12000) = 8000');
+check(price60Of({ start: '', end: '', price: 1200 }) === 1000, 'price60Of(1200) planché à 1000 (pas 800)');
+check(price60Of({ start: '', end: '', price: 9000, price60: 5000 }) === 5000, 'price60Of respecte price60 saisi');
+// minPrice ne compte QUE les durées offertes.
+check(minPrice(twoPrice, new Set([90])) === 9000, 'minPrice {90} = min des 1h30 (9 000)');
+check(minPrice(twoPrice, new Set([60, 90])) === 6000, 'minPrice {60,90} = 6 000 (le 1h le moins cher)');
+check(minPrice(twoPrice) === 9000, 'minPrice défaut {90} → 9 000 (jamais un « dès 1h » non offert)');
+// Club sans plage : le 1h dérive du tarif unique.
+check(priceForSlot(simple, '18:00', 60) === Math.max(1000, Math.round((14000 * 2) / 3)), 'Club sans plage · 1h = dérivé du tarif unique');
+// validateTiers : price60 hors bornes refusé, absent accepté.
+check(validateTiers([{ start: '07:00', end: '24:00', price: 9000, price60: 500 }]).ok === false, 'price60 < 1000 → bloqué');
+check(validateTiers([{ start: '07:00', end: '24:00', price: 9000, price60: 6000 }]).ok === true, 'price60 valide → OK');
+check(validateTiers([{ start: '07:00', end: '24:00', price: 9000 }]).ok === true, 'price60 absent (optionnel) → OK');
 
 console.log(failed === 0 ? '\nTOUS LES TESTS TARIFS PASSENT.' : `\n${failed} test(s) tarifs en échec.`);
 if (failed > 0) process.exitCode = 1;
