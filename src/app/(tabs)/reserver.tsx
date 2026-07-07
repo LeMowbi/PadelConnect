@@ -278,7 +278,7 @@ export default function ReserverScreen() {
                         </View>
                         <View style={{ alignItems: 'flex-end', gap: 3 }}>
                           <View style={styles.freeDot}>
-                            <Txt variant="small" color={colors.green} style={{ fontWeight: '700' }}>
+                            <Txt variant="small" color={colors.signatureDark} style={{ fontWeight: '700' }}>
                               {free} libre{free > 1 ? 's' : ''}
                             </Txt>
                           </View>

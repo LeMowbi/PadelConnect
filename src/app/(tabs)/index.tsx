@@ -726,7 +726,7 @@ export default function HomeScreen() {
                       accessibilityLabel="Prévenir mes partenaires"
                     >
                       <Ionicons name="logo-whatsapp" size={14} color={colors.green} />
-                      <Txt variant="small" color={colors.green} numberOfLines={1} style={{ fontWeight: '700', flexShrink: 1 }}>
+                      <Txt variant="small" color={colors.signatureDark} numberOfLines={1} style={{ fontWeight: '700', flexShrink: 1 }}>
                         Prévenir mes partenaires
                       </Txt>
                     </Pressable>
@@ -742,7 +742,7 @@ export default function HomeScreen() {
                     accessibilityLabel="Prévenir mes partenaires"
                   >
                     <Ionicons name="logo-whatsapp" size={14} color={colors.green} />
-                    <Txt variant="small" color={colors.green} numberOfLines={1} style={{ fontWeight: '700', flexShrink: 1 }}>
+                    <Txt variant="small" color={colors.signatureDark} numberOfLines={1} style={{ fontWeight: '700', flexShrink: 1 }}>
                       Prévenir mes partenaires
                     </Txt>
                   </Pressable>

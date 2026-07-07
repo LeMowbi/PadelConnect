@@ -818,7 +818,7 @@ export default function Onboarding() {
                 <View style={styles.zodiac}>
                   <Txt variant="h2">{zodiac.emoji}</Txt>
                   <View style={{ flex: 1 }}>
-                    <Txt variant="body" style={{ fontWeight: '700' }} color={colors.purple}>
+                    <Txt variant="body" style={{ fontWeight: '700' }} color={colors.purpleDark}>
                       {zodiac.name} · {ageFrom(birthDate)} ans
                     </Txt>
                     <Txt variant="small" color={colors.textMuted}>
@@ -891,7 +891,7 @@ export default function Onboarding() {
                 /^[0-9A-F]{12}$/.test(referralCode.trim()) ? (
                   <View style={styles.referralHint}>
                     <Ionicons name="checkmark-circle" size={14} color={colors.green} />
-                    <Txt variant="small" color={colors.green}>
+                    <Txt variant="small" color={colors.signature}>
                       Code de parrainage détecté ✓ — ton ami sera crédité
                     </Txt>
                   </View>
