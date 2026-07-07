@@ -92,6 +92,14 @@ check(validateTiers([tier('07:00', '12:00'), tier('12:00', '24:00')]).ok === tru
 check(validateTiers([tier('16:00', '07:00')]).ok === false, 'Début après fin → bloqué');
 check(validateTiers([tier('7h', '24:00')]).ok === false, 'Format heure invalide → bloqué');
 
+// price60 (prix 1h) : optionnel, mêmes bornes, et JAMAIS supérieur au prix 1h30 (cohérence éco).
+check(validateTiers([{ start: '07:00', end: '24:00', price: 15000, price60: 10000 }]).ok === true, 'price60 ≤ price → OK');
+check(
+  validateTiers([{ start: '07:00', end: '24:00', price: 15000, price60: 20000 }]).ok === false,
+  'price60 > price (1h plus cher que 1h30) → bloqué',
+);
+check(validateTiers([{ start: '07:00', end: '24:00', price: 15000, price60: 500 }]).ok === false, 'price60 sous PRICE_MIN → bloqué');
+
 // ——— Bornes dynamiques : la couverture suit les HEURES D'OUVERTURE du club (chaque club
 // ouvre à son heure). Un club 08:00→23:00 valide 08:00→23:00, et REFUSE le 07:00→24:00 forcé. ———
 check(validateTiers([tier('08:00', '23:00')], 8 * 60, 23 * 60).ok === true, 'Club 08:00→23:00 : plage unique couvrant l’amplitude → OK');

@@ -141,6 +141,11 @@ export function validateTiers(
     if (p.t.price60 != null && (p.t.price60 < PRICE_MIN || p.t.price60 > PRICE_MAX)) {
       return { ok: false, error: `Tarif 1h invalide (${p.t.price60} F) : entre 1 000 et 1 000 000 FCFA la session.` };
     }
+    // Cohérence économique : une session d'1h ne peut pas coûter PLUS cher qu'une d'1h30 (sinon
+    // la fiche afficherait « 1h · 30 000 » au-dessus de « 1h30 · 20 000 » — absurde pour le joueur).
+    if (p.t.price60 != null && p.t.price60 > p.t.price) {
+      return { ok: false, error: `Le prix 1h (${p.t.price60} F) ne peut pas dépasser le prix 1h30 (${p.t.price} F).` };
+    }
   }
 
   // Couverture AU MOINS égale à l'amplitude d'ouverture : une plage qui déborde avant

@@ -7,6 +7,8 @@ import { PopIn } from './PopIn';
 import { Card, Tag, Txt } from './ui';
 import { clubGallery, defaultCourts, type Club } from '@/data/clubs';
 import { useApp } from '@/store/AppContext';
+import { courtsFor, resolvedGridFor } from '@/lib/availability';
+import { offeredDurations } from '@/lib/courtSchedule';
 import { hapticLight } from '@/lib/haptics';
 import { minPrice } from '@/lib/pricing';
 import { fcfa, initials } from '@/lib/format';
@@ -23,6 +25,20 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
   const gallery = clubGallery(club, state.clubPhotos[club.id] ?? []);
   const photo = state.clubCovers[club.id] ?? gallery[0];
   const courtCount = (state.clubCourts[club.id] ?? defaultCourts(club)).length;
+  // « dès X » = plus petit prix RÉELLEMENT offert (créneaux 1h/1h30, 68) : un club tout en 1h
+  // n'annonce pas le prix 1h30 (durée qu'il ne vend pas, et plus cher). On dérive les durées
+  // proposées depuis la grille par terrain (défaut {90} pour un club sans grille = comportement
+  // d'avant). Vide (tous créneaux fermés) → repli {90} pour ne pas afficher un prix nul.
+  const offered = offeredDurations(
+    resolvedGridFor(club, {
+      clubSlots: state.clubSlots,
+      clubCourts: state.clubCourts,
+      courtSlots: state.courtSlots,
+      courtClosed: state.clubCourtClosed,
+    }),
+    courtsFor(club, state.clubCourts),
+  );
+  const priceFrom = minPrice(club, offered.size ? offered : undefined);
   // Note RÉELLE (avis vérifiés, agrégat serveur state.clubRatings — un seul appel pour tous
   // les clubs). Absente tant qu’un club n’a aucun avis : on n’affiche alors rien (jamais de
   // note inventée). Même donnée que la fiche club → liste et détail restent cohérents.
@@ -122,7 +138,7 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
               numberOfLines={1}
               style={{ fontWeight: '700', flexShrink: 1, marginLeft: spacing.sm }}
             >
-              dès {fcfa(minPrice(club))}
+              dès {fcfa(priceFrom)}
             </Txt>
           )}
         </View>
@@ -174,7 +190,7 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
             </Txt>
           ) : (
             <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
-              dès {fcfa(minPrice(club))} · session
+              dès {fcfa(priceFrom)} · session
             </Txt>
           )}
           {!comingSoon && rating ? (

@@ -201,11 +201,14 @@ export default function ClubDetail() {
   };
   const clubCourtsList = courtsFor(club, state.clubCourts);
   const offeredClub = offeredDurations(resolvedGridFor(club, sched), clubCourtsList);
-  const durationsText =
-    [...offeredClub]
-      .sort((a, b) => a - b)
-      .map(durationLabel)
-      .join(' / ') || durationLabel(90);
+  // Durées réellement proposées (« 1h » / « 1h30 »). VIDE si tous les créneaux sont fermés :
+  // on n'annonce alors aucune durée (afficher « 1h30 » serait faux — rien n'est réservable).
+  const durationsText = offeredClub.size
+    ? [...offeredClub]
+        .sort((a, b) => a - b)
+        .map(durationLabel)
+        .join(' / ')
+    : '';
   // La photo « de profil » choisie par le club ouvre la galerie (héros) ; les photos par
   // terrain la complètent en fin de visionneuse (chaque vignette porte le nom du terrain).
   const cover = state.clubCovers[club.id];
@@ -326,7 +329,7 @@ export default function ClubDetail() {
               n’est pas encore réservable → bouton désactivé + libellé explicite. */}
           <StickyBar
             label={club.comingSoon ? 'Bientôt sur PadelConnect' : `dès ${fcfa(minPrice(club, offeredClub))}`}
-            hint={club.comingSoon ? 'réservation à venir' : `la session · ${durationsText}`}
+            hint={club.comingSoon ? 'réservation à venir' : durationsText ? `la session · ${durationsText}` : 'réservation au club'}
             cta={club.comingSoon ? 'Bientôt' : 'Réserver'}
             disabled={!!club.comingSoon}
             onPress={() => router.push(`/reserver/${club.id}`)}
@@ -537,7 +540,7 @@ export default function ClubDetail() {
             <View style={styles.tierRow}>
               <View style={styles.tierLeft}>
                 <Ionicons name="time-outline" size={16} color={colors.textMuted} />
-                <Txt variant="body">Session · {durationsText}</Txt>
+                <Txt variant="body">{durationsText ? `Session · ${durationsText}` : 'Session au club'}</Txt>
               </View>
               <Txt variant="body" style={{ fontWeight: '700' }}>
                 dès {fcfa(minPrice(club, offeredClub))}

@@ -137,6 +137,11 @@ function CourtScheduleRow({
         </Pressable>
       </View>
       <View style={styles.wrap}>
+        {sorted.length === 0 ? (
+          <Txt variant="small" color={colors.textMuted}>
+            Aucun créneau sur ce terrain — ajoutes-en un ci-dessous.
+          </Txt>
+        ) : null}
         {sorted.map((s) => {
           const end = slotEnd(s.t, s.d);
           const endLabel = end !== null ? minutesToSlot(end) : '?';
