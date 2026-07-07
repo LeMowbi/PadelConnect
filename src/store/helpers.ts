@@ -36,6 +36,7 @@ export function frAuthError(msg: string): string {
   if (m.includes('email not confirmed')) return 'Confirme d’abord ton e-mail — vérifie ta boîte mail (et tes spams).';
   if (m.includes('invalid login')) return 'Identifiant ou mot de passe incorrect.';
   if (m.includes('already registered') || m.includes('already been registered')) return 'Cet e-mail a déjà un compte — connecte-toi.';
+  if (m.includes('phone_taken')) return 'Ce numéro est déjà utilisé par un autre compte.';
   if (m.includes('unable to validate email') || m.includes('invalid format')) return 'Adresse e-mail invalide — vérifie-la.';
   if (m.includes('password should be') || m.includes('password')) return 'Mot de passe trop court (6 caractères minimum).';
   if (m.includes('network') || m.includes('fetch') || m.includes('timeout')) return 'Connexion internet impossible — réessaie.';

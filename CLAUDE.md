@@ -390,6 +390,16 @@ tous les agents en parallèle et vérification adversariale, puis build + mise E
   « perte de donnée RPC » refermée, 76 RPC client alignées sur les signatures live, convention
   réseau-null respectée, redirections 200 partout. Aucune correction nécessaire = gate vert.
 - SQL en base : `65`, `66` **appliqués et vérifiés live** (Management API, projet …ccxij).
+- **Téléphone UNIQUE (67, demande porteur 2026-07-07)** : un numéro = un seul compte (le porteur
+  donne l'accès via le numéro). Unicité sur les **10 derniers chiffres** (même convention que
+  l'appariement amis/coachs/clubs → `+225 07…` et `07…` = même numéro). `phone10(text)` immuable +
+  **index unique partiel** `profiles_phone10_uniq` (garde-fou dur, toutes voies : inscription,
+  édition profil, appel forgé, course concurrente) + garde `PHONE_TAKEN` dans `handle_new_user`
+  (refus atomique avant l'insert) + RPC `phone_available` (UX : message net à l'inscription).
+  Client : pré-check à l'inscription + détection 23505 à l'édition profil (`updateAccount` renvoie
+  `phoneTaken`) → « Ce numéro est déjà utilisé par un autre compte. ». **Appliqué et vérifié live**
+  (0 doublon, blocage prouvé sur données réelles en transaction annulée). ⚠️ côté CLIENT = **build
+  suivant** (le #57 en revue applique déjà la règle SERVEUR, juste le message est moins fin).
 
 ## 11. Où regarder
 

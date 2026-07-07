@@ -663,7 +663,7 @@ function EditAccount({ onDone }: { onDone: () => void }) {
     }
     setError(null);
     setSaving(true);
-    const { photoSaved, profileSaved } = await updateAccount({
+    const { photoSaved, profileSaved, phoneTaken } = await updateAccount({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       phone: phone.trim(),
@@ -672,6 +672,11 @@ function EditAccount({ onDone }: { onDone: () => void }) {
       gender,
     });
     setSaving(false);
+    // Numéro déjà porté par un autre compte (unicité serveur) : message net, pas « vérifie ta connexion ».
+    if (phoneTaken) {
+      setError('Ce numéro est déjà utilisé par un autre compte.');
+      return;
+    }
     // On ne ment plus : si les champs texte n'ont pas atteint le serveur (réseau), le formulaire
     // RESTE OUVERT — sinon l'ancien prénom/numéro serveur revenait en silence au prochain
     // lancement (et le numéro sert aux clubs + à l'appariement amis/coachs).

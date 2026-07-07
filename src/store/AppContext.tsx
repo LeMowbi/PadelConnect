@@ -302,7 +302,9 @@ type AppContextType = {
   // doit alors prévenir l’utilisateur au lieu d’afficher un toast de succès mensonger.
   // photoSaved / profileSaved = false : la photo / les champs texte n'ont PAS atteint le
   // serveur (réseau) — l'écran d'édition doit le dire au lieu d'un succès mensonger.
-  updateAccount: (patch: Partial<Account>) => Promise<{ photoSaved: boolean; profileSaved: boolean }>;
+  // phoneTaken = true : l'échec vient d'un NUMÉRO déjà pris par un autre compte (unicité serveur,
+  // 67) — l'écran doit alors le dire clairement plutôt que d'accuser la connexion.
+  updateAccount: (patch: Partial<Account>) => Promise<{ photoSaved: boolean; profileSaved: boolean; phoneTaken?: boolean }>;
   // Inscription serveur PRINCIPALE — e-mail (confirmé) + mot de passe, le téléphone est
   // conservé (sans SMS) pour que les clubs puissent joindre les joueurs. `needsConfirm`
   // = true quand l’e-mail de confirmation vient d’être envoyé (pas encore de session).
@@ -1069,6 +1071,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               if (patch.gender !== undefined) a.gender = prev?.gender;
               return { ...s, account: a };
             });
+            // Numéro déjà porté par un autre compte (unicité serveur 67 = 23505) : ce n'est PAS un
+            // souci réseau. On sort tout de suite pour que l'écran affiche le bon message (et on
+            // n'enchaîne pas sur l'upload photo, la ligne profil ayant été refusée en bloc).
+            if ((error as { code?: string }).code === '23505') {
+              return { photoSaved: true, profileSaved: false, phoneTaken: true };
+            }
           }
         }
         // PHOTO : on l’envoie au stockage (survit à une réinstallation, synchro multi-appareils).
@@ -1110,6 +1118,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // lien de confirmation (deep link → refreshSession).
       signUpWithEmail: async (email, password, phone, profile) => {
         const cleanEmail = email.trim().toLowerCase();
+        // Un numéro = un seul compte (unicité serveur 67). On vérifie AVANT de créer le compte auth
+        // pour un message net (et éviter un compte auth mort refusé par le trigger). Convention réseau :
+        // l'appel renvoie null en cas d'échec → on n'affirme PAS « pris » et on laisse le serveur trancher.
+        const { data: avail } = await supabase.rpc('phone_available', { p_phone: phone.trim() });
+        if (avail === false) {
+          return { ok: false, error: 'Ce numéro est déjà utilisé par un autre compte.' };
+        }
         const { data, error } = await supabase.auth.signUp({
           email: cleanEmail,
           password,
