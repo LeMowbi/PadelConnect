@@ -372,6 +372,25 @@ sur la branche de dev (build #48, mise à jour day-1 après approbation du #47) 
   l'opérateur. Non bloquant pour le lancement. SQL prêt à écrire le jour où le porteur tranche.
 - Autres post-lancement : vrai SMTP de confirmation, perf, éventuel kit `PlanningGrid`.
 
+### Campagne d'audit v2 (2026-07-07) — 5 gros audits « chaque tour renforce le précédent » ✅
+
+Demande porteur : 2 bugs signalés + **5 audits complets** (app, site, serveur, mails, code) avec
+tous les agents en parallèle et vérification adversariale, puis build + mise EN LIGNE sur iPhone.
+- **Bug #1 (site figé)** : `site/assets/site.js` ne lisait plus les données live → rendu DYNAMIQUE
+  (`liveCourts`/`liveBlurb` dérivés de `club_config.courts`/`club_overrides.blurb`, badge « N clubs »
+  réel). Vérifié live : l'override « Temple de Padel » + 2 terrains s'affichent (tour 1 & 3).
+- **Bug #2 (modifs opérateur qui se réinitialisent)** : `WaveLink.tsx` resync render-phase
+  (`syncedLink`, ne clobbe plus la saisie), `NewsEditor` toast au niveau provider, et surtout SQL
+  **66** `upsert_club_override` ON CONFLICT préserve les colonnes non touchées (null=garde, ''=efface)
+  → la description ne se perd plus. SQL **65** rend `set_tournament_fee`/`set_wave_link` idempotents.
+- **Tour 4** : boucle de redirection `/get` (Cloudflare clean-URLs) réparée dans `site/_redirects`
+  + perf planning gérant (`pastByWeek` O(n²)→O(n)).
+- **Tour 5 (gate final)** : 4 agents adversariaux (app / serveur+DB live / site+mails / contrat
+  app↔serveur) → **TOUT CLEAN**, aucun défaut restant : 65 & 66 byte-identiques en base, classe
+  « perte de donnée RPC » refermée, 76 RPC client alignées sur les signatures live, convention
+  réseau-null respectée, redirections 200 partout. Aucune correction nécessaire = gate vert.
+- SQL en base : `65`, `66` **appliqués et vérifiés live** (Management API, projet …ccxij).
+
 ## 11. Où regarder
 
 - `docs/PUSH-SETUP.md` — configuration des push & webhooks (étapes Dashboard).
