@@ -4,6 +4,7 @@
 // joueurs, SANS nouvelle version de l’app.
 
 import { serverRowToClub, type Club, type CustomClub, type PriceTier } from '@/data/clubs';
+import type { CourtSlot } from './courtSchedule';
 import { supabase } from './supabase';
 
 // Surcharge de page club, telle que servie/stockée (mêmes champs que le store local clubInfo).
@@ -70,6 +71,9 @@ export type ClubConfig = {
   // à 18:00 sur CE terrain, pour TOUTES les réservations (cours in-app compris) — les autres
   // terrains restent ouverts.
   courtClosed?: Record<string, string[]>;
+  // Grille PAR TERRAIN à durée variable (68) : { 'Terrain 1': [{ t:'08:00', d:90 }, …] }.
+  // SOURCE DE VÉRITÉ des horaires quand présente (sinon dérive de `slots`@90, cf. courtSchedule).
+  courtSlots?: Record<string, CourtSlot[]>;
 };
 
 type ClubConfigRow = {
@@ -81,6 +85,7 @@ type ClubConfigRow = {
   cover_url: string | null;
   court_photos: Record<string, string> | null;
   court_closed: Record<string, string[]> | null;
+  court_slots: Record<string, CourtSlot[]> | null;
 };
 
 // Toutes les configs de club → { clubId: config } pour fusion dans le store au chargement.
@@ -98,6 +103,7 @@ export async function fetchClubConfigs(): Promise<Record<string, ClubConfig> | n
       coverUrl: r.cover_url ?? undefined,
       courtPhotos: r.court_photos ?? undefined,
       courtClosed: r.court_closed ?? undefined,
+      courtSlots: r.court_slots ?? undefined,
     };
   }
   return out;
@@ -120,6 +126,10 @@ export async function upsertClubConfig(clubId: string, c: ClubConfig): Promise<b
     p_cover_url: c.coverUrl ?? null,
     p_court_photos: c.courtPhotos ?? null,
     ...(c.courtClosed !== undefined ? { p_court_closed: c.courtClosed } : {}),
+    // p_court_slots (68) : ABSENT = préserve la grille par terrain ; `{}` = efface (retour au
+    // défaut, réactive court_closed/slots hérités) ; objet = nouvelle grille (le serveur en
+    // dérive aussi le miroir `slots` et remet court_closed à vide). Omis contre une base sans 68.
+    ...(c.courtSlots !== undefined ? { p_court_slots: c.courtSlots } : {}),
   });
   return !error && data === true;
 }

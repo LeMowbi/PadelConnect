@@ -31,6 +31,9 @@ export type Competition = {
   // (tout le club bloqué ce jour-là) — gardé pour les seeds de démonstration.
   courtNames?: string[];
   timeSlots?: string[];
+  // Durée (min) de CHAQUE créneau du tournoi, alignée sur timeSlots (créneaux modulables 1h/1h30).
+  // Vide/absent = 1h30 par défaut sur chaque créneau (rétrocompat + tournois seed).
+  slotDurations?: number[];
   // Roster RÉEL des équipes inscrites (tournois serveur) — « Prénom & Partenaire ». Remplace
   // les noms de démonstration : le nombre d’inscrits et les noms affichés sont vrais.
   teamNames?: string[];

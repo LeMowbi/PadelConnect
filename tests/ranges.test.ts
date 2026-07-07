@@ -38,6 +38,15 @@ const evenings: BlockedRange = { ...base, times: ['18:00', '19:30'] };
 check(rangeBlocks(evenings, '2026-07-15', '18:00', 'Terrain 2'), 'Heure listée → bloqué');
 check(!rangeBlocks(evenings, '2026-07-15', '09:30', 'Terrain 2'), 'Heure non listée → libre (le matin reste réservable)');
 
+// Créneaux à DURÉE VARIABLE (68) : une heure fermée T ferme l'intervalle [T, T+90). Un créneau
+// candidat est bloqué dès qu'il CHEVAUCHE (miroir EXACT de la garde serveur). Adjacent = OK.
+const noon: BlockedRange = { ...base, times: ['12:00'] };
+check(rangeBlocks(noon, '2026-07-15', '12:00', 'Terrain 2', 60), 'Candidat 12:00·1h dans la fermeture 12:00 → bloqué');
+check(rangeBlocks(noon, '2026-07-15', '11:30', 'Terrain 2', 90), 'Candidat 11:30·1h30 déborde sur 12:00 → bloqué');
+check(!rangeBlocks(noon, '2026-07-15', '10:30', 'Terrain 2', 90), 'Candidat 10:30·1h30 finit à 12:00 (adjacent) → libre');
+check(rangeBlocks(noon, '2026-07-15', '13:00', 'Terrain 2', 60), 'Candidat 13:00·1h dans [12:00,13:30) → bloqué');
+check(!rangeBlocks(noon, '2026-07-15', '13:30', 'Terrain 2', 90), 'Candidat 13:30 après [12:00,13:30) (adjacent) → libre');
+
 // Période d'un seul jour (dateFrom = dateTo) : comportement « blocage journée ».
 const oneDay: BlockedRange = { ...base, dateFrom: '2026-07-15', dateTo: '2026-07-15' };
 check(rangeBlocks(oneDay, '2026-07-15', '11:00', 'Terrain 2'), 'Période d’un seul jour : ce jour est bloqué');

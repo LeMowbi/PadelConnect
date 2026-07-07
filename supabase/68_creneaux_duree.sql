@@ -1223,3 +1223,49 @@ $$;
 revoke execute on function public.resolve_court_slots(text, text) from public, anon, authenticated;
 -- hhmm_to_min / durations_60_90 : immuables et inoffensifs, utilisés dans les contraintes CHECK
 -- → on LAISSE l'EXECUTE PUBLIC par défaut (sinon un INSERT non-owner échouerait sur le CHECK).
+
+-- ─── 22) fetch_competitions (+ slot_durations) — la dispo joueur lit la durée EXACTE de chaque
+-- créneau de tournoi (sinon elle retombe sur 90 par défaut = sur-blocage conservateur d'un
+-- créneau tournoi 1h). Reprend À L'IDENTIQUE la 62 (restriction organizer_phone) + la colonne
+-- `slot_durations` en fin de table. Idempotent (create or replace après drop de signature).
+drop function if exists public.fetch_competitions();
+create or replace function public.fetch_competitions()
+returns table (
+  id uuid, organizer_id uuid, organizer_type text, organizer_name text, organizer_phone text,
+  club_id text, club_name text, title text, format text, level text,
+  date_key text, end_date_key text, courts text[], slots text[],
+  capacity int, fee text, reward text, official boolean, status text, commission int,
+  winner text, second text, third text, loser text, registered int, teams text[],
+  reject_reason text, payment_status text, wave_link text, slot_durations int[]
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select c.id, c.organizer_id, c.organizer_type, c.organizer_name,
+    case when c.organizer_id = auth.uid()
+              or public.can_manage_club(c.club_id)
+              or exists (select 1 from public.competition_registrations r
+                           where r.competition_id = c.id and r.user_id = auth.uid())
+         then c.organizer_phone else null end,
+    c.club_id, c.club_name, c.title, c.format, c.level,
+    c.date_key, c.end_date_key, c.courts, c.slots,
+    c.capacity, c.fee, c.reward, c.official, c.status, c.commission,
+    c.winner, c.second, c.third, c.loser,
+    (select count(*) from public.competition_registrations r where r.competition_id = c.id)::int,
+    (select coalesce(array_agg(trim(coalesce(pr.first_name, '') || ' & ' || rg.partner) order by rg.created_at), '{}')
+       from public.competition_registrations rg
+       join public.profiles pr on pr.id = rg.user_id
+       where rg.competition_id = c.id),
+    c.reject_reason,
+    c.payment_status,
+    (select tc.wave_link from public.tournament_config tc where tc.id = true),
+    c.slot_durations
+  from public.competitions c
+  where c.status in ('published', 'closed')
+    or c.organizer_id = auth.uid()
+    or public.can_manage_club(c.club_id);
+$$;
+revoke execute on function public.fetch_competitions() from public, anon;
+grant execute on function public.fetch_competitions() to authenticated;

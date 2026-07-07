@@ -91,6 +91,8 @@ export const initialState: AppState = {
   managedClubId: 'padelta',
   clubSlots: {},
   clubCourts: {},
+  // Grille PAR TERRAIN à durée variable (68) : { clubId: { 'Terrain 1': [{ t, d, x? }] } }.
+  courtSlots: {},
   // Fermetures récurrentes par terrain (54) : { clubId: { 'Terrain 1': ['18:00'] } }.
   clubCourtClosed: {},
   blockedSlots: [],
@@ -118,6 +120,7 @@ export function clubConfigSlices(s: AppState, configs: Record<string, ClubConfig
   const clubCovers = { ...s.clubCovers };
   const clubCourtPhotos = { ...s.clubCourtPhotos };
   const clubCourtClosed = { ...s.clubCourtClosed };
+  const courtSlots = { ...s.courtSlots };
   for (const [id, c] of Object.entries(configs ?? {})) {
     if (c.slots) clubSlots[id] = c.slots;
     if (c.courts) clubCourts[id] = c.courts;
@@ -128,8 +131,12 @@ export function clubConfigSlices(s: AppState, configs: Record<string, ClubConfig
     else if (id in clubCovers) delete clubCovers[id];
     if (c.courtPhotos) clubCourtPhotos[id] = c.courtPhotos;
     if (c.courtClosed) clubCourtClosed[id] = c.courtClosed;
+    // Grille par terrain (68) : présente → source de vérité ; ABSENTE → le club est repassé à la
+    // grille dérivée (efface via upsert `{}`) → on retire le miroir pour que la dérivation reprenne.
+    if (c.courtSlots) courtSlots[id] = c.courtSlots;
+    else if (id in courtSlots) delete courtSlots[id];
   }
-  return { clubSlots, clubCourts, clubOffers, clubPhotos, clubCovers, clubCourtPhotos, clubCourtClosed };
+  return { clubSlots, clubCourts, clubOffers, clubPhotos, clubCovers, clubCourtPhotos, clubCourtClosed, courtSlots };
 }
 
 // État ramené à « déconnecté » : identité + données serveur ET tout le périmètre personnel

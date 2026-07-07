@@ -86,6 +86,7 @@ import {
 } from '@/lib/reservations';
 import { blockUser as blockUserRpc, fetchBlockedUserIds } from '@/lib/moderation';
 import { samePhone } from '@/lib/phone';
+import { overlaps, type CourtSlot } from '@/lib/courtSchedule';
 import { SESSION_MIN } from '@/lib/slots';
 import { cancelMatchReminder, onPushReceivedInForeground, scheduleMatchReminder, syncMatchReminders } from '@/lib/notifications';
 import { registerPushToken } from '@/lib/push';
@@ -155,6 +156,7 @@ export type Reservation = {
   dateKey: string; // identité stable du jour (AAAA-MM-JJ) — base des calculs
   time: string;
   startsAt: number; // horodatage réel du créneau (rappel, anti double-réservation)
+  durationMin: number; // durée FIGÉE du créneau (60|90), comme le prix — base fin de match / agenda
   price: number; // prix RÉEL du créneau (figé à la réservation — base commission & partage)
   players: number;
   invited: Invited[];
@@ -167,13 +169,15 @@ export type Reservation = {
   createdAt: number;
 };
 
-// Durée d’une session (1h30) — sert à savoir quand une réservation est « jouée ». Dérivée de
-// SESSION_MIN (slots.ts) : une SEULE source pour la durée de session dans toute l’app.
+// Durée par DÉFAUT d’une session (1h30), dérivée de SESSION_MIN (slots.ts). Repli quand une
+// réservation n'a pas de durée figée (ancien binaire / donnée héritée) — chaque résa porte
+// désormais SA `durationMin` (créneaux modulables 1h/1h30, 68).
 export const SESSION_MS = SESSION_MIN * 60000;
 
-// Une réservation est « jouée » dès que son heure de fin est passée (automatique, jamais déclaré).
+// Une réservation est « jouée » dès que son heure de FIN est passée (automatique, jamais déclaré).
+// La fin dépend de la durée PROPRE du créneau (1h ou 1h30), pas d'une durée fixe.
 export function isPlayed(r: Reservation, now = Date.now()): boolean {
-  return r.startsAt + SESSION_MS <= now;
+  return r.startsAt + (r.durationMin || SESSION_MIN) * 60000 <= now;
 }
 
 // Palmarès du joueur : une entrée par tournoi joué (vainqueur, dernière place, ou participant).
@@ -200,7 +204,7 @@ export type OperatorNews = { id: string; title: string; subtitle?: string; link?
 
 // Créneau fermé PAR LE CLUB (résa téléphone/WhatsApp, entretien…). Ce n’est PAS une
 // réservation PadelConnect : jamais compté dans l’historique, la commission ou les stats.
-export type BlockedSlot = { clubId: string; dateKey: string; time: string; court: string; reason: string };
+export type BlockedSlot = { clubId: string; dateKey: string; time: string; court: string; reason: string; durationMin: number };
 
 // Infos d’un club modifiables par son gérant (s’appliquent par-dessus les données de base).
 export type ClubInfo = {
@@ -260,8 +264,11 @@ export type AppState = {
   occupancy: SlotOccupancy[]; // créneaux pris par TOUS (vue publique) → dispo cross-joueur
   storageFull: boolean; // true si la sauvegarde a dû abandonner des photos (quota plein)
   managedClubId: string;
-  clubSlots: Record<string, string[]>; // horaires ouverts par club
+  clubSlots: Record<string, string[]>; // horaires ouverts par club (ancienne grille @90, hérité)
   clubCourts: Record<string, string[]>; // terrains (courts) gérés par club
+  // Grille PAR TERRAIN à durée variable (68) : { clubId: { 'Terrain 1': [{ t, d, x? }] } } —
+  // source de vérité des horaires quand présente (sinon dérivée de clubSlots@90, cf. courtSchedule).
+  courtSlots: Record<string, Record<string, CourtSlot[]>>;
   blockedSlots: BlockedSlot[]; // créneaux fermés hors app par les clubs
   blockedRanges: BlockedRange[]; // fermetures sur PÉRIODE (54) — terrain ou club entier
   // Fermetures récurrentes PAR TERRAIN (54) : { clubId: { 'Terrain 1': ['18:00'] } }.
@@ -474,6 +481,9 @@ type AppContextType = {
   unblockRange: (id: string) => Promise<boolean>;
   // Fermetures RÉCURRENTES par terrain (54) — false = échec serveur, miroir intact.
   setCourtClosed: (clubId: string, closed: Record<string, string[]>) => Promise<boolean>;
+  // Grille PAR TERRAIN à durée variable (68) : remplace la grille du club. `grid` non vide =
+  // nouvelle source de vérité ; `{}` = repasse à la grille dérivée (efface côté serveur).
+  setCourtSlots: (clubId: string, grid: Record<string, CourtSlot[]>) => Promise<boolean>;
   // ok = false quand l’écriture SERVEUR a échoué (réseau/session) : l’actu reste alors visible
   // seulement sur le téléphone de l’opérateur — l’appelant doit le dire honnêtement.
   // `push` (47) : true = notify-club envoie AUSSI l’actu en notification à tous les joueurs.
@@ -1481,12 +1491,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           (x) => (!x.userId || x.userId === state.serverUserId) && x.startsAt > Date.now(),
         ).length;
         if (myUpcoming >= MAX_UPCOMING) return { ok: false, reason: 'limit' };
-        // Anti double-réservation locale (réponse immédiate). La barrière FORTE reste la
-        // contrainte unique serveur : si un autre joueur a pris le terrain entre-temps,
-        // l’insert échoue (conflict) et on renvoie une erreur.
-        const sameSlot = (x: { clubId: string; dateKey: string; time: string; court: string }) =>
-          x.clubId === r.clubId && x.dateKey === r.dateKey && x.time === r.time && x.court === r.court;
-        if (state.reservations.some(sameSlot) || state.occupancy.some(sameSlot)) return { ok: false, reason: 'conflict' };
+        // Anti double-réservation locale (réponse immédiate) — chevauchement d'INTERVALLE sur le
+        // même terrain (créneaux 1h/1h30, 68) : un 09:00·1h se pose à côté d'un 08:00·1h30, mais
+        // pas dessus. La barrière FORTE reste la contrainte d'exclusion serveur (23P01) : si un
+        // autre joueur a pris un créneau qui déborde entre-temps, l’insert échoue (conflict).
+        const overlapsBooked = (x: { clubId: string; dateKey: string; court: string; time: string; durationMin?: number }) =>
+          x.clubId === r.clubId &&
+          x.dateKey === r.dateKey &&
+          x.court === r.court &&
+          overlaps({ t: r.time, d: r.durationMin as 60 | 90 }, { t: x.time, d: (x.durationMin ?? 90) as 60 | 90 });
+        if (state.reservations.some(overlapsBooked) || state.occupancy.some(overlapsBooked)) return { ok: false, reason: 'conflict' };
         const bookedBy = state.account
           ? { name: `${state.account.firstName} ${state.account.lastName}`.trim(), phone: state.account.phone }
           : undefined;
@@ -1532,7 +1546,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setState((s) => ({
             ...s,
             reservations: [created, ...s.reservations.filter((x) => x.id !== created.id)],
-            occupancy: [...s.occupancy, { clubId: created.clubId, dateKey: created.dateKey, time: created.time, court: created.court }],
+            occupancy: [
+              ...s.occupancy,
+              { clubId: created.clubId, dateKey: created.dateKey, time: created.time, court: created.court, durationMin: created.durationMin },
+            ],
           }));
           // Réservation PARTAGÉE : les amis invités qui ont un compte la voient aussi chez eux.
           // On rattache par numéro (résolu côté serveur) — la résa reste UNIQUE (une commission).
@@ -1550,7 +1567,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Mode LOCAL (démo, hors session) : comportement d’origine.
         const localId = uid();
         setState((s) => {
-          if (s.reservations.some(sameSlot)) return s;
+          if (s.reservations.some(overlapsBooked)) return s;
           return { ...s, reservations: [{ ...r, bookedBy, id: localId, createdAt: Date.now() }, ...s.reservations] };
         });
         if (state.remindersOn) void scheduleMatchReminder({ ...r, id: localId });
@@ -2154,7 +2171,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         const sameSlot = (x: { clubId: string; dateKey: string; time: string; court: string }) =>
           x.clubId === b.clubId && x.dateKey === b.dateKey && x.time === b.time && x.court === b.court;
-        if (state.reservations.some(sameSlot)) return false;
+        // Résa à venir SOUS le créneau à fermer : chevauchement d'INTERVALLE sur le même terrain
+        // (miroir de la garde serveur block_slot) — un 08:00·1h30 empêche de fermer 09:00·1h.
+        const overCourt = (x: { clubId: string; dateKey: string; court: string; time: string; durationMin: number }) =>
+          x.clubId === b.clubId &&
+          x.dateKey === b.dateKey &&
+          x.court === b.court &&
+          overlaps({ t: b.time, d: b.durationMin as 60 | 90 }, { t: x.time, d: x.durationMin as 60 | 90 });
+        if (state.reservations.some(overCourt)) return false;
         if (state.blockedSlots.some(sameSlot)) return false;
         // Ceinture-bretelles : jamais de blocage manuel par-dessus un terrain déjà retenu par un
         // tournoi publié (même protection que la grille/le détail de créneau côté UI) — même si
@@ -2163,7 +2187,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...state.myCompetitions.filter((c) => c.clubId === b.clubId),
           ...seedCompetitions.filter((c) => c.clubId === b.clubId),
         ];
-        const compBlocked = competitionBlockedCourts(b.clubId, b.dateKey, b.time, comps);
+        const compBlocked = competitionBlockedCourts(b.clubId, b.dateKey, b.time, b.durationMin, comps);
         if (compBlocked === 'all' || compBlocked.includes(b.court)) return false;
         // Persistance SERVEUR : le blocage devient RÉEL (visible par tous, empêche vraiment la
         // réservation via le trigger) et survit à la réinstallation. On ATTEND le serveur et
@@ -2233,6 +2257,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         if (sessionEpochRef.current !== epoch) return true;
         setState((s) => ({ ...s, clubCourtClosed: { ...s.clubCourtClosed, [clubId]: closed } }));
+        return true;
+      },
+      // Grille PAR TERRAIN à durée variable (68). Écriture honnête (serveur d'abord, motif
+      // setClubSlots) : le serveur VALIDE la grille (anti-chevauchement, bornes) et en dérive le
+      // miroir `slots` + remet court_closed à vide → on aligne le store en conséquence. Une grille
+      // vide `{}` efface la grille par terrain (retour à la dérivation @90). Garde d'époque.
+      setCourtSlots: async (clubId, grid) => {
+        const epoch = sessionEpochRef.current;
+        const cleared = Object.keys(grid).length === 0;
+        if (state.serverUserId) {
+          const ok = await upsertClubConfig(clubId, { courtSlots: grid });
+          if (!ok) return false;
+        }
+        if (sessionEpochRef.current !== epoch) return true;
+        setState((s) => {
+          const nextCourtSlots = { ...s.courtSlots };
+          if (cleared) delete nextCourtSlots[clubId];
+          else nextCourtSlots[clubId] = grid;
+          // Le serveur remet court_closed à vide quand une grille par terrain est posée (les
+          // fermetures vivent désormais dans la grille via `x:true`) → on aligne le miroir local.
+          const nextCourtClosed = { ...s.clubCourtClosed };
+          if (!cleared) delete nextCourtClosed[clubId];
+          return { ...s, courtSlots: nextCourtSlots, clubCourtClosed: nextCourtClosed };
+        });
         return true;
       },
       // L’opérateur publie/met à jour l’actu d’accueil. On ne régénère l’id (ce qui la

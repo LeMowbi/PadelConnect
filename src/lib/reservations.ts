@@ -21,7 +21,8 @@ const MIRROR_WINDOW_MS = 180 * 86400000;
 export const CANCEL_DEADLINE_MS = 5 * 60 * 60 * 1000;
 
 // Occupation d’un créneau (sans identité) — alimente la disponibilité cross-joueur.
-export type SlotOccupancy = { clubId: string; dateKey: string; time: string; court: string };
+// `durationMin` (défaut 90) → chevauchement d'intervalle côté client (créneaux 1h/1h30).
+export type SlotOccupancy = { clubId: string; dateKey: string; time: string; court: string; durationMin: number };
 
 type Row = {
   id: string;
@@ -33,6 +34,7 @@ type Row = {
   time: string | null;
   starts_at: number | string | null;
   court: string | null;
+  duration_min: number | null; // durée figée du créneau (60|90) — 90 par défaut (rétrocompat)
   price: number | null;
   players: number | null;
   invited: Invited[] | null;
@@ -64,6 +66,7 @@ function rowToReservation(row: Row): Reservation {
     dateKey: row.date_key ?? '',
     time: row.time ?? '',
     startsAt,
+    durationMin: row.duration_min ?? 90, // absent (ancien binaire / migration) ⇒ 1h30
     price: row.price ?? 0,
     players: row.players ?? 1,
     invited: row.invited ?? [],
@@ -92,6 +95,7 @@ function reservationToRow(
     time: r.time,
     starts_at: r.startsAt,
     court: r.court,
+    duration_min: r.durationMin, // durée figée (60|90) — la garde serveur revalide contre la grille
     price: r.price,
     players: r.players,
     invited: r.invited,
@@ -136,7 +140,9 @@ export async function insertReservation(
     // « slot closed » (54) = le club vient de fermer ce créneau (période, terrain, grille) :
     // « choisis un autre terrain » serait faux — l'appelant resynchronise plutôt la grille.
     if (code === 'P0001' && msg.includes('slot closed')) return { ok: false, closed: true };
-    return { ok: false, conflict: code === '23505' || code === '23514' || code === 'P0001' };
+    // 23P01 = exclusion_violation : la contrainte anti-chevauchement d'intervalle (68) a rejeté
+    // un créneau qui déborde sur une résa existante. Comme 23505, c'est « terrain pris ».
+    return { ok: false, conflict: code === '23505' || code === '23P01' || code === '23514' || code === 'P0001' };
   }
   return { ok: true, reservation: rowToReservation(data as Row) };
 }
@@ -148,18 +154,21 @@ export async function insertReservation(
 export async function fetchBlockedSlots(): Promise<BlockedSlot[] | null> {
   const { data, error } = await supabase
     .from('blocked_slots')
-    .select('club_id, date_key, time, court, reason')
+    .select('club_id, date_key, time, court, reason, duration_min')
     .gte('date_key', dayKey(new Date()))
     .order('date_key', { ascending: true })
     .limit(1000);
   if (error) return null;
-  return (data ?? []).map((r: { club_id: string; date_key: string; time: string; court: string; reason: string | null }) => ({
-    clubId: r.club_id,
-    dateKey: r.date_key,
-    time: r.time,
-    court: r.court,
-    reason: r.reason ?? '',
-  }));
+  return (data ?? []).map(
+    (r: { club_id: string; date_key: string; time: string; court: string; reason: string | null; duration_min: number | null }) => ({
+      clubId: r.club_id,
+      dateKey: r.date_key,
+      time: r.time,
+      court: r.court,
+      reason: r.reason ?? '',
+      durationMin: r.duration_min ?? 90, // chevauchement d'intervalle (68) — 1h30 par défaut
+    }),
+  );
 }
 
 // ─── Fermetures sur PÉRIODE (blocked_ranges serveur, 54) ────────────────────────
@@ -392,10 +401,11 @@ export async function fetchOccupancy(): Promise<SlotOccupancy[] | null> {
     .order('date_key', { ascending: true })
     .limit(1000);
   if (error) return null;
-  return (data ?? []).map((o: { club_id: string; date_key: string; time: string; court: string }) => ({
+  return (data ?? []).map((o: { club_id: string; date_key: string; time: string; court: string; duration_min: number | null }) => ({
     clubId: o.club_id,
     dateKey: o.date_key,
     time: o.time,
     court: o.court,
+    durationMin: o.duration_min ?? 90, // durée réelle du créneau pris (chevauchement d'intervalle)
   }));
 }

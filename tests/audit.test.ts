@@ -4,6 +4,7 @@
 //   node --experimental-strip-types tests/audit.test.ts
 
 import { weekKeyOf } from '../src/lib/days.ts';
+import { overlaps } from '../src/lib/courtSchedule.ts';
 
 let failed = 0;
 const check = (cond: boolean, msg: string) => {
@@ -62,26 +63,44 @@ check(canCancel(now0 + FIVE_H + 60000, now0) === true, 'Annulation à 5h01 du d�
 check(canCancel(now0 + FIVE_H - 60000, now0) === false, 'Annulation à 4h59 du début : REFUSÉE');
 check(canCancel(now0 + FIVE_H, now0) === false, 'Annulation à 5h00 pile : REFUSÉE (strictement plus de 5h requis)');
 
-// Garde-fou : anti double-réservation du même terrain (miroir d'addReservation).
-type Slot = { clubId: string; dateKey: string; time: string; court: string };
+// Garde-fou : anti double-réservation du même terrain (miroir d'addReservation, créneaux 1h/1h30).
+// Chevauchement d'INTERVALLE (durée propre) — utilise le VRAI `overlaps` (courtSchedule.ts), la
+// même convention demi-ouverte que la contrainte d'exclusion serveur (23P01).
+type Slot = { clubId: string; dateKey: string; time: string; court: string; durationMin: 60 | 90 };
 const taken = (list: Slot[], r: Slot) =>
-  list.some((x) => x.clubId === r.clubId && x.dateKey === r.dateKey && x.time === r.time && x.court === r.court);
-const existing: Slot[] = [{ clubId: 'padelta', dateKey: '2026-06-13', time: '18:00', court: 'Terrain 1' }];
+  list.some(
+    (x) =>
+      x.clubId === r.clubId &&
+      x.dateKey === r.dateKey &&
+      x.court === r.court &&
+      overlaps({ t: r.time, d: r.durationMin }, { t: x.time, d: x.durationMin }),
+  );
+const existing: Slot[] = [{ clubId: 'padelta', dateKey: '2026-06-13', time: '18:00', court: 'Terrain 1', durationMin: 90 }];
 check(
-  taken(existing, { clubId: 'padelta', dateKey: '2026-06-13', time: '18:00', court: 'Terrain 1' }),
+  taken(existing, { clubId: 'padelta', dateKey: '2026-06-13', time: '18:00', court: 'Terrain 1', durationMin: 90 }),
   'Même terrain, même créneau → refusé',
 );
 check(
-  !taken(existing, { clubId: 'padelta', dateKey: '2026-06-13', time: '18:00', court: 'Terrain 2' }),
+  !taken(existing, { clubId: 'padelta', dateKey: '2026-06-13', time: '18:00', court: 'Terrain 2', durationMin: 90 }),
   'Autre terrain, même créneau → accepté',
 );
 check(
-  !taken(existing, { clubId: 'padelta', dateKey: '2026-06-14', time: '18:00', court: 'Terrain 1' }),
+  !taken(existing, { clubId: 'padelta', dateKey: '2026-06-14', time: '18:00', court: 'Terrain 1', durationMin: 90 }),
   'Même terrain, autre jour → accepté',
 );
+// Chevauchement partiel : un 1h à 19:00 tombe DANS le 18:00·1h30 (finit 19:30) → refusé ;
+// un 1h à 19:30 est ADJACENT (18:00·1h30 finit pile à 19:30) → accepté.
+check(
+  taken(existing, { clubId: 'padelta', dateKey: '2026-06-13', time: '19:00', court: 'Terrain 1', durationMin: 60 }),
+  'Créneau 1h à 19:00 chevauche le 18:00·1h30 → refusé',
+);
+check(
+  !taken(existing, { clubId: 'padelta', dateKey: '2026-06-13', time: '19:30', court: 'Terrain 1', durationMin: 60 }),
+  'Créneau 1h à 19:30 adjacent au 18:00·1h30 → accepté',
+);
 
-// Garde-fou : blocage hors app refusé sur un créneau déjà réservé ou déjà bloqué (même clé).
-check(taken(existing, existing[0]), 'Blocage par-dessus une résa app → refusé (même clé de créneau)');
+// Garde-fou : blocage hors app refusé sur un créneau déjà réservé (chevauchement d'intervalle).
+check(taken(existing, existing[0]), 'Blocage par-dessus une résa app → refusé (chevauchement)');
 
 // Garde-fou : tournoi plein (miroir de teamCount/full).
 const teamCount = (slots: number, registered: number, isReg: boolean) => Math.min(slots, registered + (isReg ? 1 : 0));

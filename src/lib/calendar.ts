@@ -9,7 +9,6 @@ import { Platform } from 'react-native';
 import { SESSION_MIN } from './slots';
 
 const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
-const SESSION_MS = SESSION_MIN * 60000; // 1h30 — durée de session UNIQUE (slots.ts)
 
 export type CalendarResult = 'added' | 'canceled' | 'unavailable';
 
@@ -18,13 +17,16 @@ export async function addReservationToCalendar(input: {
   startsAt: number;
   court: string;
   area?: string;
+  // Durée RÉELLE du créneau réservé (1h ou 1h30, créneaux modulables 68). Défaut 1h30 pour les
+  // appelants historiques — l'événement agenda doit refléter la vraie durée (un 1h ≠ un bloc 1h30).
+  durationMin?: number;
 }): Promise<CalendarResult> {
   if (!isNative) return 'unavailable';
   try {
     const res = await Calendar.createEventInCalendarAsync({
       title: `Padel · ${input.clubName}`,
       startDate: new Date(input.startsAt),
-      endDate: new Date(input.startsAt + SESSION_MS),
+      endDate: new Date(input.startsAt + (input.durationMin ?? SESSION_MIN) * 60000),
       // Les créneaux sont exprimés à l’heure d’Abidjan (Côte d’Ivoire = UTC+0). On ancre
       // l’événement sur ce fuseau pour qu’il s’affiche à la bonne heure même sur un appareil
       // réglé sur un autre fuseau (voyage / testeur hors Abidjan).

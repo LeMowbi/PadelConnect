@@ -182,6 +182,26 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   action `setCourtClosed`). La durée de session reste 1h30 PARTOUT (tarifs, commission,
   anti double-résa) — décision assumée. `upsert_club_config` gagne `p_court_closed` (⚠️ 54 à
   coller AVANT le build #47). La dispo joueur filtre tout ça dans `freeCourts` (availability.ts).
+- **Créneaux à DURÉE VARIABLE 1h/1h30 PAR TERRAIN (68, demande porteur 2026-07-07)** : REMPLACE la
+  durée fixe 1h30 de la 54. Chaque TERRAIN a SA grille (`club_config.court_slots` jsonb :
+  `{ 'Terrain 1': [{ t:'08:00', d:90 }, { t:'09:30', d:60, x?:true }] }`) — durée 60 ou 90 par créneau,
+  mélangeables, modifiables à tout moment, sans chevauchement sur un terrain. Chaque **réservation FIGE
+  sa durée** (`reservations.duration_min`) comme son prix. Le gérant règle **DEUX prix par plage**
+  (`price_tiers[].price` = 1h30, `price60` = 1h ; 1h dérive à 2/3 si vide). Logique PURE
+  `src/lib/courtSchedule.ts` (types + `overlaps` demi-ouvert strict `[t,t+d)`, `canAddCourtSlot`,
+  `resolveCourtSlots` rétrocompatible : `court_slots` null ⇒ dérive de l'ancienne grille `slots`@90, les
+  fermetures héritées `'!'`/`court_closed` RESTENT fermées). Anti double-vente = **contrainte d'exclusion
+  GiST** `reservations_no_overlap` (`int8range(starts_at, starts_at+duration_min*60000)`, SQLSTATE **23P01**,
+  `btree_gist`) + gardes serveur réécrites en CHEVAUCHEMENT D'INTERVALLE (miroir EXACT côté client :
+  `availability.ts` `freeCourtSlotsAt`/`freeCourts(club,dateKey,time,durationMin,ctx)`, `AvailCtx.courtSlots`,
+  `ranges.rangeBlocks(...,durationMin)`, `slot_occupancy`+`duration_min`). Tournois AUSSI modulables
+  (`competitions.slot_durations int[]`, aligné sur `slots` ; `create_competition`/`fetch_competitions`+durées).
+  `resolve_court_slots(club_id,court)` = grille effective serveur. `upsert_club_config` gagne `p_court_slots`
+  (null=préserve, `'{}'`=efface→dérivation, objet=grille validée + dérive le miroir `slots` + vide `court_closed`).
+  Store : tranche `state.courtSlots`, action `setCourtSlots`. `isPlayed(r)` = `startsAt + durationMin*60000`.
+  ⚠️ **SQL 68 remplace le #57 en revue** (base résa VIDE) : à coller quand le nouveau build est la version
+  LIVE minimale (sinon un #57 encore actif verrait un 23P01 non mappé). Tests : `courtSchedule`/`availability`/
+  `ranges`/`audit`/`pricing` (overlap prouvé, adjacence OK, asymétrie 1h↔1h30, rétrocompat null≡@90).
 - **Multi-clubs (55, demande porteur)** : un compte gère PLUSIEURS clubs. `manager_clubs` liste
   les clubs autorisés ; `profiles.managed_club_id` reste le club ACTIF (un seul à la fois) →
   aucun contrôle serveur existant ne change. `grant_club_access_by_phone` AJOUTE (plus de

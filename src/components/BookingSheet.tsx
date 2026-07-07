@@ -12,6 +12,7 @@ import { hapticWarning } from '@/lib/haptics';
 import { activeClubs, type Club } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { freeCourts, type AvailCtx } from '@/lib/availability';
+import { durationLabel } from '@/lib/courtSchedule';
 import { dateKeyLabel, slotTimestamp, type DayOption } from '@/lib/days';
 import { fcfa, perPlayerOf } from '@/lib/format';
 import { priceForSlot } from '@/lib/pricing';
@@ -20,7 +21,21 @@ import { colors, radius, shadows, spacing } from '@/theme';
 
 // Réservation rapide « en place » : une fiche qui monte du bas, sans changer de page.
 // 2 gestes suffisent : ouvrir → Réserver (le 1ᵉʳ terrain libre est présélectionné).
-export function BookingSheet({ club, day, time, onClose }: { club: Club; day: DayOption; time: string; onClose: () => void }) {
+// `durationMin` (60|90) est CHOISI EN AMONT par l'appelant (créneaux à durée variable, 68) :
+// cette feuille ne propose que les terrains offrant CE (heure, durée) précis.
+export function BookingSheet({
+  club,
+  day,
+  time,
+  durationMin,
+  onClose,
+}: {
+  club: Club;
+  day: DayOption;
+  time: string;
+  durationMin: 60 | 90;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const { state, addReservation } = useApp();
   const toast = useToast();
@@ -30,6 +45,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
     clubs: activeClubs(state.customClubs, state.clubInfo),
     clubSlots: state.clubSlots,
     clubCourts: state.clubCourts,
+    courtSlots: state.courtSlots,
     reservations: state.reservations,
     occupancy: state.occupancy,
     comps: [...seedCompetitions, ...state.myCompetitions],
@@ -38,16 +54,18 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
     courtClosed: state.clubCourtClosed,
   };
   const free = useMemo(
-    () => freeCourts(club, day.key, time, ctx),
+    () => freeCourts(club, day.key, time, durationMin, ctx),
     // deps volontairement listées à la main : ctx est reconstruit à chaque rendu.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       club.id,
       day.key,
       time,
+      durationMin,
       state.reservations,
       state.occupancy,
       state.clubCourts,
+      state.courtSlots,
       state.blockedSlots,
       state.blockedRanges,
       state.clubCourtClosed,
@@ -55,7 +73,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
     ],
   );
 
-  const price = priceForSlot(club, time);
+  const price = priceForSlot(club, time, durationMin);
   const [court, setCourt] = useState<string | null>(free[0] ?? null);
   // Participants : toi + jusqu’à 3 invités (amis ou nom libre).
   const [friendIds, setFriendIds] = useState<string[]>([]);
@@ -122,6 +140,7 @@ export function BookingSheet({ club, day, time, onClose }: { club: Club; day: Da
       time,
       startsAt: slotTimestamp(day.key, time),
       price,
+      durationMin,
       players: 1 + invited.length,
       invited,
       // Capacité = format choisi (2 = 1v1, 4 = 2v2). Match ouvert seulement s'il reste au

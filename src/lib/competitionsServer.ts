@@ -37,6 +37,7 @@ type CompetitionRow = {
   reject_reason: string | null;
   payment_status: string | null; // 'unpaid' | 'paid' (Wave, v2)
   wave_link: string | null; // lien de paiement Wave de l'opérateur (identique sur chaque ligne)
+  slot_durations: number[] | null; // durée (min) de chaque créneau tournoi, alignée sur slots (68)
 };
 
 // Résultat de clôture figé côté serveur (rejoué dans le store sous compResults).
@@ -70,6 +71,7 @@ function rowToCompetition(r: CompetitionRow, myUserId: string): Competition {
     server: true,
     courtNames: r.courts ?? undefined,
     timeSlots: r.slots ?? undefined,
+    slotDurations: r.slot_durations && r.slot_durations.length ? r.slot_durations : undefined,
     teamNames: r.teams ?? undefined,
     commission: r.commission,
     status,
