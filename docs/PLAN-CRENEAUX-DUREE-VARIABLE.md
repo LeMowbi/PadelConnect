@@ -624,3 +624,27 @@ porte désormais **DEUX prix** (1h et 1h30). Modèle 2D :
 - `validateTiers` (sensible à la durée, §7.1) : n'exige un prix que pour les durées **réellement
   présentes** dans la grille ; couverture des heures d'ouverture par plage inchangée.
 - `minPrice` = min sur (plages × durées **offertes**). `price60` défaut `max(PRICE_MIN, round(price90*2/3))`.
+
+---
+
+# 12. Simplification rollout (2026-07-07) — ce build REMPLACE le #57
+
+Décision porteur : le build « créneaux » est **mis en soumission À LA PLACE du #57** (le #57 ne sort
+pas). Conséquence : **plus d'ancien binaire à ménager** → on RETIRE tout l'échafaudage de compat #57.
+
+- **UNE seule migration SQL complète** (plus de découpage 68/69) : colonnes + CHECK `d∈{60,90}` +
+  `btree_gist` + `starts_at not null` + **contrainte d'exclusion GiST** + réécriture des guards +
+  nouvelles signatures RPC, tout d'un coup. **Appliquée au moment de couper le build** (coordonnée
+  avec la soumission — pas « maintenant pendant que le #57 est en revue »), pour qu'aucun testeur
+  TestFlight sur un vieux build ne frappe le nouveau SQL avant de mettre à jour.
+- **SUPPRIMÉ** (échafaudage #57 devenu inutile) : le miroir `slots` dérivé pour ancien client
+  (§7.1/§8.1), le maintien des anciennes signatures RPC en arité réduite, la fenêtre double code
+  d'erreur 23505/23P01. Le nouveau client mappe directement `23P01`. Plus propre.
+- **CONSERVÉ** (correction de données, PAS de la compat de confort) : `duration_min default 90` pour
+  les réservations existantes ; `court_slots null ⇒ grille par défaut @90` pour les clubs pas encore
+  réglés ; `price60` dérivé quand absent. On ne casse **jamais** une donnée existante.
+- Go-live : **swap #57 → nouveau build** via l'API App Store (même procédé que #56→#57).
+
+⚠️ Les sections §6.0 / §7.2 / §8.1 (découpage 68/69, miroir slots, appliquer-69-quand-live) sont
+**caduques** sur ce point — remplacées par « une migration, au moment du build ». Le reste (modèle,
+anti-chevauchement, specs UI, tests, verrou multi-jours) est inchangé.
