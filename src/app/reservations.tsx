@@ -438,6 +438,9 @@ export default function ReservationsScreen() {
           upcoming.map((r, idx) => {
             const owner = isOwner(r);
             const canCancel = owner && r.startsAt - now > CANCEL_DEADLINE_MS;
+            // Part par joueur sur l'effectif RÉEL (moi + invités) — cohérent avec le récap WhatsApp
+            // du même écran. Un match OUVERT encore en attente affiche sa capacité (estimation).
+            const players = r.openMatch ? (r.openCapacity ?? 4) : Math.max(1, 1 + r.invited.length);
             const [, mm, dd] = r.dateKey.split('-');
             // Sans zéro initial pour rester cohérent avec dateKeyLabel (« 1 juil. », pas « 01 »).
             const day = dd ? String(Number(dd)) : '';
@@ -463,7 +466,7 @@ export default function ReservationsScreen() {
                       </Txt>
                       {r.price ? (
                         <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
-                          {fcfa(r.price)} · ~{perPlayerOf(r.price, r.openCapacity ?? 4)}/joueur à {r.openCapacity ?? 4}
+                          {fcfa(r.price)} · ~{perPlayerOf(r.price, players)}/joueur à {players}
                         </Txt>
                       ) : null}
                     </View>
