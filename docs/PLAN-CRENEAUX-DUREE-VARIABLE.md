@@ -558,3 +558,31 @@ Tous CADUCS → à retirer/annoter à l'écriture du code pour ne pas induire en
 ## 9.5 État
 Gate a trouvé 1 défaut réel (9.1) → **corrigé dans le plan**. Une ronde de confirmation est relancée
 (discipline : ne pas s'arrêter tant qu'une passe ne revient pas vide). Le reste = propreté + 3 sous-specs.
+
+---
+
+# 10. Ronde de confirmation — CONVERGÉ ✅ (2026-07-07)
+
+2 relectures finales après le fix §9 :
+- **Complétude concurrence** = « CONCURRENCY COMPLETE » : après §9.1/§9.2, TOUS les couples pouvant
+  double-occuper un terrain (résa↔tournoi, résa↔blocked_slots, résa↔blocked_ranges, cours↔résa,
+  cours↔cours, tournoi↔tournoi, block_range↔tournoi) partagent une clé de verrou sur le jour contesté,
+  en plus de la contrainte GiST pour résa↔résa. Aucun couple racy restant.
+- **Attaque fraîche finale** = « NO NEW DEFECT — plan is implementation-ready » (vérifié contre code +
+  base live : `int8range [)` = `overlaps` strict client ✓ ; durée figée au no-show→booked ✓ ; plancher
+  price60 sans couplage commission ✓ ; tous les sites `SESSION_MS`/`90*60000` couverts ✓ ; base vide ✓).
+
+## 10.1 Notes d'implémentation finales (pas des défauts)
+- **Clé de verrou par jour** : écrire la boucle avec `to_char(date_key::date + d, 'YYYY-MM-DD')`
+  (comme `block_range`) pour être **byte-identique** à la clé du guard résa (insensible au DateStyle).
+- **Durcissement OPTIONNEL pré-existant** : la branche `mark_no_show` (UPDATE→booked) re-vérifie les
+  tournois sous READ COMMITTED sans verrou (le verrou est dans le guard INSERT). Pré-existant, **non
+  aggravé** par la feature. Belt-and-suspenders si un jour souhaité : préfixer
+  `pg_advisory_xact_lock(hashtext(club||':'||date_key))` sur la branche UPDATE→booked du guard
+  d'availability. **Pas un prérequis.**
+
+## 10.2 VERDICT
+**PLAN CONVERGÉ ET PRÊT À CODER.** 5 rondes de vérification (~20 agents), ~50 manques trouvés et
+intégrés, 0 défaut résiduel. Rollout sûr pour le #57. SQL 68/69 inventoriés. API pure figée. Specs UI
+concrètes. Plan de tests défini (dont `availability.test.ts` neuf + suite serveur scriptée). Démarrage
+possible au **Lot 1** (logique pure + tests — zéro risque, rien de visible).
