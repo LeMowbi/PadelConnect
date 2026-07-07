@@ -586,3 +586,41 @@ Gate a trouvé 1 défaut réel (9.1) → **corrigé dans le plan**. Une ronde de
 intégrés, 0 défaut résiduel. Rollout sûr pour le #57. SQL 68/69 inventoriés. API pure figée. Specs UI
 concrètes. Plan de tests défini (dont `availability.test.ts` neuf + suite serveur scriptée). Démarrage
 possible au **Lot 1** (logique pure + tests — zéro risque, rien de visible).
+
+---
+
+# 11. Revirement porteur (2026-07-07) — tournois FINALEMENT modulables + précision tarifs
+
+## 11.1 Tournois → modulables 1h/1h30 (REVIENT dans le scope)
+Le porteur revient sur §6.7 : **les tournois sont finalement modulables 1h/1h30.**
+→ **§6.7 et §8.2 (« pas de slot_durations ») sont CADUCS** ; **§6.5 est RÉACTIVÉ** avec les
+résolutions déjà produites par la vérification (chantiers G1-G8) :
+- `competitions.slot_durations int[]` **parallèle à `slots`** + **CHECK `cardinality(slot_durations)
+  in (0, cardinality(slots))`** + `d∈{60,90}` par élément (sinon durée NULL → range non borné →
+  double-vente). (Vide ⇒ 90 par créneau, rétro-compat.)
+- `competition_slot_conflict` / `competition_overlaps_reservations` : conflit tournoi↔tournoi ET
+  tournoi↔réservation en **vrai intervalle**, comparés en **minutes-de-journée** (double
+  `unnest WITH ORDINALITY` — un tournoi n'a pas de `starts_at`, donc PAS `int8range`).
+- `create_competition`/`approve_competition`/`block_range` : enfiler `slot_durations`.
+- `competitionBlockedCourts` (client) : reçoit les durées des créneaux tournoi + la grille du terrain
+  candidat → overlap par terrain (un tournoi 08:00·1h30 masque le créneau joueur 09:00 qui déborde).
+- Modèle client `Competition` (`timeSlots`, `CompetitionRow.slots`, `rowToCompetition`,
+  `CreateCompetitionInput`, `createCompetition`, `fetch_competitions`) : câbler `slotDurations`.
+- **Divergence par terrain** : l'organisateur choisit une durée de créneau tournoi validée contre
+  chaque terrain sélectionné (sinon deux terrains divergents à la même heure ne se représentent pas).
+- `nouvelle.tsx` : sélecteur de durée par créneau + garde anti-chevauchement des créneaux tournoi ;
+  lit `court_slots` (pas l'ancienne grille club).
+- Le verrou multi-jours §9.1 reste requis (inchangé).
+⚠️ Cette réactivation ROUVRE la surface tournoi → **re-vérification ciblée du volet tournoi** avant
+de le coder (les 4 autres lots — pure/serveur-résa/store/UI-joueur/cours — restent convergés).
+
+## 11.2 Tarifs — plages horaires × durée (précision porteur)
+Les **plages horaires** du club (ex. `08:00–16:00`, `16:00–22:00`) sont **conservées** ; chaque plage
+porte désormais **DEUX prix** (1h et 1h30). Modèle 2D :
+- `PriceTier = { start, end, price90, price60, label? }` (l'ancien `price` devient `price90`).
+- `priceForSlot(club, time, durationMin)` : l'**heure** choisit la plage (ligne), la **durée** choisit
+  le prix (colonne). Ex. `17:00·1h` → plage soirée · price60 ; `09:00·1h30` → plage journée · price90.
+- Éditeur (`ClubInfoCard`) : chaque ligne de plage = `[Début][Fin][Prix 1h][Prix 1h30][Nom?]`.
+- `validateTiers` (sensible à la durée, §7.1) : n'exige un prix que pour les durées **réellement
+  présentes** dans la grille ; couverture des heures d'ouverture par plage inchangée.
+- `minPrice` = min sur (plages × durées **offertes**). `price60` défaut `max(PRICE_MIN, round(price90*2/3))`.
