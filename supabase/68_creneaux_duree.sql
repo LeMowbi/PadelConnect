@@ -360,6 +360,7 @@ as $$
 declare
   v_mode text := 'preserve';      -- preserve | clear | set
   v_eff_slots text[] := '{}';     -- miroir slots dérivé (mode 'set')
+  v_eff_closed jsonb := '{}'::jsonb; -- fermetures PAR TERRAIN projetées (mode 'set') → survivent au 'clear'
   k text;
   kk text;
   arr jsonb;
@@ -436,6 +437,21 @@ begin
                               order by public.hhmm_to_min(t)), '{}')
       into v_eff_slots
       from n90;
+
+    -- Fermetures PAR TERRAIN projetées depuis la grille (créneaux `x:true`) → { 'Terrain 1': ['18:00'] }.
+    -- Elles restent DORMANTES tant que `court_slots` existe (resolve_court_slots lit alors la grille),
+    -- mais un 'clear' ultérieur (retour aux horaires simples) les PRÉSERVE via coalesce(cc.court_closed)
+    -- au lieu de rouvrir silencieusement un créneau-terrain volontairement fermé.
+    select coalesce(jsonb_object_agg(court, times), '{}'::jsonb)
+      into v_eff_closed
+      from (
+        select ce.key as court,
+               jsonb_agg((e ->> 't') order by public.hhmm_to_min(e ->> 't')) as times
+          from jsonb_each(p_court_slots) as ce(key, val),
+               lateral jsonb_array_elements(ce.val) as e
+         where jsonb_typeof(ce.val) = 'array' and coalesce((e ->> 'x')::boolean, false)
+         group by ce.key
+      ) s;
   elsif p_court_slots = '{}'::jsonb then
     v_mode := 'clear';
   end if;
@@ -446,7 +462,7 @@ begin
     p_club_id,
     case when v_mode = 'set' then v_eff_slots else p_slots end,
     p_courts, p_offers, p_coaches, p_photos, nullif(p_cover_url, ''), p_court_photos,
-    case when v_mode = 'set' then '{}'::jsonb else p_court_closed end,
+    case when v_mode = 'set' then v_eff_closed else p_court_closed end,
     case when v_mode = 'set' then p_court_slots else null end
   )
   on conflict (club_id) do update set
@@ -459,7 +475,7 @@ begin
     -- '' = « retirer la cover » (null = champ non fourni → on garde l'existante).
     cover_url = case when p_cover_url = '' then null else coalesce(p_cover_url, cc.cover_url) end,
     court_photos = coalesce(excluded.court_photos, cc.court_photos),
-    court_closed = case when v_mode = 'set' then '{}'::jsonb
+    court_closed = case when v_mode = 'set' then v_eff_closed
                         else coalesce(excluded.court_closed, cc.court_closed) end,
     court_slots = case v_mode when 'set' then p_court_slots
                               when 'clear' then null
@@ -1213,8 +1229,10 @@ begin
     update public.reservations set status = 'booked' where id = p_id and status = 'no_show';
   end if;
   return found;
-exception when unique_violation or exclusion_violation then
-  return false; -- le créneau a été repris entre-temps : retour à 'booked' impossible
+exception when unique_violation or exclusion_violation or check_violation then
+  -- créneau repris (23505/23P01) OU désormais fermé/réservé à un tournoi (23514, levé par la garde
+  -- de disponibilité sur l'UPDATE → 'booked') : retour propre `false` plutôt qu'une erreur brute.
+  return false;
 end;
 $$;
 

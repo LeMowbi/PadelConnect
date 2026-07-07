@@ -2283,10 +2283,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const nextCourtSlots = { ...s.courtSlots };
           if (cleared) delete nextCourtSlots[clubId];
           else nextCourtSlots[clubId] = grid;
-          // Le serveur remet court_closed à vide quand une grille par terrain est posée (les
-          // fermetures vivent désormais dans la grille via `x:true`) → on aligne le miroir local.
+          // Aligne `clubCourtClosed` sur ce que le serveur écrit : à la POSE d'une grille, il PROJETTE
+          // les créneaux fermés (`x:true`) dans court_closed (dormant tant que la grille existe, mais
+          // préservé si le gérant repasse aux « horaires simples » → plus de réouverture silencieuse
+          // d'un créneau-terrain volontairement fermé). Au 'clear', on PRÉSERVE (le serveur coalesce).
           const nextCourtClosed = { ...s.clubCourtClosed };
-          if (!cleared) delete nextCourtClosed[clubId];
+          if (!cleared) {
+            const projected: Record<string, string[]> = {};
+            for (const [court, slots] of Object.entries(grid)) {
+              const closed = slots
+                .filter((sl) => sl.x)
+                .map((sl) => sl.t)
+                .sort();
+              if (closed.length) projected[court] = closed;
+            }
+            nextCourtClosed[clubId] = projected;
+          }
           return { ...s, courtSlots: nextCourtSlots, clubCourtClosed: nextCourtClosed };
         });
         return true;

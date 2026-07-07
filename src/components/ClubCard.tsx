@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { ClubPhoto } from './ClubPhoto';
 import { PopIn } from './PopIn';
@@ -29,16 +29,20 @@ export function ClubCard({ club, compact }: { club: Club; compact?: boolean }) {
   // n'annonce pas le prix 1h30 (durée qu'il ne vend pas, et plus cher). On dérive les durées
   // proposées depuis la grille par terrain (défaut {90} pour un club sans grille = comportement
   // d'avant). Vide (tous créneaux fermés) → repli {90} pour ne pas afficher un prix nul.
-  const offered = offeredDurations(
-    resolvedGridFor(club, {
-      clubSlots: state.clubSlots,
-      clubCourts: state.clubCourts,
-      courtSlots: state.courtSlots,
-      courtClosed: state.clubCourtClosed,
-    }),
-    courtsFor(club, state.clubCourts),
-  );
-  const priceFrom = minPrice(club, offered.size ? offered : undefined);
+  // Mémoïsé : ClubCard est un item de liste (re-rendu au scroll) et la dérivation de grille est
+  // O(terrains × créneaux) — on ne la recalcule que si le club ou ses tranches d'horaires changent.
+  const priceFrom = useMemo(() => {
+    const offered = offeredDurations(
+      resolvedGridFor(club, {
+        clubSlots: state.clubSlots,
+        clubCourts: state.clubCourts,
+        courtSlots: state.courtSlots,
+        courtClosed: state.clubCourtClosed,
+      }),
+      courtsFor(club, state.clubCourts),
+    );
+    return minPrice(club, offered.size ? offered : undefined);
+  }, [club, state.clubSlots, state.clubCourts, state.courtSlots, state.clubCourtClosed]);
   // Note RÉELLE (avis vérifiés, agrégat serveur state.clubRatings — un seul appel pour tous
   // les clubs). Absente tant qu’un club n’a aucun avis : on n’affiche alors rien (jamais de
   // note inventée). Même donnée que la fiche club → liste et détail restent cohérents.

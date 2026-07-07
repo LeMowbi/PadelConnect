@@ -5,6 +5,7 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { SkeletonLines } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, SectionHeader, Tag, Txt } from '@/components/ui';
+import { durationLabel } from '@/lib/courtSchedule';
 import { dateKeyLabel } from '@/lib/days';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { fetchOpenMatches, joinOpenMatch, type OpenMatch } from '@/lib/openMatches';
@@ -201,6 +202,7 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
                       les tournois, CompetitionCard) — plus lisible qu'une phrase grise noyée. */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.xs, marginTop: 2 }}>
                     <Tag label={m.capacity === 2 ? '1v1' : '2v2'} tone={m.capacity === 2 ? 'signature' : 'purple'} />
+                    <Tag label={durationLabel(m.durationMin)} tone="neutral" />
                     {m.placesLeft === 1 ? <Tag label="Dernière place !" tone="coral" icon="flame" /> : null}
                   </View>
                   <Txt variant="small" color={colors.textMuted} numberOfLines={1} style={{ marginTop: 2 }}>
