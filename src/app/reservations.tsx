@@ -749,7 +749,7 @@ export default function ReservationsScreen() {
                       le jour et le terrain à choisir). */}
                   <View style={{ flexDirection: 'row', gap: spacing.lg }}>
                     <Pressable
-                      onPress={() => router.push(`/reserver/${r.clubId}?time=${encodeURIComponent(r.time)}`)}
+                      onPress={() => router.push(`/reserver/${r.clubId}?time=${encodeURIComponent(r.time)}&durationMin=${r.durationMin}`)}
                       style={styles.replayBtn}
                       hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
                       accessibilityRole="button"

@@ -755,7 +755,13 @@ export default function HomeScreen() {
           /* A-L1 : Rejouer au dernier club (seulement si 0 réservation à venir) — l’heure de la
              dernière partie est pré-remplie (l’habitué rejoue souvent au même créneau). */
           <View style={styles.section}>
-            <Card onPress={() => go(`/reserver/${lastPlayedClub.id}?time=${encodeURIComponent(lastPlayed?.time ?? '')}`)}>
+            <Card
+              onPress={() =>
+                go(
+                  `/reserver/${lastPlayedClub.id}?time=${encodeURIComponent(lastPlayed?.time ?? '')}&durationMin=${lastPlayed?.durationMin ?? 90}`,
+                )
+              }
+            >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
                 <View style={[styles.replayIcon, { backgroundColor: colors.signatureSoft }]}>
                   <Ionicons name="refresh" size={22} color={colors.signature} />

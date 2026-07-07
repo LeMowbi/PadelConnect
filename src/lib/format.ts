@@ -4,7 +4,8 @@ export function fcfa(n: number): string {
   return `${n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')} FCFA`;
 }
 
-// Prix par joueur (terrain à 4), arrondi à la centaine — sessions de 1h30.
+// Prix par joueur estimé « à 4 », arrondi à la centaine (le prix de session est déjà figé pour
+// la durée réelle du créneau, 1h ou 1h30 — cette estimation divise simplement par 4).
 export function perPlayer(sessionPrice: number): string {
   return fcfa(Math.round(sessionPrice / 4 / 100) * 100);
 }

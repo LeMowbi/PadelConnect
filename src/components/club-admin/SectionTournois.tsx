@@ -7,6 +7,7 @@ import { Button, Card, EmptyState, IconCircle, SectionHeader, Tag, Txt } from '@
 import { type Club } from '@/data/clubs';
 import { compDateLabel, formatFee, isCompFinished, isTournamentPublic, teamCount, type Competition } from '@/data/competitions';
 import { openWhatsApp } from '@/lib/contact';
+import { durationLabel } from '@/lib/courtSchedule';
 import { dayKey } from '@/lib/days';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
@@ -103,7 +104,13 @@ export function SectionTournois({ club, comps, onCloseComp }: { club: Club; comp
                 <ReqInfo
                   icon="time-outline"
                   label="Créneaux bloqués"
-                  value={c.timeSlots?.length ? c.timeSlots.join(' · ') : 'Toute la journée'}
+                  value={
+                    c.timeSlots?.length
+                      ? // Créneaux MODULABLES (68) : on montre la durée de chaque créneau (1h/1h30)
+                        // → le gérant sait EXACTEMENT ce qu'il bloque avant de valider (ex. « 08:00 (1h) »).
+                        c.timeSlots.map((t, i) => (c.slotDurations?.[i] ? `${t} (${durationLabel(c.slotDurations[i])})` : t)).join(' · ')
+                      : 'Toute la journée'
+                  }
                 />
                 <ReqInfo icon="people-outline" label="Capacité" value={`${c.slots} équipes`} />
                 <ReqInfo icon="git-network-outline" label="Format" value={c.format} />
