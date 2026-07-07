@@ -14,8 +14,9 @@ import { useToast } from '@/components/Toast';
 import { Button, Card, EmptyState, IconCircle, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
-import { freeCourts, hasFullDayCompetition, openSlotsFor, type AvailCtx } from '@/lib/availability';
+import { freeCourtSlotsAt, hasFullDayCompetition, openSlotsFor, type AvailCtx } from '@/lib/availability';
 import { fetchClubCoaches, type ServerCoach } from '@/lib/coachesServer';
+import { durationLabel } from '@/lib/courtSchedule';
 import { dateKeyLabel, nextDays, slotTimestamp } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
@@ -135,6 +136,7 @@ export default function CoursScreen() {
     clubs: activeClubs(state.customClubs, state.clubInfo),
     clubSlots: state.clubSlots,
     clubCourts: state.clubCourts,
+    courtSlots: state.courtSlots,
     reservations: state.reservations,
     occupancy: state.occupancy,
     comps: [...seedCompetitions, ...state.myCompetitions],
@@ -143,19 +145,22 @@ export default function CoursScreen() {
     courtClosed: state.clubCourtClosed,
   };
   // Créneaux proposables = dispos du COACH ∩ horaires encore ouverts par le CLUB (triés).
-  const openSlots = openSlotsFor(club, state.clubSlots);
+  const openSlots = openSlotsFor(club, ctx);
   const coachSlots = coach.slots.filter((s) => openSlots.includes(s)).sort();
   const compToday = !!day && hasFullDayCompetition(club.id, day.key, ctx.comps);
-  const free = day && slot ? freeCourts(club, day.key, slot, ctx) : [];
+  // Terrains libres à CE créneau, chacun avec SA durée (un même horaire peut offrir 1h sur un
+  // terrain et 1h30 sur un autre) — le prix ne se connaît qu’une fois le terrain choisi.
+  const freeSlots = day && slot ? freeCourtSlotsAt(club, day.key, slot, ctx) : [];
   // Pré-sélection du 1er terrain libre (même confort que l’écran Réserver, A-L2).
-  const effectiveCourt = court ?? (day && slot && free.length > 0 ? free[0] : null);
+  const effectiveCourt = court ?? (day && slot && freeSlots.length > 0 ? freeSlots[0].court : null);
+  const durationMin = effectiveCourt ? (freeSlots.find((x) => x.court === effectiveCourt)?.durationMin ?? null) : null;
 
-  const slotPrice = slot ? priceForSlot(club, slot) : null;
-  const ready = !!day && !!slot && !!effectiveCourt && !compToday;
+  const slotPrice = slot && durationMin ? priceForSlot(club, slot, durationMin) : null;
+  const ready = !!day && !!slot && !!effectiveCourt && !!durationMin && !compToday;
   const step = !day ? 0 : !slot ? 1 : !effectiveCourt ? 2 : 3;
 
   const confirm = async () => {
-    if (!day || !slot || !effectiveCourt || submitting) return;
+    if (!day || !slot || !effectiveCourt || !durationMin || submitting) return;
     if (!state.serverUserId) {
       toast.show('Connecte-toi pour demander un cours', { icon: 'person-circle-outline' });
       return;
@@ -176,7 +181,8 @@ export default function CoursScreen() {
       time: slot,
       court: effectiveCourt,
       startsAt,
-      price: priceForSlot(club, slot),
+      price: priceForSlot(club, slot, durationMin),
+      durationMin,
     });
     setSubmitting(false);
     if (ok) {
@@ -213,6 +219,7 @@ export default function CoursScreen() {
             <Row label="Jour" value={day!.label} />
             <Row label="Heure" value={slot!} />
             <Row label="Terrain (si accepté)" value={effectiveCourt!} />
+            {durationMin ? <Row label="Durée" value={durationLabel(durationMin)} /> : null}
             {slotPrice ? <Row label="Terrain (réglé au club)" value={fcfa(slotPrice)} /> : null}
             {coach.price ? <Row label="Cours (réglé au coach)" value={fcfa(coach.price)} /> : null}
           </View>
@@ -234,7 +241,7 @@ export default function CoursScreen() {
       overlay={
         <StickyBar
           label={slotPrice ? fcfa(slotPrice) : 'Terrain'}
-          hint="terrain · session 1h30"
+          hint={durationMin ? `terrain · session ${durationLabel(durationMin)}` : 'Choisis un terrain'}
           cta={submitting ? 'Envoi…' : 'Demander le cours'}
           onPress={confirm}
           disabled={!ready || submitting}
@@ -291,7 +298,7 @@ export default function CoursScreen() {
         <View style={styles.wrap}>
           {coachSlots.map((s) => {
             const isPast = !!day && slotTimestamp(day.key, s) <= Date.now();
-            const noCourt = !!day && freeCourts(club, day.key, s, ctx).length === 0;
+            const noCourt = !!day && freeCourtSlotsAt(club, day.key, s, ctx).length === 0;
             const blocked = !day || compToday || isPast || noCourt;
             const label = isPast ? `${s} · passé` : noCourt ? `${s} · complet` : s;
             return (
@@ -319,8 +326,8 @@ export default function CoursScreen() {
           <>
             <Label text="Terrain (réservé à l’acceptation)" />
             <View style={styles.wrap}>
-              {free.map((c) => (
-                <Chip key={c} label={c} active={c === effectiveCourt} onPress={() => setCourt(c)} size="lg" />
+              {freeSlots.map(({ court: c, durationMin: d }) => (
+                <Chip key={c} label={`${c} · ${durationLabel(d)}`} active={c === effectiveCourt} onPress={() => setCourt(c)} size="lg" />
               ))}
             </View>
           </>
@@ -328,7 +335,9 @@ export default function CoursScreen() {
 
         <Card style={styles.priceRow}>
           <View style={{ flex: 1 }}>
-            <Txt variant="muted">Terrain (session 1h30, réglé au club)</Txt>
+            <Txt variant="muted">
+              {durationMin ? `Terrain (session ${durationLabel(durationMin)}, réglé au club)` : 'Terrain (réglé au club)'}
+            </Txt>
             {coach.price ? (
               <Txt variant="small" color={colors.textFaint}>
                 + cours {fcfa(coach.price)} réglé directement au coach

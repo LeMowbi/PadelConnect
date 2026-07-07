@@ -12,6 +12,7 @@ import { matchTemplates } from '@/lib/matchMessages';
 import { shareViewAsImage } from '@/lib/shareImage';
 import { findClub } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
+import { durationLabel } from '@/lib/courtSchedule';
 import { useToast } from '@/components/Toast';
 import { isPlayed, useApp, type Reservation } from '@/store/AppContext';
 import { addReservationToCalendar } from '@/lib/calendar';
@@ -186,7 +187,13 @@ export default function ReservationsScreen() {
   // succès — l’habitué réserve plusieurs jours à l’avance et veut la retrouver dans son agenda).
   const addToCalendar = async (r: Reservation) => {
     const club = findClub(r.clubId, state.customClubs, state.clubInfo);
-    const res = await addReservationToCalendar({ clubName: r.clubName, startsAt: r.startsAt, court: r.court, area: club?.area ?? '' });
+    const res = await addReservationToCalendar({
+      clubName: r.clubName,
+      startsAt: r.startsAt,
+      court: r.court,
+      area: club?.area ?? '',
+      durationMin: r.durationMin,
+    });
     // « canceled » = l'utilisateur a refermé la fiche système lui-même : pas de toast d'erreur.
     if (res === 'canceled') return;
     toast.show(
@@ -462,7 +469,7 @@ export default function ReservationsScreen() {
                         {r.clubName}
                       </Txt>
                       <Txt variant="muted">
-                        {r.time} · {r.court} · 1h30
+                        {r.time} · {r.court} · {durationLabel(r.durationMin)}
                       </Txt>
                       {r.price ? (
                         <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>

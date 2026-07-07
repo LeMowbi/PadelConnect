@@ -138,6 +138,7 @@ export type CreateCompetitionInput = {
   endDateKey?: string;
   courts: string[];
   slots: string[];
+  slotDurations?: number[]; // durée (60|90) de chaque créneau, alignée sur `slots` (68) — défaut 90 côté serveur
   capacity: number;
   fee: string;
   reward: string;
@@ -158,6 +159,7 @@ export async function createCompetition(input: CreateCompetitionInput): Promise<
     p_end_date_key: input.endDateKey ?? null,
     p_courts: input.courts,
     p_slots: input.slots,
+    p_slot_durations: input.slotDurations ?? [],
     p_capacity: input.capacity,
     p_fee: input.fee,
     p_reward: input.reward,

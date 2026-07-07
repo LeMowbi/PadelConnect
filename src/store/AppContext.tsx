@@ -400,6 +400,7 @@ type AppContextType = {
     court: string;
     startsAt: number;
     price: number;
+    durationMin: 60 | 90; // durée du créneau du terrain choisi (68) — figée sur le cours puis la résa
   }) => Promise<boolean>;
   // L’élève annule sa demande de cours EN ATTENTE (un cours accepté = une réservation normale).
   cancelMyLesson: (id: string) => Promise<boolean>;
@@ -1371,6 +1372,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             endDateKey: c.endDateKey,
             courts: c.courtNames ?? [],
             slots: c.timeSlots ?? [],
+            slotDurations: c.slotDurations ?? [],
             capacity: c.slots,
             fee: c.fee,
             reward: c.reward,
@@ -1548,7 +1550,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             reservations: [created, ...s.reservations.filter((x) => x.id !== created.id)],
             occupancy: [
               ...s.occupancy,
-              { clubId: created.clubId, dateKey: created.dateKey, time: created.time, court: created.court, durationMin: created.durationMin },
+              {
+                clubId: created.clubId,
+                dateKey: created.dateKey,
+                time: created.time,
+                court: created.court,
+                durationMin: created.durationMin,
+              },
             ],
           }));
           // Réservation PARTAGÉE : les amis invités qui ont un compte la voient aussi chez eux.

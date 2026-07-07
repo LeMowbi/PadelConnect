@@ -83,7 +83,7 @@ export default function ClubAdmin() {
   }, [connectedManager]);
 
   const [closingId, setClosingId] = useState<string | null>(null);
-  const [selectedCell, setSelectedCell] = useState<{ dateKey: string; time: string; label: string } | null>(null);
+  const [selectedCell, setSelectedCell] = useState<{ dateKey: string; time: string; durationMin: number; label: string } | null>(null);
   const [blockingCourt, setBlockingCourt] = useState<string | null>(null);
 
   // Inscription d’un nouveau club (validée ensuite par l’opérateur PadelConnect).
@@ -475,7 +475,13 @@ export default function ClubAdmin() {
               const isPast = cellTs <= now;
               // Terrains retenus par un tournoi PARTIEL (certains terrains/créneaux seulement —
               // la journée entière est déjà couverte par hasFullDayCompetition ci-dessus).
-              const compBlocked = competitionBlockedCourts(club.id, selectedCell.dateKey, selectedCell.time, comps);
+              const compBlocked = competitionBlockedCourts(
+                club.id,
+                selectedCell.dateKey,
+                selectedCell.time,
+                selectedCell.durationMin,
+                comps,
+              );
               return courts.map((c, i) => {
                 const isTournoi = compBlocked === 'all' || compBlocked.includes(c);
                 const resa = cellRes.find((r) => r.court === c);
@@ -580,7 +586,14 @@ export default function ClubAdmin() {
                             onPress={() => {
                               setBlockingCourt(null);
                               void blockSlot(
-                                { clubId: club.id, dateKey: selectedCell.dateKey, time: selectedCell.time, court: c, reason },
+                                {
+                                  clubId: club.id,
+                                  dateKey: selectedCell.dateKey,
+                                  time: selectedCell.time,
+                                  court: c,
+                                  reason,
+                                  durationMin: selectedCell.durationMin,
+                                },
                                 cellTs,
                               ).then((ok) =>
                                 toast.show(

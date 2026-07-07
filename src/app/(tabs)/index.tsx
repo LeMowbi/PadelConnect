@@ -13,6 +13,7 @@ import { Screen } from '@/components/Screen';
 import { Card, Divider, SectionHeader, Tag, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
+import { durationLabel } from '@/lib/courtSchedule';
 import { DAY_MS, dateKeyLabel, dayKey } from '@/lib/days';
 import { hapticLight } from '@/lib/haptics';
 import { initials, perPlayerOf } from '@/lib/format';
@@ -20,7 +21,7 @@ import { fetchLeaderboard, type LeaderboardRow } from '@/lib/leaderboard';
 import { openWhatsApp } from '@/lib/contact';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { isBirthdayToday, parseBirthDate, zodiacFor } from '@/lib/zodiac';
-import { SESSION_MS, isPlayed, useApp } from '@/store/AppContext';
+import { isPlayed, useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
 // Accès rapide — 4 raccourcis UTILES sans onglet dédié (demande porteur : ni Coachs-annuaire
@@ -140,13 +141,13 @@ export default function HomeScreen() {
     .filter((c) => isTournamentPublic(c) && c.dateKey >= today)
     .slice(0, 2);
   // MES réservations seulement (un compte club/opérateur en reçoit d’autres via RLS).
-  // Inclut la résa EN COURS (startsAt + SESSION_MS > now) pour que le match reste affiché
-  // pendant les 1h30 de jeu, au lieu de disparaître entre « prochain match » et « rejouer ».
-  // Les invitations PAS ENCORE ACCEPTÉES sont exclues (comme dans « Mes réservations ») :
-  // elles ont leur bandeau « à confirmer » ci-dessous — sinon la même résa apparaîtrait
-  // à la fois « à confirmer » ET « ton prochain match ».
+  // Inclut la résa EN COURS (!isPlayed, durée RÉELLE du créneau — 1h ou 1h30, 68) pour que le
+  // match reste affiché pendant toute la session, au lieu de disparaître entre « prochain match »
+  // et « rejouer ». Les invitations PAS ENCORE ACCEPTÉES sont exclues (comme dans « Mes
+  // réservations ») : elles ont leur bandeau « à confirmer » ci-dessous — sinon la même résa
+  // apparaîtrait à la fois « à confirmer » ET « ton prochain match ».
   const upcoming = [...myReservations]
-    .filter((r) => r.startsAt + SESSION_MS > now && !state.pendingInvitationIds.includes(r.id))
+    .filter((r) => !isPlayed(r, now) && !state.pendingInvitationIds.includes(r.id))
     .sort((a, b) => a.startsAt - b.startsAt)[0];
 
   // A-L1 : dernier club joué/réservé (la réservation passée la plus récente).
@@ -279,7 +280,7 @@ export default function HomeScreen() {
     const share = upcoming.price ? `\nPrévois ${perPlayerOf(upcoming.price, 1 + upcoming.invited.length)} chacun.` : '';
     openWhatsApp(
       '',
-      `On joue au padel ! 🎾\n${upcoming.clubName} — ${dateKeyLabel(upcoming.dateKey)} à ${upcoming.time} (session 1h30)\n${upcoming.court}${who}${share}\nRéservé via PadelConnect.`,
+      `On joue au padel ! 🎾\n${upcoming.clubName} — ${dateKeyLabel(upcoming.dateKey)} à ${upcoming.time} (session ${durationLabel(upcoming.durationMin)})\n${upcoming.court}${who}${share}\nRéservé via PadelConnect.`,
     );
   };
 
@@ -652,7 +653,7 @@ export default function HomeScreen() {
                     {upcoming.clubName}
                   </Txt>
                   <Txt variant="muted">
-                    {upcoming.time} · {upcoming.court} · 1h30
+                    {upcoming.time} · {upcoming.court} · {durationLabel(upcoming.durationMin)}
                   </Txt>
                   {/* Compte à rebours doux */}
                   <View style={styles.countdownRow}>

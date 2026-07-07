@@ -3,20 +3,22 @@ import { StyleSheet, TextInput, View } from 'react-native';
 import { CalendarPicker } from '@/components/CalendarPicker';
 import { Chip } from '@/components/Chip';
 import { Button, Card, Txt } from '@/components/ui';
+import { openCourtSlots, type CourtSlot } from '@/lib/courtSchedule';
 import { DAY_MS, dateKeyLabel, dayKey } from '@/lib/days';
 import type { BlockRangeStatus } from '@/lib/reservations';
 import { colors, radius, spacing } from '@/theme';
 
 // Mini-formulaire « Fermer sur une période » : terrain (ou tous) → Du/Au → heures (ou journée
 // entière) → motif. Même langage visuel que QuickBlock (créneau unique), pour une fermeture
-// qui DURE (travaux, événement privé) plutôt qu'un blocage ponctuel.
+// qui DURE (travaux, événement privé) plutôt qu'un blocage ponctuel. Les heures proposées
+// dépendent du terrain choisi : SA propre grille (68), filtrée aux créneaux ouverts.
 export function BlockRangeForm({
   courts,
-  times,
+  grid,
   onSubmit,
 }: {
   courts: string[];
-  times: string[]; // horaires ouverts du club
+  grid: Record<string, CourtSlot[]>; // grille EFFECTIVE de chaque terrain (resolvedGridFor)
   onSubmit: (input: {
     court: string | null;
     dateFrom: string;
@@ -53,15 +55,40 @@ export function BlockRangeForm({
     setSelTimes(next);
   };
 
+  // Heures ouvertes proposées : celles du terrain choisi (SA grille), ou l'union de tous les
+  // terrains si « Tous les terrains » — un terrain a SA propre grille (1h/1h30, 68).
+  const times: string[] = court
+    ? openCourtSlots(grid, court).map((s) => s.t)
+    : [...new Set(courts.flatMap((c) => openCourtSlots(grid, c).map((s) => s.t)))].sort();
+
   const canSubmit = !!dateFrom && !!dateTo && !busy;
 
   return (
     <Card style={{ marginTop: spacing.sm, borderColor: colors.coral }}>
       <Txt variant="label">Terrain</Txt>
       <View style={styles.wrap}>
-        <Chip label="Tous les terrains" active={court === null} onPress={() => setCourt(null)} />
+        <Chip
+          label="Tous les terrains"
+          active={court === null}
+          onPress={() => {
+            setCourt(null);
+            // Le changement de terrain change les heures disponibles : on repart de « toute la
+            // journée » plutôt que de garder une sélection devenue incohérente.
+            setAllDay(true);
+            setSelTimes([]);
+          }}
+        />
         {courts.map((c) => (
-          <Chip key={c} label={c} active={court === c} onPress={() => setCourt(c)} />
+          <Chip
+            key={c}
+            label={c}
+            active={court === c}
+            onPress={() => {
+              setCourt(c);
+              setAllDay(true);
+              setSelTimes([]);
+            }}
+          />
         ))}
       </View>
 

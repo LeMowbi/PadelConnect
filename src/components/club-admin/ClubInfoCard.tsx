@@ -9,15 +9,23 @@ import { minutesToSlot } from '@/lib/slots';
 import { type ClubInfo } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
-// 3 lignes de plages tarifaires éditables (nom optionnel, heure début, fin, prix). Vide = ignorée.
-type TierRow = { start: string; end: string; price: string; label: string };
+// 3 lignes de plages tarifaires éditables (nom optionnel, heure début, fin, DEUX prix).
+// `price` = prix 1h30 (obligatoire dès que la plage est renseignée), `price60` = prix 1h
+// (optionnel — dérivé côté pricing.ts si vide, aux ⅔ du prix 1h30).
+type TierRow = { start: string; end: string; price: string; price60: string; label: string };
 
 const CLUB_TYPES: Club['type'][] = ['Couvert', 'Extérieur', 'Mixte'];
 
 function emptyTiers(club: Club): TierRow[] {
-  const seed = (club.priceTiers ?? []).map((t) => ({ start: t.start, end: t.end, price: String(t.price), label: t.label ?? '' }));
+  const seed = (club.priceTiers ?? []).map((t) => ({
+    start: t.start,
+    end: t.end,
+    price: String(t.price),
+    price60: t.price60 ? String(t.price60) : '',
+    label: t.label ?? '',
+  }));
   const rows = [...seed];
-  while (rows.length < 3) rows.push({ start: '', end: '', price: '', label: '' });
+  while (rows.length < 3) rows.push({ start: '', end: '', price: '', price60: '', label: '' });
   return rows.slice(0, 3);
 }
 
@@ -90,7 +98,13 @@ export function ClubInfoCard({
     // On ne garde que les plages complètes (début, fin, prix > 0). Aucune → tarif unique.
     const built: PriceTier[] = tiers
       .filter((t) => t.start.trim() && t.end.trim() && Number(t.price) > 0)
-      .map((t) => ({ start: t.start.trim(), end: t.end.trim(), price: Number(t.price), label: t.label.trim() || undefined }));
+      .map((t) => ({
+        start: t.start.trim(),
+        end: t.end.trim(),
+        price: Number(t.price),
+        price60: Number(t.price60) > 0 ? Number(t.price60) : undefined,
+        label: t.label.trim() || undefined,
+      }));
     // Validation À LA SOURCE : des plages doivent couvrir les HEURES D’OUVERTURE du club
     // (openMin→closeMin) sans trou ni chevauchement. Échec → on N’ENREGISTRE RIEN (état intact).
     // SEULEMENT si les plages ont été touchées : une amplitude élargie entre-temps (horaire
@@ -211,14 +225,28 @@ export function ClubInfoCard({
               accessibilityLabel={`Heure de fin de la plage tarifaire ${i + 1}`}
               style={[styles.input, styles.tierCell, { marginTop: 0 }]}
             />
+          </View>
+          {/* Deux prix par plage : la session 1h30 (obligatoire) et la session 1h (optionnelle,
+              sinon dérivée automatiquement aux ⅔ du prix 1h30 — voir price60Of, pricing.ts). */}
+          <View style={[styles.tierRow, { marginTop: spacing.xs }]}>
             <TextInput
               value={t.price}
               onChangeText={(v) => setTier(i, { price: v })}
-              placeholder="FCFA"
+              placeholder="Prix 1h30 (FCFA)"
               placeholderTextColor={colors.textMuted}
               keyboardType="numeric"
               maxLength={7}
-              accessibilityLabel={`Prix de la plage tarifaire ${i + 1}, en FCFA`}
+              accessibilityLabel={`Prix de la session 1h30, plage tarifaire ${i + 1}, en FCFA`}
+              style={[styles.input, styles.tierPrice, { marginTop: 0 }]}
+            />
+            <TextInput
+              value={t.price60}
+              onChangeText={(v) => setTier(i, { price60: v })}
+              placeholder="Prix 1h (optionnel)"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="numeric"
+              maxLength={7}
+              accessibilityLabel={`Prix de la session 1h, plage tarifaire ${i + 1}, en FCFA (optionnel)`}
               style={[styles.input, styles.tierPrice, { marginTop: 0 }]}
             />
           </View>
@@ -226,7 +254,7 @@ export function ClubInfoCard({
       ))}
       <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
         Si tu définis des plages, elles doivent couvrir tes heures d’ouverture ({openLabel} → {closeLabel}) sans trou. Nomme-les (Journée,
-        Soirée…) pour les afficher en onglets sur ta page.
+        Soirée…) pour les afficher en onglets sur ta page. Prix 1h laissé vide : il est déduit automatiquement du prix 1h30 (environ ⅔).
       </Txt>
       {tierError ? (
         <View style={styles.tierErrorBox}>

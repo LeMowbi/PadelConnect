@@ -8,7 +8,15 @@ import { LegendDot } from '@/components/club-admin/LegendDot';
 import { QuickBlock } from '@/components/club-admin/QuickBlock';
 import { BlockRangeForm } from '@/components/club-admin/BlockRangeForm';
 import { type Club } from '@/data/clubs';
-import { competitionBlockedCourts, courtsFor, hasFullDayCompetition, openSlotsFor, rangeBlocks } from '@/lib/availability';
+import {
+  competitionBlockedCourts,
+  courtsFor,
+  hasFullDayCompetition,
+  rangeBlocks,
+  resolvedGridFor,
+  type ScheduleCtx,
+} from '@/lib/availability';
+import { durationLabel, overlaps, toMin, type CourtSlot } from '@/lib/courtSchedule';
 import { DAY_MS, dateKeyLabel, nextDays, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
@@ -24,7 +32,7 @@ import {
 import { isPlayed, useApp, type Reservation } from '@/store/AppContext';
 import { colors, radius, shadows, spacing } from '@/theme';
 
-type SelectedCell = { dateKey: string; time: string; label: string };
+type SelectedCell = { dateKey: string; time: string; durationMin: number; label: string };
 
 export function SectionReservations({
   club,
@@ -174,58 +182,80 @@ export function SectionReservations({
   // Fermetures sur PÉRIODE (54) de ce club, triées par date de début (les plus proches d’abord).
   const clubRanges = state.blockedRanges.filter((r) => r.clubId === club.id).sort((a, b) => a.dateFrom.localeCompare(b.dateFrom));
 
-  // Planning par TERRAIN pour un jour donné (maquette Espace Club · planning).
+  // Planning par TERRAIN pour un jour donné — chaque terrain a SA grille (1h/1h30, 68).
   const week = nextDays(7);
-  // Repli sur les créneaux/terrains par défaut tant que le gérant n’a rien personnalisé —
-  // sinon le planning et les mini-stats resteraient vides à l’ouverture de l’Espace Club.
-  const openSlots = openSlotsFor(club, state.clubSlots);
   const courts = courtsFor(club, state.clubCourts);
-  const planTimes = [...openSlots].sort();
+  // Grille EFFECTIVE de chaque terrain (courtSlots par terrain si réglée, sinon dérivée de la
+  // grille club unique) : source de vérité unique pour le planning, les stats et QuickBlock/
+  // BlockRangeForm — plus de liste `planTimes` partagée entre terrains aux durées différentes.
+  const sched: ScheduleCtx = {
+    clubSlots: state.clubSlots,
+    clubCourts: state.clubCourts,
+    courtSlots: state.courtSlots,
+    courtClosed: state.clubCourtClosed,
+  };
+  const grid = resolvedGridFor(club, sched);
   const planDay = week.find((d) => d.key === planDayKey) ?? week[0];
   // « Jour bloqué entièrement » : seulement un tournoi PUBLIÉ sans terrains/créneaux précis.
   // Un tournoi en attente/refusé, ou qui ne réserve que quelques terrains, ne ferme pas la grille.
   const dayTournament = hasFullDayCompetition(club.id, planDay.key, comps);
   // Statut d’UN terrain à un créneau — réservations app + blocages hors app + créneaux/terrains
-  // réellement réservés par un tournoi publié (pas toute la journée par défaut).
-  // Pré-filtré sur LE jour affiché : la grille appelle courtStatusAt pour chaque cellule —
+  // réellement réservés par un tournoi publié (pas toute la journée par défaut). Calculé en
+  // CHEVAUCHEMENT (le créneau candidat [t, t+d) sur ce terrain). Pré-filtré sur LE jour affiché :
   // balayer tout l'historique du club à chaque cellule deviendrait lourd avec les mois.
   const planDayRes = clubRes.filter((r) => r.dateKey === planDay.key);
   const planDayBlocked = clubBlocked.filter((b) => b.dateKey === planDay.key);
-  const closedByCourt = state.clubCourtClosed[club.id] ?? {};
-  const courtStatusAt = (court: string, time: string): 'reserved' | 'blocked' | 'tournoi' | 'free' => {
-    const compBlocked = competitionBlockedCourts(club.id, planDay.key, time, comps);
+  const overlapsAny = (slot: CourtSlot, items: { time: string; durationMin?: number }[]) =>
+    items.some((x) => overlaps(slot, { t: x.time, d: (x.durationMin ?? 90) as 60 | 90 }));
+  const courtStatusAt = (court: string, slot: CourtSlot): 'reserved' | 'blocked' | 'tournoi' | 'free' => {
+    const compBlocked = competitionBlockedCourts(club.id, planDay.key, slot.t, slot.d, comps);
     if (compBlocked === 'all' || compBlocked.includes(court)) return 'tournoi';
-    if (planDayRes.some((r) => r.time === time && r.court === court)) return 'reserved';
-    if (planDayBlocked.some((b) => b.time === time && b.court === court)) return 'blocked';
+    // Un créneau fermé sur la grille du terrain elle-même (x:true, fermeture récurrente repliée
+    // ou fermeture manuelle) se montre comme « bloqué » — jamais réservable, comme le voit le serveur.
+    if (slot.x) return 'blocked';
+    if (
+      overlapsAny(
+        slot,
+        planDayRes.filter((r) => r.court === court),
+      )
+    )
+      return 'reserved';
+    if (
+      overlapsAny(
+        slot,
+        planDayBlocked.filter((b) => b.court === court),
+      )
+    )
+      return 'blocked';
     // Fermeture sur période (54) couvrant ce jour/heure/terrain — même rendu qu’un blocage ponctuel.
-    if (clubRanges.some((r) => rangeBlocks(r, planDay.key, time, court))) return 'blocked';
-    // Fermeture RÉCURRENTE par terrain (54) : la case doit se montrer fermée, comme la voient
-    // les joueurs (et comme le serveur la refuse) — sinon le gérant attend des résas dessus.
-    if ((closedByCourt[court] ?? []).includes(time)) return 'blocked';
+    if (clubRanges.some((r) => rangeBlocks(r, planDay.key, slot.t, court, slot.d))) return 'blocked';
     return 'free';
   };
 
   // Mini-stats de la semaine : taux d’occupation + créneau le plus demandé. Le dénominateur ne
-  // compte que les cellules réellement VENDABLES : une case fermée (période, blocage ponctuel,
-  // fermeture récurrente du terrain) n'est pas un « créneau vide » — sinon l'occupation était
-  // sous-évaluée dès qu'un club utilisait les fermetures (54).
+  // compte que les créneaux réellement VENDABLES (ouverts sur LEUR terrain, ni période ni
+  // blocage ponctuel dessus) — on itère les créneaux PROPRES de chaque terrain, pas une grille
+  // commune (des terrains peuvent offrir des horaires/durées différents).
   const weekKeys = new Set(week.map((d) => d.key));
   const weekRes = clubRes.filter((r) => weekKeys.has(r.dateKey));
-  const cellClosed = (dKey: string, t: string, court: string) =>
-    (closedByCourt[court] ?? []).includes(t) ||
-    clubRanges.some((r) => rangeBlocks(r, dKey, t, court)) ||
-    clubBlocked.some((b) => b.dateKey === dKey && b.time === t && b.court === court);
+  const cellClosed = (dKey: string, slot: CourtSlot, court: string) =>
+    clubRanges.some((r) => rangeBlocks(r, dKey, slot.t, court, slot.d)) ||
+    overlapsAny(
+      slot,
+      clubBlocked.filter((b) => b.dateKey === dKey && b.court === court),
+    );
   let sellable = 0;
-  for (const d of week) for (const t of planTimes) for (const c of courts) if (!cellClosed(d.key, t, c)) sellable++;
+  for (const d of week) for (const c of courts) for (const s of grid[c] ?? []) if (!s.x && !cellClosed(d.key, s, c)) sellable++;
   const capacity = Math.max(1, sellable);
   const occupancy = Math.min(100, Math.round((weekRes.length / capacity) * 100));
   const byHour = new Map<string, number>();
   for (const r of weekRes) byHour.set(r.time, (byHour.get(r.time) ?? 0) + 1);
   const topHour = [...byHour.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
-  // Créneaux les plus CREUX (parmi les heures d’ouverture, celles jamais réservées cette semaine)
-  // → le gérant sait où pousser une offre pour remplir. Une heure sans AUCUN terrain ouvert
-  // cette semaine n'est pas « creuse » : elle est fermée.
-  const quietHours = planTimes.filter((t) => !byHour.has(t) && week.some((d) => courts.some((c) => !cellClosed(d.key, t, c)))).slice(0, 3);
+  // Union des débuts ouverts, tous terrains confondus — base du graphe « remplissage » et des
+  // créneaux les plus CREUX (jamais réservés cette semaine parmi les horaires réellement ouverts
+  // quelque part) → le gérant sait où pousser une offre pour remplir.
+  const allOpenTimes = [...new Set(courts.flatMap((c) => (grid[c] ?? []).filter((s) => !s.x).map((s) => s.t)))].sort();
+  const quietHours = allOpenTimes.filter((t) => !byHour.has(t)).slice(0, 3);
 
   // Revenu = somme des prix RÉELS des réservations (figés à la réservation). On additionne les
   // parties JOUÉES (revenu encaissé) — même base que la commission.
@@ -258,25 +288,27 @@ export function SectionReservations({
       {showBlockForm ? (
         <QuickBlock
           days={week}
-          times={openSlots}
           courts={courts}
+          grid={grid}
           dayHasTournament={(dKey) => hasFullDayCompetition(club.id, dKey, comps)}
-          courtStatus={(dKey, time, court) => {
-            const compBlocked = competitionBlockedCourts(club.id, dKey, time, comps);
+          courtStatus={(dKey, time, court, durationMin) => {
+            const d = durationMin as 60 | 90;
+            const compBlocked = competitionBlockedCourts(club.id, dKey, time, d, comps);
             if (compBlocked === 'all' || compBlocked.includes(court)) return { state: 'tournoi' };
-            const resa = clubRes.find((r) => r.dateKey === dKey && r.time === time && r.court === court);
+            const slot: CourtSlot = { t: time, d };
+            const resa = clubRes.find((r) => r.dateKey === dKey && r.court === court && overlapsAny(slot, [r]));
             if (resa) return { state: 'reserved', label: resa.bookedBy?.name ?? 'Joueur' };
-            const blk = clubBlocked.find((b) => b.dateKey === dKey && b.time === time && b.court === court);
+            const blk = clubBlocked.find((b) => b.dateKey === dKey && b.court === court && overlapsAny(slot, [b]));
             if (blk) return { state: 'blocked', label: blk.reason };
-            // Mêmes yeux que le planning : une case couverte par une période fermée (54) ou une
-            // fermeture récurrente du terrain n'est PAS re-blocable (double comptabilité).
-            const rng = clubRanges.find((r) => rangeBlocks(r, dKey, time, court));
+            // Mêmes yeux que le planning : une case couverte par une période fermée (54) n'est PAS
+            // re-blocable (double comptabilité) — un créneau fermé sur la grille du terrain (x:true)
+            // n'apparaît déjà plus dans les créneaux proposés par `grid` (filtrés côté QuickBlock).
+            const rng = clubRanges.find((r) => rangeBlocks(r, dKey, time, court, d));
             if (rng) return { state: 'blocked', label: rangeReasons[rng.id] || 'Fermé sur période' };
-            if ((closedByCourt[court] ?? []).includes(time)) return { state: 'blocked', label: 'Fermé sur ce terrain' };
             return { state: 'free' };
           }}
-          onBlock={async (dKey, time, court, reason, ts) => {
-            const ok = await blockSlot({ clubId: club.id, dateKey: dKey, time, court, reason }, ts);
+          onBlock={async (dKey, time, court, durationMin, reason, ts) => {
+            const ok = await blockSlot({ clubId: club.id, dateKey: dKey, time, court, reason, durationMin }, ts);
             if (ok) hapticSuccess();
             else hapticWarning();
             return ok;
@@ -308,7 +340,7 @@ export function SectionReservations({
       {showRangeForm ? (
         <BlockRangeForm
           courts={courts}
-          times={openSlots}
+          grid={grid}
           onSubmit={async (input) => {
             const status = await blockRange({ clubId: club.id, ...input });
             if (status === 'ok') {
@@ -442,61 +474,68 @@ export function SectionReservations({
               </Txt>
             </View>
           ) : null}
-          {/* Grille terrains × créneaux (défilement horizontal) */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View>
-              {/* En-tête : créneaux */}
-              <View style={styles.gridRow}>
-                <View style={styles.gridCourtName} />
-                {planTimes.map((t) => (
-                  <View key={t} style={styles.gridCell}>
-                    <Txt variant="small" color={colors.textFaint} style={{ fontSize: 10 }}>
-                      {t}
-                    </Txt>
+          {/* Une LIGNE PAR TERRAIN : chaque terrain montre SA propre grille (créneaux 1h/1h30
+              mélangeables), plus lisible qu'une matrice figée dès que les terrains divergent. */}
+          <View style={{ gap: spacing.md }}>
+            {courts.map((court) => {
+              const courtSlots = (grid[court] ?? []).slice().sort((a, b) => (toMin(a.t) ?? 0) - (toMin(b.t) ?? 0));
+              return (
+                <View key={court}>
+                  <Txt variant="small" style={{ fontWeight: '700', marginBottom: spacing.xs }}>
+                    {court}
+                  </Txt>
+                  <View style={styles.wrap}>
+                    {courtSlots.map((s) => {
+                      const st = courtStatusAt(court, s);
+                      const cellStyle =
+                        st === 'reserved'
+                          ? styles.gcReserved
+                          : st === 'blocked'
+                            ? styles.gcBlocked
+                            : st === 'tournoi'
+                              ? styles.gcTournoi
+                              : styles.gcFree;
+                      // Libellé lu par un lecteur d’écran (les cases libres sont sinon vides).
+                      const statusLabel =
+                        st === 'reserved' ? 'réservé' : st === 'blocked' ? 'bloqué' : st === 'tournoi' ? 'tournoi' : 'libre';
+                      return (
+                        <Pressable
+                          key={s.t}
+                          onPress={() => {
+                            hapticLight(); // repère tactile sur une grille dense (terrains × créneaux)
+                            onSelectCell({
+                              dateKey: planDay.key,
+                              time: s.t,
+                              durationMin: s.d,
+                              label: `${planDay.label} · ${s.t} · ${durationLabel(s.d)}`,
+                            });
+                          }}
+                          style={({ pressed }) => [
+                            styles.gridSlotBox,
+                            cellStyle,
+                            pressed && { opacity: 0.7, transform: [{ scale: 0.96 }] },
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${court}, ${s.t}, ${durationLabel(s.d)}, ${statusLabel}`}
+                        >
+                          {st === 'reserved' ? <Ionicons name="checkmark" size={12} color={colors.onSignature} /> : null}
+                          {st === 'blocked' ? <Ionicons name="lock-closed" size={11} color={colors.textFaint} /> : null}
+                          {st === 'tournoi' ? <Ionicons name="trophy" size={11} color={colors.onSignature} /> : null}
+                          <Txt
+                            variant="small"
+                            color={st === 'reserved' || st === 'tournoi' ? colors.onSignature : colors.textFaint}
+                            style={{ fontSize: 10, fontWeight: '600' }}
+                          >
+                            {s.t} · {durationLabel(s.d)}
+                          </Txt>
+                        </Pressable>
+                      );
+                    })}
                   </View>
-                ))}
-              </View>
-              {courts.map((court) => (
-                <View key={court} style={styles.gridRow}>
-                  <View style={styles.gridCourtName}>
-                    <Txt variant="small" style={{ fontWeight: '700', fontSize: 12 }} numberOfLines={1}>
-                      {court}
-                    </Txt>
-                  </View>
-                  {planTimes.map((t) => {
-                    const st = courtStatusAt(court, t);
-                    const cellStyle =
-                      st === 'reserved'
-                        ? styles.gcReserved
-                        : st === 'blocked'
-                          ? styles.gcBlocked
-                          : st === 'tournoi'
-                            ? styles.gcTournoi
-                            : styles.gcFree;
-                    // Libellé lu par un lecteur d’écran (les cases libres sont sinon vides).
-                    const statusLabel =
-                      st === 'reserved' ? 'réservé' : st === 'blocked' ? 'bloqué' : st === 'tournoi' ? 'tournoi' : 'libre';
-                    return (
-                      <Pressable
-                        key={t}
-                        onPress={() => {
-                          hapticLight(); // repère tactile sur une grille dense (terrains × créneaux)
-                          onSelectCell({ dateKey: planDay.key, time: t, label: `${planDay.label} · ${t}` });
-                        }}
-                        style={({ pressed }) => [styles.gridCellBox, cellStyle, pressed && { opacity: 0.7, transform: [{ scale: 0.94 }] }]}
-                        accessibilityRole="button"
-                        accessibilityLabel={`${court}, ${t}, ${statusLabel}`}
-                      >
-                        {st === 'reserved' ? <Ionicons name="checkmark" size={12} color={colors.onSignature} /> : null}
-                        {st === 'blocked' ? <Ionicons name="lock-closed" size={11} color={colors.textFaint} /> : null}
-                        {st === 'tournoi' ? <Ionicons name="trophy" size={11} color={colors.onSignature} /> : null}
-                      </Pressable>
-                    );
-                  })}
                 </View>
-              ))}
-            </View>
-          </ScrollView>
+              );
+            })}
+          </View>
           <View style={styles.planLegend}>
             <LegendDot color={colors.signature} label="Réservé" />
             <LegendDot color={colors.surface} label="Libre" />
@@ -521,7 +560,7 @@ export function SectionReservations({
             <Txt variant="label" style={{ marginBottom: spacing.md }}>
               Remplissage par créneau (7 j)
             </Txt>
-            <BarChart data={planTimes.map((t) => ({ label: t, value: weekRes.filter((r) => r.time === t).length }))} />
+            <BarChart data={allOpenTimes.map((t) => ({ label: t, value: weekRes.filter((r) => r.time === t).length }))} />
           </Card>
         ) : null}
 
@@ -797,6 +836,7 @@ export function SectionReservations({
 
 const styles = StyleSheet.create({
   stats: { flexDirection: 'row', gap: spacing.sm },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
   relNote: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   banner: {
     flexDirection: 'row',
@@ -819,10 +859,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dayPillActive: { backgroundColor: colors.signature, borderColor: colors.signature, ...shadows.e1 },
-  gridRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
-  gridCourtName: { width: 70, paddingRight: spacing.sm },
-  gridCell: { width: 50, alignItems: 'center', justifyContent: 'center', marginHorizontal: 2 },
-  gridCellBox: { width: 50, height: 38, borderRadius: radius.sm, marginHorizontal: 2, alignItems: 'center', justifyContent: 'center' },
+  // Puce de créneau (une par terrain, largeur libre — le libellé porte l'heure ET la durée).
+  gridSlotBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: 34,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radius.sm,
+  },
   gcReserved: { backgroundColor: colors.signature, ...shadows.e1 },
   gcFree: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   gcBlocked: { backgroundColor: colors.surfaceBeige, borderWidth: 1, borderColor: colors.border },

@@ -3,6 +3,7 @@
 // joueur envoie en un tap sur WhatsApp. Fonction PURE (aucune dépendance native) : la couche UI
 // ne fait que présenter la liste et ouvrir WhatsApp avec le `body` choisi.
 
+import { durationLabel } from './courtSchedule';
 import { dateKeyLabel } from './days';
 import { perPlayerOf } from './format';
 import type { Reservation } from '@/store/AppContext';
@@ -13,7 +14,8 @@ export type MatchTemplate = { key: string; label: string; icon: string; body: st
 // `clubUrl` = lien Universal du club (partage) fourni par l'appelant, pour rester découplé de
 // la config d'app (referrals) et donc testable sans dépendance native.
 export function matchTemplates(r: Reservation, clubUrl: string): MatchTemplate[] {
-  const when = `${r.clubName} — ${dateKeyLabel(r.dateKey)} à ${r.time} (session 1h30)`;
+  // Durée RÉELLE du créneau (1h/1h30, 68) — déjà portée par la réservation, pas de paramètre à ajouter.
+  const when = `${r.clubName} — ${dateKeyLabel(r.dateKey)} à ${r.time} (session ${durationLabel(r.durationMin)})`;
   const who = r.invited.length ? `\nÉquipe : ${r.invited.map((i) => i.name).join(', ')}` : '';
   const share = r.price ? `\nPrévois ${perPlayerOf(r.price, 1 + r.invited.length)} chacun.` : '';
   const cap = r.openCapacity ?? 4;

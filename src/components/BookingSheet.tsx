@@ -200,6 +200,7 @@ export function BookingSheet({
         area={club.area}
         startsAt={slotTimestamp(day.key, time)}
         price={price}
+        durationMin={durationMin}
         participantCount={participantCount}
         invitedNames={invitedNames}
         onSeeReservations={() => {
@@ -233,7 +234,7 @@ export function BookingSheet({
                       {club.name}
                     </Txt>
                     <Txt variant="muted">
-                      {day.label} · {time} · 1h30 · {fcfa(price)} la session
+                      {day.label} · {time} · {durationLabel(durationMin)} · {fcfa(price)} la session
                     </Txt>
                   </View>
                   <Pressable onPress={onClose} hitSlop={8} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Fermer">
@@ -444,7 +445,7 @@ export function BookingSheet({
                         full
                       />
                       <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
-                        Session de 1h30 · sans paiement en ligne — réglé au club. Annulation jusqu’à 5h avant.
+                        Session de {durationLabel(durationMin)} · sans paiement en ligne — réglé au club. Annulation jusqu’à 5h avant.
                       </Txt>
                     </View>
                   </>

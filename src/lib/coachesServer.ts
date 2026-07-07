@@ -33,6 +33,7 @@ export type Lesson = {
   court: string;
   startsAt: number;
   price?: number; // prix du terrain (la réservation créée le reprend)
+  durationMin: number; // durée FIGÉE du créneau (60|90, 68) — repli 90 si absente (données héritées)
   status: 'pending' | 'accepted' | 'declined' | 'cancelled';
   reservationId?: string;
 };
@@ -51,6 +52,7 @@ type LessonRow = {
   court: string;
   starts_at: number;
   price: number | null;
+  duration_min: number | null;
   status: Lesson['status'];
   reservation_id: string | null;
 };
@@ -70,6 +72,7 @@ function toLesson(r: LessonRow): Lesson {
     court: r.court,
     startsAt: r.starts_at,
     price: r.price ?? undefined,
+    durationMin: r.duration_min ?? 90,
     status: r.status,
     reservationId: r.reservation_id ?? undefined,
   };
@@ -147,6 +150,8 @@ export async function clubRemoveCoach(userId: string): Promise<boolean> {
 }
 
 // L’ÉLÈVE demande un cours (le terrain n’est pas réservé : il le sera à l’acceptation).
+// `durationMin` (60|90, 68) = la durée du créneau du TERRAIN choisi — le serveur la fige sur
+// le cours puis sur la réservation créée à l’acceptation.
 export async function requestLesson(input: {
   coachId: string;
   clubId: string;
@@ -157,6 +162,7 @@ export async function requestLesson(input: {
   court: string;
   startsAt: number;
   price: number;
+  durationMin: 60 | 90;
 }): Promise<string | null> {
   const { data, error } = await supabase.rpc('request_lesson', {
     p_coach: input.coachId,
@@ -168,6 +174,7 @@ export async function requestLesson(input: {
     p_court: input.court,
     p_starts_at: input.startsAt,
     p_price: input.price,
+    p_duration: input.durationMin,
   });
   if (error || !data) return null;
   return data as string;

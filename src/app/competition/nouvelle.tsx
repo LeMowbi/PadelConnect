@@ -111,9 +111,21 @@ export default function NouvelleCompetition() {
   // et créneaux réels, pour que l’organisateur réserve des terrains/heures PRÉCIS (pas tout).
   const host = asClub ? club : findClub(hostId ?? undefined, state.customClubs, state.clubInfo);
   const hostCourts = host ? courtsFor(host, state.clubCourts) : [];
-  const hostSlots = host ? openSlotsFor(host, state.clubSlots) : [];
+  // ScheduleCtx minimal (pas besoin de dispo complète ici, juste les horaires ouverts) — grille
+  // PAR TERRAIN (68) : deux clubs — ou deux terrains d’un même club — peuvent proposer des
+  // créneaux décalés.
+  const sched = {
+    clubSlots: state.clubSlots,
+    clubCourts: state.clubCourts,
+    courtSlots: state.courtSlots,
+    courtClosed: state.clubCourtClosed,
+  };
+  const hostSlots = host ? openSlotsFor(host, sched) : [];
   const toggleCourt = (c: string) => setCourts((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]));
   const toggleTime = (t: string) => setTimes((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
+  // Durée (1h/1h30, défaut 1h30) choisie par l’organisateur pour CHAQUE créneau sélectionné —
+  // alignée 1-pour-1 sur `times` à l’envoi (les tournois sont modulables comme les résas, 68).
+  const [timeDurations, setTimeDurations] = useState<Record<string, 60 | 90>>({});
 
   // Fermetures du club hôte (54) sur les dates choisies : un terrain/créneau couvert par une
   // période fermée ou une fermeture récurrente est grisé — le serveur refuserait la validation,
@@ -186,6 +198,8 @@ export default function NouvelleCompetition() {
       // Terrains/créneaux PRÉCIS réservés au tournoi (vides = tout le club ce jour-là).
       courtNames: courts,
       timeSlots: times,
+      // Durée de chaque créneau, alignée 1-pour-1 sur `times` (défaut 1h30 si non touchée).
+      slotDurations: times.map((t) => timeDurations[t] ?? 90),
       // Club → publié direct ; joueur → en attente de validation du club hôte.
       status: asClub ? 'approved' : 'pending',
     });
@@ -358,6 +372,31 @@ export default function NouvelleCompetition() {
               ? ' Les choix grisés sont fermés par le club sur ces dates.'
               : ''}
           </Txt>
+
+          {/* Durée de chaque créneau retenu (1h ou 1h30, défaut 1h30) — les tournois sont
+              modulables comme les réservations (68). */}
+          {times.length > 0 ? (
+            <>
+              <Txt variant="label" style={{ marginTop: spacing.lg }}>
+                Durée de chaque créneau
+              </Txt>
+              {times
+                .slice()
+                .sort()
+                .map((t) => {
+                  const d = timeDurations[t] ?? 90;
+                  return (
+                    <View key={t} style={styles.durationRow}>
+                      <Txt variant="small" color={colors.textMuted} style={{ width: 56 }}>
+                        {t}
+                      </Txt>
+                      <Chip label="1h" active={d === 60} onPress={() => setTimeDurations((cur) => ({ ...cur, [t]: 60 }))} />
+                      <Chip label="1h30" active={d === 90} onPress={() => setTimeDurations((cur) => ({ ...cur, [t]: 90 }))} />
+                    </View>
+                  );
+                })}
+            </>
+          ) : null}
         </>
       ) : null}
 
@@ -391,6 +430,7 @@ export default function NouvelleCompetition() {
 
 const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  durationRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
   feeBox: {
     flexDirection: 'row',
     alignItems: 'center',

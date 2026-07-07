@@ -8,6 +8,7 @@ import { useToast } from './Toast';
 import { Button, Txt } from './ui';
 import { addReservationToCalendar } from '@/lib/calendar';
 import { openWhatsApp } from '@/lib/contact';
+import { durationLabel } from '@/lib/courtSchedule';
 import { perPlayerOf } from '@/lib/format';
 import { colors, gradients, radius, spacing } from '@/theme';
 
@@ -24,6 +25,7 @@ export function BookingConfirmation({
   area,
   startsAt,
   price,
+  durationMin,
   participantCount,
   invitedNames,
   onSeeReservations,
@@ -36,6 +38,7 @@ export function BookingConfirmation({
   area?: string;
   startsAt: number;
   price: number;
+  durationMin: 60 | 90;
   participantCount: number;
   invitedNames: string[];
   onSeeReservations: () => void;
@@ -45,7 +48,7 @@ export function BookingConfirmation({
   const toast = useToast();
 
   const addToCalendar = async () => {
-    const res = await addReservationToCalendar({ clubName, startsAt, court, area });
+    const res = await addReservationToCalendar({ clubName, startsAt, court, area, durationMin });
     // « canceled » = l'utilisateur a refermé la fiche système lui-même : pas de toast d'erreur.
     if (res === 'canceled') return;
     toast.show(
@@ -60,7 +63,7 @@ export function BookingConfirmation({
     const share = price ? `\nPrévois ${perPlayerOf(price, 1 + invitedNames.length)} chacun.` : '';
     openWhatsApp(
       '',
-      `On joue au padel ! 🎾\n${clubName} — ${dayLabel} à ${time} (session 1h30)\n${court}${who}${share}\nRéservé via PadelConnect.`,
+      `On joue au padel ! 🎾\n${clubName} — ${dayLabel} à ${time} (session ${durationLabel(durationMin)})\n${court}${who}${share}\nRéservé via PadelConnect.`,
     );
   };
 

@@ -18,6 +18,7 @@ export type OpenMatch = {
   creatorName: string;
   placesLeft: number; // places restantes aux côtés du créateur (capacité − 1 − arrivés)
   capacity: number; // 2 = 1v1 · 4 = 2v2
+  durationMin: number; // durée réelle du créneau (60|90, créneaux modulables 68) — 90 par défaut
 };
 
 export async function fetchOpenMatches(): Promise<OpenMatch[] | null> {
@@ -38,6 +39,7 @@ export async function fetchOpenMatches(): Promise<OpenMatch[] | null> {
       creator_name: string;
       places_left: number;
       capacity: number;
+      duration_min: number;
     }[]
   ).map((r) => ({
     id: r.id,
@@ -53,6 +55,7 @@ export async function fetchOpenMatches(): Promise<OpenMatch[] | null> {
     creatorName: r.creator_name,
     placesLeft: r.places_left,
     capacity: r.capacity ?? 4,
+    durationMin: r.duration_min ?? 90,
   }));
 }
 

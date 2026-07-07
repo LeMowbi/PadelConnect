@@ -28,10 +28,12 @@ import { coaches } from '@/data/coaches';
 import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { isPlayed, useApp } from '@/store/AppContext';
 import { canAccessClub } from '@/lib/access';
+import { courtsFor, resolvedGridFor, type ScheduleCtx } from '@/lib/availability';
 import { fetchClubCoaches, type ServerCoach } from '@/lib/coachesServer';
 import { deleteMyReview, fetchClubReviews, replyToReview, submitReview, type ServerReview } from '@/lib/reviewsServer';
 import { reportReview } from '@/lib/moderation';
 import { openWhatsApp } from '@/lib/contact';
+import { durationLabel, offeredDurations } from '@/lib/courtSchedule';
 import { hapticSuccess } from '@/lib/haptics';
 import { dateKeyLabel, dayKey } from '@/lib/days';
 import { fcfa, initials } from '@/lib/format';
@@ -189,6 +191,21 @@ export default function ClubDetail() {
 
   const fav = state.favoriteClubIds.includes(club.id);
   const boosted = state.boostedClubIds.includes(club.id);
+  // Durées RÉELLEMENT proposées par ce club (un terrain peut être en 1h, un autre en 1h30, 68) —
+  // sert au prix « dès » honnête et au libellé de durée dynamique (jamais « 1h30 » en dur).
+  const sched: ScheduleCtx = {
+    clubSlots: state.clubSlots,
+    clubCourts: state.clubCourts,
+    courtSlots: state.courtSlots,
+    courtClosed: state.clubCourtClosed,
+  };
+  const clubCourtsList = courtsFor(club, state.clubCourts);
+  const offeredClub = offeredDurations(resolvedGridFor(club, sched), clubCourtsList);
+  const durationsText =
+    [...offeredClub]
+      .sort((a, b) => a - b)
+      .map(durationLabel)
+      .join(' / ') || durationLabel(90);
   // La photo « de profil » choisie par le club ouvre la galerie (héros) ; les photos par
   // terrain la complètent en fin de visionneuse (chaque vignette porte le nom du terrain).
   const cover = state.clubCovers[club.id];
@@ -308,8 +325,8 @@ export default function ClubDetail() {
           {/* CTA collant : prix « dès » à gauche, Réserver (pill) à droite. Un club « Bientôt »
               n’est pas encore réservable → bouton désactivé + libellé explicite. */}
           <StickyBar
-            label={club.comingSoon ? 'Bientôt sur PadelConnect' : `dès ${fcfa(minPrice(club))}`}
-            hint={club.comingSoon ? 'réservation à venir' : 'la session · 1h30'}
+            label={club.comingSoon ? 'Bientôt sur PadelConnect' : `dès ${fcfa(minPrice(club, offeredClub))}`}
+            hint={club.comingSoon ? 'réservation à venir' : `la session · ${durationsText}`}
             cta={club.comingSoon ? 'Bientôt' : 'Réserver'}
             disabled={!!club.comingSoon}
             onPress={() => router.push(`/reserver/${club.id}`)}
@@ -520,10 +537,10 @@ export default function ClubDetail() {
             <View style={styles.tierRow}>
               <View style={styles.tierLeft}>
                 <Ionicons name="time-outline" size={16} color={colors.textMuted} />
-                <Txt variant="body">Session · 1h30</Txt>
+                <Txt variant="body">Session · {durationsText}</Txt>
               </View>
               <Txt variant="body" style={{ fontWeight: '700' }}>
-                dès {fcfa(minPrice(club))}
+                dès {fcfa(minPrice(club, offeredClub))}
               </Txt>
             </View>
           )}

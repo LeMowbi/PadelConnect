@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { BookingSheet } from '@/components/BookingSheet';
+import { BottomSheet } from '@/components/BottomSheet';
 import { Chip } from '@/components/Chip';
 import { OpenMatches } from '@/components/OpenMatches';
 import { Reveal } from '@/components/Reveal';
@@ -11,7 +12,8 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { Button, Card, EmptyState, Txt } from '@/components/ui';
 import { activeClubs, isFeaturedClub, type Club } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
-import { clubsFreeAt, freeCourts, openSlotsFor, slotGrid, type AvailCtx } from '@/lib/availability';
+import { clubsFreeAt, courtsFor, freeCourtSlotsAt, openSlotsFor, resolvedGridFor, slotGrid, type AvailCtx } from '@/lib/availability';
+import { durationLabel, offeredDurations } from '@/lib/courtSchedule';
 import { nextDays, slotTimestamp, type DayOption } from '@/lib/days';
 import { hapticLight } from '@/lib/haptics';
 import { fcfa, perPlayer } from '@/lib/format';
@@ -48,7 +50,17 @@ export default function ReserverScreen() {
     [state.customClubs, state.clubInfo, state.clubStatus],
   );
   // Grille = union des créneaux RÉELLEMENT ouverts par les clubs visibles (peut dépasser SAMPLE_SLOTS).
-  const grid = useMemo(() => slotGrid({ clubs: visibleClubs, clubSlots: state.clubSlots }), [visibleClubs, state.clubSlots]);
+  const grid = useMemo(
+    () =>
+      slotGrid({
+        clubs: visibleClubs,
+        clubSlots: state.clubSlots,
+        clubCourts: state.clubCourts,
+        courtSlots: state.courtSlots,
+        courtClosed: state.clubCourtClosed,
+      }),
+    [visibleClubs, state.clubSlots, state.clubCourts, state.courtSlots, state.clubCourtClosed],
+  );
   // Le soir, quand TOUS les créneaux réellement proposés du jour sont passés, on ouvre sur Demain.
   const todayOver = useMemo(() => !grid.some((t) => slotTimestamp(days[0].key, t) > Date.now()), [grid, days]);
   // On ne stocke QUE la clé du jour choisi et on dérive l’objet à chaque rendu (motif
@@ -61,7 +73,10 @@ export default function ReserverScreen() {
   // La dernière vue utilisée est mémorisée (l’écran rouvre comme tu l’avais laissé).
   const view = state.reserverView;
   const setView = setReserverView;
-  const [sheet, setSheet] = useState<{ club: Club; time: string } | null>(null);
+  const [sheet, setSheet] = useState<{ club: Club; time: string; durationMin: 60 | 90 } | null>(null);
+  // Un même horaire peut offrir des durées DIFFÉRENTES selon le terrain (68) : si un club+heure
+  // propose plusieurs durées, on les fait choisir avant d’ouvrir la feuille de réservation.
+  const [durationChoice, setDurationChoice] = useState<{ club: Club; time: string; durations: (60 | 90)[] } | null>(null);
   const pickDay = (d: DayOption) => {
     hapticLight(); // tap léger à chaque étape du tunnel (jour → créneau → terrain)
     setSelDayKey(d.key);
@@ -80,6 +95,7 @@ export default function ReserverScreen() {
       clubs: visibleClubs,
       clubSlots: state.clubSlots,
       clubCourts: state.clubCourts,
+      courtSlots: state.courtSlots,
       reservations: state.reservations,
       occupancy: state.occupancy,
       comps: [...seedCompetitions, ...state.myCompetitions],
@@ -91,6 +107,7 @@ export default function ReserverScreen() {
       visibleClubs,
       state.clubSlots,
       state.clubCourts,
+      state.courtSlots,
       state.reservations,
       state.occupancy,
       state.myCompetitions,
@@ -128,28 +145,47 @@ export default function ReserverScreen() {
         .filter((club) => !club.comingSoon)
         .map((club) => ({
           club,
-          slots: openSlotsFor(club, state.clubSlots)
-            .map((time) => ({ time, ts: slotTimestamp(day.key, time) }))
-            .filter((s) => s.ts > Date.now() && freeCourts(club, day.key, s.time, ctx).length > 0),
+          // `free` porte le détail (terrain, durée) de chaque créneau — nécessaire pour afficher
+          // le prix MINIMUM réellement offert (durée-dépendant, 68) sans jamais coder « 1h30 » en dur.
+          slots: openSlotsFor(club, ctx)
+            .map((time) => ({ time, ts: slotTimestamp(day.key, time), free: freeCourtSlotsAt(club, day.key, time, ctx) }))
+            .filter((s) => s.ts > Date.now() && s.free.length > 0),
         }))
         // Tri STABLE par priorité : à rang égal, l’ordre alphabétique de visibleClubs est conservé.
         .sort((a, b) => clubRank(a.club) - clubRank(b.club))
     );
     // clubRank est une fonction pure de favIds (isFeaturedClub est stable) : favIds suffit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, visibleClubs, state.clubSlots, day.key, ctx, favIds]);
+  }, [view, visibleClubs, day.key, ctx, favIds]);
 
+  // Ouvre la feuille de réservation pour (club, heure) — si CE couple offre plusieurs durées
+  // (un terrain 1h, un autre 1h30 au même horaire, 68), on fait d’abord choisir la durée.
   const open = (club: Club, time: string) => {
     hapticLight(); // aligné sur pickDay/pickSlot : tout le tunnel « Réserver » émet un tap léger
-    setSheet({ club, time });
+    const durations = [...new Set(freeCourtSlotsAt(club, day.key, time, ctx).map((x) => x.durationMin))].sort((a, b) => a - b);
+    if (durations.length > 1) {
+      setDurationChoice({ club, time, durations });
+    } else {
+      setSheet({ club, time, durationMin: durations[0] ?? 90 });
+    }
   };
 
   const isToday = day.key === days[0].key;
   const goTomorrow = () => setSelDayKey(days[1].key);
   const noSlotsByClub = !byClub.some((b) => b.slots.length > 0);
 
+  // Prix MINIMUM réellement offert par un club à une heure précise (parmi les durées qu'il
+  // propose à cette heure) — jamais un prix supposé à durée fixe (68).
+  const minPriceAt = (club: Club, time: string): number => {
+    const durs = [...new Set(freeCourtSlotsAt(club, day.key, time, ctx).map((x) => x.durationMin))];
+    return durs.length ? Math.min(...durs.map((d) => priceForSlot(club, time, d))) : priceForSlot(club, time, 90);
+  };
+  // « Dès » d'un club (sans heure choisie) : sur les durées qu'il offre RÉELLEMENT (jamais 1h30
+  // par défaut pour un club qui n'a que du 1h).
+  const clubOffered = (club: Club) => offeredDurations(resolvedGridFor(club, ctx), courtsFor(club, state.clubCourts));
+
   return (
-    <Screen title="Réserver" subtitle="Sessions de 1h30 — on te montre les terrains libres" refreshControl={refreshControl}>
+    <Screen title="Réserver" subtitle="On te montre les terrains libres, heure par heure" refreshControl={refreshControl}>
       <Reveal>
         {/* Jour — pastilles (maquette) : jour abrégé + numéro, signature si actif */}
         <ScrollView
@@ -212,7 +248,7 @@ export default function ReserverScreen() {
             <>
               {/* Grille de créneaux (maquette) : on choisit d’abord l’heure */}
               <Txt variant="label" style={{ marginBottom: spacing.sm }}>
-                Choisis un créneau · 1h30
+                Choisis un créneau
               </Txt>
               <View style={styles.slotGrid}>
                 {rows.map((row) => {
@@ -260,38 +296,41 @@ export default function ReserverScreen() {
                   {/* Même priorité que « Par club » : Padelta, puis mes favoris, puis le reste. */}
                   {[...selectedRow.clubs]
                     .sort((a, b) => clubRank(a.club) - clubRank(b.club))
-                    .map(({ club, free }) => (
-                      <Pressable
-                        key={club.id}
-                        onPress={() => open(club, selectedRow.time)}
-                        style={styles.clubMini}
-                        accessibilityRole="button"
-                        accessibilityLabel={`${club.name}, ${free} terrain${free > 1 ? 's' : ''} libre${free > 1 ? 's' : ''}, ${fcfa(priceForSlot(club, selectedRow.time))}`}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Txt variant="body" style={{ fontWeight: '700' }} numberOfLines={1}>
-                            {club.name}
-                          </Txt>
-                          <Txt variant="small" color={colors.textMuted} numberOfLines={1}>
-                            {club.area}
-                          </Txt>
-                        </View>
-                        <View style={{ alignItems: 'flex-end', gap: 3 }}>
-                          <View style={styles.freeDot}>
-                            <Txt variant="small" color={colors.signatureDark} style={{ fontWeight: '700' }}>
-                              {free} libre{free > 1 ? 's' : ''}
+                    .map(({ club, free }) => {
+                      const minP = minPriceAt(club, selectedRow.time);
+                      return (
+                        <Pressable
+                          key={club.id}
+                          onPress={() => open(club, selectedRow.time)}
+                          style={styles.clubMini}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${club.name}, ${free} terrain${free > 1 ? 's' : ''} libre${free > 1 ? 's' : ''}, dès ${fcfa(minP)}`}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Txt variant="body" style={{ fontWeight: '700' }} numberOfLines={1}>
+                              {club.name}
+                            </Txt>
+                            <Txt variant="small" color={colors.textMuted} numberOfLines={1}>
+                              {club.area}
                             </Txt>
                           </View>
-                          <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
-                            {fcfa(priceForSlot(club, selectedRow.time))}
-                          </Txt>
-                          <Txt variant="small" color={colors.textFaint} style={{ fontSize: 11 }}>
-                            ~{perPlayer(priceForSlot(club, selectedRow.time))}/joueur à 4
-                          </Txt>
-                        </View>
-                        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                      </Pressable>
-                    ))}
+                          <View style={{ alignItems: 'flex-end', gap: 3 }}>
+                            <View style={styles.freeDot}>
+                              <Txt variant="small" color={colors.signatureDark} style={{ fontWeight: '700' }}>
+                                {free} libre{free > 1 ? 's' : ''}
+                              </Txt>
+                            </View>
+                            <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
+                              dès {fcfa(minP)}
+                            </Txt>
+                            <Txt variant="small" color={colors.textFaint} style={{ fontSize: 11 }}>
+                              ~{perPlayer(minP)}/joueur à 4
+                            </Txt>
+                          </View>
+                          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                        </Pressable>
+                      );
+                    })}
                 </View>
               ) : (
                 <View style={[styles.infoPill, { marginTop: spacing.lg }]}>
@@ -325,14 +364,14 @@ export default function ReserverScreen() {
                     </Txt>
                   </View>
                   <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
-                    dès {fcfa(minPrice(club))}
+                    dès {fcfa(minPrice(club, clubOffered(club)))}
                   </Txt>
                 </View>
                 <View style={styles.slotWrap}>
                   {slots.map((s) => (
                     <Chip
                       key={s.time}
-                      label={`${s.time} · ${fcfa(priceForSlot(club, s.time))}`}
+                      label={`${s.time} · dès ${fcfa(minPriceAt(club, s.time))}`}
                       icon={PRIME_TIMES.has(s.time) ? 'flame' : undefined}
                       onPress={() => open(club, s.time)}
                     />
@@ -355,7 +394,32 @@ export default function ReserverScreen() {
           />
         </View>
 
-        {sheet ? <BookingSheet club={sheet.club} day={day} time={sheet.time} onClose={() => setSheet(null)} /> : null}
+        {sheet ? (
+          <BookingSheet club={sheet.club} day={day} time={sheet.time} durationMin={sheet.durationMin} onClose={() => setSheet(null)} />
+        ) : null}
+
+        {/* Choix de la durée AVANT la feuille de réservation, seulement quand ce (club, heure)
+            offre plusieurs durées selon le terrain (68). */}
+        <BottomSheet
+          visible={!!durationChoice}
+          title="Choisis la durée"
+          subtitle={durationChoice ? `${durationChoice.club.name} · ${durationChoice.time}` : undefined}
+          onClose={() => setDurationChoice(null)}
+        >
+          <View style={styles.wrapRow}>
+            {durationChoice?.durations.map((d) => (
+              <Chip
+                key={d}
+                label={`${durationLabel(d)} · ${fcfa(priceForSlot(durationChoice.club, durationChoice.time, d))}`}
+                onPress={() => {
+                  setSheet({ club: durationChoice.club, time: durationChoice.time, durationMin: d });
+                  setDurationChoice(null);
+                }}
+                size="lg"
+              />
+            ))}
+          </View>
+        </BottomSheet>
       </Reveal>
     </Screen>
   );
@@ -403,4 +467,5 @@ const styles = StyleSheet.create({
   freeDot: { backgroundColor: colors.greenSoft, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 2 },
   clubHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   slotWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  wrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

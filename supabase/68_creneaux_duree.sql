@@ -1269,3 +1269,42 @@ as $$
 $$;
 revoke execute on function public.fetch_competitions() from public, anon;
 grant execute on function public.fetch_competitions() to authenticated;
+
+-- ─── 23) fetch_open_matches (+ duration_min) — un match ouvert affiche la durée RÉELLE du créneau
+-- (1h ou 1h30) au lieu d'un 1h30 générique. Reprend À L'IDENTIQUE la 57 (open_capacity, blocage,
+-- prénom masqué) + la colonne `duration_min`. Le TYPE change (colonne en +) → drop obligatoire.
+drop function if exists public.fetch_open_matches();
+create or replace function public.fetch_open_matches()
+returns table (
+  id uuid, club_id text, club_name text, date_key text, date_label text, "time" text, court text,
+  starts_at bigint, open_level text, creator_id uuid, creator_name text, places_left int, capacity int,
+  duration_min int
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select r.id, r.club_id, r.club_name, r.date_key, r.date_label, r."time", r.court, r.starts_at,
+         r.open_level, r.user_id,
+         case
+           when coalesce(trim(r.booked_by_name), '') = '' then 'Un joueur'
+           else split_part(trim(r.booked_by_name), ' ', 1) ||
+                case when split_part(trim(r.booked_by_name), ' ', 2) <> ''
+                     then ' ' || left(split_part(trim(r.booked_by_name), ' ', 2), 1) || '.'
+                     else '' end
+         end,
+         greatest(0, coalesce(r.open_capacity, 4) - 1
+           - coalesce(case when jsonb_typeof(r.invited) = 'array' then jsonb_array_length(r.invited) end, 0))::int,
+         coalesce(r.open_capacity, 4)::int,
+         coalesce(r.duration_min, 90)::int
+    from public.reservations r
+    where r.status = 'booked'
+      and r.open_match
+      and r.starts_at > (extract(epoch from now()) * 1000)::bigint
+      and coalesce(case when jsonb_typeof(r.invited) = 'array' then jsonb_array_length(r.invited) end, 0)
+          < coalesce(r.open_capacity, 4) - 1
+    order by r.starts_at;
+$$;
+revoke execute on function public.fetch_open_matches() from public, anon;
+grant execute on function public.fetch_open_matches() to authenticated;

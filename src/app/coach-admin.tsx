@@ -9,10 +9,11 @@ import { Button, Card, Divider, IconCircle, SectionHeader, Tag, Txt } from '@/co
 import { findClub } from '@/data/clubs';
 import { openSlotsFor } from '@/lib/availability';
 import { fetchCoachLessons, respondLesson, type CoachProfile, type Lesson } from '@/lib/coachesServer';
+import { durationLabel } from '@/lib/courtSchedule';
 import { fcfa } from '@/lib/format';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
-import { SESSION_MS, useApp } from '@/store/AppContext';
+import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
 // ESPACE COACH — réservé aux comptes promus coach par leur club (table coaches, serveur).
@@ -117,7 +118,11 @@ export default function CoachAdmin() {
   const { lessons, failed: loadFailed } = loaded;
   const all = lessons ?? [];
   const pending = all.filter((l) => l.status === 'pending' && l.startsAt > now).sort((a, b) => a.startsAt - b.startsAt);
-  const upcoming = all.filter((l) => l.status === 'accepted' && l.startsAt + SESSION_MS > now).sort((a, b) => a.startsAt - b.startsAt);
+  // Durée RÉELLE du cours (créneaux modulables 1h/1h30, 68 — coachesServer replie déjà à 1h30
+  // pour une donnée héritée), pas une durée de session fixe.
+  const upcoming = all
+    .filter((l) => l.status === 'accepted' && l.startsAt + l.durationMin * 60000 > now)
+    .sort((a, b) => a.startsAt - b.startsAt);
   // Historique compact : cours donnés, demandes passées/refusées ET cours annulés par l’élève
   // après acceptation (reservationId présent) — une demande retirée avant réponse n’y figure pas.
   const history = all
@@ -211,7 +216,16 @@ export default function CoachAdmin() {
         <CoachSettings
           key={profile.clubId}
           profile={profile}
-          clubSlots={club ? openSlotsFor(club, state.clubSlots) : profile.slots}
+          clubSlots={
+            club
+              ? openSlotsFor(club, {
+                  clubSlots: state.clubSlots,
+                  clubCourts: state.clubCourts,
+                  courtSlots: state.courtSlots,
+                  courtClosed: state.clubCourtClosed,
+                })
+              : profile.slots
+          }
           onSave={async (specialty, price, slots) => {
             const ok = await saveCoachSettings(specialty, price, slots);
             toast.show(
@@ -271,7 +285,7 @@ function LessonRow({ lesson: l }: { lesson: Lesson }) {
           {l.studentName}
         </Txt>
         <Txt variant="muted">
-          {l.dateLabel} à {l.time} · {l.court}
+          {l.dateLabel} à {l.time} ({durationLabel(l.durationMin)}) · {l.court}
         </Txt>
         {l.price ? <Txt variant="small" color={colors.textMuted}>{`Terrain : ${fcfa(l.price)} (réglé au club)`}</Txt> : null}
       </View>

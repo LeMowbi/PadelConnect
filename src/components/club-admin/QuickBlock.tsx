@@ -3,50 +3,54 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Chip } from '@/components/Chip';
 import { Button, Card, Txt } from '@/components/ui';
+import { durationLabel, openCourtSlots, type CourtSlot } from '@/lib/courtSchedule';
 import { slotTimestamp } from '@/lib/days';
 import { colors, radius, spacing } from '@/theme';
 
 // Motifs de blocage d’un créneau hors app.
 const BLOCK_REASONS = ['Résa téléphone/WhatsApp', 'Entretien', 'Privatisé', 'Autre'];
 
-// Mini-formulaire « Bloquer un créneau » : date → heure → terrain → motif.
-// Distingue réservé / bloqué / libre, et permet de débloquer (avec confirmation).
+// Mini-formulaire « Bloquer un créneau » : date → TERRAIN → un de SES créneaux (heure + durée,
+// 1h/1h30) → motif. Le terrain est choisi AVANT le créneau (68) : chaque terrain a sa propre
+// grille, un horaire n'a de sens qu'une fois le terrain connu.
 export type CourtStatus = { state: 'free' | 'reserved' | 'blocked' | 'tournoi'; label?: string };
 
 export function QuickBlock({
   days,
-  times,
   courts,
+  grid,
   dayHasTournament,
   courtStatus,
   onBlock,
   onUnblock,
 }: {
   days: { key: string; label: string; value: number }[];
-  times: string[];
   courts: string[];
+  grid: Record<string, CourtSlot[]>; // grille EFFECTIVE de chaque terrain (resolvedGridFor)
   dayHasTournament: (dateKey: string) => boolean;
-  courtStatus: (dateKey: string, time: string, court: string) => CourtStatus;
-  onBlock: (dateKey: string, time: string, court: string, reason: string, ts: number) => Promise<boolean>;
+  courtStatus: (dateKey: string, time: string, court: string, durationMin: number) => CourtStatus;
+  onBlock: (dateKey: string, time: string, court: string, durationMin: number, reason: string, ts: number) => Promise<boolean>;
   onUnblock: (dateKey: string, time: string, court: string) => Promise<boolean>;
 }) {
   // Jour retrouvé par CLÉ (pas l'objet capturé au montage) : après minuit, days[0] change de
   // valeur — un état objet figerait le formulaire sur la veille (motif : cours/[coachId].tsx).
   const [selDayKey, setSelDayKey] = useState<string | null>(null);
   const day = days.find((d) => d.key === selDayKey) ?? days[0];
-  const [time, setTime] = useState<string | null>(null);
   const [court, setCourt] = useState<string | null>(null);
-  const [confirmUnblock, setConfirmUnblock] = useState<string | null>(null);
+  const [slot, setSlot] = useState<CourtSlot | null>(null);
+  const [confirmUnblock, setConfirmUnblock] = useState<CourtSlot | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const tsOf = (t: string) => slotTimestamp(day.key, t);
   const reset = () => {
-    setTime(null);
     setCourt(null);
+    setSlot(null);
     setError(null);
     setConfirmUnblock(null);
   };
   const tournamentDay = dayHasTournament(day.key);
+  // Créneaux OUVERTS du terrain sélectionné (les fermés `x:true` ne se bloquent pas — déjà indisponibles).
+  const courtSlots = court ? openCourtSlots(grid, court) : [];
 
   return (
     <Card style={{ marginTop: spacing.sm, borderColor: colors.coral }}>
@@ -75,160 +79,141 @@ export function QuickBlock({
       ) : (
         <>
           <Txt variant="label" style={{ marginTop: spacing.md }}>
-            Heure
+            Terrain
           </Txt>
           <View style={styles.wrap}>
-            {[...times].sort().map((t) => {
-              const past = tsOf(t) <= Date.now();
-              return (
-                <Chip
-                  key={t}
-                  label={past ? `${t} · passé` : t}
-                  active={t === time}
-                  disabled={past}
-                  onPress={() => {
-                    setTime(t);
-                    setCourt(null);
-                    setError(null);
-                    setConfirmUnblock(null);
-                  }}
-                />
-              );
-            })}
+            {courts.map((c) => (
+              <Chip
+                key={c}
+                label={c}
+                active={c === court}
+                onPress={() => {
+                  setCourt(c);
+                  setSlot(null);
+                  setError(null);
+                  setConfirmUnblock(null);
+                }}
+              />
+            ))}
           </View>
 
-          {time ? (
+          {court ? (
             <>
               <Txt variant="label" style={{ marginTop: spacing.md }}>
-                Terrain
+                Créneau
               </Txt>
-              <View style={{ marginTop: spacing.sm, gap: spacing.sm }}>
-                {courts.map((c) => {
-                  const st = courtStatus(day.key, time, c);
-                  const label =
-                    st.state === 'reserved'
-                      ? `${c} · réservé (${st.label})`
-                      : st.state === 'blocked'
-                        ? `${c} · bloqué (${st.label})`
-                        : st.state === 'tournoi'
-                          ? `${c} · tournoi`
-                          : c;
-                  const tone =
-                    st.state === 'reserved'
-                      ? colors.textMuted
-                      : st.state === 'blocked'
-                        ? colors.coral
-                        : st.state === 'tournoi'
-                          ? colors.purple
-                          : colors.text;
+              <View style={styles.wrap}>
+                {courtSlots.map((s) => {
+                  const past = tsOf(s.t) <= Date.now();
                   return (
-                    <Pressable
-                      key={c}
+                    <Chip
+                      key={s.t}
+                      label={past ? `${s.t} · ${durationLabel(s.d)} · passé` : `${s.t} · ${durationLabel(s.d)}`}
+                      active={slot?.t === s.t}
+                      disabled={past}
                       onPress={() => {
+                        setSlot(s);
                         setError(null);
-                        if (st.state === 'reserved') {
-                          setError(`Déjà réservé par ${st.label} — vois avec le joueur.`);
-                          return;
-                        }
-                        if (st.state === 'tournoi') {
-                          setError('Terrain retenu par un tournoi — non blocable.');
-                          return;
-                        }
-                        if (st.state === 'blocked') {
-                          setConfirmUnblock(confirmUnblock === c ? null : c);
-                          setCourt(null);
-                          return;
-                        }
-                        setCourt(c === court ? null : c);
                         setConfirmUnblock(null);
                       }}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: court === c, disabled: st.state === 'reserved' || st.state === 'tournoi' }}
-                      style={[
-                        styles.courtRow,
-                        court === c && styles.courtRowSel,
-                        (st.state === 'reserved' || st.state === 'tournoi') && { opacity: 0.6 },
-                      ]}
-                    >
-                      <Ionicons
-                        name={
-                          st.state === 'reserved'
-                            ? 'person'
-                            : st.state === 'blocked'
-                              ? 'lock-closed'
-                              : st.state === 'tournoi'
-                                ? 'trophy'
-                                : court === c
-                                  ? 'radio-button-on'
-                                  : 'radio-button-off'
-                        }
-                        size={16}
-                        color={tone}
-                      />
-                      <Txt variant="small" color={tone} style={{ flex: 1, fontWeight: '600' }}>
-                        {label}
-                      </Txt>
-                      {st.state === 'blocked' ? (
-                        <Txt variant="small" color={colors.coral}>
-                          Débloquer ?
-                        </Txt>
-                      ) : null}
-                    </Pressable>
+                    />
                   );
                 })}
               </View>
             </>
           ) : null}
 
-          {/* Confirmation de déblocage */}
-          {time && confirmUnblock ? (
-            <View style={styles.confirmBox}>
-              <Txt variant="small" color={colors.text} style={{ fontWeight: '600' }}>
-                Débloquer {confirmUnblock} à {time} ? Il redeviendra réservable.
-              </Txt>
-              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-                <View style={{ flex: 1 }}>
-                  <Button
-                    size="sm"
-                    label="Débloquer"
-                    icon="lock-open"
-                    onPress={() => {
-                      void onUnblock(day.key, time, confirmUnblock);
-                      setConfirmUnblock(null);
-                    }}
-                    full
-                  />
-                </View>
-                <Button size="sm" label="Annuler" variant="ghost" onPress={() => setConfirmUnblock(null)} />
-              </View>
-            </View>
-          ) : null}
-
-          {/* Motif de blocage */}
-          {time && court ? (
-            <>
-              <Txt variant="label" style={{ marginTop: spacing.md }}>
-                Motif
-              </Txt>
-              <View style={styles.wrap}>
-                {BLOCK_REASONS.map((reason) => (
-                  <Chip
-                    key={reason}
-                    label={reason}
-                    onPress={() => {
-                      void onBlock(day.key, time, court, reason, tsOf(time)).then((ok) => {
-                        if (!ok) {
-                          setError('Impossible de bloquer ce créneau.');
-                          return;
-                        }
-                        reset();
-                      });
-                    }}
-                  />
-                ))}
-              </View>
-            </>
-          ) : null}
+          {court && slot
+            ? (() => {
+                const st = courtStatus(day.key, slot.t, court, slot.d);
+                if (st.state === 'reserved') {
+                  return (
+                    <View style={styles.statusBox}>
+                      <Ionicons name="person" size={16} color={colors.textMuted} />
+                      <Txt variant="small" color={colors.textMuted} style={{ flex: 1, fontWeight: '600' }}>
+                        Déjà réservé par {st.label} — vois avec le joueur.
+                      </Txt>
+                    </View>
+                  );
+                }
+                if (st.state === 'tournoi') {
+                  return (
+                    <View style={styles.statusBox}>
+                      <Ionicons name="trophy" size={16} color={colors.purple} />
+                      <Txt variant="small" color={colors.purple} style={{ flex: 1, fontWeight: '600' }}>
+                        Terrain retenu par un tournoi — non blocable.
+                      </Txt>
+                    </View>
+                  );
+                }
+                if (st.state === 'blocked') {
+                  return (
+                    <>
+                      <Pressable
+                        onPress={() => setConfirmUnblock(confirmUnblock ? null : slot)}
+                        accessibilityRole="button"
+                        style={styles.statusBox}
+                      >
+                        <Ionicons name="lock-closed" size={16} color={colors.coral} />
+                        <Txt variant="small" color={colors.coral} style={{ flex: 1, fontWeight: '600' }}>
+                          Bloqué · {st.label}
+                        </Txt>
+                        <Txt variant="small" color={colors.coral}>
+                          Débloquer ?
+                        </Txt>
+                      </Pressable>
+                      {confirmUnblock ? (
+                        <View style={styles.confirmBox}>
+                          <Txt variant="small" color={colors.text} style={{ fontWeight: '600' }}>
+                            Débloquer {court} à {slot.t} ? Il redeviendra réservable.
+                          </Txt>
+                          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                            <View style={{ flex: 1 }}>
+                              <Button
+                                size="sm"
+                                label="Débloquer"
+                                icon="lock-open"
+                                onPress={() => {
+                                  void onUnblock(day.key, slot.t, court);
+                                  setConfirmUnblock(null);
+                                }}
+                                full
+                              />
+                            </View>
+                            <Button size="sm" label="Annuler" variant="ghost" onPress={() => setConfirmUnblock(null)} />
+                          </View>
+                        </View>
+                      ) : null}
+                    </>
+                  );
+                }
+                // Libre → motif de blocage.
+                return (
+                  <>
+                    <Txt variant="label" style={{ marginTop: spacing.md }}>
+                      Motif
+                    </Txt>
+                    <View style={styles.wrap}>
+                      {BLOCK_REASONS.map((reason) => (
+                        <Chip
+                          key={reason}
+                          label={reason}
+                          onPress={() => {
+                            void onBlock(day.key, slot.t, court, slot.d, reason, tsOf(slot.t)).then((ok) => {
+                              if (!ok) {
+                                setError('Impossible de bloquer ce créneau.');
+                                return;
+                              }
+                              reset();
+                            });
+                          }}
+                        />
+                      ))}
+                    </View>
+                  </>
+                );
+              })()
+            : null}
         </>
       )}
 
@@ -255,15 +240,15 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginTop: spacing.md,
   },
-  courtRow: {
+  statusBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     padding: spacing.md,
     borderRadius: radius.sm,
     backgroundColor: colors.surfaceAlt,
+    marginTop: spacing.md,
   },
-  courtRowSel: { backgroundColor: colors.signatureSoft, borderWidth: 1, borderColor: colors.signature },
   confirmBox: {
     marginTop: spacing.md,
     padding: spacing.md,
