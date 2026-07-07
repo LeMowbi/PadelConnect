@@ -299,3 +299,135 @@ les **réservations joueur + cours coach**. Conséquences (le §6.5 tombe presqu
   `/invite`·`/club` (pas d'heure), **site vitrine** (n'affiche que le nombre de terrains), finances
   opérateur (somme des `price` figés), fiabilité/no-show/annulation-5h (basés sur le début),
   `submit_review` (début), rappels (avant match), `mark_no_show`/MAX_UPCOMING (début), seeds.
+
+---
+
+# 7. Révision 2 — verrouillage après ronde 2 (2026-07-07)
+
+2ᵉ ronde (5 relectures sur le plan révisé : découpage 68/69, boucle chevauchement, contradictions,
+implémentabilité, tests). Elle a **résolu les forks ouverts** et fourni les specs concrètes. **Ces
+décisions sont FINALES** (plus aucun « à décider »). Priment sur §2-§6.
+
+## 7.1 Forks tranchés (définitif)
+- **UNE seule représentation de créneau fermé** = entrée `court_slots` avec `"x":true`.
+  `court_closed` est **retiré** : l'éditeur écrit les fermetures récurrentes en `x:true` et **vide
+  `court_closed` à la sauvegarde** ; `resolveCourtSlots(null)` fusionne à la dérivation **les `!`
+  hérités ET `court_closed`** en `{t,d:90,x:true}` (sinon les fermetures récurrentes des clubs non
+  re-sauvegardés redeviennent réservables — même classe de bug que les `!`). `availability.ts` lit
+  **uniquement** `court_slots` résolu, plus jamais `courtClosed`. (`blocked_slots`/`blocked_ranges`
+  restent : axe DATE-spécifique, ≠ récurrent.)
+- **`blocked_ranges`** : une heure fermée `T` ferme l'intervalle **`[T, T+90)`** (session max) ;
+  overlap d'intervalle des DEUX côtés (`rangeBlocks` client + les 3 branches serveur). Pas de
+  changement de schéma `times`, juste l'interprétation. (Option « donner une durée » écartée.)
+- **`court_slots` = seule source de vérité** quand non-null ; le nouveau client ne lit plus `slots`
+  pour les horaires. À chaque sauvegarde, `upsert_club_config` écrit AUSSI un `slots` dérivé
+  (projection 90 min, créneaux fermés en `'!'`) comme **miroir compat ancien client**. Le guard
+  serveur valide contre `court_slots` → un ancien client qui tente un créneau invalide est refusé
+  (dégradation propre : les anciens builds ne voient juste pas les créneaux 1h).
+- **`validateTiers` sensible à la durée** : n'exiger un prix que pour les durées **réellement
+  présentes** dans la grille résolue (union des terrains) → cohérent avec `minPrice` par construction.
+- **Règle 5 « créneau réservé » définie IDENTIQUE client+serveur** = toute entrée `court_slots` dont
+  l'intervalle `[t,t+d)` **chevauche** l'intervalle d'une réservation `booked` à venir sur ce terrain ;
+  appliquée à retirer/raccourcir/déplacer **ET à AJOUTER** (sinon on affiche un créneau non réservable).
+  Calculée côté client depuis la **même** `slot_occupancy` (avec durée) que le serveur → jamais de
+  désaccord.
+
+## 7.2 Rollout — précisions finales
+- **CHECK non idempotents** aussi : `drop constraint if exists` avant chaque `add constraint … check`
+  (`reservations`/`lessons`/`blocked_slots`) ; `drop index if exists reservations_slot_unique`.
+- **`create extension if not exists btree_gist`** = tout en HAUT de **SQL 69** (juste avant la
+  contrainte).
+- **Appliquer SQL 69 seulement quand le nouveau build est la version LIVE/minimale** (pas juste
+  soumis) — sinon un #57 encore actif voit un conflit 23P01 non mappé. Table vide → risque faible,
+  mais on respecte l'ordre.
+- `reservations.ts:139` : **ajouter** `'23P01'` (OR, ne PAS remplacer `23514`/`P0001`).
+
+## 7.3 Contrat de chevauchement — explicite
+- `overlaps(a,b)` : **demi-ouvert strict** `aStart < bEnd && bStart < aEnd` (adjacents OK, comme
+  `int8range [)`). UNE seule convention client+serveur.
+- `freeCourts(club, dateKey, time, durationMin, ctx)` + `AvailCtx.courtSlots` : la dispo doit
+  connaître la durée candidate et la grille du terrain (sinon l'app propose un créneau que le serveur
+  refuse). Signature à changer au Lot 3.
+- **`reservations_insert_guard` RÉÉCRIT `new.starts_at := derive(date_key,time)`** (UTC/Abidjan),
+  ne fait pas confiance à la valeur client (sinon `starts_at` forgé passe la contrainte au mauvais
+  intervalle).
+- **`block_slot`** pose `blocked_slots.duration_min` depuis `resolve_court_slots` (durée réelle du
+  créneau), pas 90 par défaut → client et serveur d'accord.
+- `int8range(starts_at, starts_at + duration_min*60000)` = **millisecondes** (`starts_at` epoch-ms).
+
+## 7.4 API pure `courtSchedule.ts` (signatures FIGÉES — tests d'abord)
+```ts
+export type CourtSlot = { t: string; d: 60 | 90; x?: boolean };
+export function slotEnd(t: string, d: number): number | null;            // toMin(t)+d
+export function overlaps(a: CourtSlot, b: CourtSlot): boolean;           // [t,t+d) strict
+export function canAddCourtSlot(existing: CourtSlot[], t: string, d: 60|90):
+  { ok: true } | { ok: false; error: string };                          // format, ≥05:00, fin≤24:00, no-overlap (durée PROPRE), no-dup
+export function openCourtSlots(cs: Record<string,CourtSlot[]>, court: string): CourtSlot[]; // !x, triés
+export function resolveCourtSlots(
+  cfg: { courtSlots?: Record<string,CourtSlot[]> | null; slots?: string[]; courtClosed?: Record<string,string[]> },
+  courts: string[]
+): Record<string,CourtSlot[]>;                                          // null ⇒ slots@90 ; '!' ET court_closed ⇒ {d:90,x:true}
+export function slotDurationAt(cs: Record<string,CourtSlot[]>, court: string, t: string): 60|90|null;
+```
+⚠️ `canAddCourtSlot` chevauche avec la **durée propre** de chaque créneau (≠ tampon fixe 90 min de
+l'ancien `canAddSlot`) — c'est une SÉMANTIQUE nouvelle, ne pas porter l'ancienne règle.
+
+## 7.5 Schéma `court_slots` + validation `upsert_club_config`
+- Objet JSON, **≤ 20 clés** (terrains) ; valeur = tableau **≤ 48 entrées** ;
+  entrée `{ t: /^([01]\d|2[0-3]):(00|30)$/ , d: 60|90, x?: bool }` (**granularité 30 min**, rejeter :15/:45).
+- Bornes : `toMin(t) ≥ 300` et `toMin(t)+d ≤ 1440` ; **anti-chevauchement par terrain** côté SQL
+  (équivalent serveur de `canAddCourtSlot` — la contrainte d'exclusion ne garde QUE les réservations,
+  pas la définition de grille) ; rejeter propriétés inconnues / non-array ; dédup `t` par terrain ;
+  ignorer les clés orphelines à la LECTURE via `resolveCourtSlots(cfg, courts)`.
+- **WRITE null-préserve ≠ READ null-dérive** : `p_court_slots = null` ⇒ **préserve** la colonne
+  (comme SQL 66) ; `'{}'` ⇒ efface (retour au défaut). La branche « remise à défaut » du store
+  (`clubConfigSlices`) doit matcher cette sémantique.
+
+## 7.6 Specs UI concrètes (débloquent le code)
+- **Planning gérant** (`SectionReservations`) : abandonner la matrice `heure×terrain` → **une ligne
+  par terrain**, chips `début→fin · 1h/1h30` colorés par statut (`courtSlotStatusAt(court,{t,d})` en
+  overlap, tournoi = `[t,t+90)`). `SelectedCell` gagne `durationMin`. Stats respécifiées :
+  `sellable`/`byHour`/`quietHours` itèrent les créneaux PROPRES de chaque terrain (plus de
+  `planTimes` partagé). `QuickBlock`/`BlockRangeForm` : prop `slotsForCourt(court): {t,d}[]` (choix
+  du terrain d'abord). (Timeline proportionnelle = option premium, hors-scope sauf demande.)
+- **« Par heure »** : tuiles = heures (union des débuts, `slotGrid` lit `courtSlots`) ; helper
+  `freeCourtSlotsAt(club,dateKey,time,ctx): {court,durationMin}[]` ; à la sélection, **grouper les
+  terrains libres par durée** → une chip par durée présente (`1h · 12 000` / `1h30 · 15 000`), résout
+  d'un coup le cas inter-clubs ET intra-club mixte ; `BookingSheet` reçoit `durationMin` explicite.
+- **Cours coach** : `durationMin`/`slotPrice`/hint/summary passent **en aval de `effectiveCourt`**
+  (recalcul au changement de terrain) ; prix indéterminé avant choix terrain → StickyBar « Choisis un
+  terrain » puis prix exact ; `requestCoachLesson` gagne `durationMin`.
+- **`minPrice`** : `minPrice(club, offered: Set<60|90> = {90})` + helper `offeredDurations(courtSlots, club)`
+  calculé au niveau connecté au store ; `ClubCard` gagne une prop optionnelle `offeredDurations`
+  (défaut `{90}`) passée par les ~3 écrans-listes (accueil, favoris, liste clubs) — énumérer les
+  sites d'appel pour n'en manquer aucun.
+
+## 7.7 Plan de TESTS (barrière avant build — la garde anti-double-vente doit être PROUVÉE)
+- **`courtSchedule.test.ts`** : overlap (adjacents OK ; `08:00·90` vs `09:00`/`09:29·60` = conflit) ;
+  **asymétrie 1h-avant-1h30 ET 1h30-avant-1h** ; minuit (`23:00·60` OK, `23:00·90` refusé, `22:30·90`
+  OK) ; min 05:00 ; `canAddCourtSlot` sur grille mixte ; **`resolveCourtSlots` : `!` ET `court_closed`
+  restent fermés** (garde anti-régression double-vente) ; null ⇒ tout @90 identique à aujourd'hui.
+- **NOUVEAU `availability.test.ts`** (n'existe pas — la garde côté app y vit) : `freeCourts` exclut un
+  terrain pris `08:00·90` pour un candidat `09:00·60` mais pas `09:30·60` ; `competitionBlockedCourts`
+  tournoi `08:00`(90) bloque `09:00` qui déborde, pas `09:30` ; occupation autres joueurs avec durée.
+- **`pricing.test.ts`** : `priceForSlot(...,60)` vs `(...,90)` ; `minPrice` ne compte que les durées
+  offertes ; clamp `price60 = max(PRICE_MIN, round(price90*2/3))` ; `validateTiers` 2 prix sur bornes union.
+- **`audit.test.ts` RÉÉCRIT** (lignes 65-84) : le miroir `taken()` passe d'égalité exacte à overlap
+  (sinon il reste vert à tort et cautionne les chevauchements).
+- **Compat signatures** : `canAddSlot`/`priceForSlot`/`minPrice` gardent des params par défaut
+  (90/legacy) pour que `slots.test.ts`/`pricing.test.ts`/`seeds.entry.ts` compilent ; le filtre
+  `priceTiersFor` ne doit PAS se mettre à exiger `price60>0` (sinon les seeds sans price60 deviennent
+  « invalides »).
+- **Suite SERVEUR scriptée** (transactions annulées, technique 65/66/67, code d'erreur attendu) :
+  (1) exclusion refuse `08:00·90`+`09:00·60` même terrain → **23P01** ; (2) adjacents `08:00·90`+`09:30`
+  → OK ; (3) `duration_min=0`/null → refus CHECK ; (4) `starts_at` forgé ≠ `date_key+time` → refus ;
+  (5) `upsert_club_config` retire/raccourcit un créneau sous une résa à venir → refus ; (6) tournoi
+  90 vs résa 60 qui déborde → refus ; (7) `mark_no_show` retour `booked` → 23P01 ; (8) `starts_at null`
+  → aucune ligne ne peut briquer un terrain.
+- **Compat** : `court_slots=null` ≡ aujourd'hui ; `duration_min` absent ⇒ 90 (isPlayed/agenda/finances).
+
+## 7.8 Textes périmés à corriger dans le doc (ménage)
+- §2/Lot 2 mettaient la contrainte d'exclusion en « SQL 68 » → c'est **69** (voir §6.0). 
+- §2 « ⚠️ 4 occurrences dans fetch_leaderboard » → **2+2+1=5 sur 3 fonctions** (§6.6).
+- §2 « fermetures ponctuelles » pour `court_closed` → `court_closed` est **récurrent** (retiré, §7.1) ;
+  le ponctuel = `blocked_slots`/`blocked_ranges`.
