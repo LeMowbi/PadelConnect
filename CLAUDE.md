@@ -82,8 +82,12 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   l'écrire dans le dépôt).
 - Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
 --auto-submit --non-interactive --no-wait`.
-- **`app.json` `buildNumber` courant : 56** (EAS `autoIncrement` le bump à chaque build — ne PAS
-  s'en remettre au suivi manuel ci-dessous, c'est `app.json` qui fait foi). Historique : #46 =
+- **`app.json` `buildNumber` courant : 57** (EAS `autoIncrement` le bump à chaque build — ne PAS
+  s'en remettre au suivi manuel ci-dessous, c'est `app.json` qui fait foi). Le **#57** est EN REVUE
+  App Store ; le prochain build (créneaux 1h/1h30) le REMPLACERA en soumission (demande porteur).
+  ⚠️ **SQL `68_creneaux_duree.sql` à COLLER en base** (SQL Editor → Run) quand ce build devient la
+  version LIVE minimale — table `reservations` VIDE donc risque faible, mais coller AVANT que le
+  binaire ne soit en prod (sinon un #57 encore actif verrait un conflit 23P01 non mappé). Historique : #46 =
   lancement audit n°7 ; #47 = créneaux modulables + multi-clubs ; #48+ = chantier v2 (comptes club,
   1v1, Wave, stats) ; suivi des 10 audits « chaque audit renforce le précédent » (tours 2→10) sur la
   branche de dev. ✅ **Tout le SQL `02`→`64` est appliqué EN BASE** (vérifié à distance le
@@ -420,6 +424,27 @@ tous les agents en parallèle et vérification adversariale, puis build + mise E
   `phoneTaken`) → « Ce numéro est déjà utilisé par un autre compte. ». **Appliqué et vérifié live**
   (0 doublon, blocage prouvé sur données réelles en transaction annulée). ⚠️ côté CLIENT = **build
   suivant** (le #57 en revue applique déjà la règle SERVEUR, juste le message est moins fin).
+
+### Créneaux à durée variable 1h/1h30 par terrain (68, demande porteur 2026-07-07) — ✅ CODE FAIT
+
+Chantier « créneaux modulables 1h/1h30, horaires PAR TERRAIN » (détail archi en §9). Fait sur la
+branche de dev en 5 lots (tsc 0 · lint 0 · test:logic vert · bundle eager OK) :
+- **Lot 1** — logique PURE `src/lib/courtSchedule.ts` (overlap `[t,t+d)`, `canAddCourtSlot`,
+  `resolveCourtSlots` rétrocompat) + tarifs 2 durées (`pricing.ts` : `price60Of`, `priceForSlot(...,d)`,
+  `minPrice(club, offered)`) + tests (`courtSchedule`/`pricing`).
+- **Lot 2** — SQL `68_creneaux_duree.sql` : contrainte d'exclusion GiST (23P01), `court_slots` jsonb,
+  `duration_min`, `resolve_court_slots`, gardes réécrites en intervalle, `upsert_club_config`+p_court_slots,
+  `request_lesson`+p_duration, `create_competition`+p_slot_durations, `fetch_competitions`/`fetch_open_matches`
+  exposent les durées, leaderboard `duration_min*60000`. **Vérifié adversarial (9/9 assertions live annulées)**.
+- **Lot 3** — store + dispo par intervalle (`availability.ts` `freeCourtSlotsAt`/`freeCourts`,
+  `Reservation.durationMin`, `isPlayed` durée réelle, tranche `courtSlots` + action `setCourtSlots`,
+  overlap dedup) + tests (`availability` neuf, `audit`/`ranges` réécrits).
+- **Lots 4-5** — écrans : Espace Club (éditeur grille par terrain, 2 prix, planning une ligne/terrain,
+  QuickBlock/BlockRangeForm), joueur (« Par heure »/fiche club groupent par DURÉE via puces prix),
+  coach (prix en aval du terrain), tournois modulables (durée par créneau), agenda à la durée réelle.
+- **Reste porteur** : ① coller `supabase/68_creneaux_duree.sql` en base ; ② lancer le build EAS
+  (`EXPO_TOKEN=…`) → soumission qui REMPLACE le #57 ; ③ (le token EAS/ASC vit chez le porteur, jamais
+  dans le dépôt).
 
 ## 11. Où regarder
 
