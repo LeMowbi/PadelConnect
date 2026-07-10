@@ -132,6 +132,37 @@ function CourtScheduleRow({
     await persist(next, `Créneau ${s.t} passé en ${durationLabel(nextD)} sur ${court}`);
   };
 
+  // Refaire TOUTE la grille du terrain à une durée unique, SANS trou : sessions enchaînées de
+  // l'ouverture à la fermeture actuelles (bascule créneau par créneau = un trou de 30 min à
+  // chaque raccourcissement — ici la grille est recompactée d'une traite). Les heures de départ
+  // changent → refusé si une réservation à venir vit sur ce terrain (elle ne retomberait plus
+  // sur un créneau) ; les créneaux fermés sont rouverts (leurs heures n'existent plus), on le dit.
+  const rebuildAll = async (d: 60 | 90) => {
+    if (!sorted.length) return;
+    const now = Date.now();
+    if (reservations.some((r) => r.clubId === clubId && r.court === court && !isPlayed(r, now))) {
+      toast.show('Ce terrain a des réservations à venir — vois avec les joueurs pour qu’ils annulent depuis l’app.', {
+        icon: 'alert-circle',
+      });
+      return;
+    }
+    const start = toMin(sorted[0].t) ?? 0;
+    const last = sorted[sorted.length - 1];
+    const close = slotEnd(last.t, last.d) ?? start;
+    const next: CourtSlot[] = [];
+    for (let m = start; m + d <= close; m += d) next.push({ t: minutesToSlot(m), d });
+    if (!next.length) {
+      toast.show(`Plage trop courte pour une session de ${durationLabel(d)}`, { icon: 'alert-circle' });
+      return;
+    }
+    const hadClosed = sorted.some((s) => s.x);
+    await persist(
+      next,
+      `${court} : tout en ${durationLabel(d)} — ${next.length} créneaux sans trou` +
+        (hadClosed ? ' (créneaux fermés rouverts — referme ta pause si besoin)' : ''),
+    );
+  };
+
   // Ajouter un créneau (heure + durée) — `canAddCourtSlot` porte toutes les règles (format,
   // bornes, chevauchement AVEC les créneaux fermés compris — un créneau fermé occupe sa place).
   const addSlot = async () => {
@@ -179,9 +210,26 @@ function CourtScheduleRow({
         </Pressable>
       </View>
       {durMode ? (
-        <Txt variant="small" color={colors.textMuted}>
-          Touche un créneau pour basculer sa durée (1h ↔ 1h30).
-        </Txt>
+        <View style={{ gap: spacing.xs }}>
+          <Txt variant="small" color={colors.textMuted}>
+            Touche un créneau pour basculer sa durée (1h ↔ 1h30). Raccourcir laisse un trou de 30 min — comble-le via « Ajouter un créneau
+            », ou refais toute la grille d’un coup, sans trou :
+          </Txt>
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <Chip
+              label="Tout en 1h"
+              disabled={saving}
+              accessibilityLabel={`Refaire toute la grille de ${court} en sessions de 1h, sans trou`}
+              onPress={() => void rebuildAll(60)}
+            />
+            <Chip
+              label="Tout en 1h30"
+              disabled={saving}
+              accessibilityLabel={`Refaire toute la grille de ${court} en sessions de 1h30, sans trou`}
+              onPress={() => void rebuildAll(90)}
+            />
+          </View>
+        </View>
       ) : null}
       <View style={styles.wrap}>
         {sorted.length === 0 ? (
