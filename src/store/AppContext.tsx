@@ -468,8 +468,9 @@ type AppContextType = {
   setManagedClub: (id: string) => void;
   // false = l’écriture SERVEUR a échoué (réseau/session) : le miroir local n’est PAS touché,
   // l’appelant doit prévenir le gérant (toast) au lieu de laisser la grille diverger en silence.
-  setClubSlots: (clubId: string, slots: string[]) => Promise<boolean>;
-  setClubCourts: (clubId: string, courts: string[]) => Promise<boolean>;
+  // 'ok' | 'denied' (refus serveur : garde anti-orphelin) | 'offline' (panne réseau) — messages honnêtes.
+  setClubSlots: (clubId: string, slots: string[]) => Promise<'ok' | 'denied' | 'offline'>;
+  setClubCourts: (clubId: string, courts: string[]) => Promise<'ok' | 'denied' | 'offline'>;
   blockSlot: (b: BlockedSlot, startsAt: number) => Promise<boolean>;
   unblockSlot: (clubId: string, dateKey: string, time: string, court: string) => Promise<boolean>;
   // Fermetures sur PÉRIODE (54). 'reservations' = une résa à venir vit dans la période.
@@ -2168,21 +2169,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         if (state.serverUserId) {
           const ok = await writeClubConfig(clubId, { slots: next });
-          if (!ok) return false;
+          if (ok !== true) return ok === false ? 'denied' : 'offline';
         }
-        if (sessionEpochRef.current !== epoch) return true;
+        if (sessionEpochRef.current !== epoch) return 'ok';
         setState((s) => ({ ...s, clubSlots: { ...s.clubSlots, [clubId]: next } }));
-        return true;
+        return 'ok';
       },
       setClubCourts: async (clubId, courts) => {
         const epoch = sessionEpochRef.current;
         if (state.serverUserId) {
           const ok = await writeClubConfig(clubId, { courts });
-          if (!ok) return false;
+          if (ok !== true) return ok === false ? 'denied' : 'offline';
         }
-        if (sessionEpochRef.current !== epoch) return true;
+        if (sessionEpochRef.current !== epoch) return 'ok';
         setState((s) => ({ ...s, clubCourts: { ...s.clubCourts, [clubId]: courts } }));
-        return true;
+        return 'ok';
       },
       // Fermer un créneau hors app. Garde-fous : jamais dans le passé, jamais par-dessus
       // une réservation PadelConnect, jamais en double.
