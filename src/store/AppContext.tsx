@@ -87,7 +87,7 @@ import {
 import { blockUser as blockUserRpc, fetchBlockedUserIds } from '@/lib/moderation';
 import { samePhone } from '@/lib/phone';
 import { overlaps, type CourtSlot } from '@/lib/courtSchedule';
-import { SESSION_MIN } from '@/lib/slots';
+import { minutesToSlot, SESSION_MIN, slotToMinutes } from '@/lib/slots';
 import { cancelMatchReminder, onPushReceivedInForeground, scheduleMatchReminder, syncMatchReminders } from '@/lib/notifications';
 import { registerPushToken } from '@/lib/push';
 import { uploadAvatar } from '@/lib/avatar';
@@ -2311,7 +2311,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
             nextCourtClosed[clubId] = projected;
           }
-          return { ...s, courtSlots: nextCourtSlots, clubCourtClosed: nextCourtClosed };
+          // Miroir `slots` : au mode 'set', le SERVEUR réécrit aussi la grille simple (échelle
+          // @90 recouvrant [ouverture, fermeture] de la grille réelle — 69). On applique la MÊME
+          // dérivation localement, sinon « Repasser aux horaires simples » rouvrirait l'éditeur
+          // simple sur une grille périmée… qui se REmatérialiserait au serveur au prochain geste
+          // (perte silencieuse — constat HIGH de l'audit tour 2). Échelle vide (plage < 1h30) →
+          // on conserve le miroir existant, comme le repli (d) de la 69.
+          const nextClubSlots = { ...s.clubSlots };
+          if (!cleared) {
+            let open = Infinity;
+            let close = -Infinity;
+            for (const slots of Object.values(grid))
+              for (const sl of slots) {
+                const m = slotToMinutes(sl.t);
+                if (m === null) continue;
+                if (m < open) open = m;
+                if (m + sl.d > close) close = m + sl.d;
+              }
+            const ladder: string[] = [];
+            for (let m = open; m + 90 <= close; m += 90) ladder.push(minutesToSlot(m));
+            if (ladder.length) nextClubSlots[clubId] = ladder;
+          }
+          return { ...s, courtSlots: nextCourtSlots, clubCourtClosed: nextCourtClosed, clubSlots: nextClubSlots };
         });
         return 'ok';
       },
