@@ -47,6 +47,7 @@ function CourtScheduleRow({
   const toast = useToast();
   const [showAdd, setShowAdd] = useState(false);
   const [removeMode, setRemoveMode] = useState(false);
+  const [durMode, setDurMode] = useState(false); // toucher un créneau = basculer sa durée 1h ↔ 1h30
   const [draftT, setDraftT] = useState('09:00');
   const [draftD, setDraftD] = useState<60 | 90>(90);
   const [saving, setSaving] = useState(false);
@@ -104,6 +105,33 @@ function CourtScheduleRow({
     await persist(next, `Créneau ${s.t} retiré de ${court}`);
   };
 
+  // Basculer la durée d'un créneau existant (1h ↔ 1h30) SANS retirer/ré-ajouter — le geste que
+  // cherche naturellement un gérant. Mêmes gardes que le retrait : refus si une réservation à
+  // venir occupe le créneau (sa durée est FIGÉE — la grille ne doit pas se dérober sous elle),
+  // et l'ALLONGEMENT 1h → 1h30 vérifie le chevauchement avec le créneau suivant.
+  const switchDuration = async (s: CourtSlot) => {
+    if (hasUpcoming(s)) {
+      toast.show('Ce créneau a des réservations à venir sur ce terrain — vois avec les joueurs pour qu’ils annulent depuis l’app.', {
+        icon: 'alert-circle',
+      });
+      return;
+    }
+    const nextD: 60 | 90 = s.d === 90 ? 60 : 90;
+    if (nextD > s.d) {
+      const v = canAddCourtSlot(
+        sorted.filter((x) => x.t !== s.t),
+        s.t,
+        nextD,
+      );
+      if (!v.ok) {
+        toast.show(v.error, { icon: 'alert-circle' });
+        return;
+      }
+    }
+    const next = sorted.map((x) => (x.t === s.t ? { ...x, d: nextD } : x));
+    await persist(next, `Créneau ${s.t} passé en ${durationLabel(nextD)} sur ${court}`);
+  };
+
   // Ajouter un créneau (heure + durée) — `canAddCourtSlot` porte toutes les règles (format,
   // bornes, chevauchement AVEC les créneaux fermés compris — un créneau fermé occupe sa place).
   const addSlot = async () => {
@@ -124,7 +152,21 @@ function CourtScheduleRow({
           {court}
         </Txt>
         <Pressable
-          onPress={() => setRemoveMode((v) => !v)}
+          onPress={() => {
+            setDurMode((v) => !v);
+            setRemoveMode(false);
+          }}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`${durMode ? 'Terminer le changement de durée' : 'Changer la durée d’un créneau (1h ↔ 1h30)'} sur ${court}`}
+        >
+          <Ionicons name={durMode ? 'checkmark' : 'time-outline'} size={18} color={durMode ? colors.green : colors.textFaint} />
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            setRemoveMode((v) => !v);
+            setDurMode(false);
+          }}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={`${removeMode ? 'Terminer le retrait de créneaux' : 'Retirer un créneau'} sur ${court}`}
@@ -136,6 +178,11 @@ function CourtScheduleRow({
           />
         </Pressable>
       </View>
+      {durMode ? (
+        <Txt variant="small" color={colors.textMuted}>
+          Touche un créneau pour basculer sa durée (1h ↔ 1h30).
+        </Txt>
+      ) : null}
       <View style={styles.wrap}>
         {sorted.length === 0 ? (
           <Txt variant="small" color={colors.textMuted}>
@@ -149,15 +196,17 @@ function CourtScheduleRow({
             <Chip
               key={s.t}
               label={`${s.t}→${endLabel} · ${durationLabel(s.d)}`}
-              icon={removeMode ? 'close' : undefined}
+              icon={removeMode ? 'close' : durMode ? 'time-outline' : undefined}
               active={!s.x}
               disabled={saving}
               accessibilityLabel={
                 removeMode
                   ? `Retirer définitivement le créneau ${s.t}-${endLabel} de ${court}`
-                  : `${court}, créneau ${s.t}-${endLabel}, ${durationLabel(s.d)}, ${s.x ? 'fermé' : 'ouvert'}`
+                  : durMode
+                    ? `Passer le créneau ${s.t} de ${court} en ${durationLabel(s.d === 90 ? 60 : 90)}`
+                    : `${court}, créneau ${s.t}-${endLabel}, ${durationLabel(s.d)}, ${s.x ? 'fermé' : 'ouvert'}`
               }
-              onPress={() => (removeMode ? void removeSlot(s) : void toggleClosed(s))}
+              onPress={() => (removeMode ? void removeSlot(s) : durMode ? void switchDuration(s) : void toggleClosed(s))}
             />
           );
         })}
@@ -623,6 +672,16 @@ export function SectionMonClub({ club }: { club: Club }) {
       toast.show('Terrain non enregistré — vérifie ta connexion', { icon: 'alert-circle' });
       return;
     }
+    // Sous grille PAR TERRAIN : le nouveau terrain hérite tout de suite de la grille du premier
+    // terrain du club (mêmes horaires ET durées 1h/1h30). Sans ça il retomberait sur la grille
+    // générique @90 — PAS les horaires du club — et la prochaine sauvegarde figerait ce défaut
+    // (c'est ce qui a effacé les réglages d'un gérant qui re-créait ses terrains). Best-effort,
+    // comme les nettoyages de removeCourt.
+    const storedGrid = state.courtSlots[club.id];
+    if (storedGrid && Object.keys(storedGrid).length) {
+      const model = storedGrid[courts[0]] ?? Object.values(storedGrid)[0] ?? [];
+      if (model.length) void setCourtSlots(club.id, { ...storedGrid, [n]: model.map((s) => ({ ...s })) });
+    }
     setCourtName('');
   };
   const removeCourt = async (n: string) => {
@@ -650,6 +709,14 @@ export function SectionMonClub({ club }: { club: Club }) {
       const nextMap = { ...(state.clubCourtClosed[club.id] ?? {}) };
       delete nextMap[n];
       void setCourtClosed(club.id, nextMap);
+    }
+    // Idem pour sa grille par terrain : une entrée orpheline serait ré-héritée en silence par un
+    // terrain re-créé au même nom (et fausse le comptage des grilles explicites).
+    const storedGrid = state.courtSlots[club.id];
+    if (storedGrid?.[n]) {
+      const nextGrid = { ...storedGrid };
+      delete nextGrid[n];
+      void setCourtSlots(club.id, nextGrid);
     }
   };
 
@@ -1137,7 +1204,8 @@ export function SectionMonClub({ club }: { club: Club }) {
             <>
               <Txt variant="muted">
                 Chaque terrain a SA grille : mélange librement des sessions de 1h et 1h30, sans chevauchement. Touche un créneau pour le
-                fermer ou le rouvrir ; utilise « Retirer un créneau » (icône à droite du nom du terrain) pour le supprimer définitivement.
+                fermer ou le rouvrir ; l’icône horloge (à droite du nom du terrain) passe un créneau de 1h à 1h30 et inversement ; l’icône «
+                − » retire un créneau définitivement.
               </Txt>
               {courts.map((c) => (
                 <CourtScheduleRow
@@ -1146,7 +1214,16 @@ export function SectionMonClub({ club }: { club: Club }) {
                   court={c}
                   slots={perCourtGrid[c] ?? []}
                   reservations={state.reservations}
-                  onSave={(next) => setCourtSlots(club.id, { ...perCourtGrid, [c]: next })}
+                  onSave={(next) => {
+                    // Base = grille STOCKÉE (pas la grille résolue) : on ne fige jamais un repli
+                    // d'affichage comme donnée réelle, et on purge les entrées de terrains retirés
+                    // (une grille orpheline a déjà écrasé les réglages d'un club en production).
+                    const base = state.courtSlots[club.id] ?? perCourtGrid;
+                    const nextGrid: Record<string, CourtSlot[]> = {};
+                    for (const k of courts) if (base[k]) nextGrid[k] = base[k];
+                    nextGrid[c] = next;
+                    return setCourtSlots(club.id, nextGrid);
+                  }}
                 />
               ))}
               <View style={styles.coverDivider} />
