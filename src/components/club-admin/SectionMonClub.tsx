@@ -105,31 +105,57 @@ function CourtScheduleRow({
     await persist(next, `Créneau ${s.t} retiré de ${court}`);
   };
 
-  // Basculer la durée d'un créneau existant (1h ↔ 1h30) SANS retirer/ré-ajouter — le geste que
-  // cherche naturellement un gérant. Mêmes gardes que le retrait : refus si une réservation à
-  // venir occupe le créneau (sa durée est FIGÉE — la grille ne doit pas se dérober sous elle),
-  // et l'ALLONGEMENT 1h → 1h30 vérifie le chevauchement avec le créneau suivant.
+  // Basculer la durée d'un créneau (1h ↔ 1h30) en gardant la grille SANS TROU : les créneaux
+  // qui s'enchaînaient juste derrière se DÉCALENT automatiquement de 30 min (en avant ou en
+  // arrière) pour rester collés — un club mélange librement 1h et 1h30 sans jamais créer de
+  // trou. Une PAUSE volontaire (vrai trou dans la grille) arrête le décalage : on n'y touche
+  // pas. Gardes : refus si le créneau modifié OU un créneau déplacé porte une réservation à
+  // venir (leurs heures sont vendues), et l'allongement ne doit pas dépasser minuit.
   const switchDuration = async (s: CourtSlot) => {
-    if (hasUpcoming(s)) {
-      toast.show('Ce créneau a des réservations à venir sur ce terrain — vois avec les joueurs pour qu’ils annulent depuis l’app.', {
-        icon: 'alert-circle',
-      });
+    const nextD: 60 | 90 = s.d === 90 ? 60 : 90;
+    const delta = nextD - s.d; // -30 (vers 1h) ou +30 (vers 1h30)
+    // Chaîne contiguë derrière `s` : chaque créneau qui démarre EXACTEMENT à la fin du
+    // précédent suit le décalage ; le premier trou (pause volontaire) arrête la chaîne.
+    const idx = sorted.findIndex((x) => x.t === s.t);
+    const moved: CourtSlot[] = [];
+    let chainEnd = (toMin(s.t) ?? 0) + s.d;
+    for (let i = idx + 1; i < sorted.length; i++) {
+      const st = toMin(sorted[i].t) ?? 0;
+      if (st !== chainEnd) break;
+      moved.push(sorted[i]);
+      chainEnd = st + sorted[i].d;
+    }
+    if ([s, ...moved].some(hasUpcoming)) {
+      toast.show(
+        'Ce changement déplacerait des créneaux qui ont des réservations à venir — vois avec les joueurs pour qu’ils annulent depuis l’app.',
+        { icon: 'alert-circle' },
+      );
       return;
     }
-    const nextD: 60 | 90 = s.d === 90 ? 60 : 90;
-    if (nextD > s.d) {
-      const v = canAddCourtSlot(
-        sorted.filter((x) => x.t !== s.t),
-        s.t,
-        nextD,
-      );
-      if (!v.ok) {
-        toast.show(v.error, { icon: 'alert-circle' });
-        return;
-      }
+    if (delta > 0 && chainEnd + delta > 24 * 60) {
+      toast.show('Impossible : la grille dépasserait minuit — retire d’abord le dernier créneau.', { icon: 'alert-circle' });
+      return;
     }
-    const next = sorted.map((x) => (x.t === s.t ? { ...x, d: nextD } : x));
-    await persist(next, `Créneau ${s.t} passé en ${durationLabel(nextD)} sur ${court}`);
+    const movedTimes = new Set(moved.map((x) => x.t));
+    const next = sorted.map((x) => {
+      if (x.t === s.t) return { ...x, d: nextD };
+      if (movedTimes.has(x.t)) return { ...x, t: minutesToSlot((toMin(x.t) ?? 0) + delta) };
+      return x;
+    });
+    // Ceinture : la grille candidate doit rester saine (aucun chevauchement) — sinon on refuse
+    // plutôt que d'enregistrer une grille invalide (le serveur la rejetterait de toute façon).
+    const clash = next.some((a, i) => next.some((b, j) => j > i && overlaps(a, b)));
+    if (clash) {
+      toast.show('Impossible ici : le décalage ferait se chevaucher deux créneaux.', { icon: 'alert-circle' });
+      return;
+    }
+    await persist(
+      next,
+      `Créneau ${s.t} passé en ${durationLabel(nextD)} sur ${court}` +
+        (moved.length
+          ? ` — ${moved.length} créneau${moved.length > 1 ? 'x' : ''} décalé${moved.length > 1 ? 's' : ''} pour rester sans trou`
+          : ''),
+    );
   };
 
   // Refaire TOUTE la grille du terrain à une durée unique, SANS trou : sessions enchaînées de
@@ -212,8 +238,8 @@ function CourtScheduleRow({
       {durMode ? (
         <View style={{ gap: spacing.xs }}>
           <Txt variant="small" color={colors.textMuted}>
-            Touche un créneau pour basculer sa durée (1h ↔ 1h30). Raccourcir laisse un trou de 30 min — comble-le via « Ajouter un créneau
-            », ou refais toute la grille d’un coup, sans trou :
+            Touche un créneau pour le passer de 1h à 1h30 (et inversement) : les créneaux suivants se décalent tout seuls pour rester sans
+            trou — mélange librement les deux durées. Les pauses (vrais trous) ne bougent pas. Ou refais toute la grille d’un coup :
           </Txt>
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
             <Chip
