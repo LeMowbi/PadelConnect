@@ -20,6 +20,9 @@ fi
 echo "→ Export web (npm run build:web)…"
 npm run build:web
 
+echo "→ Correction des chemins de polices (wrangler exclut node_modules)…"
+./scripts/fix-web-assets.sh dist
+
 echo "→ Déploiement sur Cloudflare Pages (padelconnect-club)…"
 npx wrangler@latest pages deploy dist \
   --project-name=padelconnect-club \

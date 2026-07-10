@@ -51,6 +51,11 @@ jobs:
       - name: Exporter le web (dossier dist/)
         run: npm run build:web
 
+      # wrangler EXCLUT tout dossier `node_modules` : sans cette étape les polices d'icônes
+      # (Ionicons…) ne sont pas envoyées → icônes en carrés vides sur tout le site.
+      - name: Corriger les chemins de polices
+        run: ./scripts/fix-web-assets.sh dist
+
       - name: Déployer sur Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
