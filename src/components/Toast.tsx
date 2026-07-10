@@ -46,6 +46,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
         Animated.timing(slide, { toValue: 0, duration: 180, useNativeDriver: true }),
       ]).start();
+      // Durée proportionnelle à la longueur (audit) : 2,4 s ne suffisent pas pour lire un
+      // message d'erreur/confirmation de ~120 caractères — ~45 ms par caractère au-delà de 50,
+      // plafonné à 7 s pour ne pas coller à l'écran.
+      const holdMs = Math.min(7000, Math.max(2400, 2400 + (msg.length - 50) * 45));
       timer.current = setTimeout(() => {
         Animated.parallel([
           Animated.timing(opacity, { toValue: 0, duration: 220, useNativeDriver: true }),
@@ -53,7 +57,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         ]).start(({ finished }) => {
           if (finished) setMessage(null);
         });
-      }, 2400);
+      }, holdMs);
     },
     [opacity, slide],
   );
