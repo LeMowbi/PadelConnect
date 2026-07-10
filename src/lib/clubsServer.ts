@@ -111,7 +111,7 @@ export async function fetchClubConfigs(): Promise<Record<string, ClubConfig> | n
 
 // Le gérant pousse SA config (mise à jour partielle : seuls les champs fournis changent).
 // Le serveur refuse si ce n’est pas son club. false si refusé/échec.
-export async function upsertClubConfig(clubId: string, c: ClubConfig): Promise<boolean> {
+export async function upsertClubConfig(clubId: string, c: ClubConfig): Promise<boolean | null> {
   // p_coaches (fiches simples, retirées) est omis : le paramètre a un défaut null côté serveur,
   // qui préserve la valeur existante — aucun changement de signature SQL nécessaire.
   // p_court_closed n'est envoyé QUE s'il est fourni (même motif que open_match, reservations.ts) :
@@ -131,7 +131,12 @@ export async function upsertClubConfig(clubId: string, c: ClubConfig): Promise<b
     // dérive aussi le miroir `slots` et remet court_closed à vide). Omis contre une base sans 68.
     ...(c.courtSlots !== undefined ? { p_court_slots: c.courtSlots } : {}),
   });
-  return !error && data === true;
+  // null = panne (réseau/API) ≠ false = REFUS serveur (validation, droit, garde anti-orphelin
+  // de la 69) : les appelants qui savent l'exploiter affichent un message honnête au lieu du
+  // « vérifie ta connexion » mensonger relevé à l'audit. Les tests `if (!ok)` existants restent
+  // corrects (false et null sont tous deux falsy).
+  if (error) return null;
+  return data === true;
 }
 
 type ClubOverrideRow = {

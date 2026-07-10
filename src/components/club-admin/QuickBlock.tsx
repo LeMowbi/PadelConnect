@@ -30,7 +30,7 @@ export function QuickBlock({
   dayHasTournament: (dateKey: string) => boolean;
   courtStatus: (dateKey: string, time: string, court: string, durationMin: number) => CourtStatus;
   onBlock: (dateKey: string, time: string, court: string, durationMin: number, reason: string, ts: number) => Promise<boolean>;
-  onUnblock: (dateKey: string, time: string, court: string) => Promise<boolean>;
+  onUnblock: (dateKey: string, time: string, court: string, durationMin: number) => Promise<boolean>;
 }) {
   // Jour retrouvé par CLÉ (pas l'objet capturé au montage) : après minuit, days[0] change de
   // valeur — un état objet figerait le formulaire sur la veille (motif : cours/[coachId].tsx).
@@ -174,7 +174,7 @@ export function QuickBlock({
                                 label="Débloquer"
                                 icon="lock-open"
                                 onPress={() => {
-                                  void onUnblock(day.key, slot.t, court);
+                                  void onUnblock(day.key, slot.t, court, slot.d);
                                   setConfirmUnblock(null);
                                 }}
                                 full

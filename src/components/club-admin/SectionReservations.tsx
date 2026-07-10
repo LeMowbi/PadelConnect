@@ -313,8 +313,13 @@ export function SectionReservations({
             else hapticWarning();
             return ok;
           }}
-          onUnblock={async (dKey, time, court) => {
-            const ok = await unblockSlot(club.id, dKey, time, court);
+          onUnblock={async (dKey, time, court, durationMin) => {
+            // Après un changement de grille (bascule 1h/1h30, « Tout en 1h »…), la cellule peut
+            // CHEVAUCHER un blocage posé à une autre heure : on débloque l'entrée RÉELLE (son
+            // heure à elle) — envoyer l'heure de la cellule ne matchait aucune ligne en base.
+            const cell: CourtSlot = { t: time, d: (durationMin === 60 ? 60 : 90) as 60 | 90 };
+            const blk = clubBlocked.find((b) => b.dateKey === dKey && b.court === court && overlapsAny(cell, [b]));
+            const ok = await unblockSlot(club.id, dKey, blk?.time ?? time, court);
             if (ok)
               hapticSuccess(); // le créneau redevient réservable
             else hapticWarning();

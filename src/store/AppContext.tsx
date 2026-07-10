@@ -479,7 +479,9 @@ type AppContextType = {
   setCourtClosed: (clubId: string, closed: Record<string, string[]>) => Promise<boolean>;
   // Grille PAR TERRAIN à durée variable (68) : remplace la grille du club. `grid` non vide =
   // nouvelle source de vérité ; `{}` = repasse à la grille dérivée (efface côté serveur).
-  setCourtSlots: (clubId: string, grid: Record<string, CourtSlot[]>) => Promise<boolean>;
+  // 'ok' | 'denied' (refus serveur : validation ou garde anti-orphelin 69 — le message doit le
+  // dire, pas accuser la connexion) | 'offline' (panne réseau).
+  setCourtSlots: (clubId: string, grid: Record<string, CourtSlot[]>) => Promise<'ok' | 'denied' | 'offline'>;
   // ok = false quand l’écriture SERVEUR a échoué (réseau/session) : l’actu reste alors visible
   // seulement sur le téléphone de l’opérateur — l’appelant doit le dire honnêtement.
   // `push` (47) : true = notify-club envoie AUSSI l’actu en notification à tous les joueurs.
@@ -549,6 +551,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // départ et n’applique son résultat QUE si l’époque n’a pas changé entre-temps — sinon
   // une réponse tardive réécrirait les données d’un compte déjà déconnecté.
   const sessionEpochRef = useRef(0);
+  // Compteur d'ÉCRITURES club_config : un rechargement (loadSession/refreshMirror) capturé AVANT
+  // une écriture du gérant peut résoudre APRÈS elle et réappliquer un instantané périmé — la
+  // sauvegarde suivante rematérialiserait alors l'ancienne grille en base (perte réelle, prouvée
+  // à l'audit). Chaque relecture capture ce compteur au départ et, s'il a bougé à l'arrivée,
+  // JETTE sa tranche club_config (le miroir local, plus frais, est conservé).
+  const clubCfgWriteRef = useRef(0);
+  // Écriture club_config traçée : tout succès invalide les relectures en vol (voir ci-dessus).
+  const writeClubConfig = async (clubId: string, patch: Parameters<typeof upsertClubConfig>[1]) => {
+    const ok = await upsertClubConfig(clubId, patch);
+    if (ok) clubCfgWriteRef.current += 1;
+    return ok;
+  };
   // Id du compte serveur COURANT, suivi dans une ref (comme remindersOnRef) : permet à
   // loadSession de détecter une BASCULE de compte (A→B) au moment où elle s'exécute, sans
   // remettre serverUserId dans ses dépendances — pour bumper l'époque et invalider toute
@@ -665,6 +679,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Réservations : le serveur est la source de vérité → on remplace le miroir local
       // par les résas pertinentes (les miennes ; club/opérateur : celles de leur périmètre,
       // via RLS), l’occupation de TOUS (disponibilité), et les clubs ajoutés côté serveur.
+      const cfgW = clubCfgWriteRef.current; // écriture club_config pendant la relecture → tranche jetée
       const [
         reservationsRes,
         occ,
@@ -743,7 +758,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // null = échec réseau → on garde les surcharges déjà connues (convention §8).
         clubInfo: overrides ? { ...s.clubInfo, ...overrides } : s.clubInfo,
         // Config club partagée (horaires, terrains, offres, coachs, photos).
-        ...clubConfigSlices(s, configs),
+        ...(clubCfgWriteRef.current === cfgW ? clubConfigSlices(s, configs) : {}),
         // Tournois serveur (visibles par tous, synchronisés) + mes inscriptions + clôtures.
         ...competitionSlices(s, serverComps, compRegs),
         tournamentFee: tournamentFee ?? s.tournamentFee,
@@ -829,6 +844,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // requêtes, leurs résultats tardifs ne réécriront pas les données du compte sortant.
       const epoch = sessionEpochRef.current;
       const ok = () => sessionEpochRef.current === epoch;
+      const cfgW = clubCfgWriteRef.current; // écriture club_config pendant la relecture → tranche jetée
       void (async () => {
         try {
           const [
@@ -916,7 +932,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             clubStatus: clubStatus ?? s.clubStatus,
             boostExpiry: boosts ?? s.boostExpiry,
             boostedClubIds: boosts ? Object.keys(boosts).filter((id) => boosts[id] > Date.now()) : s.boostedClubIds,
-            ...clubConfigSlices(s, configs),
+            ...(clubCfgWriteRef.current === cfgW ? clubConfigSlices(s, configs) : {}),
             ...competitionSlices(s, serverComps, compRegs),
             blockedUserIds: blockedUsers ?? s.blockedUserIds,
             role: prof ? ((prof.role as AppState['role']) ?? s.role) : s.role,
@@ -1517,12 +1533,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // grille) — « choisis un autre terrain » serait faux. On resynchronise les
             // fermetures pour que la grille affichée se corrige immédiatement.
             if (res.closed) {
+              const cfgW = clubCfgWriteRef.current;
               const [freshRanges, freshConfigs] = await Promise.all([fetchBlockedRanges(), fetchClubConfigs()]);
               if (sessionEpochRef.current === epoch) {
                 setState((s) => ({
                   ...s,
                   blockedRanges: freshRanges ?? s.blockedRanges,
-                  ...clubConfigSlices(s, freshConfigs),
+                  ...(clubCfgWriteRef.current === cfgW ? clubConfigSlices(s, freshConfigs) : {}),
                 }));
               }
               return { ok: false, reason: 'closed' };
@@ -1750,7 +1767,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (existing.includes(finalUrl)) return true;
         const next = [...existing, finalUrl];
         if (state.serverUserId) {
-          const ok = await upsertClubConfig(clubId, { photos: next });
+          const ok = await writeClubConfig(clubId, { photos: next });
           if (!ok) return false;
         }
         setState((s) => ({ ...s, clubPhotos: { ...s.clubPhotos, [clubId]: next } }));
@@ -1759,7 +1776,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       removeClubPhoto: async (clubId, uri) => {
         const next = (state.clubPhotos[clubId] ?? []).filter((x) => x !== uri);
         if (state.serverUserId) {
-          const ok = await upsertClubConfig(clubId, { photos: next });
+          const ok = await writeClubConfig(clubId, { photos: next });
           if (!ok) return false;
           void removeClubPhotoFile(uri); // best-effort : retire aussi le fichier du Storage
         }
@@ -1771,7 +1788,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!t) return false;
         const next = [{ id: uid(), kind, title: t, detail: detail.trim() }, ...(state.clubOffers[clubId] ?? [])];
         if (state.serverUserId) {
-          const ok = await upsertClubConfig(clubId, { offers: next });
+          const ok = await writeClubConfig(clubId, { offers: next });
           if (!ok) return false;
         }
         setState((s) => ({ ...s, clubOffers: { ...s.clubOffers, [clubId]: next } }));
@@ -1780,7 +1797,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       removeClubOffer: async (clubId, id) => {
         const next = (state.clubOffers[clubId] ?? []).filter((o) => o.id !== id);
         if (state.serverUserId) {
-          const ok = await upsertClubConfig(clubId, { offers: next });
+          const ok = await writeClubConfig(clubId, { offers: next });
           if (!ok) return false;
         }
         setState((s) => ({ ...s, clubOffers: { ...s.clubOffers, [clubId]: next } }));
@@ -1796,7 +1813,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (!finalUrl) return false; // échec d’upload : on n’enregistre JAMAIS une URI locale
         }
         if (state.serverUserId) {
-          const ok = await upsertClubConfig(clubId, { coverUrl: finalUrl ?? '' });
+          const ok = await writeClubConfig(clubId, { coverUrl: finalUrl ?? '' });
           if (!ok) return false;
           // L’ancienne cover uploadée ne sert plus à rien → suppression best-effort du fichier.
           if (previous && previous !== finalUrl) void removeClubPhotoFile(previous);
@@ -1823,7 +1840,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (finalUrl) next[court] = finalUrl;
         else delete next[court];
         if (state.serverUserId) {
-          const ok = await upsertClubConfig(clubId, { courtPhotos: next });
+          const ok = await writeClubConfig(clubId, { courtPhotos: next });
           if (!ok) return false;
           if (previous && previous !== finalUrl) void removeClubPhotoFile(previous);
         }
@@ -2150,7 +2167,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const next = [...slots].sort();
         const epoch = sessionEpochRef.current;
         if (state.serverUserId) {
-          const ok = await upsertClubConfig(clubId, { slots: next });
+          const ok = await writeClubConfig(clubId, { slots: next });
           if (!ok) return false;
         }
         if (sessionEpochRef.current !== epoch) return true;
@@ -2160,7 +2177,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setClubCourts: async (clubId, courts) => {
         const epoch = sessionEpochRef.current;
         if (state.serverUserId) {
-          const ok = await upsertClubConfig(clubId, { courts });
+          const ok = await writeClubConfig(clubId, { courts });
           if (!ok) return false;
         }
         if (sessionEpochRef.current !== epoch) return true;
@@ -2255,7 +2272,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCourtClosed: async (clubId, closed) => {
         const epoch = sessionEpochRef.current;
         if (state.serverUserId) {
-          const ok = await upsertClubConfig(clubId, { courtClosed: closed });
+          const ok = await writeClubConfig(clubId, { courtClosed: closed });
           if (!ok) return false;
         }
         if (sessionEpochRef.current !== epoch) return true;
@@ -2270,10 +2287,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         const cleared = Object.keys(grid).length === 0;
         if (state.serverUserId) {
-          const ok = await upsertClubConfig(clubId, { courtSlots: grid });
-          if (!ok) return false;
+          const ok = await writeClubConfig(clubId, { courtSlots: grid });
+          if (ok !== true) return ok === false ? 'denied' : 'offline';
         }
-        if (sessionEpochRef.current !== epoch) return true;
+        if (sessionEpochRef.current !== epoch) return 'ok';
         setState((s) => {
           const nextCourtSlots = { ...s.courtSlots };
           if (cleared) delete nextCourtSlots[clubId];
@@ -2296,7 +2313,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return { ...s, courtSlots: nextCourtSlots, clubCourtClosed: nextCourtClosed };
         });
-        return true;
+        return 'ok';
       },
       // L’opérateur publie/met à jour l’actu d’accueil. On ne régénère l’id (ce qui la
       // fait RÉAPPARAÎTRE chez les joueurs qui l’avaient fermée) QUE si le contenu change.

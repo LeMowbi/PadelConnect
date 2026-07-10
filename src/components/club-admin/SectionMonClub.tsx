@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { ClubPhoto } from '@/components/ClubPhoto';
@@ -36,13 +36,15 @@ function CourtScheduleRow({
   slots,
   reservations,
   clubId,
+  busy,
   onSave,
 }: {
   court: string;
   slots: CourtSlot[]; // grille COMPLÈTE de ce terrain (ouverts + fermés), triée par heure
   reservations: Reservation[];
   clubId: string;
-  onSave: (next: CourtSlot[]) => Promise<boolean>;
+  busy: boolean; // une écriture de grille est en vol (N'IMPORTE quel terrain) → tout est gelé
+  onSave: (next: CourtSlot[]) => Promise<'ok' | 'denied' | 'offline' | 'busy'>;
 }) {
   const toast = useToast();
   const [showAdd, setShowAdd] = useState(false);
@@ -51,6 +53,7 @@ function CourtScheduleRow({
   const [draftT, setDraftT] = useState('09:00');
   const [draftD, setDraftD] = useState<60 | 90>(90);
   const [saving, setSaving] = useState(false);
+  const [confirmRebuild, setConfirmRebuild] = useState<60 | 90 | null>(null); // 2 appuis si des créneaux fermés seraient rouverts
 
   const sorted = slots.slice().sort((a, b) => (toMin(a.t) ?? 0) - (toMin(b.t) ?? 0));
 
@@ -69,11 +72,17 @@ function CourtScheduleRow({
 
   const persist = async (next: CourtSlot[], successMsg?: string) => {
     setSaving(true);
-    const ok = await onSave(next);
+    const res = await onSave(next);
     setSaving(false);
-    if (ok && successMsg) toast.show(successMsg);
-    if (!ok) toast.show('Enregistrement impossible — vérifie ta connexion', { icon: 'alert-circle' });
-    return ok;
+    if (res === 'ok' && successMsg) toast.show(successMsg);
+    // Messages honnêtes (audit) : un REFUS serveur (garde anti-orphelin / validation) n'est pas
+    // une panne réseau — dire « vérifie ta connexion » faisait réessayer en boucle pour rien.
+    if (res === 'denied')
+      toast.show('Le serveur a refusé cette grille — une réservation à venir ne retomberait plus sur un créneau. Réessaie plus tard.', {
+        icon: 'alert-circle',
+      });
+    if (res === 'offline') toast.show('Enregistrement impossible — vérifie ta connexion', { icon: 'alert-circle' });
+    return res === 'ok';
   };
 
   // Fermer/rouvrir un créneau existant (x:true ↔ ouvert) — refuse la FERMETURE d'un créneau qui
@@ -182,11 +191,16 @@ function CourtScheduleRow({
       return;
     }
     const hadClosed = sorted.some((s) => s.x);
-    await persist(
-      next,
-      `${court} : tout en ${durationLabel(d)} — ${next.length} créneaux sans trou` +
-        (hadClosed ? ' (créneaux fermés rouverts — referme ta pause si besoin)' : ''),
-    );
+    if (hadClosed && confirmRebuild !== d) {
+      // 1er appui = avertissement AVANT d'agir (un toast après coup ne laissait pas le choix).
+      setConfirmRebuild(d);
+      toast.show(`⚠️ Ça rouvrira tes créneaux fermés sur ${court} — touche encore « Tout en ${durationLabel(d)} » pour confirmer.`, {
+        icon: 'information-circle',
+      });
+      return;
+    }
+    setConfirmRebuild(null);
+    await persist(next, `${court} : tout en ${durationLabel(d)} — ${next.length} créneaux sans trou`);
   };
 
   // Ajouter un créneau (heure + durée) — `canAddCourtSlot` porte toutes les règles (format,
@@ -212,8 +226,10 @@ function CourtScheduleRow({
           onPress={() => {
             setDurMode((v) => !v);
             setRemoveMode(false);
+            setConfirmRebuild(null);
           }}
-          hitSlop={8}
+          hitSlop={10}
+          style={{ padding: 6 }}
           accessibilityRole="button"
           accessibilityLabel={`${durMode ? 'Terminer le changement de durée' : 'Changer la durée d’un créneau (1h ↔ 1h30)'} sur ${court}`}
         >
@@ -224,7 +240,8 @@ function CourtScheduleRow({
             setRemoveMode((v) => !v);
             setDurMode(false);
           }}
-          hitSlop={8}
+          hitSlop={10}
+          style={{ padding: 6 }}
           accessibilityRole="button"
           accessibilityLabel={`${removeMode ? 'Terminer le retrait de créneaux' : 'Retirer un créneau'} sur ${court}`}
         >
@@ -238,24 +255,30 @@ function CourtScheduleRow({
       {durMode ? (
         <View style={{ gap: spacing.xs }}>
           <Txt variant="small" color={colors.textMuted}>
-            Touche un créneau pour le passer de 1h à 1h30 (et inversement) : les créneaux suivants se décalent tout seuls pour rester sans
-            trou — mélange librement les deux durées. Les pauses (vrais trous) ne bougent pas. Ou refais toute la grille d’un coup :
+            Touche un créneau pour le passer de 1h à 1h30 (et inversement) : les créneaux qui s’enchaînent derrière (même fermés) se
+            décalent tout seuls pour rester sans trou — mélange librement les deux durées. Un vrai trou dans la grille (pause) arrête le
+            décalage. Ou refais toute la grille d’un coup :
           </Txt>
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
             <Chip
               label="Tout en 1h"
-              disabled={saving}
+              disabled={saving || busy}
               accessibilityLabel={`Refaire toute la grille de ${court} en sessions de 1h, sans trou`}
               onPress={() => void rebuildAll(60)}
             />
             <Chip
               label="Tout en 1h30"
-              disabled={saving}
+              disabled={saving || busy}
               accessibilityLabel={`Refaire toute la grille de ${court} en sessions de 1h30, sans trou`}
               onPress={() => void rebuildAll(90)}
             />
           </View>
         </View>
+      ) : null}
+      {removeMode ? (
+        <Txt variant="small" color={colors.textMuted}>
+          Touche un créneau pour le retirer définitivement de ce terrain (≠ le fermer : un créneau retiré n’existe plus).
+        </Txt>
       ) : null}
       <View style={styles.wrap}>
         {sorted.length === 0 ? (
@@ -272,7 +295,7 @@ function CourtScheduleRow({
               label={`${s.t}→${endLabel} · ${durationLabel(s.d)}`}
               icon={removeMode ? 'close' : durMode ? 'time-outline' : undefined}
               active={!s.x}
-              disabled={saving}
+              disabled={saving || busy}
               accessibilityLabel={
                 removeMode
                   ? `Retirer définitivement le créneau ${s.t}-${endLabel} de ${court}`
@@ -301,8 +324,8 @@ function CourtScheduleRow({
             <Chip label="1h30" active={draftD === 90} onPress={() => setDraftD(90)} />
           </View>
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            <Button size="sm" label="Ajouter" icon="add" onPress={() => void addSlot()} disabled={saving} />
-            <Button size="sm" label="Annuler" variant="ghost" onPress={() => setShowAdd(false)} disabled={saving} />
+            <Button size="sm" label="Ajouter" icon="add" onPress={() => void addSlot()} disabled={saving || busy} />
+            <Button size="sm" label="Annuler" variant="ghost" onPress={() => setShowAdd(false)} disabled={saving || busy} />
           </View>
         </View>
       ) : (
@@ -313,7 +336,7 @@ function CourtScheduleRow({
             label="Ajouter un créneau"
             icon="add-circle-outline"
             onPress={() => setShowAdd(true)}
-            disabled={saving}
+            disabled={saving || busy}
           />
         </View>
       )}
@@ -434,6 +457,25 @@ export function SectionMonClub({ club }: { club: Club }) {
   };
   const hasPerCourtGrid = !!state.courtSlots[club.id];
   const perCourtGrid = resolvedGridFor(club, sched);
+  // Écritures de grille SÉRIALISÉES : upsert_club_config remplace la carte court_slots EN ENTIER
+  // — deux écritures qui se croisent = la seconde écrase la première (perte silencieuse prouvée
+  // à l'audit, les deux toasts disaient « ✓ »). Un seul vol à la fois : verrou synchrone (ref,
+  // insensible au batching de setState) + état pour geler l'UI de TOUS les terrains.
+  const gridWriteRef = useRef(false);
+  const [gridBusy, setGridBusy] = useState(false);
+  const writeGrid = async (
+    build: (stored: Record<string, CourtSlot[]> | undefined) => Record<string, CourtSlot[]>,
+  ): Promise<'ok' | 'denied' | 'offline' | 'busy'> => {
+    if (gridWriteRef.current) return 'busy';
+    gridWriteRef.current = true;
+    setGridBusy(true);
+    try {
+      return await setCourtSlots(club.id, build(state.courtSlots[club.id]));
+    } finally {
+      gridWriteRef.current = false;
+      setGridBusy(false);
+    }
+  };
 
   // ── Grille libre : ajouter/retirer un horaire précis à la grille (au-delà de la simple
   // plage ouverture/fermeture) — voir addFreeSlot/removeFreeSlot plus bas. `savingGrid` sert de
@@ -741,20 +783,36 @@ export function SectionMonClub({ club }: { club: Club }) {
   const addCourt = async () => {
     const n = courtName.trim();
     if (n.length < 1 || courts.includes(n)) return;
+    if (courts.length >= 20) {
+      // Borne alignée sur le serveur (upsert_club_config ≤ 20 grilles) : au-delà, PLUS AUCUNE
+      // écriture de grille ne passerait — mieux vaut refuser ici avec un message clair.
+      toast.show('20 terrains maximum par club', { icon: 'alert-circle' });
+      return;
+    }
     const ok = await setClubCourts(club.id, [...courts, n]);
     if (!ok) {
       toast.show('Terrain non enregistré — vérifie ta connexion', { icon: 'alert-circle' });
       return;
     }
     // Sous grille PAR TERRAIN : le nouveau terrain hérite tout de suite de la grille du premier
-    // terrain du club (mêmes horaires ET durées 1h/1h30). Sans ça il retomberait sur la grille
-    // générique @90 — PAS les horaires du club — et la prochaine sauvegarde figerait ce défaut
-    // (c'est ce qui a effacé les réglages d'un gérant qui re-créait ses terrains). Best-effort,
-    // comme les nettoyages de removeCourt.
+    // terrain ACTUEL du club (mêmes horaires ET durées 1h/1h30). Sans ça il retomberait sur la
+    // grille générique @90 — PAS les horaires du club — et resterait vendable à des heures où le
+    // club est fermé (c'est la famille de bugs qui a effacé les réglages d'un club en prod).
+    // ATTENDU (plus de fire-and-forget) : un échec est DIT au gérant, avec le geste de secours.
     const storedGrid = state.courtSlots[club.id];
     if (storedGrid && Object.keys(storedGrid).length) {
-      const model = storedGrid[courts[0]] ?? Object.values(storedGrid)[0] ?? [];
-      if (model.length) void setCourtSlots(club.id, { ...storedGrid, [n]: model.map((s) => ({ ...s })) });
+      const res = await writeGrid((stored) => {
+        const base = stored ?? {};
+        const nextGrid: Record<string, CourtSlot[]> = {};
+        for (const k of courts) if (base[k]) nextGrid[k] = base[k]; // purge les entrées orphelines
+        const model = nextGrid[courts[0]] ?? perCourtGrid[courts[0]] ?? [];
+        nextGrid[n] = model.map((s) => ({ ...s }));
+        return nextGrid;
+      });
+      if (res !== 'ok')
+        toast.show(`Terrain ajouté, mais sa grille n’a pas pu être copiée — touche un créneau de « ${n} » pour réessayer.`, {
+          icon: 'alert-circle',
+        });
     }
     setCourtName('');
   };
@@ -785,12 +843,24 @@ export function SectionMonClub({ club }: { club: Club }) {
       void setCourtClosed(club.id, nextMap);
     }
     // Idem pour sa grille par terrain : une entrée orpheline serait ré-héritée en silence par un
-    // terrain re-créé au même nom (et fausse le comptage des grilles explicites).
+    // terrain re-créé au même nom. ATTENTION : on n'envoie JAMAIS `{}` par accident — vider la
+    // carte est le mode CLEAR serveur (tout le club repasserait aux horaires simples et les
+    // terrains restants changeraient d'horaires en silence). Si la purge vide la carte, on
+    // matérialise les grilles EFFECTIVES des terrains restants à la place.
     const storedGrid = state.courtSlots[club.id];
     if (storedGrid?.[n]) {
-      const nextGrid = { ...storedGrid };
-      delete nextGrid[n];
-      void setCourtSlots(club.id, nextGrid);
+      const remaining = courts.filter((c) => c !== n);
+      const res = await writeGrid((stored) => {
+        const base = stored ?? {};
+        const nextGrid: Record<string, CourtSlot[]> = {};
+        for (const k of remaining) if (base[k]) nextGrid[k] = base[k];
+        if (Object.keys(nextGrid).length === 0) for (const k of remaining) nextGrid[k] = (perCourtGrid[k] ?? []).map((s) => ({ ...s }));
+        return nextGrid;
+      });
+      if (res !== 'ok' && res !== 'busy')
+        toast.show('Terrain retiré, mais sa grille n’a pas pu être nettoyée — modifie un créneau pour resynchroniser.', {
+          icon: 'alert-circle',
+        });
     }
   };
 
@@ -1288,16 +1358,19 @@ export function SectionMonClub({ club }: { club: Club }) {
                   court={c}
                   slots={perCourtGrid[c] ?? []}
                   reservations={state.reservations}
-                  onSave={(next) => {
+                  busy={gridBusy}
+                  onSave={(next) =>
                     // Base = grille STOCKÉE (pas la grille résolue) : on ne fige jamais un repli
                     // d'affichage comme donnée réelle, et on purge les entrées de terrains retirés
                     // (une grille orpheline a déjà écrasé les réglages d'un club en production).
-                    const base = state.courtSlots[club.id] ?? perCourtGrid;
-                    const nextGrid: Record<string, CourtSlot[]> = {};
-                    for (const k of courts) if (base[k]) nextGrid[k] = base[k];
-                    nextGrid[c] = next;
-                    return setCourtSlots(club.id, nextGrid);
-                  }}
+                    writeGrid((stored) => {
+                      const base = stored ?? perCourtGrid;
+                      const nextGrid: Record<string, CourtSlot[]> = {};
+                      for (const k of courts) if (base[k]) nextGrid[k] = base[k];
+                      nextGrid[c] = next;
+                      return nextGrid;
+                    })
+                  }
                 />
               ))}
               <View style={styles.coverDivider} />
@@ -1311,10 +1384,18 @@ export function SectionMonClub({ club }: { club: Club }) {
                   variant="ghost"
                   label="Repasser aux horaires simples"
                   icon="swap-horizontal-outline"
+                  disabled={gridBusy}
                   onPress={() => {
-                    void setCourtSlots(club.id, {}).then((ok) => {
-                      if (!ok) toast.show('Action impossible — vérifie ta connexion', { icon: 'alert-circle' });
-                      else toast.show('Horaires simples rétablis ✓');
+                    void writeGrid(() => ({})).then((res) => {
+                      if (res === 'ok') toast.show('Horaires simples rétablis ✓');
+                      else if (res === 'denied')
+                        toast.show(
+                          'Impossible : une réservation à venir ne retomberait plus sur la grille simple (1h30). Réessaie plus tard.',
+                          {
+                            icon: 'alert-circle',
+                          },
+                        );
+                      else if (res === 'offline') toast.show('Action impossible — vérifie ta connexion', { icon: 'alert-circle' });
                     });
                   }}
                 />
@@ -1474,9 +1555,14 @@ export function SectionMonClub({ club }: { club: Club }) {
                   variant="secondary"
                   label="Passer aux horaires par terrain (1h/1h30)"
                   icon="grid-outline"
+                  disabled={gridBusy}
                   onPress={() => {
-                    void setCourtSlots(club.id, perCourtGrid).then((ok) => {
-                      if (!ok) toast.show('Action impossible — vérifie ta connexion', { icon: 'alert-circle' });
+                    void writeGrid(() => perCourtGrid).then((res) => {
+                      if (res === 'denied')
+                        toast.show('Impossible pour l’instant — le serveur a refusé la grille. Réessaie plus tard.', {
+                          icon: 'alert-circle',
+                        });
+                      else if (res === 'offline') toast.show('Action impossible — vérifie ta connexion', { icon: 'alert-circle' });
                     });
                   }}
                 />
