@@ -96,7 +96,7 @@ function CourtScheduleRow({
       return;
     }
     const next = sorted.map((x) => (x.t === s.t ? (s.x ? { t: x.t, d: x.d } : { ...x, x: true as const }) : x));
-    await persist(next, s.x ? `Créneau ${s.t} rouvert sur ${court}` : `Créneau ${s.t} fermé sur ${court}`);
+    await persist(next, s.x ? `Créneau ${s.t} rouvert sur ${court} ✓` : `Créneau ${s.t} fermé sur ${court} ✓`);
   };
 
   // Retirer DÉFINITIVEMENT un créneau de la grille de ce terrain (≠ le fermer).
@@ -112,7 +112,7 @@ function CourtScheduleRow({
       return;
     }
     const next = sorted.filter((x) => x.t !== s.t);
-    await persist(next, `Créneau ${s.t} retiré de ${court}`);
+    await persist(next, `Créneau ${s.t} retiré de ${court} ✓`);
   };
 
   // Basculer la durée d'un créneau (1h ↔ 1h30) en gardant la grille SANS TROU : les créneaux
@@ -163,8 +163,8 @@ function CourtScheduleRow({
       next,
       `Créneau ${s.t} passé en ${durationLabel(nextD)} sur ${court}` +
         (moved.length
-          ? ` — ${moved.length} créneau${moved.length > 1 ? 'x' : ''} décalé${moved.length > 1 ? 's' : ''} pour rester sans trou`
-          : ''),
+          ? ` — ${moved.length} créneau${moved.length > 1 ? 'x' : ''} décalé${moved.length > 1 ? 's' : ''} pour rester sans trou ✓`
+          : ' ✓'),
     );
   };
 
@@ -199,13 +199,13 @@ function CourtScheduleRow({
       // 1er appui = avertissement AVANT d'agir (un toast après coup ne laissait pas le choix).
       setConfirmRebuild(d);
       toast.show(
-        `⚠️ Ça rouvrira tes créneaux fermés et comblera tes pauses sur ${court} — touche encore « Tout en ${durationLabel(d)} » pour confirmer.`,
-        { icon: 'information-circle' },
+        `Ça rouvrira tes créneaux fermés et comblera tes pauses sur ${court}. Touche encore « Tout en ${durationLabel(d)} » pour confirmer.`,
+        { icon: 'alert-circle' },
       );
       return;
     }
     setConfirmRebuild(null);
-    await persist(next, `${court} : tout en ${durationLabel(d)} — ${next.length} créneau${next.length > 1 ? 'x' : ''} sans trou`);
+    await persist(next, `${court} : tout en ${durationLabel(d)} — ${next.length} créneau${next.length > 1 ? 'x' : ''} sans trou ✓`);
   };
 
   // Ajouter un créneau (heure + durée) — `canAddCourtSlot` porte toutes les règles (format,
@@ -217,17 +217,24 @@ function CourtScheduleRow({
       return;
     }
     const next = [...sorted, { t: draftT, d: draftD }];
-    const ok = await persist(next, `Créneau ${draftT} · ${durationLabel(draftD)} ajouté sur ${court}`);
+    const ok = await persist(next, `Créneau ${draftT} · ${durationLabel(draftD)} ajouté sur ${court} ✓`);
     if (ok) setShowAdd(false);
   };
 
   return (
     <View style={{ marginTop: spacing.md }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        <Txt variant="body" style={{ fontWeight: '700', flex: 1 }}>
-          {court}
-        </Txt>
-        <Pressable
+      <Txt variant="body" style={{ fontWeight: '700' }}>
+        {court}
+      </Txt>
+      {/* Réglages du terrain en boutons LIBELLÉS (pas des icônes nues) : un gérant comprend d'un
+          coup d'œil, et l'état actif (« Terminé ») est explicite. */}
+      <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs, flexWrap: 'wrap' }}>
+        <Button
+          size="sm"
+          variant={durMode ? 'secondary' : 'ghost'}
+          icon={durMode ? 'checkmark' : 'time-outline'}
+          label={durMode ? 'Terminé' : 'Durée 1h/1h30'}
+          disabled={saving || busy}
           onPress={() => {
             const on = !durMode;
             setDurMode(on);
@@ -237,14 +244,13 @@ function CourtScheduleRow({
               on ? `Changement de durée activé sur ${court}` : `Changement de durée terminé sur ${court}`,
             );
           }}
-          hitSlop={10}
-          style={{ padding: 6 }}
-          accessibilityRole="button"
-          accessibilityLabel={`${durMode ? 'Terminer le changement de durée' : 'Changer la durée d’un créneau, de 1h à 1h30 ou l’inverse'} sur ${court}`}
-        >
-          <Ionicons name={durMode ? 'checkmark' : 'time-outline'} size={18} color={durMode ? colors.green : colors.textFaint} />
-        </Pressable>
-        <Pressable
+        />
+        <Button
+          size="sm"
+          variant={removeMode ? 'secondary' : 'ghost'}
+          icon={removeMode ? 'checkmark' : 'remove-circle-outline'}
+          label={removeMode ? 'Terminé' : 'Retirer'}
+          disabled={saving || busy}
           onPress={() => {
             const on = !removeMode;
             setRemoveMode(on);
@@ -253,24 +259,13 @@ function CourtScheduleRow({
               on ? `Retrait de créneaux activé sur ${court}` : `Retrait de créneaux terminé sur ${court}`,
             );
           }}
-          hitSlop={10}
-          style={{ padding: 6 }}
-          accessibilityRole="button"
-          accessibilityLabel={`${removeMode ? 'Terminer le retrait de créneaux' : 'Retirer un créneau'} sur ${court}`}
-        >
-          <Ionicons
-            name={removeMode ? 'checkmark' : 'remove-circle-outline'}
-            size={18}
-            color={removeMode ? colors.green : colors.textFaint}
-          />
-        </Pressable>
+        />
       </View>
       {durMode ? (
         <View style={{ gap: spacing.xs }}>
           <Txt variant="small" color={colors.textMuted}>
-            Touche un créneau pour le passer de 1h à 1h30 (et inversement) : les créneaux qui s’enchaînent derrière (même fermés) se
-            décalent tout seuls pour rester sans trou — mélange librement les deux durées. Un vrai trou dans la grille (pause) arrête le
-            décalage (allonger juste avant une pause la réduit de 30 min). Ou refais toute la grille d’un coup :
+            Touche un créneau pour le passer de 1h à 1h30 (ou l’inverse) : les créneaux suivants se recalent tout seuls, sans trou. Ou
+            refais toute la grille d’un coup :
           </Txt>
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
             <Chip
@@ -1410,11 +1405,11 @@ export function SectionMonClub({ club }: { club: Club }) {
             <>
               <Txt variant="muted">
                 Chaque terrain a SA grille : mélange librement des sessions de 1h et 1h30, sans chevauchement. Touche un créneau pour le
-                fermer ou le rouvrir ; l’icône horloge (à droite du nom du terrain) passe un créneau de 1h à 1h30 et inversement ; l’icône «
-                − » retire un créneau définitivement.
+                fermer ou le rouvrir ; le bouton « Durée 1h/1h30 » change la durée d’un créneau ; le bouton « Retirer » l’enlève
+                définitivement.
               </Txt>
               <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
-                Créneau vert = ouvert à la réservation · créneau gris = fermé.
+                Créneau vert = ouvert à la réservation · créneau clair = fermé.
               </Txt>
               {courts.map((c) => (
                 <CourtScheduleRow
