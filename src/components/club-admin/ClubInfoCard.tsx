@@ -126,9 +126,13 @@ export function ClubInfoCard({
     if (blurb.trim() !== initial.blurb) patch.blurb = blurb.trim();
     if (type !== initial.type) patch.type = type;
     if (price !== initial.price) patch.priceFrom = Number(price);
-    if (tiersChanged) patch.priceTiers = built.length ? built : undefined;
-    if (phone.trim() !== initial.phone) patch.contactPhone = phone.trim() || undefined;
-    if (mapsQuery.trim() !== initial.mapsQuery) patch.mapsQuery = mapsQuery.trim() || undefined;
+    // Effacement EXPLICITE (audit) : on envoie '' / [] (non-null) — la SQL 66 les traite comme un
+    // effacement volontaire (nullif → NULL pour les textes, plage vide → retour au tarif unique).
+    // `undefined` valait `null` = « champ non fourni » → le serveur PRÉSERVAIT l'ancienne valeur,
+    // qui réapparaissait au prochain refresh (WhatsApp / position Maps / plages tarifaires figées).
+    if (tiersChanged) patch.priceTiers = built;
+    if (phone.trim() !== initial.phone) patch.contactPhone = phone.trim();
+    if (mapsQuery.trim() !== initial.mapsQuery) patch.mapsQuery = mapsQuery.trim();
     // On ATTEND le serveur : « Enregistré ✓ » ne s’affiche qu’au vrai succès (sinon, hors-ligne,
     // l’accusé mentait et la page se rétablissait silencieusement au prochain chargement).
     setSaving(true);

@@ -725,6 +725,16 @@ export default function CompetitionDetail() {
             </Txt>
           </Card>
         ) : null
+      ) : started ? (
+        // Inscription fermée dès le jour J (aligné sur register_competition côté serveur + la
+        // désinscription déjà refusée à partir du jour J) : on informe au lieu d'afficher le
+        // formulaire — sinon un joueur s'inscrivait le jour J sans pouvoir se désinscrire ensuite
+        // (et récoltait les +10 pts « officiel joué » sans jouer sur un tournoi officiel).
+        <Card style={{ marginTop: spacing.lg }}>
+          <Txt variant="small" color={colors.textFaint}>
+            Le tournoi a commencé — les inscriptions sont fermées.
+          </Txt>
+        </Card>
       ) : (
         <View style={{ marginTop: spacing.lg }}>
           <Txt variant="h3">S’inscrire en équipe</Txt>

@@ -15,7 +15,7 @@ export function NewsEditor({
   onRemove,
 }: {
   news: { title: string; subtitle?: string; link?: string } | null;
-  onPublish: (n: { title: string; subtitle?: string; link?: string; push?: boolean }) => Promise<{ ok: boolean }>;
+  onPublish: (n: { title: string; subtitle?: string; link?: string; push?: boolean }) => Promise<{ ok: boolean; error?: string }>;
   onRemove: () => Promise<{ ok: boolean }>;
 }) {
   const toast = useToast();
@@ -38,10 +38,10 @@ export function NewsEditor({
   const publish = async () => {
     if (title.trim().length < 3 || publishing) return;
     setPublishing(true);
-    const { ok } = await onPublish({ title: title.trim(), subtitle: subtitle.trim(), link: link.trim(), push: sendPush });
+    const { ok, error } = await onPublish({ title: title.trim(), subtitle: subtitle.trim(), link: link.trim(), push: sendPush });
     setPublishing(false);
     if (!ok) {
-      toast.show('Publication impossible — réessaie', { icon: 'alert-circle' });
+      toast.show(error ?? 'Publication impossible — réessaie', { icon: 'alert-circle' });
       return;
     }
     // Toast de succès INDÉPENDANT du « Publiée ✓ » du bouton : à la 1ʳᵉ publication, l'éditeur se

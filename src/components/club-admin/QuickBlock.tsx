@@ -174,8 +174,15 @@ export function QuickBlock({
                                 label="Débloquer"
                                 icon="lock-open"
                                 onPress={() => {
-                                  void onUnblock(day.key, slot.t, court, slot.d);
-                                  setConfirmUnblock(null);
+                                  // On ATTEND le serveur : un échec de déblocage affiche une erreur
+                                  // (comme le blocage), au lieu de fermer la boîte en silence.
+                                  void onUnblock(day.key, slot.t, court, slot.d).then((ok) => {
+                                    if (!ok) {
+                                      setError('Impossible de débloquer ce créneau.');
+                                      return;
+                                    }
+                                    setConfirmUnblock(null);
+                                  });
                                 }}
                                 full
                               />

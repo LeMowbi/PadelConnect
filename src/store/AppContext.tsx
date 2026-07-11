@@ -486,7 +486,7 @@ type AppContextType = {
   // ok = false quand l’écriture SERVEUR a échoué (réseau/session) : l’actu reste alors visible
   // seulement sur le téléphone de l’opérateur — l’appelant doit le dire honnêtement.
   // `push` (47) : true = notify-club envoie AUSSI l’actu en notification à tous les joueurs.
-  setOperatorNews: (news: { title: string; subtitle?: string; link?: string; push?: boolean }) => Promise<{ ok: boolean }>;
+  setOperatorNews: (news: { title: string; subtitle?: string; link?: string; push?: boolean }) => Promise<{ ok: boolean; error?: string }>;
   removeOperatorNews: () => Promise<{ ok: boolean }>; // retire l’actu d’accueil publiée (attend le serveur)
   dismissNews: (id: string) => void;
   resetAll: () => void;
@@ -667,8 +667,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           void AsyncStorage.getItem(PENDING_AVATAR_KEY).then((pending) => {
             if (!pending || !stillCurrent()) return;
             void uploadAvatar(userId, pending).then((url) => {
+              // On ne retire la photo en attente qu'au SUCCÈS de l'upload : un échec réseau
+              // (uploadAvatar renvoie null, ne rejette pas) la conserve pour un prochain essai
+              // au lieu de la jeter en silence (doctrine « écritures honnêtes »).
+              if (!url) return;
               void AsyncStorage.removeItem(PENDING_AVATAR_KEY);
-              if (!url || !stillCurrent()) return;
+              if (!stillCurrent()) return;
               setState((s) => ({ ...s, account: s.account ? { ...s.account, photoUri: url } : s.account }));
               void supabase.from('profiles').update({ photo_uri: url }).eq('id', userId);
             });
@@ -1719,7 +1723,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         const ok = await blockUserRpc(userId);
         if (!ok || sessionEpochRef.current !== epoch) return ok;
-        setState((s) => (s.blockedUserIds.includes(userId) ? s : { ...s, blockedUserIds: [...s.blockedUserIds, userId] }));
+        // On ajoute au miroir des bloqués ET on purge toute demande d'ami REÇUE de ce compte : le
+        // serveur (64) l'a déjà passée à 'declined' → la garder afficherait le nom du bloqué et
+        // « Accepter » échouerait en boucle jusqu'au prochain refresh (le miroir doit tenir seul).
+        setState((s) => ({
+          ...s,
+          blockedUserIds: s.blockedUserIds.includes(userId) ? s.blockedUserIds : [...s.blockedUserIds, userId],
+          friendRequests: s.friendRequests.filter((r) => r.fromId !== userId),
+        }));
         return true;
       },
       removeFriend: async (id) => {
@@ -2344,10 +2355,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setOperatorNews: async (news) => {
         const title = news.title.trim();
         const subtitle = news.subtitle?.trim() || undefined;
-        // Lien : on n’accepte qu’une URL ; on préfixe https:// si l’opérateur l’a oublié.
+        // Lien : on n’accepte qu’une URL ; on préfixe https:// si l’opérateur l’a oublié. Un texte
+        // saisi mais INVALIDE (ex. « padelconnectci » sans point) était droppé en SILENCE → l’actu
+        // partait sans lien alors que l’opérateur le croyait publié. On REFUSE désormais, avec message.
         let link = news.link?.trim() || undefined;
         if (link && !/^https?:\/\//i.test(link)) link = `https://${link}`;
-        if (link && !/^https?:\/\/.+\..+/i.test(link)) link = undefined;
+        if (link && !/^https?:\/\/.+\..+/i.test(link)) {
+          return { ok: false, error: 'Lien invalide — corrige-le (https://…) ou vide le champ.' };
+        }
         const prev = state.operatorNews;
         const unchanged = !!prev && prev.title === title && prev.subtitle === subtitle && prev.link === link;
         // Contenu inchangé → même id (le bandeau ne réapparaît pas chez ceux qui l'ont fermé)…

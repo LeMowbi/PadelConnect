@@ -103,7 +103,10 @@ export async function fetchCompetitions(myUserId: string): Promise<ServerCompeti
       };
     }
   }
-  return { comps, closes, waveLink: rows[0]?.wave_link ?? null };
+  // Distinguer un fetch VIDE (0 tournoi → waveLink=null → on GARDE le miroir local, cf. helpers)
+  // d'un effacement volontaire (des tournois existent mais l'opérateur a retiré le lien Wave → ''
+  // propagé pour effacer le cache). Sans ça, un lien effacé restait affiché indéfiniment.
+  return { comps, closes, waveLink: rows.length > 0 ? (rows[0].wave_link ?? '') : null };
 }
 
 // Opérateur : enregistre SON lien de paiement Wave (que les organisateurs ouvriront pour payer).

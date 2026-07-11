@@ -93,7 +93,14 @@ export default function ReserverScreen() {
   // l'écran « done » NE DOIT PAS relire les valeurs dérivées (effectiveCourt/effectiveDuration/
   // slotPrice), car addReservation vient d'occuper le terrain → la dispo change et ces dérivations
   // basculeraient sur un AUTRE terrain / une AUTRE durée (récap, calendrier et WhatsApp faux).
-  const [booked, setBooked] = useState<{ court: string; durationMin: 60 | 90; price: number } | null>(null);
+  const [booked, setBooked] = useState<{
+    court: string;
+    durationMin: 60 | 90;
+    price: number;
+    dayLabel: string;
+    time: string;
+    startsAt: number;
+  } | null>(null);
 
   // Contexte de disponibilité + terrains libres PAR créneau du jour choisi, mémoïsés (hooks
   // avant les `return` anticipés — règle React Compiler). Sans ça, chaque frappe dans le champ
@@ -280,7 +287,17 @@ export default function ReserverScreen() {
     if (res.ok) {
       hapticSuccess();
       // Fige l'instantané AVANT le re-rendu de succès (la dispo va muter — cf. déclaration de `booked`).
-      setBooked({ court: effectiveCourt, durationMin: effectiveDuration, price: bookedPrice });
+      // On fige AUSSI le jour (libellé absolu), l'heure et startsAt : l'écran de succès ne doit plus
+      // lire `day!`/`slot!` — après une nuit en arrière-plan, useTodayKey recale `dates`, l'ancien
+      // « aujourd'hui » sort de la fenêtre → `day = null` → crash (TypeError) au rendu du récap.
+      setBooked({
+        court: effectiveCourt,
+        durationMin: effectiveDuration,
+        price: bookedPrice,
+        dayLabel: dateKeyLabel(day.key),
+        time: slot,
+        startsAt,
+      });
       setDone(true);
       setCelebrate(true);
       // Résa créée mais rattachement des amis invités échoué : sans ce toast, la carte
@@ -346,8 +363,8 @@ export default function ReserverScreen() {
           <View style={styles.summary}>
             <Row label="Club" value={club.name} />
             <Row label="Terrain" value={booked.court} />
-            <Row label="Jour" value={day!.label} />
-            <Row label="Heure" value={slot!} />
+            <Row label="Jour" value={booked.dayLabel} />
+            <Row label="Heure" value={booked.time} />
             <Row label="Durée" value={durationLabel(booked.durationMin)} />
             <Row label="Participants" value={`Toi${participantCount > 0 ? ` + ${participantCount}` : ''}`} />
             <Row label={`Tarif (session ${durationLabel(booked.durationMin)})`} value={fcfa(booked.price)} />
@@ -362,7 +379,7 @@ export default function ReserverScreen() {
               onPress={async () => {
                 const res = await addReservationToCalendar({
                   clubName: club.name,
-                  startsAt: slotTimestamp(day!.key, slot!),
+                  startsAt: booked.startsAt,
                   court: booked.court,
                   area: club.area,
                   durationMin: booked.durationMin, // durée réellement réservée (instantané figé)
@@ -389,7 +406,7 @@ export default function ReserverScreen() {
                   const share = booked.price ? `\nPrévois ${perPlayerOf(booked.price, 1 + invitedNames.length)} chacun.` : '';
                   openWhatsApp(
                     '',
-                    `On joue au padel ! 🎾\n${club.name} — ${day!.label} à ${slot!} (session ${durationLabel(booked.durationMin)})\n${booked.court}${who}${share}\nRéservé via PadelConnect.`,
+                    `On joue au padel ! 🎾\n${club.name} — ${booked.dayLabel} à ${booked.time} (session ${durationLabel(booked.durationMin)})\n${booked.court}${who}${share}\nRéservé via PadelConnect.`,
                   );
                 }}
                 full

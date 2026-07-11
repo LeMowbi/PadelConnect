@@ -6,8 +6,14 @@ modifiables quand on veut ; **aucun chevauchement** possible sur un terrain ; ch
 fige sa durée et son prix** au moment de la réservation ; le gérant fixe **deux prix** (1h et 1h30) ;
 les **tournois** aussi peuvent être 1h/1h30.
 
-> ⚠️ Fonction trop grosse pour le build #57 (en revue Apple). Part dans un **build suivant**. La
-> partie SERVEUR (SQL 68) peut être posée avant sans rien casser (tout est rétro-compatible).
+> ⚠️ **DOCUMENT DE PLANIFICATION — numérotation SQL PÉRIMÉE.** La fonction a été LIVRÉE en UNE seule
+> migration `68_creneaux_duree.sql` (contrainte GiST + `court_slots` + gardes), déjà appliquée en
+> base. Les mentions « SQL 69 = contrainte GiST » plus bas sont OBSOLÈTES : les vraies migrations
+> `69`→`72` sont d'AUTRES durcissements (déjà en base). Ne pas suivre la numérotation de ce plan
+> pour coller du SQL — se référer à `CLAUDE.md` §7/§10.
+>
+> ⚠️ Fonction trop grosse pour le build #57 (en revue Apple à l'époque) → livrée dans les builds
+> #58→#61. La partie SERVEUR (SQL 68) est rétro-compatible.
 
 ---
 

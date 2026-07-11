@@ -82,18 +82,20 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   l'écrire dans le dépôt).
 - Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
 --auto-submit --non-interactive --no-wait`.
-- **`app.json` `buildNumber` courant : 57** (EAS `autoIncrement` le bump à chaque build — ne PAS
-  s'en remettre au suivi manuel ci-dessous, c'est `app.json` qui fait foi). Le **#57** est EN REVUE
-  App Store ; le prochain build (créneaux 1h/1h30) le REMPLACERA en soumission (demande porteur).
-  ⚠️ **SQL `68_creneaux_duree.sql` à COLLER en base** (SQL Editor → Run) quand ce build devient la
-  version LIVE minimale — table `reservations` VIDE donc risque faible, mais coller AVANT que le
-  binaire ne soit en prod (sinon un #57 encore actif verrait un conflit 23P01 non mappé). Historique : #46 =
-  lancement audit n°7 ; #47 = créneaux modulables + multi-clubs ; #48+ = chantier v2 (comptes club,
-  1v1, Wave, stats) ; suivi des 10 audits « chaque audit renforce le précédent » (tours 2→10) sur la
-  branche de dev. ✅ **Tout le SQL `02`→`64` est appliqué EN BASE** (vérifié à distance le
-  2026-07-06 — Management API) : plus rien à coller côté serveur avant le prochain build. Reste au
-  porteur : coller le lien Wave dans l'Espace opérateur, redéployer `notify-club` (compare HMAC en
-  temps constant), FCM Android + empreinte assetlinks.
+- **`app.json` `buildNumber` courant : 61** (EAS `autoIncrement` le bump à chaque build — ne PAS
+  s'en remettre au suivi manuel ci-dessous, c'est `app.json` qui fait foi). Le build **créneaux
+  1h/1h30** (soumissions #58→#61) a REMPLACÉ le #57 en revue. Historique : #46 = lancement audit
+  n°7 ; #47 = créneaux modulables + multi-clubs ; #48+ = chantier v2 (comptes club, 1v1, Wave,
+  stats) ; tours 2→10 « chaque audit renforce le précédent » ; #58→#61 = créneaux à durée variable
+  1h/1h30 + audits (tours 1→BLANC). ✅ **Tout le SQL `02`→`72` est appliqué EN BASE** (`68`→`72` =
+  campagne créneaux durée variable, appliqués au fil des tours d'audit alors que la table
+  `reservations` était vide). ⚠️ **NE JAMAIS recoller `68_creneaux_duree.sql` SEUL** : ses
+  `create or replace` ÉCRASERAIENT les durcissements `69`→`72` (validation `d∈{60,90}`, gardes
+  anti-orphelin, verrou commun, retrait de terrain) ; si on doit recoller la 68, recoller ENSUITE
+  `69`→`72` dans l'ordre. ⚠️ **NOUVEAU — `73_audit_complet_hardening.sql` (audit complet 2026-07-11)
+  à COLLER en base** avant que le prochain build ne devienne LIVE (durcissements serveur ci-dessous,
+  §10). Reste au porteur : coller la **73**, le lien Wave (Espace opérateur), redéployer `notify-club`
+  (compare HMAC en temps constant), FCM Android + empreinte assetlinks.
 - Un module natif nouveau (ex. `expo-contacts`) ⇒ **nouveau build requis** + config plugin dans
   `app.json` avec la chaîne de permission.
 
@@ -203,9 +205,9 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   `resolve_court_slots(club_id,court)` = grille effective serveur. `upsert_club_config` gagne `p_court_slots`
   (null=préserve, `'{}'`=efface→dérivation, objet=grille validée + dérive le miroir `slots` + vide `court_closed`).
   Store : tranche `state.courtSlots`, action `setCourtSlots`. `isPlayed(r)` = `startsAt + durationMin*60000`.
-  ⚠️ **SQL 68 remplace le #57 en revue** (base résa VIDE) : à coller quand le nouveau build est la version
-  LIVE minimale (sinon un #57 encore actif verrait un 23P01 non mappé). Tests : `courtSchedule`/`availability`/
-  `ranges`/`audit`/`pricing` (overlap prouvé, adjacence OK, asymétrie 1h↔1h30, rétrocompat null≡@90).
+  ✅ **SQL 68 appliqué en base** (avec les durcissements `69`→`72` de la campagne créneaux ; ne jamais
+  recoller la 68 seule, cf. §7). Tests : `courtSchedule`/`availability`/`ranges`/`audit`/`pricing`
+  (overlap prouvé, adjacence OK, asymétrie 1h↔1h30, rétrocompat null≡@90).
 - **Multi-clubs (55, demande porteur)** : un compte gère PLUSIEURS clubs. `manager_clubs` liste
   les clubs autorisés ; `profiles.managed_club_id` reste le club ACTIF (un seul à la fois) →
   aucun contrôle serveur existant ne change. `grant_club_access_by_phone` AJOUTE (plus de
@@ -442,9 +444,8 @@ branche de dev en 5 lots (tsc 0 · lint 0 · test:logic vert · bundle eager OK)
 - **Lots 4-5** — écrans : Espace Club (éditeur grille par terrain, 2 prix, planning une ligne/terrain,
   QuickBlock/BlockRangeForm), joueur (« Par heure »/fiche club groupent par DURÉE via puces prix),
   coach (prix en aval du terrain), tournois modulables (durée par créneau), agenda à la durée réelle.
-- **Reste porteur** : ① coller `supabase/68_creneaux_duree.sql` en base ; ② lancer le build EAS
-  (`EXPO_TOKEN=…`) → soumission qui REMPLACE le #57 ; ③ (le token EAS/ASC vit chez le porteur, jamais
-  dans le dépôt).
+- **Reste porteur (créneaux)** : ✅ FAIT — `68`→`72` appliqués en base, build #58→#61 soumis (a
+  remplacé le #57). (Le token EAS/ASC vit chez le porteur, jamais dans le dépôt.)
 - **Campagne d'audit créneaux (2026-07-11, jusqu'au tour BLANC) ✅** : 7 tours adversariaux
   (logique pure, contrat client↔serveur, UI Espace Club, consommation joueur/coach/tournoi,
   intégrité de données). Corrigés : 1 MEDIUM (fiche club n'affichait que le prix 1h30 → les 2
@@ -460,6 +461,36 @@ branche de dev en 5 lots (tsc 0 · lint 0 · test:logic vert · bundle eager OK)
   et le prix de résa reste borné par `reservations_price_guard` (SQL 40) à l'insert ; seul un appel
   forgé stockerait un `price60` hors bornes, impact purement cosmétique. Fix = ajouter la borne
   `price60` (+ `≤ price`) dans une future migration si le porteur y tient.
+
+### Audit COMPLET (2026-07-11) — app + serveur + site + config + docs — ✅ CORRIGÉ
+
+Demande porteur : audit de TOUT (backend, frontend, serveur/SQL, edge, UI, site, config, docs).
+Planifié avec **Fable** (8 agents adversariaux en parallèle, chacun vérifiant ses constats),
+appliqué avec **Opus**. **19 constats confirmés : 1 HIGH · 7 MEDIUM · 11 LOW.**
+- **Corrigés côté CLIENT (prochain build)** : effacement d'un champ fiche club (WhatsApp/Maps/plages
+  tarifaires) qui ne partait jamais au serveur → envoi de `''`/`[]` (marqueur d'effacement SQL 66,
+  `ClubInfoCard`) ; crash de l'écran de succès du tunnel au passage de minuit → jour/heure/startsAt
+  FIGÉS dans l'instantané `booked` (`reserver/[clubId]`) ; photo d'inscription jetée si 1ᵉʳ upload
+  échoue → clé retirée seulement au succès (`AppContext`) ; demande d'ami d'un bloqué non purgée du
+  miroir → purge dans `blockUserAccount` ; actu opérateur à lien invalide droppé en silence → refus
+  avec message (`setOperatorNews` → `{ ok, error }`, `NewsEditor`) ; QuickBlock « Débloquer » sans
+  retour d'erreur → attend le serveur ; lien Wave effacé non propagé → `''` vs `null` distingués
+  (`competitionsServer`) ; inscription tournoi le jour J masquée côté UI (`competition/[id]`, garde
+  `started`).
+- **Corrigés côté SERVEUR → `73_audit_complet_hardening.sql` (À COLLER en base par le porteur)** :
+  `link_participants` oppose désormais le blocage aux invitations de résa (M1) ; `respond_invitation`
+  recalcule `invited` sous `FOR UPDATE` (M4, plus de TOCTOU surbooking) ; `delete_competition` refuse
+  la suppression par l'organisateur d'un tournoi `published` avec inscrits ou frais impayés (M5) ;
+  `create_competition`/`approve_competition` bornent la plage de dates (≤ +366 j, `end ≥ start`) +
+  validation de date dans les branches joueur/opérateur (M6, plus de DoS de verrous) ; `respond_lesson`
+  verrouille par `coach:jour` (plus par `coach:jour:heure`) ; `upsert_club_config` exige `d` numérique
+  dans `court_slots`. Idempotent, `search_path` figé, à coller AVANT que le prochain build soit LIVE.
+- **DÉCISION PORTEUR EN ATTENTE (M2)** : une inscription jamais confirmée squatte le numéro à vie
+  (`handle_new_user` crée le profil avant confirmation e-mail, aucune récupération in-app). Fix
+  touche le chemin d'auth LIVE → à trancher (purge des comptes non confirmés > 24 h, ou `phone_available`
+  qui ignore un ghost non confirmé). NON inclus dans la 73.
+- **Docs recalées** : ce fichier (build 61, SQL 02→72, anti-recollage 68) ; `docs/PLAN-CRENEAUX-DUREE-VARIABLE.md`
+  (numérotation « SQL 69 » périmée) ; `site/get.html` (canonical `/get`).
 
 ## 11. Où regarder
 
