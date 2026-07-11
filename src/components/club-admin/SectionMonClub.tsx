@@ -118,9 +118,10 @@ function CourtScheduleRow({
   // Basculer la durée d'un créneau (1h ↔ 1h30) en gardant la grille SANS TROU : les créneaux
   // qui s'enchaînaient juste derrière se DÉCALENT automatiquement de 30 min (en avant ou en
   // arrière) pour rester collés — un club mélange librement 1h et 1h30 sans jamais créer de
-  // trou. Une PAUSE volontaire (vrai trou dans la grille) arrête le décalage : on n'y touche
-  // pas. Gardes : refus si le créneau modifié OU un créneau déplacé porte une réservation à
-  // venir (leurs heures sont vendues), et l'allongement ne doit pas dépasser minuit.
+  // trou. Une PAUSE volontaire (vrai trou) arrête le décalage de la chaîne ; en ALLONGEANT, la
+  // queue peut toutefois rogner la pause qui la suit — on le SIGNALE alors dans le toast (jamais
+  // en silence). Gardes : refus si le créneau modifié OU un créneau déplacé porte une réservation
+  // à venir (leurs heures sont vendues), et l'allongement ne doit pas dépasser minuit.
   const switchDuration = async (s: CourtSlot) => {
     const nextD: 60 | 90 = s.d === 90 ? 60 : 90;
     const delta = nextD - s.d; // -30 (vers 1h) ou +30 (vers 1h30)
@@ -159,12 +160,24 @@ function CourtScheduleRow({
       toast.show('Impossible ici : le décalage ferait se chevaucher deux créneaux.', { icon: 'alert-circle' });
       return;
     }
+    // Allongement (+30) : la queue de la chaîne grignote la pause qui la suivait (le créneau
+    // d'après ne bouge pas). On ne le fait plus EN SILENCE — le toast prévient que la pause a été
+    // réduite/supprimée, pour que le gérant la recrée s'il y tenait (une fermeture déjeuner, p. ex.).
+    const after = sorted[idx + 1 + moved.length];
+    const afterStart = after ? toMin(after.t) : null;
+    const eatenPause = delta > 0 && afterStart !== null && afterStart > chainEnd; // il restait un trou
+    const pauseNote = eatenPause
+      ? afterStart - (chainEnd + delta) <= 0
+        ? ' — ⚠️ la pause juste après a été supprimée'
+        : ' — ⚠️ la pause juste après a été réduite de 30 min'
+      : '';
     await persist(
       next,
       `Créneau ${s.t} passé en ${durationLabel(nextD)} sur ${court}` +
         (moved.length
           ? ` — ${moved.length} créneau${moved.length > 1 ? 'x' : ''} décalé${moved.length > 1 ? 's' : ''} pour rester sans trou ✓`
-          : ' ✓'),
+          : ' ✓') +
+        pauseNote,
     );
   };
 
@@ -480,6 +493,8 @@ export function SectionMonClub({ club }: { club: Club }) {
     let hi = -Infinity;
     for (const slots of Object.values(perCourtGrid))
       for (const sl of slots) {
+        if (sl.x) continue; // créneau FERMÉ = non vendable → hors couverture tarifaire (priceForSlot
+        // ne matche que les créneaux ouverts) ; l'inclure forçait le gérant à couvrir une heure fermée.
         const m = slotToMinutes(sl.t);
         if (m === null) continue;
         if (m < lo) lo = m;

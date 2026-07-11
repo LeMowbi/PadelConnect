@@ -87,6 +87,10 @@ check(r4.length === SAMPLE.length && r4.map((s) => s.t)[0] === '07:30', 'aucune 
 // null ⇒ comportement identique à aujourd'hui (tout @90, mêmes heures)
 const r5 = resolveCourtSlots({ courtSlots: null, slots: ['08:00', '09:30', '11:00'] }, ['T'], SAMPLE)['T'];
 check(r5.every((s) => s.d === 90) && r5.length === 3, 'null court_slots ≡ aujourd’hui (tout 1h30)');
+// courtSlots VIDE `{}` ⇒ traité comme null (dérive de slots + court_closed, PAS le défaut) : sinon
+// un « efface » rouvrirait silencieusement les fermetures « ! »/court_closed héritées.
+const r6 = resolveCourtSlots({ courtSlots: {}, slots: ['08:00', '!12:30', '14:00'] }, ['T'], SAMPLE)['T'];
+check(r6.length === 3 && r6.find((s) => s.t === '12:30')?.x === true, 'courtSlots {} ≡ null (dérive, « ! » reste fermé)');
 
 console.log(`\n${failed === 0 ? 'TOUS LES TESTS COURTSCHEDULE PASSENT.' : `${failed} ÉCHEC(S).`}`);
 process.exit(failed === 0 ? 0 : 1);

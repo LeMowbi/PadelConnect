@@ -24,6 +24,7 @@ import { Button, Card, Divider, EmptyState, IconCircle, Tag, Txt } from '@/compo
 import { SkeletonLines } from '@/components/Skeleton';
 import { StickyBar } from '@/components/StickyBar';
 import { clubGallery, defaultCourts, findClub, offersForClub } from '@/data/clubs';
+import type { PriceTier } from '@/data/clubs';
 import { coaches } from '@/data/coaches';
 import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { isPlayed, useApp } from '@/store/AppContext';
@@ -37,7 +38,7 @@ import { durationLabel, offeredDurations } from '@/lib/courtSchedule';
 import { hapticSuccess } from '@/lib/haptics';
 import { dateKeyLabel, dayKey } from '@/lib/days';
 import { fcfa, initials } from '@/lib/format';
-import { groupTiersByLabel, minPrice, priceTiersFor } from '@/lib/pricing';
+import { groupTiersByLabel, minPrice, price60Of, priceTiersFor } from '@/lib/pricing';
 import { shareClub } from '@/lib/share';
 import { openMaps } from '@/lib/maps';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
@@ -250,6 +251,35 @@ export default function ClubDetail() {
   // Plages NOMMÉES → onglets (sinon liste à plat). Purement présentation.
   const tierGroups = groupTiersByLabel(tiers);
   const activeTier = tierGroups.length ? tierGroups[Math.min(tierTab, tierGroups.length - 1)] : null;
+  // Prix d’une plage à l’affichage : le club propose peut-être 1h ET 1h30 selon le terrain (68).
+  // Quand les DEUX durées sont réellement offertes, on montre les deux (comme le tunnel de résa,
+  // sinon la fiche paraîtrait plus chère qu’elle ne l’est pour le 1h) ; sinon la seule durée
+  // offerte (repli 1h30, comportement historique d’un club sans grille par terrain).
+  const renderTierPrice = (t: PriceTier) => {
+    const durs = ([...offeredClub] as number[]).sort((a, b) => a - b);
+    if (durs.length > 1) {
+      return (
+        <View style={{ alignItems: 'flex-end' }}>
+          {durs.map((d) => (
+            <Txt
+              key={d}
+              variant={d === 90 ? 'body' : 'small'}
+              color={d === 90 ? undefined : colors.textMuted}
+              style={d === 90 ? { fontWeight: '700' } : undefined}
+            >
+              {durationLabel(d)} · {fcfa(d === 60 ? price60Of(t) : t.price)}
+            </Txt>
+          ))}
+        </View>
+      );
+    }
+    const only = durs[0] ?? 90;
+    return (
+      <Txt variant="body" style={{ fontWeight: '700' }}>
+        {fcfa(only === 60 ? price60Of(t) : t.price)}
+      </Txt>
+    );
+  };
 
   // Avis VÉRIFIÉ : on ne peut noter un club qu’après Y AVOIR SOI-MÊME joué (une de MES
   // résas passées à ce club). Sinon, le formulaire laisse place à une invitation à jouer.
@@ -508,9 +538,7 @@ export default function ClubDetail() {
                         {t.start} – {t.end}
                       </Txt>
                     </View>
-                    <Txt variant="body" style={{ fontWeight: '700' }}>
-                      {fcfa(t.price)}
-                    </Txt>
+                    {renderTierPrice(t)}
                   </View>
                 </View>
               ))}
@@ -530,9 +558,7 @@ export default function ClubDetail() {
                       {t.start} – {t.end}
                     </Txt>
                   </View>
-                  <Txt variant="body" style={{ fontWeight: '700' }}>
-                    {fcfa(t.price)}
-                  </Txt>
+                  {renderTierPrice(t)}
                 </View>
               </View>
             ))

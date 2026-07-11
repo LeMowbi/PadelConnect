@@ -131,7 +131,10 @@ function fromLegacy(slots: string[], closed: string[] | null): CourtSlot[] {
 // `fallback` = SAMPLE_SLOTS (passé par l'appelant : le module reste PUR, sans import de données app).
 export function resolveCourtSlots(cfg: CourtScheduleConfig, courts: string[], fallback: string[]): Record<string, CourtSlot[]> {
   const out: Record<string, CourtSlot[]> = {};
-  const cs = cfg.courtSlots ?? null;
+  // Objet VIDE `{}` traité comme `null` : le contrat rétro-compat veut qu'un « efface » (aucune
+  // grille par terrain) DÉRIVE de l'ancienne grille `slots` + court_closed. Sans ce garde, `{}`
+  // (truthy) tomberait sur le défaut @90 et rouvrirait silencieusement les fermetures héritées.
+  const cs = cfg.courtSlots && Object.keys(cfg.courtSlots).length ? cfg.courtSlots : null;
   const legacy = cfg.slots && cfg.slots.length ? cfg.slots : null;
   for (const court of courts) {
     if (cs && Array.isArray(cs[court])) {
