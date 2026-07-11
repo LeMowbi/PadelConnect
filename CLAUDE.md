@@ -57,7 +57,13 @@ shipper sur TestFlight.
 - État global : Context + `AsyncStorage` (`src/store/AppContext.tsx`, ~1700 lignes ; helpers purs
   et testables dans `src/store/helpers.ts`).
 - Deep links : **scheme `padelco`** (choix assumé). `reset-password` routé vers
-  `padelco://reset-password`.
+  `padelco://reset-password`. Les redirections d'e-mails d'auth (`Linking.createURL` :
+  `padelco://…` en natif, `https://club.padelconnectci.com/…` sur le WEB) ne sont honorées
+  par Supabase que si l'URL est dans la **liste blanche** (Dashboard → Auth → URL Configuration,
+  `uri_allow_list`). ✅ Depuis le 2026-07-11 elle contient les variantes NATIVES **ET WEB**
+  (club.padelconnectci.com + padelconnect-club.pages.dev, `auth-callback` + `reset-password`) —
+  avant ça, une inscription web retombait sur `site_url = padelco://` (lien mort dans le
+  navigateur ; la confirmation serveur passait quand même, mais l'utilisateur croyait à un échec).
 
 ## 6. Cadence de VÉRIFICATION (obligatoire après chaque lot, avant commit)
 
