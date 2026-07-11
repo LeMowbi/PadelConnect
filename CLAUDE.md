@@ -467,6 +467,25 @@ branche de dev en 5 lots (tsc 0 · lint 0 · test:logic vert · bundle eager OK)
   forgé stockerait un `price60` hors bornes, impact purement cosmétique. Fix = ajouter la borne
   `price60` (+ `≤ price`) dans une future migration si le porteur y tient.
 
+### Chaîne e-mail DURCIE de bout en bout (2026-07-11, demande porteur « plus de problème mails ») ✅
+
+Tout vérifié et corrigé via les API (Brevo + Cloudflare + Supabase Management), AUCUN build requis :
+- **Envoi** : SMTP Brevo actif (smtp-relay.brevo.com, expéditeur `contact@padelconnectci.com`),
+  domaine **authentifié + vérifié** (DKIM b1/b2 en CNAME chez Cloudflare, DMARC présent) — délivrance
+  prouvée 14/14 sur 7 jours. ⚠️ Plan Brevo **GRATUIT = 300 e-mails/jour** : suffisant aujourd'hui,
+  à upgrader quand l'app décolle (décision porteur).
+- **Liens** : expiration des liens passée de 1 h → **24 h** (`mailer_otp_exp` 86400 — « lien expiré »
+  était un piège pour qui ouvrait son mail plus tard) ; rate limit 30 → **60/h**.
+- **Redirections** : `uri_allow_list` élargie au WEB (cf. §5) — une inscription via le site aboutit
+  sur une vraie page, plus sur un lien `padelco://` mort.
+- **Textes** : TOUS les sujets/templates en **français** charte PadelConnect (le changement d'adresse
+  était resté en anglais), apostrophes doublées corrigées, et phrase de réassurance ajoutée au mail
+  de confirmation (« si la page affiche une erreur, ton adresse est déjà confirmée — ouvre l'app »).
+- **Comptes fantômes** : une inscription jamais confirmée ne squatte plus le numéro (SQL 74, M2).
+- Résiduel UX connu (mineur, mitigé par la phrase de réassurance) : un lien de confirmation d'une
+  inscription NATIVE ouvert sur ORDINATEUR redirige vers `padelco://` (page morte) — la confirmation
+  passe quand même. Vrai fix = page d'atterrissage https `auth-callback` sur le site + build (plus tard).
+
 ### Audit COMPLET (2026-07-11) — app + serveur + site + config + docs — ✅ CORRIGÉ
 
 Demande porteur : audit de TOUT (backend, frontend, serveur/SQL, edge, UI, site, config, docs).
