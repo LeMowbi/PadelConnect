@@ -87,14 +87,13 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   1h/1h30** (soumissions #58→#61) a REMPLACÉ le #57 en revue. Historique : #46 = lancement audit
   n°7 ; #47 = créneaux modulables + multi-clubs ; #48+ = chantier v2 (comptes club, 1v1, Wave,
   stats) ; tours 2→10 « chaque audit renforce le précédent » ; #58→#61 = créneaux à durée variable
-  1h/1h30 + audits (tours 1→BLANC). ✅ **Tout le SQL `02`→`72` est appliqué EN BASE** (`68`→`72` =
-  campagne créneaux durée variable, appliqués au fil des tours d'audit alors que la table
-  `reservations` était vide). ⚠️ **NE JAMAIS recoller `68_creneaux_duree.sql` SEUL** : ses
-  `create or replace` ÉCRASERAIENT les durcissements `69`→`72` (validation `d∈{60,90}`, gardes
-  anti-orphelin, verrou commun, retrait de terrain) ; si on doit recoller la 68, recoller ENSUITE
-  `69`→`72` dans l'ordre. ⚠️ **NOUVEAU — `73_audit_complet_hardening.sql` (audit complet 2026-07-11)
-  à COLLER en base** avant que le prochain build ne devienne LIVE (durcissements serveur ci-dessous,
-  §10). Reste au porteur : coller la **73**, le lien Wave (Espace opérateur), redéployer `notify-club`
+  1h/1h30 + audits (tours 1→BLANC). ✅ **Tout le SQL `02`→`74` est appliqué EN BASE** (`68`→`72` =
+  campagne créneaux durée variable ; `73`+`74` = audit complet 2026-07-11, appliqués via l'API
+  Management le 2026-07-11, table `reservations` vide → risque nul). ⚠️ **NE JAMAIS recoller
+  `68_creneaux_duree.sql` SEUL** : ses `create or replace` ÉCRASERAIENT les durcissements `69`→`72`
+  (validation `d∈{60,90}`, gardes anti-orphelin, verrou commun, retrait de terrain) ; si on doit
+  recoller la 68, recoller ENSUITE `69`→`74` dans l'ordre. Reste au porteur : le lien Wave (Espace
+  opérateur), redéployer `notify-club`
   (compare HMAC en temps constant), FCM Android + empreinte assetlinks.
 - Un module natif nouveau (ex. `expo-contacts`) ⇒ **nouveau build requis** + config plugin dans
   `app.json` avec la chaîne de permission.
@@ -486,13 +485,16 @@ appliqué avec **Opus**. **19 constats confirmés : 1 HIGH · 7 MEDIUM · 11 LOW
   absurdes) ne peut plus être inséré, donc plus de DoS de verrous quand le club le valide (M6).
   Résiduel de la 73 (boucles de verrous PRÉ-INSERT non bornées en étendue : branche 'club' de
   `create_competition` ET `block_range`) → FERMÉ par la 74 (ci-dessous). Idempotent, `search_path`
-  figé, à coller AVANT que le prochain build soit LIVE.
-- **`74_audit_complet_closures.sql` (À COLLER APRÈS la 73)** — ferme les LOW « appel forgé » que la 73
-  reportait (décision porteur) : `respond_lesson` verrouille par `coach:jour` (plus `coach:jour:heure`) ;
+  figé. ✅ **Appliquée en base le 2026-07-11** (API Management, vérifiée : trigger + `for update` +
+  garde `blocked_users`).
+- **`74_audit_complet_closures.sql`** — ferme les LOW « appel forgé » que la 73 reportait (décision
+  porteur) : `respond_lesson` verrouille par `coach:jour` (plus `coach:jour:heure`) ;
   `block_range` ET la branche 'club' de `create_competition` bornent l'ÉTENDUE des dates AVANT leur
   boucle de verrous ; **trigger** `club_config_court_slots_guard` exige `court_slots.d` NOMBRE 60/90 ;
   + M2 (phone, ci-dessous). Reproductions SQL BYTE-fidèles (respond_lesson, block_range,
   create_competition, handle_new_user) vérifiées par Fable. Idempotent, `search_path` figé.
+  ✅ **Appliquée en base le 2026-07-11** (vérifiée : trigger court_slots + verrou coach:jour + bornes
+  366 j + M2 fantôme ; pré-vérif « 0 court_slots forgé » OK).
 - **M2 (fermé côté serveur, décision porteur → SQL 74)** : une inscription jamais confirmée squattait
   le numéro à vie (`handle_new_user` crée le profil avant confirmation e-mail, aucune récupération
   in-app). La `74` : `phone_available` ignore un compte fantôme (e-mail non confirmé > 24 h) et
