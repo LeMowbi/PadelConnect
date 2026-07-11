@@ -445,6 +445,21 @@ branche de dev en 5 lots (tsc 0 · lint 0 · test:logic vert · bundle eager OK)
 - **Reste porteur** : ① coller `supabase/68_creneaux_duree.sql` en base ; ② lancer le build EAS
   (`EXPO_TOKEN=…`) → soumission qui REMPLACE le #57 ; ③ (le token EAS/ASC vit chez le porteur, jamais
   dans le dépôt).
+- **Campagne d'audit créneaux (2026-07-11, jusqu'au tour BLANC) ✅** : 7 tours adversariaux
+  (logique pure, contrat client↔serveur, UI Espace Club, consommation joueur/coach/tournoi,
+  intégrité de données). Corrigés : 1 MEDIUM (fiche club n'affichait que le prix 1h30 → les 2
+  durées quand le club les offre), 1 HIGH (écran de succès du tunnel guidé qui RE-DÉRIVAIT
+  terrain/durée/prix depuis la dispo déjà mutée par la résa → instantané `booked` figé), et
+  finitions (resolveCourtSlots `{}`≡null, gridBounds exclut les créneaux fermés, switchDuration
+  signale une pause absorbée, toast 'busy' sur l'éditeur de grille). **Tours 6 & 7 = BLANCS**
+  (2 agents indépendants, aucun défaut d'intégrité, aucune double-vente, rien d'exploitable via
+  l'app). Miroir dispo client↔serveur prouvé EXACT (`[t,t+d)` = GiST `int8range`).
+- **Connu, non bloquant (défense en profondeur, GARDÉ POUR PLUS TARD)** : `upsert_club_override`
+  (SQL 66, déjà en base) borne le prix 1h30 mais PAS le nouveau `price60` (1h) — écart de parité
+  §8. Non atteignable via l'app (`validateTiers` borne `price60` ET `price60 ≤ price` à la saisie)
+  et le prix de résa reste borné par `reservations_price_guard` (SQL 40) à l'insert ; seul un appel
+  forgé stockerait un `price60` hors bornes, impact purement cosmétique. Fix = ajouter la borne
+  `price60` (+ `≤ price`) dans une future migration si le porteur y tient.
 
 ## 11. Où regarder
 

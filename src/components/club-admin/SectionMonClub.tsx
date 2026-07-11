@@ -83,6 +83,9 @@ function CourtScheduleRow({
         icon: 'alert-circle',
       });
     if (res === 'offline') toast.show('Enregistrement impossible — vérifie ta connexion', { icon: 'alert-circle' });
+    // Écriture concurrente (un autre terrain en cours d'enregistrement) : le verrou renvoie 'busy'
+    // — on le DIT (parité avec addCourt/removeCourt) au lieu d'un no-op silencieux qui semble figé.
+    if (res === 'busy') toast.show('Une sauvegarde est en cours — réessaie dans un instant.', { icon: 'alert-circle' });
     return res === 'ok';
   };
 
