@@ -89,6 +89,11 @@ export default function ReserverScreen() {
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [celebrate, setCelebrate] = useState(false); // confettis à l’écran de succès (motif amis.tsx)
+  // Instantané FIGÉ de la résa réellement créée (terrain/durée/prix), capturé au moment du succès :
+  // l'écran « done » NE DOIT PAS relire les valeurs dérivées (effectiveCourt/effectiveDuration/
+  // slotPrice), car addReservation vient d'occuper le terrain → la dispo change et ces dérivations
+  // basculeraient sur un AUTRE terrain / une AUTRE durée (récap, calendrier et WhatsApp faux).
+  const [booked, setBooked] = useState<{ court: string; durationMin: 60 | 90; price: number } | null>(null);
 
   // Contexte de disponibilité + terrains libres PAR créneau du jour choisi, mémoïsés (hooks
   // avant les `return` anticipés — règle React Compiler). Sans ça, chaque frappe dans le champ
@@ -252,6 +257,7 @@ export default function ReserverScreen() {
       ...state.friends.filter((f) => friendIds.includes(f.id)).map((f) => ({ id: f.id, name: f.name, confirmed: false })),
       ...extraNames.map((n, i) => ({ id: `x-${Date.now()}-${i}`, name: n, confirmed: false })),
     ];
+    const bookedPrice = priceForSlot(club, slot, effectiveDuration);
     const res = await addReservation({
       clubId: club.id,
       clubName: club.name,
@@ -260,7 +266,7 @@ export default function ReserverScreen() {
       dateKey: day.key,
       time: slot,
       startsAt,
-      price: priceForSlot(club, slot, effectiveDuration),
+      price: bookedPrice,
       durationMin: effectiveDuration,
       players: 1 + invited.length,
       invited,
@@ -273,6 +279,8 @@ export default function ReserverScreen() {
     setSubmitting(false);
     if (res.ok) {
       hapticSuccess();
+      // Fige l'instantané AVANT le re-rendu de succès (la dispo va muter — cf. déclaration de `booked`).
+      setBooked({ court: effectiveCourt, durationMin: effectiveDuration, price: bookedPrice });
       setDone(true);
       setCelebrate(true);
       // Résa créée mais rattachement des amis invités échoué : sans ce toast, la carte
@@ -310,7 +318,7 @@ export default function ReserverScreen() {
     }
   };
 
-  if (done) {
+  if (done && booked) {
     const ringScale = ring.interpolate({ inputRange: [0, 1], outputRange: [0.8, 2.2] });
     const ringOpacity = ring.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0, 0.45, 0] });
     return (
@@ -337,13 +345,13 @@ export default function ReserverScreen() {
         <Card style={{ alignItems: 'center', paddingVertical: spacing.lg }}>
           <View style={styles.summary}>
             <Row label="Club" value={club.name} />
-            <Row label="Terrain" value={effectiveCourt!} />
+            <Row label="Terrain" value={booked.court} />
             <Row label="Jour" value={day!.label} />
             <Row label="Heure" value={slot!} />
-            <Row label="Durée" value={durationLabel(effectiveDuration ?? priceDuration)} />
+            <Row label="Durée" value={durationLabel(booked.durationMin)} />
             <Row label="Participants" value={`Toi${participantCount > 0 ? ` + ${participantCount}` : ''}`} />
-            <Row label={`Tarif (session ${durationLabel(effectiveDuration ?? priceDuration)})`} value={fcfa(slotPrice)} />
-            <Row label={`≈ par joueur (à ${format})`} value={perPlayerOf(slotPrice, format)} />
+            <Row label={`Tarif (session ${durationLabel(booked.durationMin)})`} value={fcfa(booked.price)} />
+            <Row label={`≈ par joueur (à ${format})`} value={perPlayerOf(booked.price, format)} />
           </View>
           <View style={{ alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.lg }}>
             <Button label="Voir mes réservations" icon="calendar" onPress={() => router.push('/reservations')} full />
@@ -355,9 +363,9 @@ export default function ReserverScreen() {
                 const res = await addReservationToCalendar({
                   clubName: club.name,
                   startsAt: slotTimestamp(day!.key, slot!),
-                  court: effectiveCourt!,
+                  court: booked.court,
                   area: club.area,
-                  durationMin: effectiveDuration ?? priceDuration, // durée réellement réservée
+                  durationMin: booked.durationMin, // durée réellement réservée (instantané figé)
                 });
                 // « canceled » = fiche système refermée par l'utilisateur : pas de toast d'erreur.
                 if (res === 'canceled') return;
@@ -378,10 +386,10 @@ export default function ReserverScreen() {
                   const who = invitedNames.length ? `\nÉquipe : ${invitedNames.join(', ')}` : '';
                   // Part calculée sur l'effectif RÉEL (toi + invités) : « /4 » sur un match à 2
                   // annoncerait la moitié de la vraie part à payer au club.
-                  const share = slotPrice ? `\nPrévois ${perPlayerOf(slotPrice, 1 + invitedNames.length)} chacun.` : '';
+                  const share = booked.price ? `\nPrévois ${perPlayerOf(booked.price, 1 + invitedNames.length)} chacun.` : '';
                   openWhatsApp(
                     '',
-                    `On joue au padel ! 🎾\n${club.name} — ${day!.label} à ${slot!} (session ${durationLabel(effectiveDuration ?? priceDuration)})\n${effectiveCourt!}${who}${share}\nRéservé via PadelConnect.`,
+                    `On joue au padel ! 🎾\n${club.name} — ${day!.label} à ${slot!} (session ${durationLabel(booked.durationMin)})\n${booked.court}${who}${share}\nRéservé via PadelConnect.`,
                   );
                 }}
                 full
@@ -392,6 +400,7 @@ export default function ReserverScreen() {
               variant="ghost"
               onPress={() => {
                 setDone(false);
+                setBooked(null); // l'instantané de succès ne survit pas à un nouveau tunnel
                 setSlot(null);
                 setDuration(null);
                 setCourt(null);
