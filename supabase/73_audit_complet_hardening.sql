@@ -162,15 +162,32 @@ returns trigger
 language plpgsql
 set search_path to 'public'
 as $$
+declare
+  v_start date;
+  v_end date;
 begin
-  if new.date_key is null or new.date_key !~ '^\d{4}-\d{2}-\d{2}$' then
-    raise exception 'Tournoi : date de début invalide (%).', new.date_key using errcode = '22007';
+  -- date_key doit être une VRAIE date (un cast, pas juste un regex : « 9999-99-99 » passe le regex
+  -- mais n'est pas une date).
+  if new.date_key is null then
+    raise exception 'Tournoi : date de début manquante.' using errcode = '22007';
   end if;
+  begin
+    v_start := new.date_key::date;
+  exception when others then
+    raise exception 'Tournoi : date de début invalide (%).', new.date_key using errcode = '22007';
+  end;
   if new.end_date_key is not null and new.end_date_key <> '' then
-    if new.end_date_key !~ '^\d{4}-\d{2}-\d{2}$'
-       or new.end_date_key::date < new.date_key::date
-       or new.end_date_key::date > ((now() at time zone 'utc')::date + 366) then
-      raise exception 'Tournoi : plage de dates invalide (fin avant début, ou au-delà de 366 jours).'
+    begin
+      v_end := new.end_date_key::date;
+    exception when others then
+      raise exception 'Tournoi : date de fin invalide (%).', new.end_date_key using errcode = '22007';
+    end;
+    -- Bornes ANTI-DoS : fin ≥ début ET ÉTENDUE ≤ 366 jours. C'est l'ÉTENDUE (end − start) qui borne
+    -- la boucle `for d in 0 .. (end − start)` d'approve_competition — borner seulement `end ≤ now+366`
+    -- laissait passer un `date_key` ancien forgé (ex. 0001-01-01 → fin proche) = des centaines de
+    -- milliers de pg_advisory_xact_lock à la validation. Un tournoi de +366 j n'a aucun sens métier.
+    if v_end < v_start or (v_end - v_start) > 366 then
+      raise exception 'Tournoi : plage de dates invalide (fin avant début, ou étendue > 366 jours).'
         using errcode = '22007';
     end if;
   end if;

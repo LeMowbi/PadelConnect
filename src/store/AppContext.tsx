@@ -1723,9 +1723,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         const ok = await blockUserRpc(userId);
         if (!ok || sessionEpochRef.current !== epoch) return ok;
-        // On ajoute au miroir des bloqués ET on purge toute demande d'ami REÇUE de ce compte : le
-        // serveur (64) l'a déjà passée à 'declined' → la garder afficherait le nom du bloqué et
-        // « Accepter » échouerait en boucle jusqu'au prochain refresh (le miroir doit tenir seul).
+        // On ajoute au miroir des bloqués ET on purge toute demande d'ami REÇUE de ce compte : la
+        // garder afficherait le nom du bloqué, et « Accepter » échouerait de toute façon (à la réponse,
+        // le serveur re-vérifie le blocage, 64) — autant la retirer tout de suite (le miroir doit tenir seul).
         setState((s) => ({
           ...s,
           blockedUserIds: s.blockedUserIds.includes(userId) ? s.blockedUserIds : [...s.blockedUserIds, userId],

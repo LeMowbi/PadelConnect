@@ -726,10 +726,10 @@ export default function CompetitionDetail() {
           </Card>
         ) : null
       ) : started ? (
-        // Inscription fermée dès le jour J (aligné sur register_competition côté serveur + la
-        // désinscription déjà refusée à partir du jour J) : on informe au lieu d'afficher le
-        // formulaire — sinon un joueur s'inscrivait le jour J sans pouvoir se désinscrire ensuite
-        // (et récoltait les +10 pts « officiel joué » sans jouer sur un tournoi officiel).
+        // Inscription fermée dès le jour J côté UI (`started = today >= dateKey`) : la DÉSINSCRIPTION
+        // est déjà refusée dès le jour J côté serveur (53), mais register_competition (59) n'a PAS de
+        // garde jour J — sans ce masque, un joueur s'inscrivait le jour J sans pouvoir se désinscrire
+        // ensuite (et récoltait les +10 pts « officiel joué » sans jouer). Garde SERVEUR = future migration.
         <Card style={{ marginTop: spacing.lg }}>
           <Txt variant="small" color={colors.textFaint}>
             Le tournoi a commencé — les inscriptions sont fermées.

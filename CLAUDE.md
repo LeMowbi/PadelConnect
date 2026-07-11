@@ -481,10 +481,14 @@ appliqué avec **Opus**. **19 constats confirmés : 1 HIGH · 7 MEDIUM · 11 LOW
   `link_participants` oppose désormais le blocage aux invitations de résa (M1) ; `respond_invitation`
   recalcule `invited` sous `FOR UPDATE` (M4, plus de TOCTOU surbooking) ; `delete_competition` refuse
   la suppression par l'organisateur d'un tournoi `published` avec inscrits ou frais impayés (M5) ;
-  `create_competition`/`approve_competition` bornent la plage de dates (≤ +366 j, `end ≥ start`) +
-  validation de date dans les branches joueur/opérateur (M6, plus de DoS de verrous) ; `respond_lesson`
-  verrouille par `coach:jour` (plus par `coach:jour:heure`) ; `upsert_club_config` exige `d` numérique
-  dans `court_slots`. Idempotent, `search_path` figé, à coller AVANT que le prochain build soit LIVE.
+  **trigger** `competitions_date_range_guard` BEFORE INSERT qui borne l'ÉTENDUE des dates
+  (`end ≥ start`, `end − start ≤ 366 j`, cast réel de `date_key`) → un tournoi joueur forgé (dates
+  absurdes) ne peut plus être inséré, donc plus de DoS de verrous quand le club le valide (M6).
+  Idempotent, `search_path` figé, à coller AVANT que le prochain build soit LIVE. **Reportés (LOW
+  « appel forgé », défense en profondeur, même famille que `price60`)** : `respond_lesson` (clé de
+  verrou `coach:jour:heure` → `coach:jour`) et `court_slots` `d` numérique dans `upsert_club_config`
+  — NON inclus dans la 73 (reproduire ces grosses fonctions pour un LOW forgé, sans double-vente
+  possible, ferait courir plus de risque qu'il n'en retire).
 - **DÉCISION PORTEUR EN ATTENTE (M2)** : une inscription jamais confirmée squatte le numéro à vie
   (`handle_new_user` crée le profil avant confirmation e-mail, aucune récupération in-app). Fix
   touche le chemin d'auth LIVE → à trancher (purge des comptes non confirmés > 24 h, ou `phone_available`
