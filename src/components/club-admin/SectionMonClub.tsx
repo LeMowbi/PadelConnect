@@ -466,22 +466,6 @@ export function SectionMonClub({ club }: { club: Club }) {
   // le dernier créneau réel (ex. un 1h à 21:00 avec un miroir qui s'arrête à 20:00) → ce créneau
   // serait vendu au tarif minimum en silence. On prend donc les bornes de la grille RÉELLE (min
   // début / max fin de tous les terrains) quand elle existe.
-  const gridBounds = () => {
-    let lo = Infinity;
-    let hi = -Infinity;
-    for (const slots of Object.values(perCourtGrid))
-      for (const sl of slots) {
-        const m = slotToMinutes(sl.t);
-        if (m === null) continue;
-        if (m < lo) lo = m;
-        if (m + sl.d > hi) hi = m + sl.d;
-      }
-    return lo === Infinity ? null : { lo, hi };
-  };
-  const bounds = state.courtSlots[club.id] ? gridBounds() : null;
-  const openMin = bounds?.lo ?? slotToMinutes(openTime) ?? MIN_OPEN;
-  const closeMin = bounds?.hi ?? slotToMinutes(closeTime) ?? MAX_CLOSE;
-
   // ── Grille PAR TERRAIN (68) : source de vérité dès que `courtSlots[club.id]` existe (posée par
   // « Passer aux horaires par terrain » ci-dessous, ou déjà réglée). Tant qu'elle est absente, on
   // garde l'éditeur simple (grille club unique, 1h30 fixe) ci-dessus — écran plus léger pour les
@@ -494,6 +478,26 @@ export function SectionMonClub({ club }: { club: Club }) {
   };
   const hasPerCourtGrid = !!state.courtSlots[club.id];
   const perCourtGrid = resolvedGridFor(club, sched);
+  // Bornes ouverture/fermeture pour la VALIDATION TARIFAIRE (déclarées APRÈS perCourtGrid : les
+  // lire avant lèverait une ReferenceError de zone morte temporelle — crash de tout l'écran).
+  const gridBounds = () => {
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const slots of Object.values(perCourtGrid))
+      for (const sl of slots) {
+        const m = slotToMinutes(sl.t);
+        if (m === null) continue;
+        if (m < lo) lo = m;
+        if (m + sl.d > hi) hi = m + sl.d;
+      }
+    return lo === Infinity ? null : { lo, hi };
+  };
+  // Sous grille par terrain, le miroir `slots`@90 peut FINIR avant le dernier créneau réel (ex.
+  // un 1h à 21:00 avec un miroir qui s'arrête à 20:00) → ce créneau serait vendu au tarif minimum
+  // en silence. On prend donc les bornes de la grille RÉELLE (min début / max fin) quand elle existe.
+  const bounds = hasPerCourtGrid ? gridBounds() : null;
+  const openMin = bounds?.lo ?? slotToMinutes(openTime) ?? MIN_OPEN;
+  const closeMin = bounds?.hi ?? slotToMinutes(closeTime) ?? MAX_CLOSE;
   // Écritures de grille SÉRIALISÉES : upsert_club_config remplace la carte court_slots EN ENTIER
   // — deux écritures qui se croisent = la seconde écrase la première (perte silencieuse prouvée
   // à l'audit, les deux toasts disaient « ✓ »). Un seul vol à la fois : verrou synchrone (ref,
