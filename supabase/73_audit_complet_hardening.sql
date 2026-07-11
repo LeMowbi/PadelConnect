@@ -13,7 +13,7 @@
 --   4) competitions (trigger)   — plage de dates bornée à l'INSERT → plus de DoS de verrous quand le
 --                                 club valide un tournoi joueur forgé (M6).
 --
--- NON inclus (décision / défense en profondeur) :
+-- NON inclus dans CETTE 73 → tous FERMÉS dans la 74 (décision porteur, à coller APRÈS la 73) :
 --   • M2 « inscription non confirmée qui squatte le numéro » : touche le chemin d'auth LIVE →
 --     décision porteur (purge des comptes non confirmés > 24 h, ou phone_available qui ignore un
 --     ghost non confirmé). À écrire quand le porteur tranche.

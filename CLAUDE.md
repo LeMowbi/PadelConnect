@@ -484,18 +484,19 @@ appliqué avec **Opus**. **19 constats confirmés : 1 HIGH · 7 MEDIUM · 11 LOW
   **trigger** `competitions_date_range_guard` BEFORE INSERT qui borne l'ÉTENDUE des dates
   (`end ≥ start`, `end − start ≤ 366 j`, cast réel de `date_key`) → un tournoi joueur forgé (dates
   absurdes) ne peut plus être inséré, donc plus de DoS de verrous quand le club le valide (M6).
-  Résiduel LOW documenté (en-tête de la 73) : les boucles de verrous PRÉ-INSERT de la branche 'club'
-  de `create_competition` ET de `block_range` restent non bornées en étendue — appel FORGÉ par un
-  gérant DÉJÀ validé uniquement (l'UI borne les dates), à fermer dans une future migration si besoin.
-  Idempotent, `search_path` figé, à coller AVANT que le prochain build soit LIVE. **Reportés (LOW
-  « appel forgé », défense en profondeur, même famille que `price60`)** : `respond_lesson` (clé de
-  verrou `coach:jour:heure` → `coach:jour`) et `court_slots` `d` numérique dans `upsert_club_config`
-  — NON inclus dans la 73 (reproduire ces grosses fonctions pour un LOW forgé, sans double-vente
-  possible, ferait courir plus de risque qu'il n'en retire).
-- **DÉCISION PORTEUR EN ATTENTE (M2)** : une inscription jamais confirmée squatte le numéro à vie
-  (`handle_new_user` crée le profil avant confirmation e-mail, aucune récupération in-app). Fix
-  touche le chemin d'auth LIVE → à trancher (purge des comptes non confirmés > 24 h, ou `phone_available`
-  qui ignore un ghost non confirmé). NON inclus dans la 73.
+  Résiduel de la 73 (boucles de verrous PRÉ-INSERT non bornées en étendue : branche 'club' de
+  `create_competition` ET `block_range`) → FERMÉ par la 74 (ci-dessous). Idempotent, `search_path`
+  figé, à coller AVANT que le prochain build soit LIVE.
+- **`74_audit_complet_closures.sql` (À COLLER APRÈS la 73)** — ferme les LOW « appel forgé » que la 73
+  reportait (décision porteur) : `respond_lesson` verrouille par `coach:jour` (plus `coach:jour:heure`) ;
+  `block_range` ET la branche 'club' de `create_competition` bornent l'ÉTENDUE des dates AVANT leur
+  boucle de verrous ; **trigger** `club_config_court_slots_guard` exige `court_slots.d` NOMBRE 60/90 ;
+  + M2 (phone, ci-dessous). Reproductions SQL BYTE-fidèles (respond_lesson, block_range,
+  create_competition, handle_new_user) vérifiées par Fable. Idempotent, `search_path` figé.
+- **M2 (fermé côté serveur, décision porteur → SQL 74)** : une inscription jamais confirmée squattait
+  le numéro à vie (`handle_new_user` crée le profil avant confirmation e-mail, aucune récupération
+  in-app). La `74` : `phone_available` ignore un compte fantôme (e-mail non confirmé > 24 h) et
+  `handle_new_user` le PURGE (best-effort) avant de refuser un numéro réellement pris.
 - **Docs recalées** : ce fichier (build 61, SQL 02→72, anti-recollage 68) ; `docs/PLAN-CRENEAUX-DUREE-VARIABLE.md`
   (numérotation « SQL 69 » périmée) ; `site/get.html` (canonical `/get`).
 
