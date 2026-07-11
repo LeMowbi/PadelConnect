@@ -484,6 +484,9 @@ appliqué avec **Opus**. **19 constats confirmés : 1 HIGH · 7 MEDIUM · 11 LOW
   **trigger** `competitions_date_range_guard` BEFORE INSERT qui borne l'ÉTENDUE des dates
   (`end ≥ start`, `end − start ≤ 366 j`, cast réel de `date_key`) → un tournoi joueur forgé (dates
   absurdes) ne peut plus être inséré, donc plus de DoS de verrous quand le club le valide (M6).
+  Résiduel LOW documenté (en-tête de la 73) : les boucles de verrous PRÉ-INSERT de la branche 'club'
+  de `create_competition` ET de `block_range` restent non bornées en étendue — appel FORGÉ par un
+  gérant DÉJÀ validé uniquement (l'UI borne les dates), à fermer dans une future migration si besoin.
   Idempotent, `search_path` figé, à coller AVANT que le prochain build soit LIVE. **Reportés (LOW
   « appel forgé », défense en profondeur, même famille que `price60`)** : `respond_lesson` (clé de
   verrou `coach:jour:heure` → `coach:jour`) et `court_slots` `d` numérique dans `upsert_club_config`

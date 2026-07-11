@@ -154,9 +154,13 @@ grant execute on function public.delete_competition(uuid) to authenticated;
 -- « Valider » (approve_competition), saturant la table de verrous (« out of shared memory ») et
 -- laissant le tournoi in-validable. On borne la plage DÈS L'INSERT (seule voie d'écriture, RLS +
 -- SECURITY DEFINER) : le tournoi absurde ne peut plus exister → approve_competition ne le voit
--- jamais. (Résiduel connu, faible : la boucle interne de create_competition en branche 'club' tourne
--- AVANT l'insert — réservée à un gérant de club DÉJÀ validé par l'opérateur ; le tournoi ne persiste
--- de toute façon pas. Bornage complet de cette boucle = future migration si besoin.)
+-- jamais. (Résiduel connu, LOW : les boucles de verrous PRÉ-INSERT — branche 'club' de
+-- create_competition (68) ET block_range (68) — ne sont PAS bornées en étendue ; réservées à un
+-- gérant de club DÉJÀ validé par l'opérateur via un appel FORGÉ (l'UI borne les dates), self-
+-- limitantes, et rien ne persiste. Borner ces deux boucles [ex. `if p_date_to::date -
+-- p_date_from::date > 366 then return 'invalid'; end if;` dans block_range] = future migration si
+-- le porteur y tient — reproduire ces grosses fonctions pour un vecteur forgé/gérant-validé ferait
+-- courir plus de risque qu'il n'en retire.)
 create or replace function public.competitions_date_range_guard()
 returns trigger
 language plpgsql
