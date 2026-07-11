@@ -306,11 +306,14 @@ $$;
 grant execute on function public.create_competition(text, text, text, text, text, text, text, text, text, text, text[], text[], int, text, text, int[]) to authenticated;
 revoke execute on function public.create_competition(text, text, text, text, text, text, text, text, text, text, text[], text[], int, text, text, int[]) from public, anon;
 
--- ─── 4) club_config : `court_slots.d` doit être un NOMBRE 60/90 (trigger, pas de reproduction) ──
--- upsert_club_config valide `(ent->>'d') in ('60','90')` (textuel) → un `d:"60"` forgé (CHAÎNE) passe
--- et est stocké ; le serveur le résout 60 mais le client le replie 90 (comparaison numérique) →
--- divergence de grille (appel forgé, aucune double-vente : la GiST lit la durée réelle). Un trigger
--- BEFORE INSERT/UPDATE ferme la voie sans reproduire la fonction (225 lignes, dernière déf. en 72).
+-- ─── 4) club_config : `court_slots.d` NOMBRE 60/90 gelé au niveau TABLE (défense en profondeur) ──
+-- La 72 valide DÉJÀ `jsonb_typeof(ent->'d') = 'number'` (+ valeur 60/90) DANS upsert_club_config → le
+-- trou d'origine (un `d:"60"` forgé en CHAÎNE, résolu 60 côté serveur mais replié 90 côté client) est
+-- déjà fermé par la RPC, seule voie d'écriture (club_config n'a qu'une policy SELECT). Ce trigger
+-- BEFORE INSERT/UPDATE FIGE l'invariant au niveau TABLE (toute voie d'écriture, présente ou future),
+-- sans reproduire la fonction (225 lignes, dernière déf. en 72). Belt-and-suspenders.
+-- ⚠️ Porteur : lancer la requête de PRÉ-VÉRIFICATION (docs / rapport ci-dessous) AVANT de coller la 74
+-- (0 ligne attendue) — écarte l'hypothétique ligne `court_slots` forgée AVANT que la 72 ne soit posée.
 create or replace function public.club_config_court_slots_guard()
 returns trigger
 language plpgsql
