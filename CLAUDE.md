@@ -88,12 +88,13 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   l'écrire dans le dépôt).
 - Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
 --auto-submit --non-interactive --no-wait`.
-- **`app.json` `buildNumber` courant : 61** (EAS `autoIncrement` le bump à chaque build — ne PAS
-  s'en remettre au suivi manuel ci-dessous, c'est `app.json` qui fait foi). Le build **créneaux
-  1h/1h30** (soumissions #58→#61) a REMPLACÉ le #57 en revue. Historique : #46 = lancement audit
-  n°7 ; #47 = créneaux modulables + multi-clubs ; #48+ = chantier v2 (comptes club, 1v1, Wave,
-  stats) ; tours 2→10 « chaque audit renforce le précédent » ; #58→#61 = créneaux à durée variable
-  1h/1h30 + audits (tours 1→BLANC). ✅ **Tout le SQL `02`→`74` est appliqué EN BASE** (`68`→`72` =
+- **`app.json` : version 1.0.1, `buildNumber` courant : 63** (EAS `autoIncrement` le bump à chaque
+  build — ne PAS s'en remettre au suivi manuel ci-dessous, c'est `app.json` qui fait foi).
+  🚀 **L'app est EN LIGNE (v1.0) depuis le 2026-07-10** sur les stores CI/SN/US ; l'UE attend la
+  vérification « commerçant » DSA d'Apple (bloque UNIQUEMENT les stores européens, rien d'autre).
+  La **v1.0.1** (build #63 = correctifs de l'audit complet) a été mise en revue par le porteur le
+  2026-07-13, **publication automatique** à l'approbation Apple (24-48 h). ✅ **Tout le SQL `02`→`74`
+  est appliqué EN BASE** (`68`→`72` =
   campagne créneaux durée variable ; `73`+`74` = audit complet 2026-07-11, appliqués via l'API
   Management le 2026-07-11, table `reservations` vide → risque nul). ⚠️ **NE JAMAIS recoller
   `68_creneaux_duree.sql` SEUL** : ses `create or replace` ÉCRASERAIENT les durcissements `69`→`72`
