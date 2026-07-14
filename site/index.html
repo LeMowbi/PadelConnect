@@ -68,21 +68,20 @@
 
         <div class="entete-actions">
           <button type="button" class="btn-lang" aria-label="Passer en français / Switch to English">EN</button>
-          <!-- Espace Club : sous-domaine web dédié aux gérants, prévu mais PAS ENCORE créé.
-               Le porteur doit déployer club.padelconnectci.com avant que ce bouton soit utile ;
-               en attendant il redirige simplement vers ce domaine (à surveiller : lien mort tant
-               que le sous-domaine n'existe pas). -->
+          <!-- Web app (club.padelconnectci.com) : le MÊME app que sur mobile, accès protégé par rôle
+               — un joueur s'y connecte/inscrit, un gérant y retrouve son Espace Club. Libellé « Se
+               connecter » (pas « Espace Club ») pour ne pas dérouter les joueurs venus du site. -->
           <a class="btn btn-contour btn-petit cache-mobile" href="https://club.padelconnectci.com">
-            <span data-i18n="nav.espaceclub">Espace Club</span>
+            <span data-i18n="nav.espaceclub">Se connecter</span>
           </a>
-          <a class="btn btn-plein btn-petit" href="/get" data-i18n="nav.telecharger">Télécharger</a>
+          <a class="btn btn-plein btn-petit" href="https://apps.apple.com/app/id6785261310" data-i18n="nav.telecharger">Télécharger</a>
           <button type="button" class="btn-menu" aria-label="Menu" aria-expanded="false"><span></span></button>
         </div>
       </div>
       <div class="menu-mobile">
         <a href="/#clubs" data-i18n="nav.clubs">Nos clubs</a>
         <a href="/#pour-les-clubs" data-i18n="nav.pourclubs">Pour les clubs</a>
-        <a href="https://club.padelconnectci.com" data-i18n="nav.espaceclub">Espace Club</a>
+        <a href="https://club.padelconnectci.com" data-i18n="nav.espaceclub">Se connecter</a>
       </div>
     </header>
 
@@ -98,11 +97,11 @@
               endroit, 100 % en français.
             </p>
             <div class="heros-boutons">
-              <a class="btn btn-plein" href="/get">
-                <span>📲</span><span data-i18n="hero.cta1">Télécharger l'app</span>
+              <a class="btn btn-plein" href="https://apps.apple.com/app/id6785261310">
+                <span>📲</span><span data-i18n="hero.cta1">Télécharger sur l'App Store</span>
               </a>
               <a class="btn btn-contour" href="https://club.padelconnectci.com">
-                <span data-i18n="hero.cta2">Espace Club →</span>
+                <span data-i18n="hero.cta2">Se connecter / S'inscrire →</span>
               </a>
             </div>
             <div class="preuves">
@@ -254,7 +253,7 @@
           </div>
 
           <div class="cta-club reveal">
-            <a class="btn btn-or" href="/get">
+            <a class="btn btn-or" href="https://apps.apple.com/app/id6785261310">
               <span>🏟️</span><span data-i18n="pourclubs.cta">Inscrire mon club</span>
             </a>
             <p class="liens-secondaires" data-i18n-html="pourclubs.cta-aide">
@@ -270,9 +269,9 @@
         <div class="conteneur">
           <div class="bandeau-final reveal">
             <h2 data-i18n="final.titre">Prêt à taper la balle ?</h2>
-            <p data-i18n="final.texte">Disponible sur iOS et Android. Gratuit pour les joueurs.</p>
-            <a class="btn btn-plein" href="/get">
-              <span>📲</span><span data-i18n="final.cta">Télécharger PadelConnect</span>
+            <p data-i18n="final.texte">Disponible sur iPhone — bientôt sur Android. Gratuit pour les joueurs.</p>
+            <a class="btn btn-plein" href="https://apps.apple.com/app/id6785261310">
+              <span>📲</span><span data-i18n="final.cta">Télécharger sur l'App Store</span>
             </a>
           </div>
         </div>
@@ -297,7 +296,7 @@
         </div>
         <div class="pied-bas">
           <span>&copy; 2026 PadelConnect · Abidjan, Côte d'Ivoire</span>
-          <span data-i18n="footer.disponible">Application disponible sur iOS et Android</span>
+          <span data-i18n="footer.disponible">Application disponible sur iPhone — bientôt sur Android</span>
         </div>
       </div>
     </footer>
@@ -307,7 +306,7 @@
       window.I18N = {
         'nav.clubs': { fr: 'Nos clubs', en: 'Our clubs' },
         'nav.pourclubs': { fr: 'Pour les clubs', en: 'For clubs' },
-        'nav.espaceclub': { fr: 'Espace Club', en: 'Club portal' },
+        'nav.espaceclub': { fr: 'Se connecter', en: 'Log in' },
         'nav.telecharger': { fr: 'Télécharger', en: 'Download' },
 
         'hero.badge': { fr: 'En ligne à Abidjan', en: 'Live in Abidjan' },
@@ -319,8 +318,8 @@
           fr: "Réserve un terrain, inscris-toi à un tournoi, trouve des partenaires de jeu et suis ta progression — tout au même endroit, 100 % en français.",
           en: 'Book a court, join a tournament, find playing partners and track your progress — all in one place.',
         },
-        'hero.cta1': { fr: "Télécharger l'app", en: 'Download the app' },
-        'hero.cta2': { fr: 'Espace Club →', en: 'Club portal →' },
+        'hero.cta1': { fr: "Télécharger sur l'App Store", en: 'Download on the App Store' },
+        'hero.cta2': { fr: "Se connecter / S'inscrire →", en: 'Log in / Sign up →' },
         'hero.preuve1': { fr: "Les meilleurs clubs d'Abidjan", en: "Abidjan's best clubs" },
         'hero.preuve2': { fr: 'Réservation confirmée par le club', en: 'Booking confirmed by the club' },
         'hero.preuve3': { fr: 'Gratuit pour les joueurs', en: 'Free for players' },
@@ -408,12 +407,12 @@
         },
 
         'final.titre': { fr: 'Prêt à taper la balle ?', en: 'Ready to hit the court?' },
-        'final.texte': { fr: 'Disponible sur iOS et Android. Gratuit pour les joueurs.', en: 'Available on iOS and Android. Free for players.' },
-        'final.cta': { fr: 'Télécharger PadelConnect', en: 'Download PadelConnect' },
+        'final.texte': { fr: 'Disponible sur iPhone — bientôt sur Android. Gratuit pour les joueurs.', en: 'Available on iPhone — Android coming soon. Free for players.' },
+        'final.cta': { fr: "Télécharger sur l'App Store", en: 'Download on the App Store' },
 
         'footer.confidentialite': { fr: 'Confidentialité', en: 'Privacy' },
         'footer.cgu': { fr: 'CGU & mentions légales', en: 'Terms & legal notice' },
-        'footer.disponible': { fr: 'Application disponible sur iOS et Android', en: 'App available on iOS and Android' },
+        'footer.disponible': { fr: 'Application disponible sur iPhone — bientôt sur Android', en: 'App available on iPhone — Android coming soon' },
       };
     </script>
     <script src="/assets/site.js"></script>
