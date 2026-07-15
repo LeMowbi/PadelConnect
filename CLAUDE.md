@@ -265,6 +265,21 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   signalements dans Demandes → « Avis signalés » (`fetch_review_reports`, `operator_delete_review`,
   `operator_dismiss_report`). Requis par l'App Store (1.2) et Google Play. Confidentialité (51) : le téléphone du créateur d'un **match ouvert** n'est plus
   stocké (trigger `strip_open_match_phone`) — il était récoltable en rejoignant chaque match.
+- **Annulation par le CLUB pour chevauchement hors app (75, demande porteur 2026-07-15)** : le
+  gérant (ou l'opérateur) peut annuler à TOUT MOMENT une résa joueur qui chevauche une réservation
+  prise HORS APPLICATION (téléphone / sur place). RPC `club_cancel_reservation(p_id, p_reason,
+  p_proposed_court, p_proposed_date_key, p_proposed_time, p_proposed_duration_min)` (SECURITY
+  DEFINER, `can_manage_club`, verrou `club:jour`) : statut dédié **`club_cancelled`** (≠ `cancelled`
+  joueur, ≠ `no_show` → la fiabilité du joueur n'est PAS touchée, ce n'est pas sa faute), enregistre
+  MOTIF + PROPOSITION d'alternative (`proposed_*`), et **BLOQUE le créneau d'origine** (`blocked_slots`,
+  même clé que `block_slot`) car il est désormais occupé hors app. Comme la GiST `reservations_no_overlap`
+  et `slot_occupancy` sont partielles `where status='booked'`, le créneau est libéré automatiquement.
+  Client : `clubCancelReservationRow` + action store `clubCancelReservation`, `ClubCancelForm` (Espace
+  Club → carte résa à venir : motif obligatoire + proposition optionnelle terrain/jour/heure), carte
+  joueur « Annulée par le club » dans « Mes réservations » (motif + « Accepter la proposition » qui
+  rouvre le tunnel jour/heure/durée pré-remplis, ou « Choisir un autre créneau »). Push via notify-club
+  (nouvelle branche `club_cancelled`, joueur + participants). ⚠️ **SQL 75 à coller en base + notify-club
+  à redéployer** avant le build qui l'expose.
 - **Liens de téléchargement multi-plateformes (audit 6)** : l'app sort sur iOS ET Android. Les
   partages d'invitation/parrainage pointent vers `padelconnectci.com/get` (`DOWNLOAD_URL`), page
   qui route vers l'App Store ou Google Play selon l'appareil ; `/invite/*` et `/club/*` réécrivent

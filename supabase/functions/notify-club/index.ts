@@ -164,6 +164,33 @@ Deno.serve(async (req) => {
           data: { kind: 'reservation', id: record.id },
         });
       }
+    } else if (table === 'reservations' && type === 'UPDATE' && record.status === 'club_cancelled' && oldRecord.status === 'booked') {
+      // Le CLUB vient d'annuler la réservation (75) car le créneau chevauche une réservation prise
+      // HORS APP → prévenir le joueur (auteur) + les participants, avec le motif et, si le club en a
+      // proposé une, l'alternative (jour/heure/terrain). Tap sur la notif → « Mes réservations ».
+      const reasonPart = record.cancel_reason ? ` Motif : ${record.cancel_reason}.` : '';
+      const proposalPart = record.proposed_time
+        ? ` Le club te propose le ${record.proposed_date_key ?? record.date_label ?? ''} à ${record.proposed_time}${record.proposed_court ? ` (${record.proposed_court})` : ''}.`
+        : ' Ouvre l’app pour choisir un autre créneau.';
+      const cancelBody = `${record.club_name ?? 'Le club'} a annulé ton créneau du ${record.date_label ?? ''} à ${record.time ?? ''} (chevauchement avec une réservation hors app).${reasonPart}${proposalPart}`;
+      notifs.push({
+        targets: await userToken(record.user_id),
+        title: 'Créneau annulé par le club',
+        body: cancelBody,
+        data: { kind: 'reservation', id: record.id },
+      });
+      // Participants (amis invités / match ouvert) : prévenus eux aussi que le créneau saute.
+      const { data: cparts } = await supabase.from('reservation_participants').select('user_id, status').eq('reservation_id', record.id);
+      const cpartIds = (cparts ?? []).filter((p) => p.status !== 'declined').map((p) => p.user_id as string);
+      if (cpartIds.length > 0) {
+        const { data: toks } = await supabase.from('profiles').select('expo_push_token').in('id', cpartIds);
+        notifs.push({
+          targets: (toks ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
+          title: 'Créneau annulé par le club',
+          body: cancelBody,
+          data: { kind: 'reservation', id: record.id },
+        });
+      }
     } else if (table === 'reservation_participants' && type === 'INSERT' && record.status === 'accepted') {
       // MATCH OUVERT (45) : quelqu'un vient de REJOINDRE — join_open_match insère directement
       // 'accepted' (≠ 'invited') → on prévient le CRÉATEUR du match, pas le nouveau venu.

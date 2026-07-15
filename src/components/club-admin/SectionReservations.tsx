@@ -7,6 +7,7 @@ import { Button, Card, Divider, EmptyState, IconCircle, SectionHeader, StatTile,
 import { LegendDot } from '@/components/club-admin/LegendDot';
 import { QuickBlock } from '@/components/club-admin/QuickBlock';
 import { BlockRangeForm } from '@/components/club-admin/BlockRangeForm';
+import { ClubCancelForm } from '@/components/club-admin/ClubCancelForm';
 import { type Club } from '@/data/clubs';
 import {
   competitionBlockedCourts,
@@ -43,9 +44,11 @@ export function SectionReservations({
   comps: import('@/data/competitions').Competition[];
   onSelectCell: (cell: SelectedCell) => void;
 }) {
-  const { state, blockSlot, unblockSlot, blockRange, unblockRange, confirmReservationByClub, markNoShow } = useApp();
+  const { state, blockSlot, unblockSlot, blockRange, unblockRange, confirmReservationByClub, markNoShow, clubCancelReservation } = useApp();
   const toast = useToast();
   const [planDayKey, setPlanDayKey] = useState<string | null>(null);
+  // Résa en cours d'annulation par le club (chevauchement hors app) : id ouvert dans un mini-form.
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [showBlockForm, setShowBlockForm] = useState(false);
   const [showRangeForm, setShowRangeForm] = useState(false);
   // Garde anti double-tap du bouton « Rouvrir » d’une période (id en cours, ou null).
@@ -691,6 +694,38 @@ export function SectionReservations({
                   avant, un tap par erreur compterait une absence injuste des jours à l’avance. */}
               {r.startsAt <= now ? (
                 <Button size="sm" label="Pas venu" icon="person-remove-outline" variant="ghost" onPress={() => onMarkNoShow(r)} full />
+              ) : null}
+              {/* Annulation par le CLUB (75) : ce créneau chevauche une réservation prise HORS APP
+                  (téléphone / sur place). On l'annule à tout moment sans pénaliser le joueur, et on
+                  lui envoie un message + une proposition d'alternative (via notify-club). */}
+              <Button
+                size="sm"
+                label="Annuler ce créneau (chevauchement)"
+                icon="swap-horizontal-outline"
+                variant="ghost"
+                onPress={() => setCancellingId(cancellingId === r.id ? null : r.id)}
+                full
+              />
+              {cancellingId === r.id ? (
+                <ClubCancelForm
+                  days={week}
+                  courts={courts}
+                  grid={grid}
+                  onCancel={(reason, proposal) =>
+                    clubCancelReservation(r.id, reason, proposal).then((ok) => {
+                      if (ok) {
+                        hapticSuccess();
+                        toast.show('Créneau annulé — le joueur est prévenu');
+                        setCancellingId(null);
+                        reloadTraces();
+                      } else {
+                        hapticWarning();
+                      }
+                      return ok;
+                    })
+                  }
+                  onClose={() => setCancellingId(null)}
+                />
               ) : null}
             </Card>
           ))

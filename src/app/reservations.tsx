@@ -826,11 +826,61 @@ export default function ReservationsScreen() {
                     </Txt>
                     <Txt variant="small" color={colors.textFaint}>
                       {dateKeyLabel(r.dateKey)} · {r.time} · {r.court}
-                      {!isOwner(r) && r.bookedBy?.name ? ` · annulée par ${r.bookedBy.name}` : ''}
+                      {!r.cancelledByClub && !isOwner(r) && r.bookedBy?.name ? ` · annulée par ${r.bookedBy.name}` : ''}
                     </Txt>
                   </View>
-                  <Tag label="Annulée" tone="coral" icon="close-circle" />
+                  <Tag label={r.cancelledByClub ? 'Annulée par le club' : 'Annulée'} tone="coral" icon="close-circle" />
                 </View>
+                {/* Annulation par le CLUB (75) : le créneau chevauchait une réservation prise hors
+                    application. On explique le motif et, si le club a proposé une alternative, on
+                    la réserve en un tap (réutilise le tunnel de réservation, jour/heure/durée
+                    pré-remplis) — sinon on renvoie vers le club pour choisir un autre créneau. */}
+                {r.cancelledByClub ? (
+                  <View style={styles.clubCancelBox}>
+                    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                      <Ionicons name="information-circle-outline" size={16} color={colors.coralDark} />
+                      <Txt variant="small" color={colors.coralDark} style={{ flex: 1 }}>
+                        Ce créneau chevauchait une réservation prise hors application.
+                        {r.cancelReason ? ` Motif : ${r.cancelReason}.` : ''}
+                      </Txt>
+                    </View>
+                    {r.proposal ? (
+                      <>
+                        <Txt variant="small" color={colors.text} style={{ marginTop: spacing.sm }}>
+                          Le club propose : {dateKeyLabel(r.proposal.dateKey)} · {r.proposal.time} · {r.proposal.court} (
+                          {durationLabel(r.proposal.durationMin)}).
+                        </Txt>
+                        <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                          <View style={{ flex: 1 }}>
+                            <Button
+                              size="sm"
+                              label="Accepter la proposition"
+                              icon="checkmark"
+                              onPress={() =>
+                                router.push(
+                                  `/reserver/${r.clubId}?dateKey=${r.proposal!.dateKey}&time=${encodeURIComponent(
+                                    r.proposal!.time,
+                                  )}&durationMin=${r.proposal!.durationMin}`,
+                                )
+                              }
+                              full
+                            />
+                          </View>
+                          <Button size="sm" label="Autre créneau" variant="ghost" onPress={() => router.push(`/reserver/${r.clubId}`)} />
+                        </View>
+                      </>
+                    ) : (
+                      <Button
+                        size="sm"
+                        label="Choisir un autre créneau"
+                        icon="calendar-outline"
+                        variant="secondary"
+                        onPress={() => router.push(`/reserver/${r.clubId}`)}
+                        full
+                      />
+                    )}
+                  </View>
+                ) : null}
               </View>
             ))}
           </Card>
@@ -1080,6 +1130,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     alignSelf: 'flex-start',
     paddingVertical: 2,
+  },
+  // Encadré « Annulée par le club » (75) : motif + proposition d'alternative.
+  clubCancelBox: {
+    marginTop: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.coralSoft,
   },
   msgRow: {
     flexDirection: 'row',

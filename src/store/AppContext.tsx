@@ -68,6 +68,7 @@ import {
   blockRangeRow,
   blockSlotRow,
   cancelReservationRow,
+  clubCancelReservationRow,
   fetchBlockedRanges,
   fetchBlockedSlots,
   fetchMyParticipations,
@@ -166,6 +167,9 @@ export type Reservation = {
   openMatch?: boolean; // match OUVERT (45) : visible dans « Matchs ouverts », rejoignable
   openLevel?: string; // niveau souhaité du match ouvert (ex. « 3–4 », libre)
   openCapacity?: number; // nombre de joueurs attendus : 2 = 1v1, 4 = 2v2 (défaut 4)
+  cancelledByClub?: boolean; // 75 : annulée par le CLUB (chevauchement résa hors app), pas par le joueur
+  cancelReason?: string; // 75 : motif d'annulation club affiché au joueur (ex. « déjà pris au téléphone »)
+  proposal?: { court: string; dateKey: string; time: string; durationMin: 60 | 90 }; // 75 : créneau de remplacement proposé
   createdAt: number;
 };
 
@@ -449,6 +453,13 @@ type AppContextType = {
   operatorSetClubCommission: (clubId: string, rate: number) => Promise<{ ok: boolean }>;
   // Club / opérateur : marque une réservation « pas venu » (absence comptée, créneau libéré).
   markNoShow: (id: string) => Promise<boolean>;
+  // Club / opérateur : annule une résa qui CHEVAUCHE une réservation hors app (75). Motif + proposition
+  // d'alternative optionnels → le joueur les voit dans « Mes réservations » (push via notify-club).
+  clubCancelReservation: (
+    id: string,
+    reason?: string,
+    proposal?: { court?: string; dateKey?: string; time?: string; durationMin?: 60 | 90 },
+  ) => Promise<boolean>;
   operatorCreateClub: (input: {
     name: string;
     area: string;
@@ -1634,6 +1645,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 (o) => !(o.clubId === res.clubId && o.dateKey === res.dateKey && o.time === res.time && o.court === res.court),
               )
             : s.occupancy,
+        }));
+        return true;
+      },
+      // Le club (ou l’opérateur) annule une résa qui CHEVAUCHE une réservation prise HORS APP (75) :
+      // le serveur passe la résa en 'club_cancelled' (créneau libéré, fiabilité du joueur intacte),
+      // enregistre le motif + une proposition d’alternative, et BLOQUE le créneau d’origine (occupé
+      // hors app). Côté miroir club : on retire la résa + son occupation et on ajoute le blocage
+      // local (comme blockSlot) pour que le planning montre tout de suite le créneau fermé. Le joueur
+      // concerné voit l’annulation à son prochain rafraîchissement (push via notify-club).
+      clubCancelReservation: async (id, reason = '', proposal) => {
+        const res = state.reservations.find((r) => r.id === id);
+        const ok = await clubCancelReservationRow(id, reason, proposal);
+        if (!ok) return false;
+        setState((s) => ({
+          ...s,
+          reservations: s.reservations.filter((r) => r.id !== id),
+          occupancy: res
+            ? s.occupancy.filter(
+                (o) => !(o.clubId === res.clubId && o.dateKey === res.dateKey && o.time === res.time && o.court === res.court),
+              )
+            : s.occupancy,
+          blockedSlots:
+            res &&
+            !s.blockedSlots.some(
+              (x) => x.clubId === res.clubId && x.dateKey === res.dateKey && x.time === res.time && x.court === res.court,
+            )
+              ? [
+                  ...s.blockedSlots,
+                  {
+                    clubId: res.clubId,
+                    dateKey: res.dateKey,
+                    time: res.time,
+                    court: res.court,
+                    reason: reason.trim() || 'Réservation hors application',
+                    durationMin: res.durationMin || SESSION_MIN,
+                  },
+                ]
+              : s.blockedSlots,
         }));
         return true;
       },

@@ -45,6 +45,12 @@ type Row = {
   open_match: boolean | null; // match ouvert (45) — rejoignable par les autres joueurs
   open_level: string | null;
   open_capacity: number | null; // 2 = 1v1 · 4 = 2v2 (v2)
+  status: string | null; // 'booked' | 'cancelled' | 'no_show' | 'club_cancelled' (75)
+  cancel_reason: string | null; // motif d'une annulation par le club (75)
+  proposed_court: string | null; // proposition d'alternative (terrain / jour / heure / durée) — 75
+  proposed_date_key: string | null;
+  proposed_time: string | null;
+  proposed_duration_min: number | null;
   created_at: string | null;
 };
 
@@ -76,6 +82,21 @@ function rowToReservation(row: Row): Reservation {
     openMatch: row.open_match ?? false,
     openLevel: row.open_level ?? undefined,
     openCapacity: row.open_capacity ?? undefined,
+    // Annulation par le CLUB (75) : motif + proposition d'alternative, portés par le même canal que
+    // les annulées (fetchCancelledReservations fait select *). Absents = annulation joueur normale.
+    cancelledByClub: row.status === 'club_cancelled',
+    cancelReason: row.cancel_reason ?? undefined,
+    proposal:
+      row.proposed_court || row.proposed_time || row.proposed_date_key
+        ? {
+            court: row.proposed_court ?? row.court ?? '',
+            dateKey: row.proposed_date_key ?? row.date_key ?? '',
+            time: row.proposed_time ?? row.time ?? '',
+            durationMin: (row.proposed_duration_min === 60 || row.proposed_duration_min === 90
+              ? row.proposed_duration_min
+              : (row.duration_min ?? 90)) as 60 | 90,
+          }
+        : undefined,
     createdAt: Number.isFinite(createdTs) ? createdTs : Date.now(),
   };
 }
@@ -271,6 +292,26 @@ export async function cancelReservationRow(id: string): Promise<boolean> {
   return !error && data === true;
 }
 
+// Annulation par le CLUB (75) : chevauchement avec une réservation HORS APP. Le gérant du club actif
+// (ou l'opérateur) annule la résa joueur (statut 'club_cancelled' → ne pénalise pas la fiabilité du
+// joueur), BLOQUE le créneau d'origine (occupé hors app) et joint un motif + une proposition
+// d'alternative (terrain / jour / heure / durée). SECURITY DEFINER + can_manage_club côté serveur.
+export async function clubCancelReservationRow(
+  id: string,
+  reason: string,
+  proposal?: { court?: string; dateKey?: string; time?: string; durationMin?: 60 | 90 },
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc('club_cancel_reservation', {
+    p_id: id,
+    p_reason: reason,
+    p_proposed_court: proposal?.court ?? null,
+    p_proposed_date_key: proposal?.dateKey ?? null,
+    p_proposed_time: proposal?.time ?? null,
+    p_proposed_duration_min: proposal?.durationMin ?? null,
+  });
+  return !error && data === true;
+}
+
 export async function setClubConfirmedRow(id: string, value: boolean): Promise<boolean> {
   // Passe par la fonction serveur (SECURITY DEFINER) qui ne modifie QUE club_confirmed
   // après contrôle du rôle — pas d’UPDATE large qui laisserait réécrire prix/terrain.
@@ -306,7 +347,7 @@ export async function fetchCancelledReservations(): Promise<Reservation[] | null
   const { data, error } = await supabase
     .from('reservations')
     .select('*')
-    .eq('status', 'cancelled')
+    .in('status', ['cancelled', 'club_cancelled']) // 75 : inclut les annulations PAR LE CLUB (motif + proposition)
     .gte('starts_at', Date.now() - MIRROR_WINDOW_MS)
     .order('starts_at', { ascending: false })
     .limit(500);
