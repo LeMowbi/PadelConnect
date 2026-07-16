@@ -42,7 +42,9 @@ jobs:
       - name: Installer Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # wrangler@latest exige Node >= 22 (sinon « Wrangler requires at least Node.js
+          # v22.0.0 » → déploiement en échec). On aligne le runner sur 22.
+          node-version: 22
           cache: npm
 
       - name: Installer les dépendances
