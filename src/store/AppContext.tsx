@@ -861,6 +861,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const epoch = sessionEpochRef.current;
       const ok = () => sessionEpochRef.current === epoch;
       const cfgW = clubCfgWriteRef.current; // écriture club_config pendant la relecture → tranche jetée
+      // Ré-enregistre le jeton de push à CHAQUE retour au premier plan (pas seulement au
+      // démarrage/à la connexion) : un utilisateur qui refuse d'abord puis ACTIVE les
+      // notifications dans les Réglages iOS est alors capté sans redémarrer l'app. Idempotent
+      // et silencieux (no-op si déjà refusé sans nouvelle demande possible, ou déjà enregistré).
+      void registerPushToken(userId);
       void (async () => {
         try {
           const [
