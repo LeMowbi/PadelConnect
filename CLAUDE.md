@@ -281,9 +281,19 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   (nouvelle branche `club_cancelled`, joueur + participants). ✅ **SQL 75 appliqué en base + notify-club
   redéployée (v28)** le 2026-07-16 (API Management, PAT porteur) — vérifié adversarial 9/9 assertions
   live (annulation, motif+proposition, blocage créneau, garde re-annulation, validation durée 60/90,
-  autorisation `can_manage_club`), transaction annulée → aucune trace. Le webhook `reservations`
-  (INSERT+UPDATE) existant couvre la branche, aucun webhook à ajouter. Reste : le build qui l'expose
+  autorisation `can_manage_club`), transaction annulée → aucune trace. Reste : le build qui l'expose
   côté UI (iOS + web `club.padelconnectci.com`).
+- **🔴 CORRECTIF PUSH MAJEUR (2026-07-16)** : deux Database Webhooks étaient MAL CONFIGURÉS en base
+  (dérive vs docs) → toute une classe de notifications ne partait JAMAIS. `reservations` écoutait
+  **INSERT seul** (⇒ ni « Réservation confirmée » au joueur, ni « Réservation annulée » au gérant,
+  ni le nouveau « Créneau annulé par le club » — tous des UPDATE) et `reservation_participants`
+  écoutait **UPDATE seul** (⇒ ni « Invitation à jouer » à l'invité, ni « Un joueur a rejoint ton
+  match » au créateur — des INSERT). Recréés via l'API Management pour écouter **INSERT + UPDATE**
+  (en-tête `x-webhook-secret` + service_role préservés) ; les 8 webhooks couvrent maintenant tous
+  INSERT+UPDATE (vérifié). Smoke test live du routage `club_cancelled` = HTTP 200 « no targets »
+  (user sans token → aucun push parasite). C'est ce qui explique que les push d'annulation/
+  confirmation/invitation « ne marchaient pas » : le code notify-club était correct, mais les
+  déclencheurs ne l'appelaient pas sur UPDATE/INSERT.
 - **Liens de téléchargement multi-plateformes (audit 6)** : l'app sort sur iOS ET Android. Les
   partages d'invitation/parrainage pointent vers `padelconnectci.com/get` (`DOWNLOAD_URL`), page
   qui route vers l'App Store ou Google Play selon l'appareil ; `/invite/*` et `/club/*` réécrivent

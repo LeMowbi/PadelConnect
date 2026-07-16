@@ -75,8 +75,14 @@ Dashboard Supabase → **Database → Webhooks** → *Create a new hook* :
     confirmée ✅ »).
   - UPDATE = le joueur annule (`status → cancelled`, depuis `booked`) → notifie le **gérant**
     du club (« Réservation annulée »).
+  - UPDATE = le **club** annule pour chevauchement hors app (`status → club_cancelled`, depuis
+    `booked`, 75) → notifie le **joueur** ET les participants (« Créneau annulé par le club »,
+    avec motif + proposition d'alternative).
   - ⚠️ Si tu avais déjà créé le hook `reservations` en INSERT seul, **édite-le** pour cocher
     aussi **UPDATE** (sinon les notifs de confirmation et d'annulation ne partiront pas).
+    ✅ Corrigé en base le 2026-07-16 : le hook `reservations` écoutait INSERT SEUL (confirmation
+    + annulations joueur/club ne partaient pas) et `reservation_participants` UPDATE SEUL
+    (invitations/rejoint-match muets) → les deux écoutent désormais **INSERT + UPDATE**.
 - **Invitation → invité** ET **Invitation acceptée → auteur** (notifs sociales) : table
   `reservation_participants`, événements **INSERT _et_ UPDATE** (coche les deux) → même
   fonction `notify-club`.
