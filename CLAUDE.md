@@ -278,8 +278,12 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   Club → carte résa à venir : motif obligatoire + proposition optionnelle terrain/jour/heure), carte
   joueur « Annulée par le club » dans « Mes réservations » (motif + « Accepter la proposition » qui
   rouvre le tunnel jour/heure/durée pré-remplis, ou « Choisir un autre créneau »). Push via notify-club
-  (nouvelle branche `club_cancelled`, joueur + participants). ⚠️ **SQL 75 à coller en base + notify-club
-  à redéployer** avant le build qui l'expose.
+  (nouvelle branche `club_cancelled`, joueur + participants). ✅ **SQL 75 appliqué en base + notify-club
+  redéployée (v28)** le 2026-07-16 (API Management, PAT porteur) — vérifié adversarial 9/9 assertions
+  live (annulation, motif+proposition, blocage créneau, garde re-annulation, validation durée 60/90,
+  autorisation `can_manage_club`), transaction annulée → aucune trace. Le webhook `reservations`
+  (INSERT+UPDATE) existant couvre la branche, aucun webhook à ajouter. Reste : le build qui l'expose
+  côté UI (iOS + web `club.padelconnectci.com`).
 - **Liens de téléchargement multi-plateformes (audit 6)** : l'app sort sur iOS ET Android. Les
   partages d'invitation/parrainage pointent vers `padelconnectci.com/get` (`DOWNLOAD_URL`), page
   qui route vers l'App Store ou Google Play selon l'appareil ; `/invite/*` et `/club/*` réécrivent
