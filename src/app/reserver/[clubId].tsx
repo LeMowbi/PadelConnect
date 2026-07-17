@@ -35,7 +35,7 @@ import { useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
 export default function ReserverScreen() {
-  const params = useLocalSearchParams<{ clubId: string; dateKey?: string; time?: string; durationMin?: string }>();
+  const params = useLocalSearchParams<{ clubId: string; dateKey?: string; time?: string; durationMin?: string; court?: string }>();
   const router = useRouter();
   const { state, addReservation } = useApp();
   const toast = useToast();
@@ -61,6 +61,9 @@ export default function ReserverScreen() {
   // revalidé comme le terrain via `free`/`freeCourtSlotsAt` (jamais imposé aveuglément).
   const presetDurationRaw = typeof params.durationMin === 'string' ? Number(params.durationMin) : null;
   const presetDuration: 60 | 90 | null = presetDurationRaw === 60 || presetDurationRaw === 90 ? presetDurationRaw : null;
+  // « Accepter la proposition » (75) porte AUSSI le terrain proposé par le club : on le pré-choisit
+  // s'il est réellement libre au créneau résolu (sinon repli sur le 1er libre, jamais imposé aveuglément).
+  const presetCourt = typeof params.court === 'string' && params.court ? params.court : undefined;
   // On ne stocke QUE la clé du jour choisi et on dérive l’objet à chaque rendu (motif
   // SectionReservations.tsx / reserver/index.tsx) : sinon, après une nuit en arrière-plan,
   // `dates` est recalé par useTodayKey mais `day` resterait figé sur l’ancien objet (veille).
@@ -198,7 +201,9 @@ export default function ReserverScreen() {
   // ET qu’un terrain libre existe, on propose le premier. L’utilisateur peut toujours
   // cliquer sur un autre chip pour le remplacer (setCourt(c)). Pur UX, pas de setState
   // dans le rendu ni d’effet — la dispo ne change pas.
-  const effectiveCourt = court ?? (day && slot && effectiveDuration && free.length > 0 ? free[0] : null);
+  const effectiveCourt =
+    court ??
+    (day && slot && effectiveDuration && free.length > 0 ? (presetCourt && free.includes(presetCourt) ? presetCourt : free[0]) : null);
   // Durée utilisée pour les AFFICHAGES DE PRIX avant confirmation complète (créneau choisi mais
   // pas encore de durée explicite) : la plus petite durée offerte à ce créneau, sinon la plus
   // petite durée offerte par le club (jamais une durée codée en dur).

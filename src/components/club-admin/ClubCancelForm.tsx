@@ -17,12 +17,21 @@ export function ClubCancelForm({
   days,
   courts,
   grid,
+  courtStatus,
   onCancel,
   onClose,
 }: {
   days: { key: string; label: string; value: number }[];
   courts: string[];
   grid: Record<string, CourtSlot[]>; // grille EFFECTIVE de chaque terrain (resolvedGridFor)
+  // Statut d'un créneau (réservé / bloqué / tournoi / libre) — on ne PROPOSE que du 'free' :
+  // proposer un créneau déjà pris mènerait le joueur dans un cul-de-sac à la réservation.
+  courtStatus: (
+    dateKey: string,
+    time: string,
+    court: string,
+    durationMin: number,
+  ) => { state: 'free' | 'reserved' | 'blocked' | 'tournoi'; label?: string };
   onCancel: (reason: string, proposal?: { court: string; dateKey: string; time: string; durationMin: 60 | 90 }) => Promise<boolean>;
   onClose: () => void;
 }) {
@@ -134,12 +143,24 @@ export function ClubCancelForm({
               <View style={styles.wrap}>
                 {courtSlots.map((s) => {
                   const past = slotTimestamp(day.key, s.t) <= Date.now();
+                  // On n'offre en alternative qu'un créneau LIBRE : proposer un créneau déjà
+                  // réservé / bloqué / retenu par un tournoi mènerait le joueur à un cul-de-sac.
+                  const st = court ? courtStatus(day.key, s.t, court, s.d).state : 'free';
+                  const suffix = past
+                    ? ' · passé'
+                    : st === 'reserved'
+                      ? ' · pris'
+                      : st === 'blocked'
+                        ? ' · bloqué'
+                        : st === 'tournoi'
+                          ? ' · tournoi'
+                          : '';
                   return (
                     <Chip
                       key={s.t}
-                      label={past ? `${s.t} · ${durationLabel(s.d)} · passé` : `${s.t} · ${durationLabel(s.d)}`}
+                      label={`${s.t} · ${durationLabel(s.d)}${suffix}`}
                       active={slot?.t === s.t}
-                      disabled={past}
+                      disabled={past || st !== 'free'}
                       onPress={() => setSlot(s)}
                     />
                   );

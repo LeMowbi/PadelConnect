@@ -5,7 +5,7 @@ import { BarChart } from '@/components/BarChart';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, EmptyState, IconCircle, SectionHeader, StatTile, Tag, Txt } from '@/components/ui';
 import { LegendDot } from '@/components/club-admin/LegendDot';
-import { QuickBlock } from '@/components/club-admin/QuickBlock';
+import { QuickBlock, type CourtStatus } from '@/components/club-admin/QuickBlock';
 import { BlockRangeForm } from '@/components/club-admin/BlockRangeForm';
 import { ClubCancelForm } from '@/components/club-admin/ClubCancelForm';
 import { type Club } from '@/data/clubs';
@@ -86,13 +86,18 @@ export function SectionReservations({
   // Absences (no-show) marquées par le club : trace conservée (status='no_show').
   const [noShows, setNoShows] = useState<Reservation[]>([]);
   // Échec réseau → null : on GARDE les listes affichées (on n’écrase jamais avec du vide).
+  // On EXCLUT les annulations PAR LE CLUB (club_cancelled, 75) de cette liste : ce ne sont pas des
+  // annulations JOUEUR et le créneau n'est PAS « de nouveau libre » (il est bloqué car occupé hors
+  // app). Les afficher ici avec le texte « annulé par le joueur / libre » serait faux.
   const reloadTraces = () => {
-    void fetchCancelledReservations().then((rows) => rows && setCancelled(rows.filter((r) => r.clubId === club.id)));
+    void fetchCancelledReservations().then((rows) => rows && setCancelled(rows.filter((r) => r.clubId === club.id && !r.cancelledByClub)));
     void fetchNoShowReservations().then((rows) => rows && setNoShows(rows.filter((r) => r.clubId === club.id)));
   };
   useEffect(() => {
     let alive = true;
-    void fetchCancelledReservations().then((rows) => alive && rows && setCancelled(rows.filter((r) => r.clubId === club.id)));
+    void fetchCancelledReservations().then(
+      (rows) => alive && rows && setCancelled(rows.filter((r) => r.clubId === club.id && !r.cancelledByClub)),
+    );
     void fetchNoShowReservations().then((rows) => alive && rows && setNoShows(rows.filter((r) => r.clubId === club.id)));
     return () => {
       alive = false;
@@ -234,6 +239,22 @@ export function SectionReservations({
     if (clubRanges.some((r) => rangeBlocks(r, planDay.key, slot.t, court, slot.d))) return 'blocked';
     return 'free';
   };
+  // Variante paramétrée par le JOUR (n'importe quel jour, pas seulement celui affiché) : partagée
+  // par QuickBlock ET ClubCancelForm (proposition d'alternative 75) pour n'offrir que des créneaux
+  // réellement libres. Mêmes yeux que le planning (tournoi / réservé / bloqué / période).
+  const courtStatusFor = (dKey: string, time: string, court: string, durationMin: number): CourtStatus => {
+    const d = durationMin as 60 | 90;
+    const compBlocked = competitionBlockedCourts(club.id, dKey, time, d, comps);
+    if (compBlocked === 'all' || compBlocked.includes(court)) return { state: 'tournoi' };
+    const slot: CourtSlot = { t: time, d };
+    const resa = clubRes.find((r) => r.dateKey === dKey && r.court === court && overlapsAny(slot, [r]));
+    if (resa) return { state: 'reserved', label: resa.bookedBy?.name ?? 'Joueur' };
+    const blk = clubBlocked.find((b) => b.dateKey === dKey && b.court === court && overlapsAny(slot, [b]));
+    if (blk) return { state: 'blocked', label: blk.reason };
+    const rng = clubRanges.find((r) => rangeBlocks(r, dKey, time, court, d));
+    if (rng) return { state: 'blocked', label: rangeReasons[rng.id] || 'Fermé sur période' };
+    return { state: 'free' };
+  };
 
   // Mini-stats de la semaine : taux d’occupation + créneau le plus demandé. Le dénominateur ne
   // compte que les créneaux réellement VENDABLES (ouverts sur LEUR terrain, ni période ni
@@ -294,22 +315,7 @@ export function SectionReservations({
           courts={courts}
           grid={grid}
           dayHasTournament={(dKey) => hasFullDayCompetition(club.id, dKey, comps)}
-          courtStatus={(dKey, time, court, durationMin) => {
-            const d = durationMin as 60 | 90;
-            const compBlocked = competitionBlockedCourts(club.id, dKey, time, d, comps);
-            if (compBlocked === 'all' || compBlocked.includes(court)) return { state: 'tournoi' };
-            const slot: CourtSlot = { t: time, d };
-            const resa = clubRes.find((r) => r.dateKey === dKey && r.court === court && overlapsAny(slot, [r]));
-            if (resa) return { state: 'reserved', label: resa.bookedBy?.name ?? 'Joueur' };
-            const blk = clubBlocked.find((b) => b.dateKey === dKey && b.court === court && overlapsAny(slot, [b]));
-            if (blk) return { state: 'blocked', label: blk.reason };
-            // Mêmes yeux que le planning : une case couverte par une période fermée (54) n'est PAS
-            // re-blocable (double comptabilité) — un créneau fermé sur la grille du terrain (x:true)
-            // n'apparaît déjà plus dans les créneaux proposés par `grid` (filtrés côté QuickBlock).
-            const rng = clubRanges.find((r) => rangeBlocks(r, dKey, time, court, d));
-            if (rng) return { state: 'blocked', label: rangeReasons[rng.id] || 'Fermé sur période' };
-            return { state: 'free' };
-          }}
+          courtStatus={courtStatusFor}
           onBlock={async (dKey, time, court, durationMin, reason, ts) => {
             const ok = await blockSlot({ clubId: club.id, dateKey: dKey, time, court, reason, durationMin }, ts);
             if (ok) hapticSuccess();
@@ -711,6 +717,7 @@ export function SectionReservations({
                   days={week}
                   courts={courts}
                   grid={grid}
+                  courtStatus={courtStatusFor}
                   onCancel={(reason, proposal) =>
                     clubCancelReservation(r.id, reason, proposal).then((ok) => {
                       if (ok) {

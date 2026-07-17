@@ -840,7 +840,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (event !== 'SIGNED_OUT') return;
       sessionEpochRef.current += 1; // invalide toute requête en vol du compte sortant
       void syncMatchReminders([], false);
-      setState((s) => (s.serverUserId ? loggedOutState(s) : s));
+      void AsyncStorage.removeItem(PENDING_AVATAR_KEY); // anti-fuite photo vers le prochain compte
+      setState((s) => {
+        if (!s.serverUserId) return s; // déjà déconnecté (notre signOut a nettoyé) → idempotent
+        const cleared = loggedOutState(s);
+        // Purge disque IMMÉDIATE (comme signOut/deleteAccount) : une révocation EXTERNE (jeton
+        // expiré, compte supprimé/mot de passe changé ailleurs) suivie d'un crash ne doit pas
+        // réhydrater le compte sortant au prochain lancement.
+        void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(cleared)).catch(() => {});
+        return cleared;
+      });
     });
     return () => data.subscription.unsubscribe();
   }, []);
@@ -1080,6 +1089,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setAccount: (a) => setState((s) => ({ ...s, account: a })),
       updateAccount: async (patch) => {
         const prev = state.account; // snapshot AVANT l'écriture optimiste — pour un rollback honnête
+        // Garde d'époque : une BASCULE de compte (A→B) pendant l'upload/l'écriture serveur ne doit
+        // pas réinjecter le profil/la photo de A dans l'état du compte B (les setState d'après-await
+        // sont sinon appliqués au mauvais compte). On teste l'époque avant chaque mutation tardive.
+        const epoch = sessionEpochRef.current;
+        const current = () => sessionEpochRef.current === epoch;
         setState((s) => ({ ...s, account: s.account ? { ...s.account, ...patch } : s.account }));
         // Persistance SERVEUR des champs texte modifiés (si connecté) : sans ça, ils étaient
         // écrasés par l’ancienne valeur serveur au prochain chargement.
@@ -1105,7 +1119,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // concernés — comme le fait déjà la photo — sinon l'écran affiche un prénom/numéro
             // « enregistré » à tort jusqu'au prochain loadSession, alors que le serveur garde l'ancien.
             setState((s) => {
-              if (!s.account) return s;
+              if (!current() || !s.account) return s;
               const a = { ...s.account };
               if (patch.firstName !== undefined) a.firstName = prev?.firstName ?? a.firstName;
               if (patch.lastName !== undefined) a.lastName = prev?.lastName ?? a.lastName;
@@ -1134,10 +1148,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             if (!url) {
               // Échec d’upload : on NE conserve PAS l’URI locale file:// (illisible après une
               // réinstallation ou sur un autre appareil) → on revient à la photo précédente.
-              setState((s) => ({ ...s, account: s.account ? { ...s.account, photoUri: prevPhoto } : s.account }));
+              setState((s) => (current() && s.account ? { ...s, account: { ...s.account, photoUri: prevPhoto } } : s));
               return { photoSaved: false, profileSaved };
             }
-            setState((s) => ({ ...s, account: s.account ? { ...s.account, photoUri: url } : s.account }));
+            setState((s) => (current() && s.account ? { ...s, account: { ...s.account, photoUri: url } } : s));
             // L'écriture de la LIGNE profil est attendue elle aussi : un upload Storage réussi
             // avec une ligne non mise à jour laissait « photoSaved: true » mentir.
             const { error: photoErr } = await supabase.from('profiles').update({ photo_uri: url }).eq('id', userId);

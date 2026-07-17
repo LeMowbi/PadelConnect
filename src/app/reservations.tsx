@@ -844,40 +844,51 @@ export default function ReservationsScreen() {
                         {r.cancelReason ? ` Motif : ${r.cancelReason}.` : ''}
                       </Txt>
                     </View>
-                    {r.proposal ? (
-                      <>
-                        <Txt variant="small" color={colors.text} style={{ marginTop: spacing.sm }}>
-                          Le club propose : {dateKeyLabel(r.proposal.dateKey)} · {r.proposal.time} · {r.proposal.court} (
-                          {durationLabel(r.proposal.durationMin)}).
-                        </Txt>
-                        <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-                          <View style={{ flex: 1 }}>
-                            <Button
-                              size="sm"
-                              label="Accepter la proposition"
-                              icon="checkmark"
-                              onPress={() =>
-                                router.push(
-                                  `/reserver/${r.clubId}?dateKey=${r.proposal!.dateKey}&time=${encodeURIComponent(
-                                    r.proposal!.time,
-                                  )}&durationMin=${r.proposal!.durationMin}`,
-                                )
-                              }
-                              full
-                            />
+                    {/* Seul l'AUTEUR de la réservation peut re-réserver (le créneau de courtoisie lui
+                        est destiné) : un participant invité voit l'annulation mais n'accapare pas la
+                        proposition à la place du créateur. */}
+                    {isOwner(r) ? (
+                      r.proposal ? (
+                        <>
+                          <Txt variant="small" color={colors.text} style={{ marginTop: spacing.sm }}>
+                            Le club propose : {dateKeyLabel(r.proposal.dateKey)} · {r.proposal.time} · {r.proposal.court} (
+                            {durationLabel(r.proposal.durationMin)}).
+                          </Txt>
+                          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                            <View style={{ flex: 1 }}>
+                              <Button
+                                size="sm"
+                                label="Accepter la proposition"
+                                icon="checkmark"
+                                onPress={() =>
+                                  // On transmet AUSSI le terrain proposé au tunnel (court) : sans lui,
+                                  // le joueur devait le re-choisir et pouvait retomber sur un autre.
+                                  router.push(
+                                    `/reserver/${r.clubId}?dateKey=${r.proposal!.dateKey}&time=${encodeURIComponent(
+                                      r.proposal!.time,
+                                    )}&durationMin=${r.proposal!.durationMin}&court=${encodeURIComponent(r.proposal!.court)}`,
+                                  )
+                                }
+                                full
+                              />
+                            </View>
+                            <Button size="sm" label="Autre créneau" variant="ghost" onPress={() => router.push(`/reserver/${r.clubId}`)} />
                           </View>
-                          <Button size="sm" label="Autre créneau" variant="ghost" onPress={() => router.push(`/reserver/${r.clubId}`)} />
-                        </View>
-                      </>
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          label="Choisir un autre créneau"
+                          icon="calendar-outline"
+                          variant="secondary"
+                          onPress={() => router.push(`/reserver/${r.clubId}`)}
+                          full
+                        />
+                      )
                     ) : (
-                      <Button
-                        size="sm"
-                        label="Choisir un autre créneau"
-                        icon="calendar-outline"
-                        variant="secondary"
-                        onPress={() => router.push(`/reserver/${r.clubId}`)}
-                        full
-                      />
+                      <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
+                        Le créateur de la réservation choisira un nouveau créneau.
+                      </Txt>
                     )}
                   </View>
                 ) : null}

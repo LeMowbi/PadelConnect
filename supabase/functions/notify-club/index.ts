@@ -134,8 +134,15 @@ Deno.serve(async (req) => {
         body: `${record.booked_by_name ?? 'Un joueur'} — ${record.date_label ?? ''} à ${record.time ?? ''} (${record.court ?? ''}).`,
         data: { kind: 'club_reservation', id: record.id },
       });
-    } else if (table === 'reservations' && type === 'UPDATE' && record.club_confirmed === true && oldRecord.club_confirmed !== true) {
-      // Le club vient de CONFIRMER la réservation → prévenir le joueur (auteur).
+    } else if (
+      table === 'reservations' &&
+      type === 'UPDATE' &&
+      record.club_confirmed === true &&
+      oldRecord.club_confirmed !== true &&
+      record.status === 'booked'
+    ) {
+      // Le club vient de CONFIRMER la réservation → prévenir le joueur (auteur). Garde status='booked'
+      // (le webhook écoute désormais TOUT UPDATE) : on ne dit jamais « confirmée » sur une résa annulée.
       notifs.push({
         targets: await userToken(record.user_id),
         title: 'Réservation confirmée ✅',
