@@ -1,5 +1,10 @@
 # Checklist — Publier PadelConnect sur l'App Store (iPhone) et Google Play (Android)
 
+> ✅ **État au 2026-07-16 :** `app.json` fait foi = **version 1.0.2, buildNumber 64+** (EAS
+> `autoIncrement`). L'app est **EN LIGNE (v1.0/1.0.1)** sur les stores CI/SN/US. Tout le SQL
+> `02`→`77` est **appliqué en base**. Les numéros « version 1.0.0 / build 55 » plus bas dans ce
+> document sont **périmés** — se fier à `app.json`.
+
 > Document pratique pour le porteur. Le projet est **déjà lié à Expo** (compte `padelconnect-ci`,
 > projet `padelconnect`) et **`eas.json` est prêt** (profils `development` / `preview` / `production`).
 > Le backend Supabase est **en production** et le mode démo a été retiré : cette page sert pour le **lancement store**.

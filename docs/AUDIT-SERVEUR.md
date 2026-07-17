@@ -1,5 +1,11 @@
 # Audit — actions serveur (sans terminal)
 
+> ✅ **À JOUR au 2026-07-16 — plus rien à coller ici.** TOUT le SQL `02`→`77` est **appliqué en
+> base** (Management API), `notify-club` est déployée (v29), et les 8 Database Webhooks écoutent
+> **INSERT + UPDATE**. Les sections datées ci-dessous (« ⏳ À FAIRE » d'avant le 2026-07-06) sont
+> un HISTORIQUE conservé pour la trace — elles ne sont plus des actions en attente. Reste au
+> porteur (hors SQL) : lien Wave, FCM Android + empreinte SHA-256 d'assetlinks.
+
 ## 0-OCTIES) MULTI-CLUBS (2026-07-03) — coller SQL `55` (1 min) — ⏳ À FAIRE
 
 Un même compte (même numéro) peut désormais **gérer plusieurs clubs** (demande porteur) :

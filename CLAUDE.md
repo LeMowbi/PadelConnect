@@ -105,8 +105,8 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   `68_creneaux_duree.sql` SEUL** : ses `create or replace` ÉCRASERAIENT les durcissements `69`→`72`
   (validation `d∈{60,90}`, gardes anti-orphelin, verrou commun, retrait de terrain) ; si on doit
   recoller la 68, recoller ENSUITE `69`→`74` dans l'ordre. Reste au porteur : le lien Wave (Espace
-  opérateur), redéployer `notify-club`
-  (compare HMAC en temps constant), FCM Android + empreinte assetlinks.
+  opérateur), FCM Android + empreinte assetlinks. (`notify-club` est déployée — v29 le 2026-07-16,
+  compare HMAC en temps constant.)
 - Un module natif nouveau (ex. `expo-contacts`) ⇒ **nouveau build requis** + config plugin dans
   `app.json` avec la chaîne de permission.
 
@@ -119,10 +119,11 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `64` (voir dossier `supabase/`) — **toutes
-  appliquées en base** (vérifié le 2026-07-06). `60`→`64` couvrent des durcissements de sécurité
-  (61 diagnostics anonymes, 62 téléphone organisateur privé, 63 `with check` sur les policies
-  UPDATE de Storage, 64 cycle de vie compte/tournoi).
+  **SQL Editor → Run**. Migrations actuelles : `02` → `77` (voir dossier `supabase/`) — **toutes
+  appliquées en base** (`65`→`77` vérifiées via l'API Management ; `75` annulation club, `76` sync
+  cours↔annulation club, `77` garde atomique club_cancel). `60`→`64` couvrent des durcissements de
+  sécurité (61 diagnostics anonymes, 62 téléphone organisateur privé, 63 `with check` sur les
+  policies UPDATE de Storage, 64 cycle de vie compte/tournoi).
 - **Edge Function** `supabase/functions/notify-club/index.ts` (Deno) : envoie les push via
   l'API Expo. Déclenchée par des **Database Webhooks** (INSERT + UPDATE). Redéploiement **sans
   terminal** : Dashboard → Edge Functions → notify-club → Edit → coller le code → Deploy.
@@ -369,10 +370,9 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - **Serveur post-audit 7 ✅ FAIT (confirmé porteur, 2026-07-03)** : SQL `49` (re-corrigée) → `53`
   collées DANS L'ORDRE, notify-club redéployée, dossier `site/` re-déployé (privacy + /get, AASA ok)
   — voir docs/AUDIT-SERVEUR.md §0-SEXIES.
-- **SQL serveur ✅ FAIT** : `54`→`64` **tous appliqués en base** (vérifié à distance le 2026-07-06,
-  Management API). Il ne reste au porteur que : le lien Wave (Espace opérateur → Finances), le
-  redéploiement de `notify-club` (compare HMAC en temps constant), FCM Android + empreinte SHA-256
-  d'assetlinks (Android).
+- **SQL serveur ✅ FAIT** : `54`→`77` **tous appliqués en base** (Management API ; `65`→`77` posés/
+  vérifiés 2026-07-16). `notify-club` déployée (v29, HMAC temps constant). Il ne reste au porteur
+  que : le lien Wave (Espace opérateur → Finances), FCM Android + empreinte SHA-256 d'assetlinks.
 - **Webhook sécurisé ✅ FAIT (2026-07-06)** : `WEBHOOK_SECRET` posé dans les secrets des Edge
   Functions + en-tête `x-webhook-secret` sur les 8 webhooks + `notify-club` redéployée (le secret
   vit UNIQUEMENT côté Supabase, jamais dans le dépôt) — cf. docs/PUSH-SETUP.md §4bis.
