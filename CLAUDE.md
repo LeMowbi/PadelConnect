@@ -93,13 +93,13 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   🆕 **Build #64 (v1.0.2)** lancé sur EAS le 2026-07-16 (annulation club chevauchement 75 +
   ré-enregistrement push au premier plan) — **SANS auto-submit** pour ne pas perturber la revue
   1.0.1 en cours ; à soumettre à l'App Store dès que la 1.0.1 est approuvée. SQL `75` appliqué en
-  base, `notify-club` v28, webhooks `reservations`/`reservation_participants` recorrigés en
+  base, `notify-club` v29, webhooks `reservations`/`reservation_participants` recorrigés en
   INSERT+UPDATE, web `club.padelconnectci.com` redéployé.
   🚀 **L'app est EN LIGNE (v1.0) depuis le 2026-07-10** sur les stores CI/SN/US ; l'UE attend la
   vérification « commerçant » DSA d'Apple (bloque UNIQUEMENT les stores européens, rien d'autre).
   La **v1.0.1** (build #63 = correctifs de l'audit complet) a été mise en revue par le porteur le
-  2026-07-13, **publication automatique** à l'approbation Apple (24-48 h). ✅ **Tout le SQL `02`→`74`
-  est appliqué EN BASE** (`68`→`72` =
+  2026-07-13, **publication automatique** à l'approbation Apple (24-48 h). ✅ **Tout le SQL `02`→`77`
+  est appliqué EN BASE** (76 sync cours↔annulation club + 77 garde atomique appliqués le 2026-07-17) (`68`→`72` =
   campagne créneaux durée variable ; `73`+`74` = audit complet 2026-07-11, appliqués via l'API
   Management le 2026-07-11, table `reservations` vide → risque nul). ⚠️ **NE JAMAIS recoller
   `68_creneaux_duree.sql` SEUL** : ses `create or replace` ÉCRASERAIENT les durcissements `69`→`72`
@@ -274,7 +274,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - **Annulation par le CLUB pour chevauchement hors app (75, demande porteur 2026-07-15)** : le
   gérant (ou l'opérateur) peut annuler à TOUT MOMENT une résa joueur qui chevauche une réservation
   prise HORS APPLICATION (téléphone / sur place). RPC `club_cancel_reservation(p_id, p_reason,
-  p_proposed_court, p_proposed_date_key, p_proposed_time, p_proposed_duration_min)` (SECURITY
+p_proposed_court, p_proposed_date_key, p_proposed_time, p_proposed_duration_min)` (SECURITY
   DEFINER, `can_manage_club`, verrou `club:jour`) : statut dédié **`club_cancelled`** (≠ `cancelled`
   joueur, ≠ `no_show` → la fiabilité du joueur n'est PAS touchée, ce n'est pas sa faute), enregistre
   MOTIF + PROPOSITION d'alternative (`proposed_*`), et **BLOQUE le créneau d'origine** (`blocked_slots`,
@@ -285,7 +285,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   joueur « Annulée par le club » dans « Mes réservations » (motif + « Accepter la proposition » qui
   rouvre le tunnel jour/heure/durée pré-remplis, ou « Choisir un autre créneau »). Push via notify-club
   (nouvelle branche `club_cancelled`, joueur + participants). ✅ **SQL 75 appliqué en base + notify-club
-  redéployée (v28)** le 2026-07-16 (API Management, PAT porteur) — vérifié adversarial 9/9 assertions
+  redéployée (v29)** le 2026-07-16 (garde push « confirmée » ajoutée le 2026-07-17) (API Management, PAT porteur) — vérifié adversarial 9/9 assertions
   live (annulation, motif+proposition, blocage créneau, garde re-annulation, validation durée 60/90,
   autorisation `can_manage_club`), transaction annulée → aucune trace. Reste : le build qui l'expose
   côté UI (iOS + web `club.padelconnectci.com`).
@@ -381,6 +381,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 
 Gros chantier « personne ne peut rivaliser », décidé et planifié avec le porteur. Fait
 sur la branche de dev (build #48, mise à jour day-1 après approbation du #47) :
+
 - **Comptes club ≠ joueur (Chantier 1, SQL 56)** : choix « Joueur / Je gère un club » à
   l'inscription (`onboarding.tsx`) ; état `accountType` ; profil « club en cours de validation »
   tant que `role≠'club'`. Réutilise `club_requests` + `approve_club_request` (trigger crée la
@@ -442,6 +443,7 @@ sur la branche de dev (build #48, mise à jour day-1 après approbation du #47) 
 
 Demande porteur : 2 bugs signalés + **5 audits complets** (app, site, serveur, mails, code) avec
 tous les agents en parallèle et vérification adversariale, puis build + mise EN LIGNE sur iPhone.
+
 - **Bug #1 (site figé)** : `site/assets/site.js` ne lisait plus les données live → rendu DYNAMIQUE
   (`liveCourts`/`liveBlurb` dérivés de `club_config.courts`/`club_overrides.blurb`, badge « N clubs »
   réel). Vérifié live : l'override « Temple de Padel » + 2 terrains s'affichent (tour 1 & 3).
@@ -450,7 +452,7 @@ tous les agents en parallèle et vérification adversariale, puis build + mise E
   **66** `upsert_club_override` ON CONFLICT préserve les colonnes non touchées (null=garde, ''=efface)
   → la description ne se perd plus. SQL **65** rend `set_tournament_fee`/`set_wave_link` idempotents.
 - **Tour 4** : boucle de redirection `/get` (Cloudflare clean-URLs) réparée dans `site/_redirects`
-  + perf planning gérant (`pastByWeek` O(n²)→O(n)).
+  - perf planning gérant (`pastByWeek` O(n²)→O(n)).
 - **Tour 5 (gate final)** : 4 agents adversariaux (app / serveur+DB live / site+mails / contrat
   app↔serveur) → **TOUT CLEAN**, aucun défaut restant : 65 & 66 byte-identiques en base, classe
   « perte de donnée RPC » refermée, 76 RPC client alignées sur les signatures live, convention
@@ -471,6 +473,7 @@ tous les agents en parallèle et vérification adversariale, puis build + mise E
 
 Chantier « créneaux modulables 1h/1h30, horaires PAR TERRAIN » (détail archi en §9). Fait sur la
 branche de dev en 5 lots (tsc 0 · lint 0 · test:logic vert · bundle eager OK) :
+
 - **Lot 1** — logique PURE `src/lib/courtSchedule.ts` (overlap `[t,t+d)`, `canAddCourtSlot`,
   `resolveCourtSlots` rétrocompat) + tarifs 2 durées (`pricing.ts` : `price60Of`, `priceForSlot(...,d)`,
   `minPrice(club, offered)`) + tests (`courtSchedule`/`pricing`).
@@ -505,6 +508,7 @@ branche de dev en 5 lots (tsc 0 · lint 0 · test:logic vert · bundle eager OK)
 ### Chaîne e-mail DURCIE de bout en bout (2026-07-11, demande porteur « plus de problème mails ») ✅
 
 Tout vérifié et corrigé via les API (Brevo + Cloudflare + Supabase Management), AUCUN build requis :
+
 - **Envoi** : SMTP Brevo actif (smtp-relay.brevo.com, expéditeur `contact@padelconnectci.com`),
   domaine **authentifié + vérifié** (DKIM b1/b2 en CNAME chez Cloudflare, DMARC présent) — délivrance
   prouvée 14/14 sur 7 jours. ⚠️ Plan Brevo **GRATUIT = 300 e-mails/jour** : suffisant aujourd'hui,
@@ -526,6 +530,7 @@ Tout vérifié et corrigé via les API (Brevo + Cloudflare + Supabase Management
 Demande porteur : audit de TOUT (backend, frontend, serveur/SQL, edge, UI, site, config, docs).
 Planifié avec **Fable** (8 agents adversariaux en parallèle, chacun vérifiant ses constats),
 appliqué avec **Opus**. **19 constats confirmés : 1 HIGH · 7 MEDIUM · 11 LOW.**
+
 - **Corrigés côté CLIENT (prochain build)** : effacement d'un champ fiche club (WhatsApp/Maps/plages
   tarifaires) qui ne partait jamais au serveur → envoi de `''`/`[]` (marqueur d'effacement SQL 66,
   `ClubInfoCard`) ; crash de l'écran de succès du tunnel au passage de minuit → jour/heure/startsAt
@@ -551,10 +556,10 @@ appliqué avec **Opus**. **19 constats confirmés : 1 HIGH · 7 MEDIUM · 11 LOW
   porteur) : `respond_lesson` verrouille par `coach:jour` (plus `coach:jour:heure`) ;
   `block_range` ET la branche 'club' de `create_competition` bornent l'ÉTENDUE des dates AVANT leur
   boucle de verrous ; **trigger** `club_config_court_slots_guard` exige `court_slots.d` NOMBRE 60/90 ;
-  + M2 (phone, ci-dessous). Reproductions SQL BYTE-fidèles (respond_lesson, block_range,
-  create_competition, handle_new_user) vérifiées par Fable. Idempotent, `search_path` figé.
-  ✅ **Appliquée en base le 2026-07-11** (vérifiée : trigger court_slots + verrou coach:jour + bornes
-  366 j + M2 fantôme ; pré-vérif « 0 court_slots forgé » OK).
+  - M2 (phone, ci-dessous). Reproductions SQL BYTE-fidèles (respond_lesson, block_range,
+    create_competition, handle_new_user) vérifiées par Fable. Idempotent, `search_path` figé.
+    ✅ **Appliquée en base le 2026-07-11** (vérifiée : trigger court_slots + verrou coach:jour + bornes
+    366 j + M2 fantôme ; pré-vérif « 0 court_slots forgé » OK).
 - **M2 (fermé côté serveur, décision porteur → SQL 74)** : une inscription jamais confirmée squattait
   le numéro à vie (`handle_new_user` crée le profil avant confirmation e-mail, aucune récupération
   in-app). La `74` : `phone_available` ignore un compte fantôme (e-mail non confirmé > 24 h) et

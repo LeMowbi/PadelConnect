@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { BarChart } from '@/components/BarChart';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, EmptyState, IconCircle, SectionHeader, StatTile, Tag, Txt } from '@/components/ui';
@@ -21,6 +21,7 @@ import { durationLabel, overlaps, toMin, type CourtSlot } from '@/lib/courtSched
 import { DAY_MS, dateKeyLabel, nextDays, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
+import { confirmAsync } from '@/lib/confirm';
 import { hapticLight, hapticSuccess, hapticWarning } from '@/lib/haptics';
 import {
   fetchCancelledReservations,
@@ -144,28 +145,24 @@ export function SectionReservations({
   // aurait des conséquences injustes.
   const onMarkNoShow = (r: Reservation) => {
     const who = r.bookedBy?.name ? ` de ${r.bookedBy.name}` : '';
-    Alert.alert(
+    // confirmAsync : cross-plateforme (Alert.alert est un no-op sur le web = Espace Club navigateur).
+    void confirmAsync(
       'Marquer une absence ?',
       `Confirmes-tu que ce joueur n’est pas venu ? Le créneau${who} sera libéré et l’absence comptée dans sa fiabilité.`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Confirmer l’absence',
-          style: 'destructive',
-          onPress: () =>
-            void markNoShow(r.id).then((ok) => {
-              if (ok) {
-                hapticSuccess();
-                toast.show('Absence enregistrée');
-                reloadTraces();
-              } else {
-                hapticWarning();
-                toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
-              }
-            }),
-        },
-      ],
-    );
+      { confirmLabel: 'Confirmer l’absence', destructive: true },
+    ).then((ok) => {
+      if (!ok) return;
+      void markNoShow(r.id).then((done) => {
+        if (done) {
+          hapticSuccess();
+          toast.show('Absence enregistrée');
+          reloadTraces();
+        } else {
+          hapticWarning();
+          toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
+        }
+      });
+    });
   };
   // « Jouée » = heure de fin passée (la même règle que côté joueur — base de la commission).
   const upcomingRes = clubRes.filter((r) => !isPlayed(r, now)).sort((a, b) => a.startsAt - b.startsAt);
@@ -659,17 +656,17 @@ export function SectionReservations({
                         // dans la foulée (boucle fermée « confirmée → joueur prévenu », sans
                         // dépendre d’un second tap que le gérant oublie souvent).
                         if (!wasConfirmed && r.bookedBy?.phone) {
-                          Alert.alert('Réservation confirmée ✓', `Prévenir ${r.bookedBy.name} par WhatsApp ?`, [
-                            { text: 'Plus tard', style: 'cancel' },
-                            {
-                              text: 'Envoyer',
-                              onPress: () =>
-                                openWhatsApp(
-                                  r.bookedBy!.phone,
-                                  `Bonjour ${r.bookedBy!.name}, votre réservation du ${dateKeyLabel(r.dateKey)} à ${r.time} (${r.court}) à ${club.name} est bien confirmée ✅`,
-                                ),
-                            },
-                          ]);
+                          // confirmAsync : cross-plateforme (sur le web l'Alert natif ne s'affiche pas).
+                          void confirmAsync('Réservation confirmée ✓', `Prévenir ${r.bookedBy.name} par WhatsApp ?`, {
+                            confirmLabel: 'Envoyer',
+                            cancelLabel: 'Plus tard',
+                          }).then((send) => {
+                            if (send)
+                              openWhatsApp(
+                                r.bookedBy!.phone,
+                                `Bonjour ${r.bookedBy!.name}, votre réservation du ${dateKeyLabel(r.dateKey)} à ${r.time} (${r.court}) à ${club.name} est bien confirmée ✅`,
+                              );
+                          });
                         }
                       });
                     }}

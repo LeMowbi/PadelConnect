@@ -24,8 +24,10 @@
 //   • operator_news INSERT / UPDATE (47, si la case « push » était cochée et que l'actu change)
 //     → notif de l'ACTU à tous les joueurs.
 // L'envoi passe par l'API Push d'Expo (pas besoin de gérer APNs soi-même : Expo route vers
-// Apple/Google). Les webhooks « reservations », « reservation_participants », « competitions »
-// et « lessons » doivent écouter INSERT **et** UPDATE (cf. docs/PUSH-SETUP.md).
+// Apple/Google). ⚠️ LES 8 WEBHOOKS doivent écouter INSERT **ET** UPDATE (corrigé en base le
+// 2026-07-16 : `reservations` et `reservation_participants` avaient dérivé en INSERT-seul /
+// UPDATE-seul) : reservations, reservation_participants, competitions, friend_requests, lessons,
+// coaches, match_results, operator_news (cf. docs/PUSH-SETUP.md).
 //
 // Aucune clé secrète ici — on lit les jetons en base via la SERVICE ROLE (injectée par
 // Supabase dans les variables d'environnement de la fonction).
@@ -186,15 +188,18 @@ Deno.serve(async (req) => {
         body: cancelBody,
         data: { kind: 'reservation', id: record.id },
       });
-      // Participants (amis invités / match ouvert) : prévenus eux aussi que le créneau saute.
+      // Participants (amis invités / match ouvert) : prévenus eux aussi que le créneau saute, mais
+      // avec un texte NEUTRE — la proposition d'alternative et « ton créneau » ne s'adressent qu'à
+      // l'AUTEUR (c'est lui qui re-réserve pour le groupe). Dire « le club te propose » à un invité
+      // serait faux (le créneau de courtoisie ne lui est pas destiné).
       const { data: cparts } = await supabase.from('reservation_participants').select('user_id, status').eq('reservation_id', record.id);
       const cpartIds = (cparts ?? []).filter((p) => p.status !== 'declined').map((p) => p.user_id as string);
       if (cpartIds.length > 0) {
         const { data: toks } = await supabase.from('profiles').select('expo_push_token').in('id', cpartIds);
         notifs.push({
           targets: (toks ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
-          title: 'Créneau annulé par le club',
-          body: cancelBody,
+          title: 'Match annulé par le club',
+          body: `${record.club_name ?? 'Le club'} a annulé le créneau du ${record.date_label ?? ''} à ${record.time ?? ''} (chevauchement avec une réservation hors application).${reasonPart}`,
           data: { kind: 'reservation', id: record.id },
         });
       }

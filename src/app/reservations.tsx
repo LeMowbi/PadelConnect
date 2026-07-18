@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { AppState as RNAppState, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Chip } from '@/components/Chip';
 import { Reveal, staggerDelay } from '@/components/Reveal';
@@ -121,9 +121,27 @@ export default function ReservationsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.serverUserId]);
 
-  // Tirer pour rafraîchir : resynchronise mes réservations, mes cours, les scores ET les annulées.
+  // Retour au premier plan : recharge les ANNULÉES (+ scores) — sinon, quand le club annule mon
+  // créneau pour chevauchement hors app (75), refreshMirror (AppContext) le retirait bien de
+  // « À venir » mais la carte « Annulée par le club » (état local `cancelled`) n'apparaissait
+  // jamais → la résa semblait disparaître en silence. Piloté par l'événement AppState (pas de
+  // setState synchrone dans le corps de l'effet).
+  useEffect(() => {
+    if (!state.serverUserId) return;
+    const sub = RNAppState.addEventListener('change', (st) => {
+      if (st === 'active') {
+        void loadCancelled();
+        void loadScores();
+      }
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.serverUserId]);
+
+  // Tirer pour rafraîchir : resynchronise MES réservations (refreshSession → « À venir » perd la
+  // résa annulée par le club, plus de double-affichage avec « Annulées »), mes cours, scores et annulées.
   const { refreshControl } = usePullToRefresh(async () => {
-    await Promise.all([refreshLessons(), loadScores(), loadCancelled()]);
+    await Promise.all([refreshSession(), refreshLessons(), loadScores(), loadCancelled()]);
   });
 
   const now = Date.now();
