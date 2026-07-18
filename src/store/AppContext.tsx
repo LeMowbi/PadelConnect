@@ -3,7 +3,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, AppState as RNAppState } from 'react-native';
+import { AppState as RNAppState } from 'react-native';
 import { setClubStatusMap, type Club, type CustomClub, type PriceTier } from '@/data/clubs';
 import {
   approveClubRequest as approveClubRequestRpc,
@@ -87,6 +87,7 @@ import {
 } from '@/lib/reservations';
 import { blockUser as blockUserRpc, fetchBlockedUserIds } from '@/lib/moderation';
 import { samePhone } from '@/lib/phone';
+import { alertAsync } from '@/lib/confirm';
 import { overlaps, type CourtSlot } from '@/lib/courtSchedule';
 import { minutesToSlot, SESSION_MIN, slotToMinutes } from '@/lib/slots';
 import { cancelMatchReminder, onPushReceivedInForeground, scheduleMatchReminder, syncMatchReminders } from '@/lib/notifications';
@@ -1839,7 +1840,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // Échec d’upload sur un club serveur : on N’ENREGISTRE PAS une URI locale (file:// ou
           // data-URI) — elle serait illisible pour les autres appareils/joueurs. On prévient.
           if (!uploaded) {
-            Alert.alert('Photo non envoyée', 'L’envoi de la photo a échoué. Vérifie ta connexion et réessaie.');
+            // alertAsync : cross-plateforme (Alert.alert est un no-op sur le web = Espace Club navigateur).
+            alertAsync('Photo non envoyée', 'L’envoi de la photo a échoué. Vérifie ta connexion et réessaie.');
             return false;
           }
           finalUrl = uploaded;

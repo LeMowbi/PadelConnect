@@ -64,6 +64,7 @@ export default function ReservationsScreen() {
   // Passées : pagination INCRÉMENTALE (+20) — « tout » d'un coup monterait des centaines de
   // lignes animées dans un ScrollView non virtualisé chez un joueur assidu.
   const [pastShownCount, setPastShownCount] = useState(PAST_PREVIEW);
+  const [cancelledShownCount, setCancelledShownCount] = useState(PAST_PREVIEW);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null); // confirmation avant annulation
   const [msgTarget, setMsgTarget] = useState<Reservation | null>(null); // fiche « messages types » WhatsApp
   // Partage de résultat (image) : la résa ciblée + le partenaire choisi (2v2) + garde anti double-tap.
@@ -829,89 +830,109 @@ export default function ReservationsScreen() {
       </View>
 
       {/* Annulées — la trace reste visible (au lieu de disparaître en silence) : mes annulations
-          ET celles d'un créateur dont j'avais rejoint le match. Les 5 plus récentes. */}
+          ET celles d'un créateur dont j'avais rejoint le match. Les annulations PAR LE CLUB (75,
+          actionnables : « Accepter la proposition ») remontent EN TÊTE pour rester atteignables,
+          puis le reste par récence. Pagination « Voir plus » (sinon une carte club poussée au-delà
+          de 5 par des annulations joueur récentes devenait inaccessible). */}
       {cancelled.length > 0 ? (
         <View style={{ marginTop: spacing.xl }}>
           <SectionHeader title={`Annulées · ${cancelled.length}`} />
           <Card>
-            {cancelled.slice(0, PAST_PREVIEW).map((r, i) => (
-              <View key={r.id}>
-                {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
-                <View style={styles.row}>
-                  <View style={{ flex: 1 }}>
-                    <Txt variant="body" color={colors.textMuted} style={{ fontWeight: '600' }}>
-                      {r.clubName}
-                    </Txt>
-                    <Txt variant="small" color={colors.textFaint}>
-                      {dateKeyLabel(r.dateKey)} · {r.time} · {r.court}
-                      {!r.cancelledByClub && !isOwner(r) && r.bookedBy?.name ? ` · annulée par ${r.bookedBy.name}` : ''}
-                    </Txt>
+            {[...cancelled]
+              .sort((a, b) => Number(!!b.cancelledByClub) - Number(!!a.cancelledByClub))
+              .slice(0, cancelledShownCount)
+              .map((r, i) => (
+                <View key={r.id}>
+                  {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
+                  <View style={styles.row}>
+                    <View style={{ flex: 1 }}>
+                      <Txt variant="body" color={colors.textMuted} style={{ fontWeight: '600' }}>
+                        {r.clubName}
+                      </Txt>
+                      <Txt variant="small" color={colors.textFaint}>
+                        {dateKeyLabel(r.dateKey)} · {r.time} · {r.court}
+                        {!r.cancelledByClub && !isOwner(r) && r.bookedBy?.name ? ` · annulée par ${r.bookedBy.name}` : ''}
+                      </Txt>
+                    </View>
+                    <Tag label={r.cancelledByClub ? 'Annulée par le club' : 'Annulée'} tone="coral" icon="close-circle" />
                   </View>
-                  <Tag label={r.cancelledByClub ? 'Annulée par le club' : 'Annulée'} tone="coral" icon="close-circle" />
-                </View>
-                {/* Annulation par le CLUB (75) : le créneau chevauchait une réservation prise hors
+                  {/* Annulation par le CLUB (75) : le créneau chevauchait une réservation prise hors
                     application. On explique le motif et, si le club a proposé une alternative, on
                     la réserve en un tap (réutilise le tunnel de réservation, jour/heure/durée
                     pré-remplis) — sinon on renvoie vers le club pour choisir un autre créneau. */}
-                {r.cancelledByClub ? (
-                  <View style={styles.clubCancelBox}>
-                    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                      <Ionicons name="information-circle-outline" size={16} color={colors.coralDark} />
-                      <Txt variant="small" color={colors.coralDark} style={{ flex: 1 }}>
-                        Ce créneau chevauchait une réservation prise hors application.
-                        {r.cancelReason ? ` Motif : ${r.cancelReason}.` : ''}
-                      </Txt>
-                    </View>
-                    {/* Seul l'AUTEUR de la réservation peut re-réserver (le créneau de courtoisie lui
+                  {r.cancelledByClub ? (
+                    <View style={styles.clubCancelBox}>
+                      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                        <Ionicons name="information-circle-outline" size={16} color={colors.coralDark} />
+                        <Txt variant="small" color={colors.coralDark} style={{ flex: 1 }}>
+                          Ce créneau chevauchait une réservation prise hors application.
+                          {r.cancelReason ? ` Motif : ${r.cancelReason}.` : ''}
+                        </Txt>
+                      </View>
+                      {/* Seul l'AUTEUR de la réservation peut re-réserver (le créneau de courtoisie lui
                         est destiné) : un participant invité voit l'annulation mais n'accapare pas la
                         proposition à la place du créateur. */}
-                    {isOwner(r) ? (
-                      r.proposal ? (
-                        <>
-                          <Txt variant="small" color={colors.text} style={{ marginTop: spacing.sm }}>
-                            Le club propose : {dateKeyLabel(r.proposal.dateKey)} · {r.proposal.time} · {r.proposal.court} (
-                            {durationLabel(r.proposal.durationMin)}).
-                          </Txt>
-                          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-                            <View style={{ flex: 1 }}>
+                      {isOwner(r) ? (
+                        r.proposal ? (
+                          <>
+                            <Txt variant="small" color={colors.text} style={{ marginTop: spacing.sm }}>
+                              Le club propose : {dateKeyLabel(r.proposal.dateKey)} · {r.proposal.time} · {r.proposal.court} (
+                              {durationLabel(r.proposal.durationMin)}).
+                            </Txt>
+                            <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                              <View style={{ flex: 1 }}>
+                                <Button
+                                  size="sm"
+                                  label="Accepter la proposition"
+                                  icon="checkmark"
+                                  onPress={() =>
+                                    // On transmet AUSSI le terrain proposé au tunnel (court) : sans lui,
+                                    // le joueur devait le re-choisir et pouvait retomber sur un autre.
+                                    router.push(
+                                      `/reserver/${r.clubId}?dateKey=${r.proposal!.dateKey}&time=${encodeURIComponent(
+                                        r.proposal!.time,
+                                      )}&durationMin=${r.proposal!.durationMin}&court=${encodeURIComponent(r.proposal!.court)}`,
+                                    )
+                                  }
+                                  full
+                                />
+                              </View>
                               <Button
                                 size="sm"
-                                label="Accepter la proposition"
-                                icon="checkmark"
-                                onPress={() =>
-                                  // On transmet AUSSI le terrain proposé au tunnel (court) : sans lui,
-                                  // le joueur devait le re-choisir et pouvait retomber sur un autre.
-                                  router.push(
-                                    `/reserver/${r.clubId}?dateKey=${r.proposal!.dateKey}&time=${encodeURIComponent(
-                                      r.proposal!.time,
-                                    )}&durationMin=${r.proposal!.durationMin}&court=${encodeURIComponent(r.proposal!.court)}`,
-                                  )
-                                }
-                                full
+                                label="Autre créneau"
+                                variant="ghost"
+                                onPress={() => router.push(`/reserver/${r.clubId}`)}
                               />
                             </View>
-                            <Button size="sm" label="Autre créneau" variant="ghost" onPress={() => router.push(`/reserver/${r.clubId}`)} />
-                          </View>
-                        </>
+                          </>
+                        ) : (
+                          <Button
+                            size="sm"
+                            label="Choisir un autre créneau"
+                            icon="calendar-outline"
+                            variant="secondary"
+                            onPress={() => router.push(`/reserver/${r.clubId}`)}
+                            full
+                          />
+                        )
                       ) : (
-                        <Button
-                          size="sm"
-                          label="Choisir un autre créneau"
-                          icon="calendar-outline"
-                          variant="secondary"
-                          onPress={() => router.push(`/reserver/${r.clubId}`)}
-                          full
-                        />
-                      )
-                    ) : (
-                      <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
-                        Le créateur de la réservation choisira un nouveau créneau.
-                      </Txt>
-                    )}
-                  </View>
-                ) : null}
-              </View>
-            ))}
+                        <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
+                          Le créateur de la réservation choisira un nouveau créneau.
+                        </Txt>
+                      )}
+                    </View>
+                  ) : null}
+                </View>
+              ))}
+            {cancelled.length > cancelledShownCount ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                label={`Voir plus (${cancelled.length - cancelledShownCount} restantes)`}
+                icon="chevron-down"
+                onPress={() => setCancelledShownCount((n) => n + 20)}
+              />
+            ) : null}
           </Card>
         </View>
       ) : null}

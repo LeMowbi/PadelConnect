@@ -199,7 +199,9 @@ Deno.serve(async (req) => {
         notifs.push({
           targets: (toks ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
           title: 'Match annulé par le club',
-          body: `${record.club_name ?? 'Le club'} a annulé le créneau du ${record.date_label ?? ''} à ${record.time ?? ''} (chevauchement avec une réservation hors application).${reasonPart}`,
+          // Sans le MOTIF libre : il peut nommer un tiers (« M. X a réservé au téléphone ») et ne
+          // regarde que l'auteur de la résa — un participant n'a pas à le recevoir (confidentialité).
+          body: `${record.club_name ?? 'Le club'} a annulé le créneau du ${record.date_label ?? ''} à ${record.time ?? ''} (chevauchement avec une réservation hors application).`,
           data: { kind: 'reservation', id: record.id },
         });
       }
