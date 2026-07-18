@@ -88,7 +88,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   l'écrire dans le dépôt).
 - Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
 --auto-submit --non-interactive --no-wait`.
-- **`app.json` : version 1.0.2, `buildNumber` courant : 65** (EAS `autoIncrement` le bump à chaque
+- **`app.json` : version 1.0.2, `buildNumber` courant : 66** (EAS `autoIncrement` le bump à chaque
   build — ne PAS s'en remettre au suivi manuel ci-dessous, c'est `app.json` qui fait foi).
   🆕 **Build #64 (v1.0.2)** lancé sur EAS le 2026-07-16 (annulation club chevauchement 75 +
   ré-enregistrement push au premier plan) — **SANS auto-submit** pour ne pas perturber la revue
