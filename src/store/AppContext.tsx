@@ -1478,10 +1478,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       registerCompetition: async (id, partner) => {
         const serverComp = state.myCompetitions.find((c) => c.id === id && c.server);
+        // Garde d'époque (comme addReservation/sendFriendRequest) : compRegistrations est purgé à la
+        // déconnexion/bascule — une inscription tardive ne doit pas réinjecter un tournoi fantôme dans
+        // un compte sorti (persisté sur disque). Capturée avant l'await du RPC serveur.
+        const epoch = sessionEpochRef.current;
         if (serverComp) {
           const ok = await registerCompetitionRpc(id, partner);
           if (!ok) return false; // tournoi complet / non publié / échec → on ne confirme pas
         }
+        if (sessionEpochRef.current !== epoch) return false;
         setState((s) =>
           s.compRegistrations[id]
             ? s
@@ -1676,8 +1681,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // concerné voit l’annulation à son prochain rafraîchissement (push via notify-club).
       clubCancelReservation: async (id, reason = '', proposal) => {
         const res = state.reservations.find((r) => r.id === id);
+        // Garde d'époque (comme confirmReservationByClub/blockSlot) : ce setState AJOUTE un
+        // blocked_slot du club de `res` — une bascule de club géré (ou une déconnexion) pendant
+        // l'aller-retour RPC ne doit pas l'injecter dans le miroir d'un AUTRE périmètre.
+        const epoch = sessionEpochRef.current;
         const ok = await clubCancelReservationRow(id, reason, proposal);
         if (!ok) return false;
+        if (sessionEpochRef.current !== epoch) return false;
         setState((s) => ({
           ...s,
           reservations: s.reservations.filter((r) => r.id !== id),
