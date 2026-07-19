@@ -1698,7 +1698,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     dateKey: res.dateKey,
                     time: res.time,
                     court: res.court,
-                    reason: reason.trim() || 'Réservation hors application',
+                    // Motif GÉNÉRIQUE (miroir EXACT du serveur, SQL 78) : blocked_slots.reason est LISIBLE
+                    // PAR TOUS les joueurs (dispo) — le motif d'annulation du club (p_reason) ne doit pas
+                    // y fuiter et ne survivrait pas au prochain rafraîchissement. On fige donc la même chaîne.
+                    reason: 'Réservation hors application',
                     durationMin: res.durationMin || SESSION_MIN,
                   },
                 ]
@@ -2016,10 +2019,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // échec réseau faisait revenir en silence le statut à « À facturer » (accusé mensonger).
       setPaymentStatus: async (clubId, weekKey, status) => {
         const k = `${clubId}:${weekKey}`;
+        // Garde d'époque (comme operatorSetClubCommission/setBoost) : operatorPayments est purgé à
+        // la déconnexion/bascule — une écriture tardive ne doit pas réinjecter un paiement dans un
+        // compte sorti (données financières, périmètre opérateur).
+        const epoch = sessionEpochRef.current;
         if (state.serverUserId) {
           const ok = await setOperatorPaymentRpc(k, status);
           if (!ok) return { ok: false };
         }
+        if (sessionEpochRef.current !== epoch) return { ok: false };
         setState((s) => {
           const next = { ...s.operatorPayments };
           if (status === 'tofacture') delete next[k];
