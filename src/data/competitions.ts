@@ -43,6 +43,11 @@ export type Competition = {
   status?: 'pending' | 'approved' | 'rejected';
   // Motif de refus laissé par le club (52) — l’organisateur sait quoi changer avant de recréer.
   rejectReason?: string;
+  // Tournoi CLÔTURÉ côté serveur (status='closed', résultats figés). On garde `status='approved'`
+  // (donc toujours VISIBLE : palmarès, fiche) mais ce drapeau distinct sert au blocage de dispo :
+  // un tournoi clôturé LIBÈRE ses terrains (le serveur ne bloque QUE 'published'), il ne doit donc
+  // plus masquer aucun créneau — sinon un multi-jours clôturé avant sa fin sur-bloque le lendemain.
+  closed?: boolean;
   // Paiement Wave des frais (v2) : 'unpaid' tant que l’opérateur n’a pas confirmé, 'paid' ensuite.
   paymentStatus?: 'unpaid' | 'paid';
 };
@@ -50,6 +55,13 @@ export type Competition = {
 // Tournoi visible publiquement (listes, accueil, fiche club) : ni « en attente », ni « refusé ».
 export function isTournamentPublic(c: Competition): boolean {
   return c.status !== 'pending' && c.status !== 'rejected';
+}
+
+// Tournoi qui BLOQUE réellement des terrains/créneaux dans le calcul de disponibilité — miroir EXACT
+// de la garde serveur (`reservations_availability_guard`, qui ne bloque QUE 'published') : public ET
+// non clôturé. Un tournoi clôturé reste affiché (isTournamentPublic) mais libère ses créneaux.
+export function isTournamentBlocking(c: Competition): boolean {
+  return isTournamentPublic(c) && !c.closed;
 }
 
 // Libellé de date : « du X au Y » si le tournoi s’étale sur plusieurs jours, sinon le jour seul.

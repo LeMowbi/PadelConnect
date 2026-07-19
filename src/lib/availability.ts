@@ -9,7 +9,7 @@
 // 08:00·1h30 (adjacent) est pris, mais bloqué si 08:00·1h30 déborde dessus.
 
 import { SAMPLE_SLOTS, compareClubs, defaultCourts, type Club } from '@/data/clubs';
-import { isTournamentPublic, type Competition } from '@/data/competitions';
+import { isTournamentBlocking, type Competition } from '@/data/competitions';
 import { type CourtSlot, resolveCourtSlots, slotDurationAt, toMin } from '@/lib/courtSchedule';
 import { rangeBlocks, type BlockedRange } from '@/lib/ranges';
 import type { BlockedSlot, Reservation } from '@/store/AppContext';
@@ -84,7 +84,7 @@ export function courtsFor(club: Club, clubCourts: Record<string, string[]>): str
 export function hasFullDayCompetition(clubId: string, dateKey: string, comps: Competition[]): boolean {
   return comps.some(
     (c) =>
-      isTournamentPublic(c) && // un tournoi en attente / refusé ne bloque RIEN avant approbation
+      isTournamentBlocking(c) && // en attente / refusé / clôturé → ne bloque RIEN (miroir garde serveur 'published')
       c.clubId === clubId &&
       dateKey >= c.dateKey &&
       dateKey <= (c.endDateKey ?? c.dateKey) &&
@@ -105,7 +105,7 @@ export function competitionBlockedCourts(
 ): 'all' | string[] {
   const blocked = new Set<string>();
   for (const c of comps) {
-    if (!isTournamentPublic(c)) continue; // en attente / refusé → ne bloque aucun terrain
+    if (!isTournamentBlocking(c)) continue; // en attente / refusé / clôturé → ne bloque aucun terrain
     if (c.clubId !== clubId) continue;
     if (!(dateKey >= c.dateKey && dateKey <= (c.endDateKey ?? c.dateKey))) continue;
     const courts = c.courtNames ?? [];

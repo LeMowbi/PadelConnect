@@ -75,6 +75,9 @@ function rowToCompetition(r: CompetitionRow, myUserId: string): Competition {
     teamNames: r.teams ?? undefined,
     commission: r.commission,
     status,
+    // Clôturé côté serveur : garde `status='approved'` (toujours visible) mais NE bloque plus la
+    // dispo (miroir de la garde serveur qui n'oppose que 'published') — cf. isTournamentBlocking.
+    closed: r.status === 'closed',
     rejectReason: r.reject_reason ?? undefined,
     paymentStatus: r.payment_status === 'paid' ? 'paid' : 'unpaid',
   };

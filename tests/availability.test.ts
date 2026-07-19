@@ -23,10 +23,23 @@ const SAMPLE = ['07:30', '09:00', '10:30', '12:00', '16:30', '18:00', '19:30', '
 const io = (aT: string, aD: number, bT: string, bD: number) => overlaps({ t: aT, d: aD as 60 | 90 }, { t: bT, d: bD as 60 | 90 });
 
 // ─── competitionBlockedCourts (mirror) ────────────────────────────────────────────────────────
-type Comp = { clubId: string; dateKey: string; endDateKey?: string; courtNames?: string[]; timeSlots?: string[]; slotDurations?: number[] };
+type Comp = {
+  clubId: string;
+  dateKey: string;
+  endDateKey?: string;
+  courtNames?: string[];
+  timeSlots?: string[];
+  slotDurations?: number[];
+  status?: 'pending' | 'approved' | 'rejected';
+  closed?: boolean;
+};
+// Miroir d'isTournamentBlocking (data/competitions.ts) : bloque la dispo si PUBLIC (ni en attente
+// ni refusé) ET NON clôturé — un tournoi clôturé libère ses terrains (garde serveur = 'published').
+const isBlocking = (c: Comp) => c.status !== 'pending' && c.status !== 'rejected' && !c.closed;
 function compBlocked(clubId: string, dateKey: string, time: string, dur: number, comps: Comp[]): 'all' | string[] {
   const blocked = new Set<string>();
   for (const c of comps) {
+    if (!isBlocking(c)) continue;
     if (c.clubId !== clubId) continue;
     if (!(dateKey >= c.dateKey && dateKey <= (c.endDateKey ?? c.dateKey))) continue;
     const courts = c.courtNames ?? [];
@@ -50,19 +63,54 @@ check(!io('08:00', 90, '09:30', 60), 'symétrie : 08:00·1h30 adjacent à un 09:
 
 console.log('\n— competitionBlockedCourts (durée du créneau tournoi) —');
 const t1 = { clubId: 'padelta', dateKey: '2026-07-15', courtNames: ['Terrain 1'], timeSlots: ['08:00'], slotDurations: [90] };
-check((compBlocked('padelta', '2026-07-15', '09:00', 60, [t1]) as string[]).includes('Terrain 1'), 'tournoi 08:00·1h30 bloque un candidat 09:00 (chevauche)');
-check(!(compBlocked('padelta', '2026-07-15', '09:30', 60, [t1]) as string[]).includes('Terrain 1'), 'tournoi 08:00·1h30 ne bloque pas 09:30 (adjacent)');
+check(
+  (compBlocked('padelta', '2026-07-15', '09:00', 60, [t1]) as string[]).includes('Terrain 1'),
+  'tournoi 08:00·1h30 bloque un candidat 09:00 (chevauche)',
+);
+check(
+  !(compBlocked('padelta', '2026-07-15', '09:30', 60, [t1]) as string[]).includes('Terrain 1'),
+  'tournoi 08:00·1h30 ne bloque pas 09:30 (adjacent)',
+);
 // Tournoi à créneau 1h : ne bloque que [08:00,09:00) → un 09:00 est libre.
 const t60 = { ...t1, slotDurations: [60] };
-check(!(compBlocked('padelta', '2026-07-15', '09:00', 60, [t60]) as string[]).includes('Terrain 1'), 'tournoi 08:00·1h : 09:00 libre (créneau plus court)');
-check(compBlocked('padelta', '2026-07-15', '05:00', 90, [{ clubId: 'padelta', dateKey: '2026-07-15' }]) === 'all', 'tournoi seed sans précision → tout le club');
+check(
+  !(compBlocked('padelta', '2026-07-15', '09:00', 60, [t60]) as string[]).includes('Terrain 1'),
+  'tournoi 08:00·1h : 09:00 libre (créneau plus court)',
+);
+check(
+  compBlocked('padelta', '2026-07-15', '05:00', 90, [{ clubId: 'padelta', dateKey: '2026-07-15' }]) === 'all',
+  'tournoi seed sans précision → tout le club',
+);
+// Statut : un tournoi CLÔTURÉ (status='approved', closed) LIBÈRE ses terrains (miroir garde serveur
+// 'published') — un multi-jours clôturé avant sa fin ne doit plus sur-bloquer le lendemain.
+const tClosed = { ...t1, status: 'approved' as const, closed: true };
+check(
+  !(compBlocked('padelta', '2026-07-15', '08:00', 90, [tClosed]) as string[]).includes('Terrain 1'),
+  'tournoi CLÔTURÉ ne bloque plus (libère ses terrains)',
+);
+const tApproved = { ...t1, status: 'approved' as const };
+check(
+  (compBlocked('padelta', '2026-07-15', '08:00', 90, [tApproved]) as string[]).includes('Terrain 1'),
+  'tournoi approuvé NON clôturé bloque bien son créneau',
+);
+const tPending = { ...t1, status: 'pending' as const };
+check(
+  !(compBlocked('padelta', '2026-07-15', '08:00', 90, [tPending]) as string[]).includes('Terrain 1'),
+  'tournoi en attente ne bloque rien avant approbation',
+);
 
 console.log('\n— composition freeCourtSlotsAt (grille + occupation + période) —');
 // Grille : Terrain 1 mixte (08:00·1h30 puis 09:30·1h), Terrain 2 tout en 1h30.
 const cfg: { courtSlots: Record<string, CourtSlot[]> } = {
   courtSlots: {
-    'Terrain 1': [{ t: '08:00', d: 90 }, { t: '09:30', d: 60 }],
-    'Terrain 2': [{ t: '08:00', d: 90 }, { t: '10:30', d: 90 }],
+    'Terrain 1': [
+      { t: '08:00', d: 90 },
+      { t: '09:30', d: 60 },
+    ],
+    'Terrain 2': [
+      { t: '08:00', d: 90 },
+      { t: '10:30', d: 90 },
+    ],
   },
 };
 const courts = ['Terrain 1', 'Terrain 2'];
@@ -85,10 +133,16 @@ function freeAt(time: string): { court: string; d: 60 | 90 }[] {
 const at8 = freeAt('08:00');
 check(at8.length === 1 && at8[0].court === 'Terrain 1' && at8[0].d === 90, '08:00 : seul Terrain 1 libre (T2 pris), durée 1h30');
 const at930 = freeAt('09:30');
-check(at930.length === 1 && at930[0].court === 'Terrain 1' && at930[0].d === 60, '09:30 : Terrain 1 propose un 1h (T2 n’a pas de créneau à cette heure)');
+check(
+  at930.length === 1 && at930[0].court === 'Terrain 1' && at930[0].d === 60,
+  '09:30 : Terrain 1 propose un 1h (T2 n’a pas de créneau à cette heure)',
+);
 // L'occupation 08:00·1h30 sur T2 ne bloque PAS un créneau 10:30 (adjacent après fin 09:30).
 const at1030 = freeAt('10:30');
-check(at1030.some((x) => x.court === 'Terrain 2' && x.d === 90), '10:30 : Terrain 2 libre (l’occupation 08:00 ne déborde pas)');
+check(
+  at1030.some((x) => x.court === 'Terrain 2' && x.d === 90),
+  '10:30 : Terrain 2 libre (l’occupation 08:00 ne déborde pas)',
+);
 
 console.log(`\n${failed === 0 ? 'TOUS LES TESTS AVAILABILITY PASSENT.' : `${failed} ÉCHEC(S).`}`);
 process.exit(failed === 0 ? 0 : 1);
