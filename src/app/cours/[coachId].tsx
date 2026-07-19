@@ -85,6 +85,18 @@ export default function CoursScreen() {
   const [court, setCourt] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Instantané FIGÉ de la demande envoyée (jour/heure/terrain/durée/prix), capturé au succès :
+  // l'écran « Demande envoyée ! » NE DOIT PAS relire les valeurs dérivées vivantes (day/slot/
+  // effectiveCourt) — après une nuit en arrière-plan, useTodayKey recale `dates`, l'ancien
+  // « aujourd'hui » sort de la fenêtre → `day = null` → crash (TypeError) au rendu du récap.
+  // Même parade que reserver/[clubId].tsx (instantané `booked`).
+  const [submitted, setSubmitted] = useState<{
+    dayLabel: string;
+    time: string;
+    court: string;
+    durationMin: number;
+    price: number | null;
+  } | null>(null);
 
   if (!club) {
     return (
@@ -187,6 +199,15 @@ export default function CoursScreen() {
     setSubmitting(false);
     if (ok) {
       hapticSuccess();
+      // Fige l'instantané AVANT le re-rendu de succès (day/slot/effectiveCourt sont ici garantis
+      // non-nuls par la garde d'entrée) : l'écran « done » lit ce snapshot, jamais `day!`/`slot!`.
+      setSubmitted({
+        dayLabel: dateKeyLabel(day.key),
+        time: slot,
+        court: effectiveCourt,
+        durationMin,
+        price: priceForSlot(club, slot, durationMin),
+      });
       setDone(true);
     } else {
       // Doublon de demande, coach retiré entre-temps ou échec réseau : le serveur refuse
@@ -196,7 +217,7 @@ export default function CoursScreen() {
     }
   };
 
-  if (done) {
+  if (done && submitted) {
     return (
       <Screen back title="Cours demandé">
         <LinearGradient colors={gradients.deepGreen} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.successHero}>
@@ -216,11 +237,11 @@ export default function CoursScreen() {
           <View style={styles.summary}>
             <Row label="Coach" value={coach.name} />
             <Row label="Club" value={club.name} />
-            <Row label="Jour" value={day!.label} />
-            <Row label="Heure" value={slot!} />
-            <Row label="Terrain (si accepté)" value={effectiveCourt!} />
-            {durationMin ? <Row label="Durée" value={durationLabel(durationMin)} /> : null}
-            {slotPrice ? <Row label="Terrain (réglé au club)" value={fcfa(slotPrice)} /> : null}
+            <Row label="Jour" value={submitted.dayLabel} />
+            <Row label="Heure" value={submitted.time} />
+            <Row label="Terrain (si accepté)" value={submitted.court} />
+            <Row label="Durée" value={durationLabel(submitted.durationMin)} />
+            {submitted.price ? <Row label="Terrain (réglé au club)" value={fcfa(submitted.price)} /> : null}
             {coach.price ? <Row label="Cours (réglé au coach)" value={fcfa(coach.price)} /> : null}
           </View>
           <View style={{ alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.lg }}>

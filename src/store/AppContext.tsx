@@ -1682,8 +1682,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clubCancelReservation: async (id, reason = '', proposal) => {
         const res = state.reservations.find((r) => r.id === id);
         // Garde d'époque (comme confirmReservationByClub/blockSlot) : ce setState AJOUTE un
-        // blocked_slot du club de `res` — une bascule de club géré (ou une déconnexion) pendant
-        // l'aller-retour RPC ne doit pas l'injecter dans le miroir d'un AUTRE périmètre.
+        // blocked_slot du club de `res` — une déconnexion ou une bascule de COMPTE (A→B, qui bumpe
+        // l'époque) pendant l'aller-retour RPC ne doit pas l'injecter dans le miroir du compte sorti.
         const epoch = sessionEpochRef.current;
         const ok = await clubCancelReservationRow(id, reason, proposal);
         if (!ok) return false;
