@@ -88,13 +88,16 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   l'écrire dans le dépôt).
 - Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
 --auto-submit --non-interactive --no-wait`.
-- **`app.json` : version 1.0.2, `buildNumber` courant : 66** (EAS `autoIncrement` le bump à chaque
+- **`app.json` : version 1.0.2, `buildNumber` courant : 67** (EAS `autoIncrement` le bump à chaque
   build — ne PAS s'en remettre au suivi manuel ci-dessous, c'est `app.json` qui fait foi).
-  🆕 **Build #64 (v1.0.2)** lancé sur EAS le 2026-07-16 (annulation club chevauchement 75 +
-  ré-enregistrement push au premier plan) — **SANS auto-submit** pour ne pas perturber la revue
-  1.0.1 en cours ; à soumettre à l'App Store dès que la 1.0.1 est approuvée. SQL `75` appliqué en
-  base, `notify-club` v29, webhooks `reservations`/`reservation_participants` recorrigés en
-  INSERT+UPDATE, web `club.padelconnectci.com` redéployé.
+  🆕 **Build #67 (v1.0.2)** lancé sur EAS le 2026-08-13 **AVEC auto-submit** (App Store) : contient
+  l'UI de l'annulation club (75) + les 8 correctifs de la campagne « relance-corrige » (tour blanc
+  atteint — crash minuit cours, tournoi clôturé qui sur-bloquait, gardes d'époque, etc.). Web
+  `club.padelconnectci.com` **redéployé le même jour** (déploiement MANUEL : les secrets GitHub
+  `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` sont VIDES dans le dépôt → le workflow
+  `deploy-web.yml` échoue à CHAQUE push depuis sa création ; le porteur doit les créer dans
+  GitHub → Settings → Secrets and variables → Actions pour que l'automatisation fonctionne).
+  Le build #64 du 2026-07-16 (sans auto-submit) est SUPPLANTÉ par le #67.
   🚀 **L'app est EN LIGNE (v1.0) depuis le 2026-07-10** sur les stores CI/SN/US ; l'UE attend la
   vérification « commerçant » DSA d'Apple (bloque UNIQUEMENT les stores européens, rien d'autre).
   La **v1.0.1** (build #63 = correctifs de l'audit complet) a été mise en revue par le porteur le
