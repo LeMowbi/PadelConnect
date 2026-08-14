@@ -12,15 +12,18 @@ import { CommissionRates } from '@/components/operator/CommissionRates';
 import { ManagerAccess } from '@/components/operator/ManagerAccess';
 import { TournamentFee } from '@/components/operator/TournamentFee';
 import { TournamentFees } from '@/components/operator/TournamentFees';
+import { LoyaltyReward } from '@/components/operator/LoyaltyReward';
 import { WaveLink } from '@/components/operator/WaveLink';
 import { DiagnosticsCard } from '@/components/operator/DiagnosticsCard';
 import { NewsEditor } from '@/components/operator/NewsEditor';
+import { AgendaEditor } from '@/components/operator/AgendaEditor';
 import { opStyles } from '@/components/operator/styles';
 import { activeClubs, clubs as baseClubs, findClub, manageableClubs } from '@/data/clubs';
 import { isTournamentPublic } from '@/data/competitions';
 import { canAccessOperator } from '@/lib/access';
 import { hapticSuccess } from '@/lib/haptics';
 import { fetchReviewReports, operatorDeleteReview, operatorDismissReport, type ReviewReport } from '@/lib/moderation';
+import { fetchLoyaltyClaims, serveLoyaltyClaim, type LoyaltyClaim } from '@/lib/social';
 import { COMMISSION_RATE, isPlayed, useApp, type ServerClubRequest, type ServerSupportMessage } from '@/store/AppContext';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { addWeeks, dateKeyLabel, dayKey, weekKeyOf, weekLabel } from '@/lib/days';
@@ -221,8 +224,47 @@ export default function Operateur() {
     }
   };
 
+  // FIDÉLITÉ (82) : réclamations « 10 parties = 1 récompense » à remettre en main propre. Mêmes
+  // conventions que les avis signalés : un échec réseau ≠ « rien à servir », chargement au
+  // montage + pull-to-refresh, action honnête (on attend le serveur avant de barrer la ligne).
+  const [claims, setClaims] = useState<LoyaltyClaim[]>([]);
+  const [claimsError, setClaimsError] = useState(false);
+  const [claimBusy, setClaimBusy] = useState<string | null>(null); // anti double-tap
+  const loadClaims = useCallback(async () => {
+    const rows = await fetchLoyaltyClaims();
+    setClaimsError(rows === null);
+    if (rows) setClaims(rows); // §8 : un échec réseau ne remplace pas la liste déjà chargée
+  }, []);
+  useEffect(() => {
+    let alive = true;
+    void fetchLoyaltyClaims().then((rows) => {
+      if (!alive) return;
+      setClaimsError(rows === null);
+      if (rows) setClaims(rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const serveClaim = async (c: LoyaltyClaim) => {
+    if (claimBusy) return;
+    setClaimBusy(c.id);
+    const ok = await serveLoyaltyClaim(c.id);
+    setClaimBusy(null);
+    if (ok) {
+      // Marquage local immédiat (APRÈS confirmation serveur), puis relecture : la liste revient
+      // triée « à servir d'abord » et intègre les réclamations arrivées entre-temps.
+      setClaims((cur) => cur.map((x) => (x.id === c.id ? { ...x, served: true } : x)));
+      toast.show('Récompense marquée servie ✓');
+      void loadClaims();
+    } else {
+      toast.show('Action impossible — réessaie.', { icon: 'alert-circle' });
+    }
+  };
+  const pendingClaims = claims.filter((c) => !c.served).length;
+
   const { refreshControl, webRefreshButton } = usePullToRefresh(async () => {
-    await Promise.all([loadSupport(), loadReports()]);
+    await Promise.all([loadSupport(), loadReports(), loadClaims()]);
   });
   const markSupport = async (id: string, status: ServerSupportMessage['status']) => {
     const prev = support.find((m) => m.id === id)?.status;
@@ -276,6 +318,15 @@ export default function Operateur() {
     if (!ok && prev) setRequests((cur) => cur.map((r) => (r.id === id ? { ...r, status: prev } : r)));
   };
   const pendingRequests = requests.filter((r) => r.status === 'new' || r.status === 'contacted').length;
+  // Rappel inter-onglets : tout ce qui attend dans « Demandes ». Une liste de bouts + join
+  // évite la cascade de séparateurs conditionnels à chaque nouvelle catégorie.
+  const pendingTotal = pendingRequests + newSupport + reports.length + pendingClaims;
+  const pendingBits = [
+    pendingRequests > 0 ? `${pendingRequests} demande${pendingRequests > 1 ? 's' : ''} de club` : null,
+    newSupport > 0 ? `${newSupport} signalement${newSupport > 1 ? 's' : ''}` : null,
+    reports.length > 0 ? `${reports.length} avis signalé${reports.length > 1 ? 's' : ''}` : null,
+    pendingClaims > 0 ? `${pendingClaims} récompense${pendingClaims > 1 ? 's' : ''} à servir` : null,
+  ].filter((b): b is string => b !== null);
 
   // Approbation : demande de confirmation (action forte : crée le club + donne l’accès).
   const [approveTarget, setApproveTarget] = useState<ServerClubRequest | null>(null);
@@ -485,20 +536,16 @@ export default function Operateur() {
       <SegmentedControl options={OP_SECTIONS} value={section} onChange={setSection} />
 
       {/* Rappel visible depuis les AUTRES onglets : demandes/signalements/avis en attente. */}
-      {section !== 'Demandes' && pendingRequests + newSupport + reports.length > 0 ? (
+      {section !== 'Demandes' && pendingTotal > 0 ? (
         <Pressable
           onPress={() => setSection('Demandes')}
           style={styles.pendingPill}
           accessibilityRole="button"
-          accessibilityLabel={`${pendingRequests + newSupport + reports.length} demande${pendingRequests + newSupport + reports.length > 1 ? 's' : ''} à traiter`}
+          accessibilityLabel={`${pendingTotal} demande${pendingTotal > 1 ? 's' : ''} à traiter`}
         >
           <Ionicons name="hourglass-outline" size={14} color={colors.amberDark} />
           <Txt variant="small" color={colors.amberDark} style={{ fontWeight: '700', flex: 1 }}>
-            {pendingRequests > 0 ? `${pendingRequests} demande${pendingRequests > 1 ? 's' : ''} de club` : ''}
-            {pendingRequests > 0 && newSupport + reports.length > 0 ? ' · ' : ''}
-            {newSupport > 0 ? `${newSupport} signalement${newSupport > 1 ? 's' : ''}` : ''}
-            {newSupport > 0 && reports.length > 0 ? ' · ' : ''}
-            {reports.length > 0 ? `${reports.length} avis signalé${reports.length > 1 ? 's' : ''}` : ''}
+            {pendingBits.join(' · ')}
           </Txt>
           <Ionicons name="chevron-forward" size={14} color={colors.amberDark} />
         </Pressable>
@@ -543,6 +590,13 @@ export default function Operateur() {
               onPublish={setOperatorNews}
               onRemove={removeOperatorNews}
             />
+          </View>
+
+          {/* Agenda du padel ivoirien (82) — événements de la scène locale, affichés sur
+              l'accueil de tous les joueurs (même zone éditoriale que l'actu ci-dessus). */}
+          <View style={{ marginBottom: spacing.md }}>
+            <SectionHeader title="Agenda du padel 🇨🇮" />
+            <AgendaEditor />
           </View>
         </>
       ) : null}
@@ -778,6 +832,13 @@ export default function Operateur() {
             {/* WaveLink se resynchronise lui-même quand le lien serveur arrive/change (sans écraser
                 une saisie en cours) — cf. le motif « ajuster l'état quand une prop change ». */}
             <WaveLink link={state.waveLink} onSet={setWaveLink} toast={toast} />
+          </View>
+
+          {/* Récompense de fidélité (82) : le texte affiché sur la carte à tampons des joueurs
+              (« 10 parties = 1 récompense »). Les réclamations se servent dans « Demandes ». */}
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title="Récompense fidélité" />
+            <LoyaltyReward toast={toast} />
           </View>
 
           {/* Frais à encaisser (Wave) sur les tournois publiés par des joueurs. Confirmation
@@ -1201,6 +1262,51 @@ export default function Operateur() {
                       <Button size="sm" label="Rouvrir" icon="arrow-undo" variant="ghost" onPress={() => markSupport(m.id, 'read')} />
                     )}
                   </View>
+                </Card>
+              ))
+            )}
+          </View>
+
+          {/* FIDÉLITÉ À SERVIR (82) : un joueur a atteint 10 parties jouées et réclamé sa
+              récompense — elle se remet en main propre (club ou PadelConnect), puis « Servie ✓ ». */}
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title={`Fidélité à servir · ${pendingClaims}`} />
+            {claims.length === 0 ? (
+              <Card>
+                <Txt variant="muted">
+                  {claimsError
+                    ? 'Impossible de charger les réclamations — vérifie ta connexion, puis tire pour rafraîchir.'
+                    : 'Aucune réclamation. Dès qu’un joueur réclame sa récompense (Profil → Fidélité), elle arrive ici.'}
+                </Txt>
+              </Card>
+            ) : (
+              claims.map((c) => (
+                <Card key={c.id} style={{ marginBottom: spacing.sm }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                    <IconCircle icon="gift" color={colors.amberDark} bg={colors.amberSoft} size={40} />
+                    <View style={{ flex: 1 }}>
+                      <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
+                        {c.playerName}
+                      </Txt>
+                      <Txt variant="muted">
+                        {/* Date formatée en UTC (même motif que le reste du fichier). */}
+                        Cycle n°{c.cycle} · réclamée le {dateKeyLabel(dayKey(new Date(c.claimedAt)))}
+                      </Txt>
+                    </View>
+                    <Tag label={c.served ? 'Servie ✓' : 'À servir'} tone={c.served ? 'green' : 'amber'} />
+                  </View>
+                  {!c.served ? (
+                    <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+                      <Button
+                        size="sm"
+                        label={claimBusy === c.id ? '…' : 'Servie ✓'}
+                        icon="checkmark"
+                        disabled={claimBusy !== null}
+                        onPress={() => void serveClaim(c)}
+                        accessibilityLabel={`Marquer la récompense de ${c.playerName} comme servie`}
+                      />
+                    </View>
+                  ) : null}
                 </Card>
               ))
             )}

@@ -5,7 +5,7 @@
 // ce test ne couvre donc plus que les données encore embarquées (clubs, tournois, coachs).
 
 import { clubs } from '@/data/clubs';
-import { seedCompetitions, teamsToShow, formatFee } from '@/data/competitions';
+import { americanoPodiumTeams, seedCompetitions, teamsToShow, formatFee } from '@/data/competitions';
 import { coaches } from '@/data/coaches';
 import { minPrice, priceTiersFor } from '@/lib/pricing';
 
@@ -76,6 +76,30 @@ check(
   formatFee('') === 'Gratuit' && /^5\s000$/u.test(formatFee('5000')) && formatFee(formatFee('5000')) === formatFee('5000'),
   'formatFee : Gratuit + espacement des milliers + idempotent',
 );
+
+// 7. americanoPodiumTeams : le classement de l'americano est INDIVIDUEL alors que la clôture
+// désigne des ÉQUIPES → on remonte à l'équipe du joueur classé, jamais deux fois la même
+// (les 2 joueurs d'une équipe sur le podium), et rien tant qu'aucun score n'est saisi.
+const amComp = {
+  id: 'synthetic-americano',
+  slots: 8,
+  registered: 2,
+  server: true,
+  format: 'Americano (rotation)',
+  teamNames: ['Awa & Yann', 'Bob & Cyr'],
+  americano: {
+    players: ['Awa', 'Yann', 'Bob', 'Cyr'],
+    courts: 1,
+    rounds: [{ round: 1, matches: [{ courtIndex: 0, teamA: ['Awa', 'Bob'], teamB: ['Yann', 'Cyr'] }], resting: [] }],
+    scores: [{ round: 1, courtIndex: 0, scoreA: 24, scoreB: 10 }],
+  },
+} as unknown as Parameters<typeof americanoPodiumTeams>[0];
+const amPodium = americanoPodiumTeams(amComp);
+check(amPodium.first === 'Awa & Yann', 'americanoPodiumTeams : le joueur en tête donne SON équipe');
+check(amPodium.second === 'Bob & Cyr', 'americanoPodiumTeams : 2ᵉ place = l’équipe du 2ᵉ joueur');
+check(amPodium.third === undefined, 'americanoPodiumTeams : une équipe déjà classée n’est jamais reproposée');
+const amEmpty = { ...amComp, americano: { ...amComp.americano!, scores: [] } };
+check(Object.keys(americanoPodiumTeams(amEmpty)).length === 0, 'americanoPodiumTeams : aucun score ⇒ aucune suggestion');
 
 console.log(failed === 0 ? '\nTOUTES LES DONNÉES SEEDS SONT COHÉRENTES.' : `\n${failed} incohérence(s) seeds.`);
 if (failed > 0) process.exitCode = 1;

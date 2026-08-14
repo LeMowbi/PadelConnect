@@ -11,12 +11,16 @@ import { colors, radius, spacing } from '@/theme';
 export function ClosePanel({
   comp,
   myTeam,
+  initialPodium,
   onClose,
   onCancel,
   onDelete,
 }: {
   comp: Competition;
   myTeam?: string;
+  // Podium PRÉ-SÉLECTIONNÉ (americano auto-géré, 82) : noms d’ÉQUIPE déjà classés par l’app.
+  // Simple valeur de départ des trois sélecteurs — l’organisateur peut encore tout corriger.
+  initialPodium?: { first?: string; second?: string; third?: string };
   onClose: (
     winner: string,
     winnerIsMe: boolean,
@@ -28,10 +32,10 @@ export function ClosePanel({
   onDelete?: () => void;
 }) {
   const teams = teamsToShow(comp, myTeam);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(initialPodium?.first ?? null);
   const [loser, setLoser] = useState<string | null>(null);
-  const [second, setSecond] = useState<string | null>(null);
-  const [third, setThird] = useState<string | null>(null);
+  const [second, setSecond] = useState<string | null>(initialPodium?.second ?? null);
+  const [third, setThird] = useState<string | null>(initialPodium?.third ?? null);
   const [step, setStep] = useState<'winner' | 'final'>('winner');
   const [confirmDelete, setConfirmDelete] = useState(false);
   // Garde anti double-tap sur la clôture. Le parent renvoie une promesse (écriture honnête) : au

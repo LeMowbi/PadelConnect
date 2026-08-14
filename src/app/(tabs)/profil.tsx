@@ -4,10 +4,11 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { Avatar } from '@/components/Avatar';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Chip } from '@/components/Chip';
+import { PopIn } from '@/components/PopIn';
 import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
 import { useToast } from '@/components/Toast';
@@ -15,9 +16,10 @@ import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt, t
 import { isPlayed, useApp } from '@/store/AppContext';
 import { canAccessOperator, canSeeClubSpace } from '@/lib/access';
 import { levelLabel } from '@/lib/format';
+import { hapticSuccess } from '@/lib/haptics';
 import { isValidPhone } from '@/lib/phone';
 import { pickImage } from '@/lib/pickImage';
-import { fetchMatchAlerts, setMatchAlerts } from '@/lib/social';
+import { claimLoyalty, fetchLoyaltyReward, fetchMatchAlerts, fetchMyLoyalty, setMatchAlerts, type Loyalty } from '@/lib/social';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { GENDERS, ageFrom, genderLabel, maskBirthDate, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
 import { colors, gradients, radius, spacing } from '@/theme';
@@ -383,6 +385,15 @@ export default function ProfilScreen() {
         </Card>
       </View>
 
+      {/* Fidélité « 10 parties = 1 récompense » (82) — compteur SERVEUR, donc réservé aux
+          comptes connectés (un compte local n’a rien à compter côté récompenses). */}
+      {connected ? (
+        <View style={{ marginTop: spacing.xl }}>
+          <SectionHeader title="Fidélité" />
+          <LoyaltyCard />
+        </View>
+      ) : null}
+
       {/* Raccourcis */}
       <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
         <Card onPress={() => router.push('/reservations')} style={styles.cta}>
@@ -688,6 +699,130 @@ export default function ProfilScreen() {
   );
 }
 
+// CARTE À TAMPONS (82) — « 10 parties jouées = 1 récompense ». Le compteur (`played`) et les
+// cycles déjà réclamés (`claimed`) viennent du SERVEUR (mêmes parties que les +2 points du
+// classement : réservation passée, encore 'booked') — rien n’est compté côté client, donc rien
+// ne se perd à la réinstallation et rien ne se triche.
+function LoyaltyCard() {
+  const toast = useToast();
+  // null = pas encore chargé (ou échec réseau) : on n’affiche jamais un compteur inventé (§8).
+  const [loyalty, setLoyalty] = useState<Loyalty | null>(null);
+  // null = texte inconnu (échec réseau) ; '' = récompense pas encore réglée par l’opérateur.
+  const [reward, setReward] = useState<string | null>(null);
+  const [claiming, setClaiming] = useState(false); // garde anti double-tap
+  const [awarded, setAwarded] = useState<number | null>(null); // n° du cycle tout juste réclamé
+
+  // Chargement au montage ET au retour au premier plan (une partie a pu se jouer entre-temps,
+  // ou l’opérateur a réglé la récompense).
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      void fetchMyLoyalty().then((l) => alive && l && setLoyalty(l));
+      void fetchLoyaltyReward().then((t) => alive && t !== null && setReward(t));
+    };
+    load();
+    const sub = AppState.addEventListener('change', (st) => st === 'active' && load());
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+  }, []);
+
+  const played = loyalty?.played ?? 0;
+  // Cycles complets NON réclamés — exactement la règle du serveur (`claim_loyalty`).
+  const pending = loyalty ? Math.floor(played / 10) - loyalty.claimed : 0;
+  // Cycle complet : les 10 pastilles sont pleines (sinon `played % 10` repasserait à 0 et
+  // donnerait l’impression d’avoir perdu ses parties avant même d’avoir réclamé).
+  const filled = pending > 0 ? 10 : played % 10;
+
+  const claim = async () => {
+    if (claiming) return;
+    setClaiming(true);
+    const res = await claimLoyalty();
+    // Dans tous les cas on relit le compteur serveur : il fait foi (une partie a pu être
+    // annulée entre-temps, ou la récompense déjà réclamée depuis un autre appareil).
+    const fresh = await fetchMyLoyalty();
+    setClaiming(false);
+    if (fresh) setLoyalty(fresh);
+    if (res === 'ok') {
+      hapticSuccess();
+      // Les cycles se réclament dans l’ordre : le n° réclamé = le total de cycles après coup.
+      setAwarded(fresh ? fresh.claimed : (loyalty?.claimed ?? 0) + 1);
+    } else if (res === 'not_yet') {
+      toast.show('Pas encore : il faut 10 parties jouées depuis ta dernière récompense.', { icon: 'information-circle' });
+    } else {
+      toast.show('Connexion impossible — réessaie', { icon: 'alert-circle' });
+    }
+  };
+
+  return (
+    <Card>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+        <IconCircle icon="gift" color={colors.amberDark} bg={colors.amberSoft} />
+        <View style={{ flex: 1 }}>
+          <Txt variant="h3">10 parties = 1 récompense</Txt>
+          <Txt variant="muted">
+            {loyalty === null
+              ? 'Chargement de ton compteur…'
+              : pending > 0
+                ? 'Carte complète 🎉 — ta récompense t’attend.'
+                : `${filled}/10 parties jouées vers ta prochaine récompense.`}
+          </Txt>
+        </View>
+      </View>
+
+      {/* Les 10 tampons : une pastille pleine = une partie jouée, comptée par le serveur. */}
+      <View
+        style={styles.stamps}
+        accessible
+        accessibilityLabel={loyalty === null ? 'Carte de fidélité en cours de chargement' : `${filled} tampons sur 10`}
+      >
+        {Array.from({ length: 10 }, (_, i) => (
+          <View key={i} style={[styles.stamp, i < filled ? styles.stampOn : null]}>
+            <Ionicons name="tennisball" size={13} color={i < filled ? colors.amberDark : colors.textFaint} />
+          </View>
+        ))}
+      </View>
+
+      {/* Récompense réglée par l’opérateur (Espace opérateur → Finances). Texte inconnu (échec
+          réseau) : on n’affiche rien plutôt qu’une promesse inventée. */}
+      {reward !== null ? (
+        <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.md }}>
+          {reward.trim() ? `🎁 ${reward.trim()}` : 'Récompense en préparation — continue de jouer !'}
+        </Txt>
+      ) : null}
+
+      {/* Réclamation faite : l’écran à montrer pour recevoir la récompense. */}
+      {awarded !== null ? (
+        <PopIn>
+          <View style={styles.rewardBox}>
+            <Ionicons name="gift" size={20} color={colors.amberDark} />
+            <View style={{ flex: 1 }}>
+              <Txt variant="body" style={{ fontWeight: '700' }}>
+                Récompense n°{awarded} à réclamer
+              </Txt>
+              <Txt variant="small" color={colors.textMuted}>
+                Montre cet écran au club ou à PadelConnect pour la recevoir.
+              </Txt>
+            </View>
+          </View>
+        </PopIn>
+      ) : null}
+
+      {pending > 0 ? (
+        <View style={{ marginTop: spacing.md }}>
+          <Button label={claiming ? 'Envoi…' : 'Réclamer 🎁'} onPress={claim} disabled={claiming} full />
+          {pending > 1 ? (
+            <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
+              {pending} récompenses en attente — réclame-les une par une.
+            </Txt>
+          ) : null}
+        </View>
+      ) : null}
+    </Card>
+  );
+}
+
 function EditAccount({ onDone }: { onDone: () => void }) {
   const { state, updateAccount } = useApp();
   const toast = useToast();
@@ -872,6 +1007,30 @@ const styles = StyleSheet.create({
   trophyHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   trophyTrack: { height: 5, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden', marginTop: 6 },
   trophyFill: { height: 5, borderRadius: radius.pill, backgroundColor: colors.amber },
+  // Carte à tampons : 10 pastilles qui se partagent la largeur (flex + aspectRatio) — elles
+  // rétrécissent sur petit écran plutôt que de passer à la ligne.
+  stamps: { flexDirection: 'row', gap: 5, marginTop: spacing.md },
+  stamp: {
+    flex: 1,
+    aspectRatio: 1,
+    maxWidth: 32,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  stampOn: { backgroundColor: colors.amberSoft, borderColor: colors.amber },
+  rewardBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.amberSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
   cta: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   statsLink: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
   input: {

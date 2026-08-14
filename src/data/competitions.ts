@@ -1,5 +1,6 @@
 // Compétitions — tournois RÉELS créés par un CLUB ou par un JOUEUR (aucune donnée de démo).
 
+import { podium, standings } from '@/lib/americano';
 import { dateKeyLabel } from '@/lib/days';
 
 export type Competition = {
@@ -96,6 +97,33 @@ export function teamsToShow(comp: Competition, myTeam?: string): string[] {
     return [myTeam, ...list.filter((t) => t !== myTeam)]; // ma team en tête, sans doublon
   }
   return myTeam ? [myTeam] : [];
+}
+
+// Podium de l’americano auto-géré (82) traduit en noms d’ÉQUIPE. Le classement americano est
+// INDIVIDUEL (par joueur) alors que la clôture désigne des ÉQUIPES : on retrouve l’équipe
+// « Prénom & Partenaire » qui contient le joueur classé. Sert UNIQUEMENT à PRÉ-REMPLIR la
+// clôture — l’organisateur garde le dernier mot. Renvoie {} tant qu’aucun score n’est saisi
+// (sinon on suggérerait un « vainqueur » à 0 point, tiré de l’ordre alphabétique).
+// Une place dont l’équipe est inconnue (joueur ajouté à la main) ou DÉJÀ classée plus haut
+// (les 2 joueurs d’une même équipe sur le podium) reste vide : jamais de sélection invisible.
+export function americanoPodiumTeams(comp: Competition, myTeam?: string): { first?: string; second?: string; third?: string } {
+  const state = comp.americano;
+  if (!state?.rounds?.length || !state.scores?.length) return {};
+  const teams = teamsToShow(comp, myTeam);
+  const teamOf = (player?: string): string | undefined => {
+    if (!player) return undefined;
+    const key = player.trim().toLocaleLowerCase();
+    return teams.find((t) => t.split(' & ').some((n) => n.trim().toLocaleLowerCase() === key));
+  };
+  const top = podium(standings(state.players, state.rounds, state.scores));
+  const first = teamOf(top.first);
+  const second = teamOf(top.second);
+  const third = teamOf(top.third);
+  return {
+    first,
+    second: second && second !== first ? second : undefined,
+    third: third && third !== first && third !== second ? third : undefined,
+  };
 }
 
 // Le tournoi a-t-il des frais d’inscription (≠ gratuit) ? Sert à proposer de contacter

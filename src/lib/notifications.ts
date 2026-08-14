@@ -2,12 +2,14 @@
 // programmée ~2 h avant chaque réservation à venir. L’utilisateur active/désactive le tout
 // via l’interrupteur « Rappels de match » du profil. Web : tout est neutralisé (no-op).
 //
-// Ce fichier gère aussi le TAP sur une notification (locale OU push serveur) : on route vers
-// l’écran concerné plutôt que de rouvrir l’app là où elle en était (cf. useNotificationTapRouter).
+// Ce fichier porte aussi les rappels d’AGENDA (82, « Me rappeler » sur un événement : la veille
+// à 18 h) et le TAP sur une notification (locale OU push serveur) : on route vers l’écran
+// concerné plutôt que de rouvrir l’app là où elle en était (cf. useNotificationTapRouter).
 
 import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
+import { DAY_MS, slotTimestamp } from './days';
 import { CANCEL_DEADLINE_MS } from './reservations';
 
 const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
@@ -121,6 +123,57 @@ export async function syncMatchReminders(reservations: ReminderInput[], enabled:
   // sous le plafond iOS de 64 notifications locales — sinon les rappels lointains seraient jetés.
   const soonest = [...reservations].sort((a, b) => a.startsAt - b.startsAt).slice(0, MAX_SCHEDULED_RESERVATIONS);
   for (const r of soonest) await scheduleMatchReminder(r);
+}
+
+// ─── Rappels d’AGENDA (82) ────────────────────────────────────────────────────
+// « Me rappeler » sur un événement de l’agenda du padel ivoirien (accueil) : une notification
+// LOCALE la VEILLE à 18 h. Même mécanique qu’un rappel de match, avec deux différences assumées :
+//  • l’identifiant est STABLE (`event-{id}`) → poser deux fois n’en crée pas deux, retirer est
+//    un simple cancel par identifiant, et l’état du bouton se relit depuis le système ;
+//  • ces rappels portent `kind: 'event'` : `syncMatchReminders` n’annule QUE les siens
+//    (`kind: 'match-reminder'`), donc une resync des matchs ne les efface jamais.
+const EVENT_PREFIX = 'event-';
+const EVENT_REMINDER_HOUR = '18:00'; // la veille à 18 h (heure d’Abidjan = UTC, cf. slotTimestamp)
+
+// Horodatage du rappel d’un événement : la veille du jour J à 18 h.
+export function eventReminderAt(dateKey: string): number {
+  return slotTimestamp(dateKey, EVENT_REMINDER_HOUR) - DAY_MS;
+}
+
+// Peut-on encore poser un rappel ? Non sur le web (pas de notification locale) et non si la
+// veille 18 h est déjà passée (événement demain ou aujourd’hui) → le bouton n’est pas affiché.
+export function canRemindEvent(dateKey: string, now: number = Date.now()): boolean {
+  return isNative && eventReminderAt(dateKey) > now;
+}
+
+// Identifiants des événements ayant DÉJÀ un rappel programmé (état du bouton au montage).
+// Convention §8 : null = lecture impossible (web / permission refusée), ≠ [] = aucun rappel.
+export async function scheduledEventReminderIds(): Promise<string[] | null> {
+  if (!isNative) return null;
+  const all = await Notifications.getAllScheduledNotificationsAsync();
+  return all.filter((n) => n.identifier.startsWith(EVENT_PREFIX)).map((n) => n.identifier.slice(EVENT_PREFIX.length));
+}
+
+// Pose le rappel d’un événement. false = refusé (permission, web, veille 18 h passée).
+export async function scheduleEventReminder(ev: { id: string; title: string; dateKey: string; place: string }): Promise<boolean> {
+  if (!canRemindEvent(ev.dateKey)) return false;
+  if (!(await ensureNotificationPermission())) return false;
+  await Notifications.scheduleNotificationAsync({
+    identifier: `${EVENT_PREFIX}${ev.id}`,
+    content: {
+      title: 'C’est demain 📅',
+      body: ev.place ? `${ev.title} — ${ev.place}` : ev.title,
+      data: { kind: 'event', id: ev.id },
+    },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(eventReminderAt(ev.dateKey)) },
+  });
+  return true;
+}
+
+// Retire le rappel d’un événement (idempotent : aucun rappel posé = sans effet).
+export async function cancelEventReminder(id: string): Promise<void> {
+  if (!isNative) return;
+  await Notifications.cancelScheduledNotificationAsync(`${EVENT_PREFIX}${id}`);
 }
 
 // ─── Tap sur une notification → navigation ────────────────────────────────────

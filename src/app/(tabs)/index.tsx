@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { AgendaSection } from '@/components/AgendaSection';
 import { Avatar } from '@/components/Avatar';
 import { ClubCard } from '@/components/ClubCard';
 import { CompetitionCard } from '@/components/CompetitionCard';
@@ -371,6 +372,10 @@ export default function HomeScreen() {
             </View>
           </PopIn>
         ) : null}
+
+        {/* Agenda du padel ivoirien (82) — juste sous l'actu opérateur, et SEULEMENT s'il y a
+            des événements à venir (la section se masque toute seule sinon). */}
+        <AgendaSection />
 
         {/* HERO — CTA principal unique, carte VERTE animée (reflet + point qui pulse) */}
         <Pressable onPress={() => go('/reserver')} accessibilityRole="button" accessibilityLabel="Réserver un créneau">

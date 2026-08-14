@@ -15,7 +15,7 @@ import { SectionTournois } from '@/components/club-admin/SectionTournois';
 import { clubsByName, findClub, manageableClubs, type Club } from '@/data/clubs';
 import { canSeeClubSpace } from '@/lib/access';
 import { fetchMyManagedClubs, switchManagedClub } from '@/lib/clubsServer';
-import { seedCompetitions } from '@/data/competitions';
+import { americanoPodiumTeams, seedCompetitions } from '@/data/competitions';
 import { competitionBlockedCourts, courtsFor, hasFullDayCompetition, rangeBlocks, resolvedGridFor } from '@/lib/availability';
 import { overlaps, slotDurationAt } from '@/lib/courtSchedule';
 import { openWhatsApp } from '@/lib/contact';
@@ -110,6 +110,12 @@ export default function ClubAdmin() {
 
   const comps = [...state.myCompetitions.filter((c) => c.clubId === club.id), ...seedCompetitions.filter((c) => c.clubId === club.id)];
   const closingComp = comps.find((c) => c.id === closingId);
+  // Mon équipe dans le tournoi en cours de clôture (le gérant peut y être inscrit) — sert au
+  // marquage « Ton équipe » ET à traduire le podium de l’americano auto-géré en noms d’équipe.
+  const closingMyTeam =
+    closingComp && state.compRegistrations[closingComp.id]
+      ? `${state.account?.firstName ?? 'Toi'} & ${state.compRegistrations[closingComp.id].partner}`
+      : undefined;
 
   // Données du bottom sheet de détail créneau.
   const now = Date.now();
@@ -639,11 +645,10 @@ export default function ClubAdmin() {
         {closingComp ? (
           <ClosePanel
             comp={closingComp}
-            myTeam={
-              state.compRegistrations[closingComp.id]
-                ? `${state.account?.firstName ?? 'Toi'} & ${state.compRegistrations[closingComp.id].partner}`
-                : undefined
-            }
+            myTeam={closingMyTeam}
+            // Americano auto-géré (82) : podium PRÉ-SÉLECTIONNÉ d’après le classement calculé
+            // par l’app (vide tant qu’aucun score n’a été saisi) — modifiable avant de clôturer.
+            initialPodium={americanoPodiumTeams(closingComp, closingMyTeam)}
             onClose={(winner, isMe, loser, loserIsMe, podium) =>
               // Promesse RENDUE au panneau : sur un échec (sheet laissée ouverte), il dégèle son
               // bouton « Clôture… » pour permettre le réessai annoncé par le toast.

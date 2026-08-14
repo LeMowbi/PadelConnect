@@ -11,6 +11,7 @@ import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
 import { findClub } from '@/data/clubs';
 import {
+  americanoPodiumTeams,
   compDateLabel,
   compFill,
   formatFee,
@@ -21,6 +22,17 @@ import {
   teamCount,
   teamsToShow,
 } from '@/data/competitions';
+import {
+  buildRounds,
+  MAX_PLAYERS,
+  MIN_PLAYERS,
+  normalizePlayers,
+  standings,
+  type AmericanoRound,
+  type AmericanoScore,
+  type AmericanoState,
+} from '@/lib/americano';
+import { confirmAsync } from '@/lib/confirm';
 import { openWhatsApp } from '@/lib/contact';
 import { dayKey } from '@/lib/days';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
@@ -31,17 +43,27 @@ import { colors, gradients, radius, shadows, spacing } from '@/theme';
 export default function CompetitionDetail() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { state, registerCompetition, unregisterCompetition, closeCompetition, deleteCompetition } = useApp();
+  const { state, registerCompetition, unregisterCompetition, closeCompetition, deleteCompetition, saveAmericano } = useApp();
 
   const key = Array.isArray(id) ? id[0] : id;
   const comp = [...state.myCompetitions, ...seedCompetitions].find((c) => c.id === key);
 
   const [partnerId, setPartnerId] = useState<string | null>(null);
   const [partnerName, setPartnerName] = useState('');
-  const [winnerName, setWinnerName] = useState('');
+  // Podium de clôture : null = l’organisateur n’a rien choisi lui-même → on affiche la
+  // suggestion de l’americano auto-géré (82). '' = choix explicitement effacé (2ᵉ/3ᵉ place).
+  const [winnerPick, setWinnerPick] = useState<string | null>(null);
   const [loserName, setLoserName] = useState(''); // équipe classée dernière (facultatif)
-  const [secondName, setSecondName] = useState(''); // americano : 2ᵉ place (facultatif)
-  const [thirdName, setThirdName] = useState(''); // americano : 3ᵉ place (facultatif)
+  const [secondPick, setSecondPick] = useState<string | null>(null); // americano : 2ᵉ place (facultatif)
+  const [thirdPick, setThirdPick] = useState<string | null>(null); // americano : 3ᵉ place (facultatif)
+  // Americano auto-géré (82) — état LOCAL = saisie en cours seulement (liste en composition,
+  // terrains choisis, scores tapés). La source de vérité reste `comp.americano` (serveur),
+  // relue à chaque rendu : un retour de fetch ne se fait jamais écraser par l’écran.
+  const [playersDraft, setPlayersDraft] = useState<string[] | null>(null); // null = liste enregistrée/roster
+  const [newPlayer, setNewPlayer] = useState(''); // champ d’ajout manuel d’un joueur
+  const [courtsDraft, setCourtsDraft] = useState<number | null>(null); // null = terrains enregistrés
+  const [scoreDrafts, setScoreDrafts] = useState<Record<string, { a: string; b: string }>>({}); // clé « ronde#terrain »
+  const [savingAm, setSavingAm] = useState(false); // anti double-tap + libellés honnêtes
   const [pickingLoser, setPickingLoser] = useState(false); // 2ᵉ étape de clôture
   const [confirmCancel, setConfirmCancel] = useState(false); // annulation d’un tournoi sans inscrit
   // tone distingue succès (coche) et échec (alerte) — l'icône suivait avant toujours « succès ».
@@ -144,6 +166,124 @@ export default function CompetitionDetail() {
   // Americano : tournoi par rotation → on clôture par un PODIUM (1ᵉ/2ᵉ/3ᵉ) plutôt qu’un
   // unique vainqueur + dernier. La détection se fait sur le format choisi à la création.
   const isAmericano = comp.format.toLowerCase().includes('americano');
+
+  // ── Americano auto-géré (82) ───────────────────────────────────────────────────────────
+  // Source de vérité = `comp.americano` (serveur, relu à CHAQUE rendu). L’app ne fait que
+  // générer les rondes (rotation PURE) et tenir le classement individuel ; la clôture
+  // officielle reste `close_competition`.
+  const am = comp.americano;
+  const amRounds = am?.rounds ?? [];
+  const amLive = amRounds.length > 0; // rondes générées → étape « en cours »
+  // Liste de départ : chaque équipe inscrite « A & B » donne 2 joueurs (roster réel, éditable).
+  const rosterPlayers = normalizePlayers(teamList.flatMap((t) => t.split(' & ')));
+  const amPlayers = normalizePlayers(playersDraft ?? am?.players ?? rosterPlayers);
+  const amCourts = courtsDraft ?? am?.courts ?? 1;
+  const canGenerate = amPlayers.length >= MIN_PLAYERS && amPlayers.length <= MAX_PLAYERS;
+  // Aperçu de la grille AVANT enregistrement (fonction pure : même entrée = même sortie).
+  const amPreview = !amLive && canGenerate ? buildRounds(amPlayers, amCourts) : [];
+  const amTable = am && amLive ? standings(am.players, amRounds, am.scores) : [];
+  const amScored = (am?.scores.length ?? 0) > 0;
+  // Section réservée à l’ORGANISATEUR d’un tournoi americano SERVEUR publié et non clôturé —
+  // exactement le périmètre qu’accepte `save_americano_state` (pas de bouton qui échouerait).
+  const canManageAmericano = !!comp.createdByMe && !!comp.server && isAmericano && isTournamentPublic(comp) && !comp.closed;
+
+  // Podium suggéré par l’americano (traduit en noms d’ÉQUIPE) : pré-remplit la clôture tant
+  // que l’organisateur n’a pas choisi lui-même. Il garde le dernier mot (tout reste modifiable).
+  const amPodium = americanoPodiumTeams(comp, registered ? myTeam : undefined);
+  const winnerName = winnerPick ?? amPodium.first ?? '';
+  const secondName = secondPick ?? amPodium.second ?? '';
+  const thirdName = thirdPick ?? amPodium.third ?? '';
+
+  // Enregistrement HONNÊTE de l’état americano : on attend le serveur, la section ne bascule
+  // qu’au OK (le store ne met à jour son miroir que dans ce cas), sinon toast d’échec.
+  const saveAm = async (next: AmericanoState, okText: string): Promise<boolean> => {
+    if (savingAm) return false;
+    setSavingAm(true);
+    const ok = await saveAmericano(comp.id, next);
+    setSavingAm(false);
+    if (ok) hapticSuccess();
+    else hapticWarning();
+    showToast(ok ? okText : 'Enregistrement impossible — réessaie.', ok ? 'success' : 'error');
+    return ok;
+  };
+
+  const addPlayer = () => {
+    const name = newPlayer.trim();
+    if (!name || amPlayers.length >= MAX_PLAYERS) return;
+    setPlayersDraft(normalizePlayers([...amPlayers, name])); // doublon (même prénom) ignoré par la lib
+    setNewPlayer('');
+  };
+  const removePlayer = (name: string) => setPlayersDraft(amPlayers.filter((p) => p !== name));
+
+  const generateRounds = async () => {
+    const rounds = buildRounds(amPlayers, amCourts);
+    if (rounds.length === 0) return; // effectif hors [4,16] : le bouton est déjà désactivé
+    const ok = await saveAm({ players: amPlayers, courts: amCourts, rounds, scores: [] }, 'Rondes générées ✓');
+    if (!ok) return;
+    // La saisie locale a rempli son rôle : on repasse sur l’état serveur (source de vérité).
+    setPlayersDraft(null);
+    setCourtsDraft(null);
+    setScoreDrafts({});
+  };
+
+  // Score déjà ENREGISTRÉ d’un match (sert de valeur affichée tant que rien n’est tapé).
+  const savedScore = (round: number, courtIndex: number): AmericanoScore | undefined =>
+    am?.scores.find((s) => s.round === round && s.courtIndex === courtIndex);
+  const scoreValue = (round: number, courtIndex: number, side: 'a' | 'b'): string => {
+    const draft = scoreDrafts[`${round}#${courtIndex}`];
+    if (draft) return draft[side];
+    const saved = savedScore(round, courtIndex);
+    return saved ? String(side === 'a' ? saved.scoreA : saved.scoreB) : '';
+  };
+  const setScoreValue = (round: number, courtIndex: number, side: 'a' | 'b', text: string) => {
+    const clean = text.replace(/\D/g, '').slice(0, 2); // 0-99 : deux chiffres, rien d’autre
+    const key = `${round}#${courtIndex}`;
+    const saved = savedScore(round, courtIndex);
+    setScoreDrafts((cur) => {
+      const base = cur[key] ?? { a: saved ? String(saved.scoreA) : '', b: saved ? String(saved.scoreB) : '' };
+      return { ...cur, [key]: { ...base, [side]: clean } };
+    });
+  };
+
+  // Enregistre les scores TAPÉS de la ronde (les deux champs remplis) : une re-saisie REMPLACE
+  // le score du match (comportement de `standings` — corriger ne double jamais les points).
+  const saveRound = async (round: AmericanoRound) => {
+    if (!am) return;
+    const fresh: AmericanoScore[] = [];
+    for (const match of round.matches) {
+      const draft = scoreDrafts[`${round.round}#${match.courtIndex}`];
+      if (!draft || !draft.a || !draft.b) continue;
+      fresh.push({ round: round.round, courtIndex: match.courtIndex, scoreA: Number(draft.a), scoreB: Number(draft.b) });
+    }
+    if (fresh.length === 0) {
+      hapticWarning();
+      showToast('Saisis les deux scores d’au moins un match.', 'error');
+      return;
+    }
+    const keys = new Set(fresh.map((s) => `${s.round}#${s.courtIndex}`));
+    const scores = [...am.scores.filter((s) => !keys.has(`${s.round}#${s.courtIndex}`)), ...fresh];
+    const ok = await saveAm({ players: am.players, courts: am.courts, rounds: am.rounds, scores }, `Ronde ${round.round} enregistrée ✓`);
+    if (!ok) return;
+    setScoreDrafts((cur) => {
+      const next = { ...cur };
+      for (const k of keys) delete next[k];
+      return next;
+    });
+  };
+
+  // Recommencer : on efface rondes ET scores, on GARDE la liste des joueurs (l’écran repasse
+  // à l’étape « composition »). Confirmation destructive, cross-plateforme (app + web).
+  const restartAmericano = async () => {
+    if (!am || savingAm) return;
+    const sure = await confirmAsync(
+      'Recommencer l’americano ?',
+      'Les rondes et les scores saisis seront effacés. La liste des joueurs est conservée.',
+      { confirmLabel: 'Recommencer', destructive: true },
+    );
+    if (!sure) return;
+    const ok = await saveAm({ players: am.players, courts: am.courts, rounds: [], scores: [] }, 'Americano réinitialisé');
+    if (ok) setScoreDrafts({});
+  };
 
   // Clôture effective : vainqueur + (option) dernière équipe. Gardée (anti double-tap) + retour
   // d’échec par toast, aligné sur le flux d’inscription de cet écran.
@@ -423,6 +563,189 @@ export default function CompetitionDetail() {
         />
       </View>
 
+      {/* Americano auto-géré (82) — outil de l’ORGANISATEUR pendant le tournoi : composition de
+          la liste, génération des rondes (rotation pure), saisie des scores, classement live.
+          L’état vit côté serveur (`comp.americano`) : il suit l’organisateur d’un appareil à
+          l’autre et alimente le podium de la clôture. */}
+      {canManageAmericano ? (
+        <Card style={{ marginTop: spacing.lg, borderColor: colors.signature }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            <Ionicons name="shuffle" size={18} color={colors.signature} />
+            <Txt variant="h3" style={{ flex: 1 }}>
+              Gérer l’americano
+            </Txt>
+          </View>
+
+          {!amLive ? (
+            // ── Étape 1 : composer la liste des joueurs présents + les terrains utilisés ──
+            <>
+              <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
+                À chaque ronde les paires changent et les points sont individuels. Compose la liste des joueurs présents, choisis le nombre
+                de terrains, puis génère les rondes.
+              </Txt>
+              <Txt variant="label" style={{ marginTop: spacing.md }}>
+                JOUEURS · {amPlayers.length}
+              </Txt>
+              {amPlayers.length > 0 ? (
+                <View style={styles.wrap}>
+                  {amPlayers.map((p) => (
+                    <Chip key={p} label={p} icon="close" onPress={() => removePlayer(p)} accessibilityLabel={`Retirer ${p} de la liste`} />
+                  ))}
+                </View>
+              ) : (
+                <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                  Aucun joueur pour l’instant — ajoute-les ci-dessous.
+                </Txt>
+              )}
+              <View style={styles.addRow}>
+                <TextInput
+                  value={newPlayer}
+                  onChangeText={setNewPlayer}
+                  onSubmitEditing={addPlayer}
+                  returnKeyType="done"
+                  placeholder="Prénom du joueur"
+                  placeholderTextColor={colors.textMuted}
+                  maxLength={20}
+                  autoCapitalize="words"
+                  accessibilityLabel="Prénom du joueur à ajouter"
+                  style={[styles.input, styles.addInput]}
+                />
+                <Button
+                  label="Ajouter"
+                  icon="add"
+                  variant="secondary"
+                  onPress={addPlayer}
+                  disabled={!newPlayer.trim() || amPlayers.length >= MAX_PLAYERS}
+                />
+              </View>
+              <Txt variant="label" style={{ marginTop: spacing.md }}>
+                TERRAINS UTILISÉS
+              </Txt>
+              <View style={styles.wrap}>
+                {[1, 2, 3, 4].map((n) => (
+                  <Chip
+                    key={n}
+                    label={n > 1 ? `${n} terrains` : '1 terrain'}
+                    active={amCourts === n}
+                    onPress={() => setCourtsDraft(n)}
+                    accessibilityLabel={`${n} terrain${n > 1 ? 's' : ''} utilisé${n > 1 ? 's' : ''}`}
+                  />
+                ))}
+              </View>
+              <View style={{ marginTop: spacing.md }}>
+                <Button
+                  label={savingAm ? 'Enregistrement…' : 'Générer les rondes'}
+                  icon="shuffle"
+                  onPress={() => void generateRounds()}
+                  disabled={!canGenerate || savingAm}
+                  full
+                />
+              </View>
+              <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                {amPlayers.length < MIN_PLAYERS
+                  ? `Il faut au moins ${MIN_PLAYERS} joueurs (un terrain = 4 joueurs).`
+                  : amPlayers.length > MAX_PLAYERS
+                    ? `${MAX_PLAYERS} joueurs maximum — au-delà, fais deux sessions.`
+                    : `${amPreview.length} ronde${amPreview.length > 1 ? 's' : ''} · ${amPreview[0]?.matches.length ?? 0} match${
+                        (amPreview[0]?.matches.length ?? 0) > 1 ? 's' : ''
+                      } par ronde${amPreview[0]?.resting.length ? ` · ${amPreview[0].resting.length} au repos à tour de rôle` : ''}.`}
+              </Txt>
+            </>
+          ) : (
+            // ── Étape 2 : rondes, saisie des scores, classement live ──
+            <>
+              {/* Récapitulatif de la grille ENREGISTRÉE (jamais de la saisie locale). */}
+              <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
+                {am?.players.length ?? 0} joueurs · {amRounds.length} ronde{amRounds.length > 1 ? 's' : ''} · {am?.courts ?? 1} terrain
+                {(am?.courts ?? 1) > 1 ? 's' : ''}. Saisis les scores ronde par ronde : le classement se met à jour aussitôt.
+              </Txt>
+              {amRounds.map((round) => (
+                <View key={round.round} style={styles.roundBox}>
+                  <Txt variant="label">
+                    RONDE {round.round}/{amRounds.length}
+                  </Txt>
+                  {round.matches.map((match) => (
+                    <View key={match.courtIndex} style={styles.matchBox}>
+                      <Txt variant="small" color={colors.textFaint}>
+                        Terrain {match.courtIndex + 1}
+                      </Txt>
+                      {([match.teamA, match.teamB] as const).map((team, side) => (
+                        <View key={side} style={styles.sideRow}>
+                          <Txt variant="body" style={{ flex: 1 }} numberOfLines={1}>
+                            {team[0]} + {team[1]}
+                          </Txt>
+                          <TextInput
+                            value={scoreValue(round.round, match.courtIndex, side === 0 ? 'a' : 'b')}
+                            onChangeText={(t) => setScoreValue(round.round, match.courtIndex, side === 0 ? 'a' : 'b', t)}
+                            placeholder="—"
+                            placeholderTextColor={colors.textMuted}
+                            keyboardType="number-pad"
+                            maxLength={2}
+                            accessibilityLabel={`Points de ${team[0]} et ${team[1]}, ronde ${round.round}, terrain ${match.courtIndex + 1}`}
+                            style={styles.scoreInput}
+                          />
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                  {round.resting.length > 0 ? (
+                    <Txt variant="small" color={colors.textFaint}>
+                      Repos : {round.resting.join(', ')}
+                    </Txt>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    label={savingAm ? 'Enregistrement…' : 'Enregistrer la ronde'}
+                    icon="checkmark"
+                    variant="secondary"
+                    onPress={() => void saveRound(round)}
+                    disabled={savingAm}
+                    full
+                  />
+                </View>
+              ))}
+
+              <Divider style={{ marginVertical: spacing.md }} />
+              <Txt variant="label">CLASSEMENT</Txt>
+              {amScored ? (
+                <View style={{ marginTop: spacing.sm, gap: 6 }}>
+                  {amTable.map((row, i) => (
+                    <View key={row.player} style={styles.rankRow}>
+                      <Txt variant="body" color={i === 0 ? colors.amberDark : colors.textMuted} style={styles.rankNum}>
+                        {i + 1}
+                      </Txt>
+                      <Txt variant="body" style={{ flex: 1, fontWeight: i === 0 ? '700' : '400' }} numberOfLines={1}>
+                        {row.player}
+                      </Txt>
+                      <Txt variant="small" color={colors.textMuted}>
+                        {row.played} match{row.played > 1 ? 's' : ''}
+                      </Txt>
+                      <Txt variant="body" style={{ fontWeight: '700' }}>
+                        {row.points} pts
+                      </Txt>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                  Le classement s’affiche dès le premier score enregistré.
+                </Txt>
+              )}
+              <View style={{ marginTop: spacing.md }}>
+                <Button
+                  label="Recommencer"
+                  icon="refresh"
+                  variant="danger"
+                  onPress={() => void restartAmericano()}
+                  disabled={savingAm}
+                  full
+                />
+              </View>
+            </>
+          )}
+        </Card>
+      ) : null}
+
       {/* Résultats (tournoi clôturé) — PopIn si c’est MA victoire (le moment le plus fort du
           produit : le niveau ne bouge que via un tournoi officiel). */}
       {result ? (
@@ -475,13 +798,20 @@ export default function CompetitionDetail() {
               <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
                 Le tournoi est terminé : sélectionne l’équipe qui a gagné. C’est toi (l’organisateur) qui décides.
               </Txt>
+              {/* Americano auto-géré : le podium est PRÉ-REMPLI d’après le classement calculé
+                  (l’organisateur reste libre de le corriger avant de clôturer). */}
+              {amPodium.first ? (
+                <Txt variant="small" color={colors.signature} style={{ marginTop: spacing.sm }}>
+                  Pré-rempli d’après le classement de l’americano — tu peux corriger.
+                </Txt>
+              ) : null}
               <View style={{ marginTop: spacing.sm, gap: 6 }} accessibilityRole="radiogroup">
                 {teamList.map((t) => {
                   const sel = winnerName === t;
                   return (
                     <Pressable
                       key={t}
-                      onPress={() => setWinnerName(t)}
+                      onPress={() => setWinnerPick(t)}
                       style={[styles.teamRow, sel && styles.teamRowSel]}
                       accessibilityRole="radio"
                       accessibilityState={{ checked: sel }}
@@ -532,8 +862,8 @@ export default function CompetitionDetail() {
                       <Pressable
                         key={t}
                         onPress={() => {
-                          setSecondName((cur) => (cur === t ? '' : t));
-                          if (thirdName === t) setThirdName('');
+                          setSecondPick(secondName === t ? '' : t);
+                          if (thirdName === t) setThirdPick('');
                         }}
                         style={[styles.teamRow, sel && styles.teamRowSel]}
                         accessibilityRole="radio"
@@ -563,7 +893,7 @@ export default function CompetitionDetail() {
                     return (
                       <Pressable
                         key={t}
-                        onPress={() => setThirdName((cur) => (cur === t ? '' : t))}
+                        onPress={() => setThirdPick(thirdName === t ? '' : t)}
                         style={[styles.teamRow, sel && styles.teamRowSel]}
                         accessibilityRole="radio"
                         accessibilityState={{ checked: sel }}
@@ -940,6 +1270,32 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     fontSize: 15,
   },
+  // Americano : ligne d’ajout d’un joueur, blocs ronde/match, champ de score, ligne de classement.
+  addRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
+  addInput: { flex: 1, marginTop: 0 },
+  roundBox: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+  },
+  matchBox: { gap: 4, padding: spacing.sm, borderRadius: radius.sm, backgroundColor: colors.surface },
+  sideRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44 },
+  scoreInput: {
+    width: 56,
+    minHeight: 44,
+    textAlign: 'center',
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    color: colors.text,
+    paddingHorizontal: spacing.sm,
+    fontSize: 15,
+  },
+  rankRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  rankNum: { width: 24, fontWeight: '700' },
   pendingBanner: {
     flexDirection: 'row',
     alignItems: 'center',
