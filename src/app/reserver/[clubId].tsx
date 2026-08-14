@@ -26,7 +26,7 @@ import {
   resolvedGridFor,
   type AvailCtx,
 } from '@/lib/availability';
-import { durationLabel, offeredDurations } from '@/lib/courtSchedule';
+import { durationLabel, offeredDurations, slotDurationAt } from '@/lib/courtSchedule';
 import { dateKeyLabel, nextDays, slotTimestamp } from '@/lib/days';
 import { fcfa, perPlayerOf } from '@/lib/format';
 import { minPrice, priceForSlot, priceTiersFor } from '@/lib/pricing';
@@ -245,6 +245,19 @@ export default function ReserverScreen() {
         setExtraNames((cur) => cur.slice(0, 1));
       }
     }
+  };
+
+  // Étiquette HONNÊTE d'un terrain non sélectionnable à (heure, durée) choisies : « pris » est
+  // réservé au terrain réellement occupé — un terrain offert à une AUTRE durée (« · en 1h ») ou
+  // fermé à cette heure (« · fermé ») n'est pas « pris » (le joueur croyait le club plus plein
+  // qu'il ne l'est et renonçait à réserver).
+  const atSlot = slot ? (slotsByTime?.get(slot) ?? []) : [];
+  const courtChipLabel = (c: string): string => {
+    if (free.includes(c)) return c;
+    const alt = atSlot.find((x) => x.court === c); // libre à cette heure, mais à une autre durée
+    if (alt) return `${c} · en ${durationLabel(alt.durationMin)}`;
+    const hasSlot = slot ? slotDurationAt(resolvedGridFor(club, ctx), c, slot) !== null : false;
+    return hasSlot ? `${c} · pris` : `${c} · fermé`;
   };
 
   const ready = !!day && !!slot && !!effectiveDuration && !!effectiveCourt && !compToday;
@@ -577,7 +590,7 @@ export default function ReserverScreen() {
                 return (
                   <Chip
                     key={c}
-                    label={isFree ? c : `${c} · pris`}
+                    label={courtChipLabel(c)}
                     active={c === effectiveCourt}
                     disabled={!isFree}
                     onPress={() => setCourt(c)}

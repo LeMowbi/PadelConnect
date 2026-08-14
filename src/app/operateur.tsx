@@ -221,7 +221,7 @@ export default function Operateur() {
     }
   };
 
-  const { refreshControl } = usePullToRefresh(async () => {
+  const { refreshControl, webRefreshButton } = usePullToRefresh(async () => {
     await Promise.all([loadSupport(), loadReports()]);
   });
   const markSupport = async (id: string, status: ServerSupportMessage['status']) => {
@@ -473,7 +473,13 @@ export default function Operateur() {
   }
 
   return (
-    <Screen back title="Espace opérateur" subtitle="PadelConnect — suivi & commissions" refreshControl={refreshControl}>
+    <Screen
+      back
+      title="Espace opérateur"
+      subtitle="PadelConnect — suivi & commissions"
+      refreshControl={refreshControl}
+      headerRight={webRefreshButton}
+    >
       {/* L'Espace opérateur en ONGLETS (demande porteur) : 13 sections empilées devenaient
           illisibles — même motif que l'Espace Club (SegmentedControl + rappel inter-onglets). */}
       <SegmentedControl options={OP_SECTIONS} value={section} onChange={setSection} />

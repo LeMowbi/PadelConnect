@@ -176,7 +176,7 @@ export function slotGrid(ctx: ScheduleCtx & { clubs: Club[] }): string[] {
   return [...set].sort();
 }
 
-export type ClubAvail = { club: Club; free: number };
+export type ClubAvail = { club: Club; free: number; durations: number[] };
 
 // Clubs ayant ≥1 créneau libre à (jour, heure) — hors compétition, non passé. Padelta d’abord
 // puis alphabétique (compareClubs), comme toutes les listes joueurs.
@@ -184,7 +184,12 @@ export function clubsFreeAt(dateKey: string, time: string, slotTs: number, ctx: 
   if (slotTs <= Date.now()) return [];
   return ctx.clubs
     .filter((club) => !club.comingSoon) // un club « Bientôt » n’est pas encore réservable
-    .map((club) => ({ club, free: freeCourtSlotsAt(club, dateKey, time, ctx).length }))
+    .map((club) => {
+      // Un SEUL balayage par (club, heure) : le nombre de terrains ET les durées offertes en
+      // sortent ensemble — l'écran n'a plus à rebalayer la dispo pour afficher un prix (68).
+      const frees = freeCourtSlotsAt(club, dateKey, time, ctx);
+      return { club, free: frees.length, durations: [...new Set(frees.map((x) => x.durationMin))] };
+    })
     .filter((x) => x.free > 0)
     .sort((a, b) => compareClubs(a.club, b.club));
 }

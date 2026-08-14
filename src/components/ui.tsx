@@ -216,9 +216,10 @@ const btnTones: Record<BtnVariant, { bg: string; fg: string; border: string }> =
   primary: { bg: colors.signature, fg: colors.onSignature, border: colors.signature },
   secondary: { bg: colors.surfaceAlt, fg: colors.text, border: colors.border },
   ghost: { bg: 'transparent', fg: colors.signature, border: 'transparent' },
-  danger: { bg: colors.dangerSoft, fg: colors.danger, border: 'transparent' },
-  // Rôle « tournoi » = violet (handoff). CTA plein violet, texte blanc.
-  tournament: { bg: colors.purple, fg: colors.white, border: colors.purple },
+  // coralDark (≈6,2:1 sur dangerSoft) : `danger` nu échouait AA (~4,15:1) — même correctif que tagTones.
+  danger: { bg: colors.dangerSoft, fg: colors.coralDark, border: 'transparent' },
+  // Rôle « tournoi » = violet (handoff). CTA plein violet FONCÉ : blanc sur `purple` clair ≈4,1:1 (< AA).
+  tournament: { bg: colors.purpleDark, fg: colors.white, border: colors.purpleDark },
 };
 
 const btn = StyleSheet.create({

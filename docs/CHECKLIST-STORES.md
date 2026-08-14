@@ -21,7 +21,7 @@
 - [ ] **Compte Expo** — déjà créé (`padelconnect-ci`). ✅
 - [ ] **Apple Developer Program** — ~99 USD/an — https://developer.apple.com/programs/ (obligatoire pour l'iPhone : TestFlight + App Store).
 - [ ] **Google Play Console** — 25 USD une fois — https://play.google.com/console (obligatoire pour Android sur le Play Store).
-- [x] **Supabase** — en production ✅ (l'éventuel fournisseur **SMS** reste une note post-lancement — voir GUIDE-LANCEMENT.md).
+- [x] **Supabase** — en production ✅ (l'éventuel fournisseur **SMS** reste une note post-lancement — voir docs/archive/GUIDE-LANCEMENT.md).
 
 ## 2. Éléments légaux (obligatoires)
 

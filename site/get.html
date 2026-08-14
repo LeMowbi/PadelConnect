@@ -53,19 +53,22 @@
       <h1>PadelConnect</h1>
       <p>Réserve un terrain de padel à Abidjan en 2 minutes. Installe l'app pour continuer.</p>
       <a class="btn ios" id="ios" href="https://apps.apple.com/app/id6785261310">Télécharger sur l'App Store</a>
-      <a class="btn android" id="android" href="https://play.google.com/store/apps/details?id=ci.padelco.app">Télécharger sur Google Play</a>
+      <!-- ⚠️ Android : la fiche Google Play n'existe PAS ENCORE (le lien play.google.com/…ci.padelco.app
+           répond 404) — un bouton (ou une redirection auto) dessus enverrait chaque invité Android sur
+           une page d'erreur. Au lancement Play : remettre le <a class="btn android" id="android"> et la
+           branche isAndroid du script ci-dessous. -->
+      <p class="note" id="android-soon">Bientôt disponible sur Android — en attendant, l'app est sur iPhone.</p>
       <p class="note">Choisis le store correspondant à ton téléphone.</p>
     </main>
     <script>
-      // Redirection automatique vers le BON store selon l'appareil (les deux boutons restent
-      // affichés en repli si la détection échoue). L'app installée intercepte le lien AVANT
-      // d'atteindre cette page (Universal Links iOS / App Links Android).
+      // Redirection automatique vers le store selon l'appareil (le bouton reste affiché en repli
+      // si la détection échoue). L'app installée intercepte le lien AVANT d'atteindre cette page
+      // (Universal Links iOS / App Links Android). Android : PAS de redirection tant que la fiche
+      // Google Play n'existe pas (voir le commentaire du bouton) — on reste sur cette page.
       (function () {
         var ua = navigator.userAgent || '';
-        var isAndroid = /Android/i.test(ua);
         var isIOS = /iPhone|iPad|iPod/i.test(ua) || (/(Mac)/i.test(ua) && 'ontouchend' in document);
-        var target = isAndroid ? document.getElementById('android').href : isIOS ? document.getElementById('ios').href : null;
-        if (target) window.location.replace(target);
+        if (isIOS) window.location.replace(document.getElementById('ios').href);
       })();
     </script>
   </body>

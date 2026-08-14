@@ -41,6 +41,13 @@ export function BookingSheet({
   const toast = useToast();
   const insets = useSafeAreaInsets();
 
+  // Jour FIGÉ à l'ouverture de la feuille (initialiseur useState, jamais resynchronisé) : le prop
+  // `day` du parent est DÉRIVÉ de useTodayKey (`days.find(...) ?? days[0]`) — au passage de minuit
+  // il retomberait sur le NOUVEAU jour pendant que la feuille est ouverte, et la résa (ou l'écran
+  // de succès + « Ajouter au calendrier ») partirait silencieusement sur la mauvaise date. Figé,
+  // un créneau devenu passé est refusé proprement par la garde 'past' d'addReservation.
+  const [sel] = useState(() => ({ key: day.key, label: day.label }));
+
   const ctx: AvailCtx = {
     clubs: activeClubs(state.customClubs, state.clubInfo),
     clubSlots: state.clubSlots,
@@ -54,12 +61,12 @@ export function BookingSheet({
     courtClosed: state.clubCourtClosed,
   };
   const free = useMemo(
-    () => freeCourts(club, day.key, time, durationMin, ctx),
+    () => freeCourts(club, sel.key, time, durationMin, ctx),
     // deps volontairement listées à la main : ctx est reconstruit à chaque rendu.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       club.id,
-      day.key,
+      sel.key,
       time,
       durationMin,
       state.reservations,
@@ -135,10 +142,10 @@ export function BookingSheet({
       clubId: club.id,
       clubName: club.name,
       court,
-      date: dateKeyLabel(day.key), // libellé ABSOLU (« Lun 8 juin ») : ne devient jamais faux le lendemain
-      dateKey: day.key,
+      date: dateKeyLabel(sel.key), // libellé ABSOLU (« Lun 8 juin ») : ne devient jamais faux le lendemain
+      dateKey: sel.key,
       time,
-      startsAt: slotTimestamp(day.key, time),
+      startsAt: slotTimestamp(sel.key, time),
       price,
       durationMin,
       players: 1 + invited.length,
@@ -194,11 +201,11 @@ export function BookingSheet({
     return (
       <BookingConfirmation
         clubName={club.name}
-        dayLabel={day.label}
+        dayLabel={sel.label}
         time={time}
         court={court ?? ''}
         area={club.area}
-        startsAt={slotTimestamp(day.key, time)}
+        startsAt={slotTimestamp(sel.key, time)}
         price={price}
         durationMin={durationMin}
         participantCount={participantCount}
@@ -234,7 +241,7 @@ export function BookingSheet({
                       {club.name}
                     </Txt>
                     <Txt variant="muted">
-                      {day.label} · {time} · {durationLabel(durationMin)} · {fcfa(price)} la session
+                      {sel.label} · {time} · {durationLabel(durationMin)} · {fcfa(price)} la session
                     </Txt>
                   </View>
                   <Pressable onPress={onClose} hitSlop={8} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Fermer">

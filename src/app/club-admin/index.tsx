@@ -53,7 +53,7 @@ export default function ClubAdmin() {
     refreshSession,
   } = useApp();
   const toast = useToast();
-  const { refreshControl } = usePullToRefresh();
+  const { refreshControl, webRefreshButton } = usePullToRefresh();
 
   const [section, setSection] = useState<(typeof SECTIONS)[number]>('Réservations');
   // Guide de démarrage : null = drapeau pas encore lu (on n'affiche rien pour éviter un flash).
@@ -216,7 +216,7 @@ export default function ClubAdmin() {
   // formulaire éditable — on montre un état « indisponible / réessaie » (tiré vers le bas rafraîchit).
   if (!isOperator && !resolvedClub) {
     return (
-      <Screen back title="Espace Club" refreshControl={refreshControl}>
+      <Screen back title="Espace Club" refreshControl={refreshControl} headerRight={webRefreshButton}>
         <Card style={{ marginTop: spacing.md, alignItems: 'center', paddingVertical: spacing.xl }}>
           <Ionicons name="cloud-offline-outline" size={28} color={colors.textFaint} />
           <Txt variant="h3" style={{ marginTop: spacing.sm }}>
@@ -231,7 +231,7 @@ export default function ClubAdmin() {
   }
 
   return (
-    <Screen back title="Espace Club" subtitle="Gère ton club" refreshControl={refreshControl}>
+    <Screen back title="Espace Club" subtitle="Gère ton club" refreshControl={refreshControl} headerRight={webRefreshButton}>
       {header}
 
       {/* Guide de démarrage — les 4 gestes essentiels, fermable une fois assimilé. */}
@@ -644,12 +644,15 @@ export default function ClubAdmin() {
                 ? `${state.account?.firstName ?? 'Toi'} & ${state.compRegistrations[closingComp.id].partner}`
                 : undefined
             }
-            onClose={(winner, isMe, loser, loserIsMe, podium) => {
-              void closeCompetition(closingComp, winner, isMe, loser, loserIsMe, podium).then((ok) => {
+            onClose={(winner, isMe, loser, loserIsMe, podium) =>
+              // Promesse RENDUE au panneau : sur un échec (sheet laissée ouverte), il dégèle son
+              // bouton « Clôture… » pour permettre le réessai annoncé par le toast.
+              closeCompetition(closingComp, winner, isMe, loser, loserIsMe, podium).then((ok) => {
                 toast.show(ok ? 'Tournoi clôturé' : 'Clôture impossible — réessaie.', ok ? undefined : { icon: 'alert-circle' });
                 if (ok) setClosingId(null);
-              });
-            }}
+                return ok;
+              })
+            }
             onCancel={() => setClosingId(null)}
             onDelete={
               closingComp.createdByMe

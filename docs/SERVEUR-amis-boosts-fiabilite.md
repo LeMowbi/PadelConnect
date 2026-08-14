@@ -16,7 +16,7 @@ Trois nouveautés serveur, livrées ensemble. Tout est **idempotent** (relançab
 4. `supabase/26_competitions.sql` — les TOURNOIS vivent désormais côté serveur (visibles par
    tous, synchronisés). Un tournoi de club est publié directement ; un tournoi de joueur reste
    « en attente » (invisible des autres) jusqu'à la validation du club hôte, et un frais fixe
-   PadelConnect (par défaut 5 000 FCFA, réglable dans l'Espace opérateur) s'y applique.
+   PadelConnect (par défaut 10 000 FCFA, réglable dans l'Espace opérateur) s'y applique.
 5. `supabase/27_blocked_slots.sql` — les créneaux **fermés hors app** par un club sont enregistrés
    côté serveur, visibles par tous, et un **verrou serveur** empêche vraiment toute réservation
    sur un créneau fermé ou réservé à un tournoi publié (fini la double réservation possible).

@@ -148,7 +148,10 @@ export default function ReserverScreen() {
           // `free` porte le détail (terrain, durée) de chaque créneau — nécessaire pour afficher
           // le prix MINIMUM réellement offert (durée-dépendant, 68) sans jamais coder « 1h30 » en dur.
           slots: openSlotsFor(club, ctx)
-            .map((time) => ({ time, ts: slotTimestamp(day.key, time), free: freeCourtSlotsAt(club, day.key, time, ctx) }))
+            .map((time) => {
+              const free = freeCourtSlotsAt(club, day.key, time, ctx);
+              return { time, ts: slotTimestamp(day.key, time), free, durations: [...new Set(free.map((x) => x.durationMin))] };
+            })
             .filter((s) => s.ts > Date.now() && s.free.length > 0),
         }))
         // Tri STABLE par priorité : à rang égal, l’ordre alphabétique de visibleClubs est conservé.
@@ -174,12 +177,11 @@ export default function ReserverScreen() {
   const goTomorrow = () => setSelDayKey(days[1].key);
   const noSlotsByClub = !byClub.some((b) => b.slots.length > 0);
 
-  // Prix MINIMUM réellement offert par un club à une heure précise (parmi les durées qu'il
-  // propose à cette heure) — jamais un prix supposé à durée fixe (68).
-  const minPriceAt = (club: Club, time: string): number => {
-    const durs = [...new Set(freeCourtSlotsAt(club, day.key, time, ctx).map((x) => x.durationMin))];
-    return durs.length ? Math.min(...durs.map((d) => priceForSlot(club, time, d))) : priceForSlot(club, time, 90);
-  };
+  // Prix MINIMUM réellement offert (parmi les durées offertes à cette heure, 68) — les durées
+  // viennent de la dispo DÉJÀ calculée (memo rows/byClub) : plus aucun rebalayage
+  // réservations/occupation par puce à chaque rendu (chemin chaud, l'onglet reste monté).
+  const minPriceFor = (club: Club, time: string, durs: number[]): number =>
+    durs.length ? Math.min(...durs.map((d) => priceForSlot(club, time, d))) : priceForSlot(club, time, 90);
   // « Dès » d'un club (sans heure choisie) : sur les durées qu'il offre RÉELLEMENT (jamais 1h30
   // par défaut pour un club qui n'a que du 1h).
   const clubOffered = (club: Club) => offeredDurations(resolvedGridFor(club, ctx), courtsFor(club, state.clubCourts));
@@ -296,8 +298,8 @@ export default function ReserverScreen() {
                   {/* Même priorité que « Par club » : Padelta, puis mes favoris, puis le reste. */}
                   {[...selectedRow.clubs]
                     .sort((a, b) => clubRank(a.club) - clubRank(b.club))
-                    .map(({ club, free }) => {
-                      const minP = minPriceAt(club, selectedRow.time);
+                    .map(({ club, free, durations }) => {
+                      const minP = minPriceFor(club, selectedRow.time, durations);
                       return (
                         <Pressable
                           key={club.id}
@@ -371,7 +373,7 @@ export default function ReserverScreen() {
                   {slots.map((s) => (
                     <Chip
                       key={s.time}
-                      label={`${s.time} · dès ${fcfa(minPriceAt(club, s.time))}`}
+                      label={`${s.time} · dès ${fcfa(minPriceFor(club, s.time, s.durations))}`}
                       icon={PRIME_TIMES.has(s.time) ? 'flame' : undefined}
                       onPress={() => open(club, s.time)}
                     />

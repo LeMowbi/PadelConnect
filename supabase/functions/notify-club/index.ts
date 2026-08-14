@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
       notifs.push({
         targets: await clubManagerTokens(record.club_id),
         title: 'Nouvelle réservation 🎾',
-        body: `${record.booked_by_name ?? 'Un joueur'} — ${record.date_label ?? ''} à ${record.time ?? ''} (${record.court ?? ''}).`,
+        body: `${record.booked_by_name ?? 'Un joueur'} — ${record.club_name ?? ''} · ${record.date_label ?? ''} à ${record.time ?? ''} (${record.court ?? ''}).`,
         data: { kind: 'club_reservation', id: record.id },
       });
     } else if (
@@ -157,7 +157,7 @@ Deno.serve(async (req) => {
       notifs.push({
         targets: await clubManagerTokens(record.club_id),
         title: 'Réservation annulée',
-        body: `${record.booked_by_name ?? 'Un joueur'} a annulé son créneau du ${record.date_label ?? ''} à ${record.time ?? ''} (${record.court ?? ''}).`,
+        body: `${record.booked_by_name ?? 'Un joueur'} a annulé son créneau du ${record.date_label ?? ''} à ${record.time ?? ''} (${record.court ?? ''} · ${record.club_name ?? ''}).`,
         data: { kind: 'club_reservation', id: record.id },
       });
       // Et prévenir les PARTICIPANTS (amis invités / joueurs qui avaient rejoint un match
@@ -289,7 +289,7 @@ Deno.serve(async (req) => {
       notifs.push({
         targets: await clubManagerTokens(record.club_id),
         title: 'Nouvelle demande de tournoi 🏆',
-        body: `${record.organizer_name ?? 'Un joueur'} propose « ${record.title ?? ''} » — à valider ou refuser.`,
+        body: `${record.organizer_name ?? 'Un joueur'} propose « ${record.title ?? ''} » (${record.club_name ?? ''}) — à valider ou refuser.`,
         data: { kind: 'club_tournament', id: record.id },
       });
     } else if (table === 'competitions' && type === 'UPDATE' && record.status === 'published' && oldRecord.status === 'pending') {

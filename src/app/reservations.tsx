@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { AppState as RNAppState, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { AppState as RNAppState, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Chip } from '@/components/Chip';
 import { Reveal, staggerDelay } from '@/components/Reveal';
@@ -20,7 +20,7 @@ import { openWhatsApp } from '@/lib/contact';
 import { hapticSuccess } from '@/lib/haptics';
 import { fetchMyMatchScores, leaveOpenMatch, setMatchOpen, submitMatchScore, type MatchScore, type MatchSet } from '@/lib/matchResults';
 import { CANCEL_DEADLINE_MS, fetchCancelledReservations } from '@/lib/reservations';
-import { dateKeyLabel, dayKey } from '@/lib/days';
+import { dateKeyLabel, dayKey, slotTimestamp } from '@/lib/days';
 import { fcfa, perPlayerOf } from '@/lib/format';
 import { APP_DOMAIN } from '@/lib/referrals';
 import { openMaps } from '@/lib/maps';
@@ -798,8 +798,10 @@ export default function ReservationsScreen() {
                       </Pressable>
                     ) : null}
                     {/* Partage du résultat en image — quand MON score est validé (mine = j'ai saisi,
-                        donc iWon est fiable pour orienter le vainqueur sur la carte). */}
-                    {scores[r.id]?.mine && scores[r.id]?.validated && scores[r.id]?.score ? (
+                        donc iWon est fiable pour orienter le vainqueur sur la carte). Masqué sur le
+                        WEB (contrat shareImage.ts : la capture/partage y est indisponible — sinon le
+                        parcours entier finissait sur « Partage indisponible », une impasse). */}
+                    {Platform.OS !== 'web' && scores[r.id]?.mine && scores[r.id]?.validated && scores[r.id]?.score ? (
                       <Pressable
                         onPress={() => openShare(r)}
                         style={styles.replayBtn}
@@ -882,7 +884,12 @@ export default function ReservationsScreen() {
                               Tu ré-inviteras tes partenaires sur le nouveau créneau.
                             </Txt>
                           ) : null}
-                          {r.proposal ? (
+                          {/* Proposition encore À VENIR seulement : expirée (créneau proposé passé),
+                            « Accepter » rouvrirait le tunnel qui, faute de retrouver le jour, se
+                            pré-remplirait EN SILENCE sur un autre jour à la même heure — le joueur
+                            croirait réserver la proposition du club. On retombe alors sur
+                            « Choisir un autre créneau ». */}
+                          {r.proposal && slotTimestamp(r.proposal.dateKey, r.proposal.time) > now ? (
                             <>
                               <Txt variant="small" color={colors.text} style={{ marginTop: spacing.sm }}>
                                 Le club propose : {dateKeyLabel(r.proposal.dateKey)} · {r.proposal.time} · {r.proposal.court} (

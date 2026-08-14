@@ -140,7 +140,8 @@ export function QuickBlock({
                   return (
                     <View style={styles.statusBox}>
                       <Ionicons name="trophy" size={16} color={colors.purple} />
-                      <Txt variant="small" color={colors.purple} style={{ flex: 1, fontWeight: '600' }}>
+                      {/* purpleDark : le violet clair échoue AA (~3,6:1) sur surfaceAlt — même token que le planning. */}
+                      <Txt variant="small" color={colors.purpleDark} style={{ flex: 1, fontWeight: '600' }}>
                         Terrain retenu par un tournoi — non blocable.
                       </Txt>
                     </View>
@@ -155,10 +156,11 @@ export function QuickBlock({
                         style={styles.statusBox}
                       >
                         <Ionicons name="lock-closed" size={16} color={colors.coral} />
-                        <Txt variant="small" color={colors.coral} style={{ flex: 1, fontWeight: '600' }}>
+                        {/* coralDark : le corail nu frôle AA (4,43:1) et ce texte est ACTIONNABLE. */}
+                        <Txt variant="small" color={colors.coralDark} style={{ flex: 1, fontWeight: '600' }}>
                           Bloqué · {st.label}
                         </Txt>
-                        <Txt variant="small" color={colors.coral}>
+                        <Txt variant="small" color={colors.coralDark}>
                           Débloquer ?
                         </Txt>
                       </Pressable>

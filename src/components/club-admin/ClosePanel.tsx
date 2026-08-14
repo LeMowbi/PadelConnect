@@ -17,7 +17,13 @@ export function ClosePanel({
 }: {
   comp: Competition;
   myTeam?: string;
-  onClose: (winner: string, winnerIsMe: boolean, loser?: string, loserIsMe?: boolean, podium?: { second?: string; third?: string }) => void;
+  onClose: (
+    winner: string,
+    winnerIsMe: boolean,
+    loser?: string,
+    loserIsMe?: boolean,
+    podium?: { second?: string; third?: string },
+  ) => void | Promise<boolean>;
   onCancel: () => void;
   onDelete?: () => void;
 }) {
@@ -28,9 +34,17 @@ export function ClosePanel({
   const [third, setThird] = useState<string | null>(null);
   const [step, setStep] = useState<'winner' | 'final'>('winner');
   const [confirmDelete, setConfirmDelete] = useState(false);
-  // Garde anti double-tap sur la clôture : onClose est un callback SYNC posé par le parent
-  // (la sheet se ferme au succès) — pas besoin de repasser closing à false.
+  // Garde anti double-tap sur la clôture. Le parent renvoie une promesse (écriture honnête) : au
+  // SUCCÈS il ferme la sheet (pas besoin de rendre la main), mais sur un ÉCHEC serveur la sheet
+  // reste ouverte avec le toast « réessaie » — on doit alors DÉGELER le bouton, sinon il resterait
+  // bloqué sur « Clôture… » et le réessai promis serait impossible.
   const [closing, setClosing] = useState(false);
+  const runClose = (...args: Parameters<typeof onClose>) => {
+    setClosing(true);
+    void Promise.resolve(onClose(...args)).then((ok) => {
+      if (ok === false) setClosing(false);
+    });
+  };
 
   // Americano : tournoi par rotation → clôture par un podium (2ᵉ/3ᵉ place), pas une fin de tableau.
   const isAmericano = comp.format.toLowerCase().includes('americano');
@@ -184,13 +198,12 @@ export function ClosePanel({
               size="sm"
               label={closing ? 'Clôture…' : 'Clôturer le tournoi'}
               icon="trophy"
-              onPress={() => {
-                setClosing(true);
-                onClose(selected!, selected === myTeam, undefined, false, {
+              onPress={() =>
+                runClose(selected!, selected === myTeam, undefined, false, {
                   second: second ?? undefined,
                   third: third ?? undefined,
-                });
-              }}
+                })
+              }
               disabled={!selected || closing}
               full
             />
@@ -228,10 +241,7 @@ export function ClosePanel({
               size="sm"
               label={closing ? 'Clôture…' : loser ? `Clôturer (fin de tableau : ${loser})` : 'Clôturer'}
               icon="trophy"
-              onPress={() => {
-                setClosing(true);
-                onClose(selected!, selected === myTeam, loser ?? undefined, !!loser && loser === myTeam);
-              }}
+              onPress={() => runClose(selected!, selected === myTeam, loser ?? undefined, !!loser && loser === myTeam)}
               disabled={!selected || !loser || closing}
               full
             />
@@ -239,10 +249,7 @@ export function ClosePanel({
               size="sm"
               label={closing ? 'Clôture…' : 'Passer (pas de fin de tableau)'}
               variant="ghost"
-              onPress={() => {
-                setClosing(true);
-                onClose(selected!, selected === myTeam);
-              }}
+              onPress={() => runClose(selected!, selected === myTeam)}
               disabled={!selected || closing}
               full
             />

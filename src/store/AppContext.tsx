@@ -501,7 +501,6 @@ type AppContextType = {
   setOperatorNews: (news: { title: string; subtitle?: string; link?: string; push?: boolean }) => Promise<{ ok: boolean; error?: string }>;
   removeOperatorNews: () => Promise<{ ok: boolean }>; // retire l’actu d’accueil publiée (attend le serveur)
   dismissNews: (id: string) => void;
-  resetAll: () => void;
 };
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -576,6 +575,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (ok) clubCfgWriteRef.current += 1;
     return ok;
   };
+  // Même course pour club_overrides (fiche club : blurb, WhatsApp, plages tarifaires…) : une
+  // relecture capturée AVANT setClubInfo peut résoudre APRÈS et fusionner un instantané périmé
+  // par-dessus la saisie fraîche du gérant. Chaque relecture capture ce compteur au départ et,
+  // s'il a bougé, JETTE sa tranche clubInfo (le miroir local, plus frais, est conservé).
+  const clubOvrWriteRef = useRef(0);
   // Id du compte serveur COURANT, suivi dans une ref (comme remindersOnRef) : permet à
   // loadSession de détecter une BASCULE de compte (A→B) au moment où elle s'exécute, sans
   // remettre serverUserId dans ses dépendances — pour bumper l'époque et invalider toute
@@ -647,6 +651,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               blockedUserIds: [],
               clubCommission: {},
               operatorPayments: {},
+              // Préférences PAR COMPTE aussi (alignées sur loggedOutState) : sans quoi B hérite
+              // du bandeau d'actu fermé par A (il ne verrait jamais l'actu globale courante) et
+              // du club actif de l'opérateur A.
+              dismissedNewsId: null,
+              managedClubId: initialState.managedClubId,
             },
       );
       const { data: prof, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
@@ -697,6 +706,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // par les résas pertinentes (les miennes ; club/opérateur : celles de leur périmètre,
       // via RLS), l’occupation de TOUS (disponibilité), et les clubs ajoutés côté serveur.
       const cfgW = clubCfgWriteRef.current; // écriture club_config pendant la relecture → tranche jetée
+      const ovrW = clubOvrWriteRef.current; // écriture club_overrides pendant la relecture → idem
       const [
         reservationsRes,
         occ,
@@ -773,7 +783,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Pages club éditées par les gérants (serveur) → visibles par tous. On fusionne au-dessus
         // des éventuelles surcharges locales (le serveur fait foi pour les clubs qu’il connaît).
         // null = échec réseau → on garde les surcharges déjà connues (convention §8).
-        clubInfo: overrides ? { ...s.clubInfo, ...overrides } : s.clubInfo,
+        clubInfo: overrides && clubOvrWriteRef.current === ovrW ? { ...s.clubInfo, ...overrides } : s.clubInfo,
         // Config club partagée (horaires, terrains, offres, coachs, photos).
         ...(clubCfgWriteRef.current === cfgW ? clubConfigSlices(s, configs) : {}),
         // Tournois serveur (visibles par tous, synchronisés) + mes inscriptions + clôtures.
@@ -871,6 +881,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const epoch = sessionEpochRef.current;
       const ok = () => sessionEpochRef.current === epoch;
       const cfgW = clubCfgWriteRef.current; // écriture club_config pendant la relecture → tranche jetée
+      const ovrW = clubOvrWriteRef.current; // écriture club_overrides pendant la relecture → idem
       // Ré-enregistre le jeton de push à CHAQUE retour au premier plan (pas seulement au
       // démarrage/à la connexion) : un utilisateur qui refuse d'abord puis ACTIVE les
       // notifications dans les Réglages iOS est alors capté sans redémarrer l'app. Idempotent
@@ -959,7 +970,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             blockedRanges: blockedRangesRes ?? s.blockedRanges,
             operatorPayments: opPayments ?? s.operatorPayments,
             customClubs: serverClubs ? mergeServerClubs(s.customClubs, serverClubs) : s.customClubs,
-            clubInfo: overrides ? { ...s.clubInfo, ...overrides } : s.clubInfo,
+            clubInfo: overrides && clubOvrWriteRef.current === ovrW ? { ...s.clubInfo, ...overrides } : s.clubInfo,
             clubStatus: clubStatus ?? s.clubStatus,
             boostExpiry: boosts ?? s.boostExpiry,
             boostedClubIds: boosts ? Object.keys(boosts).filter((id) => boosts[id] > Date.now()) : s.boostedClubIds,
@@ -986,11 +997,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       })();
     };
     const sub = RNAppState.addEventListener('change', (st) => st === 'active' && refreshMirror());
-    // Même resynchronisation quand un push arrive alors que l’app est déjà au premier plan.
-    const offPush = onPushReceivedInForeground(refreshMirror);
+    // Même resynchronisation quand un push arrive alors que l’app est déjà au premier plan —
+    // mais DÉBOUNCÉE (8 s, trailing) : un soir chargé, chaque résa/join/annulation du club est un
+    // push, et chaque refreshMirror = ~20 requêtes + un setState global. La rafale de pushes se
+    // replie en UNE resynchronisation, qui capte l'état final. Le retour premier plan, lui, reste
+    // immédiat (une seule occurrence par nature).
+    let pushTimer: ReturnType<typeof setTimeout> | null = null;
+    const offPush = onPushReceivedInForeground(() => {
+      if (pushTimer) clearTimeout(pushTimer);
+      pushTimer = setTimeout(() => {
+        pushTimer = null;
+        refreshMirror();
+      }, 8000);
+    });
     return () => {
       sub.remove();
       offPush();
+      if (pushTimer) clearTimeout(pushTimer);
     };
   }, [state.serverUserId]);
 
@@ -1995,6 +2018,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (state.serverUserId) {
           const ok = await upsertClubOverride(clubId, merged);
           if (!ok) return { ok: false };
+          clubOvrWriteRef.current += 1; // invalide les relectures en vol (voir clubOvrWriteRef)
         }
         if (sessionEpochRef.current !== epoch) return { ok: false }; // déconnexion entre-temps (comme setBoost)
         setState((s) => ({ ...s, clubInfo: { ...s.clubInfo, [clubId]: { ...s.clubInfo[clubId], ...patch } } }));
@@ -2477,15 +2501,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return { ok: true };
       },
       dismissNews: (id) => setState((s) => ({ ...s, dismissedNewsId: id })),
-      resetAll: () => {
-        // Réinitialisation TOTALE : on coupe la session serveur, on efface les rappels et
-        // la clé persistée, puis on revient à l’état seed complet (≈ première ouverture).
-        sessionEpochRef.current += 1; // invalide toute requête en vol
-        supabase.auth.signOut().catch(() => {});
-        void syncMatchReminders([], false);
-        AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
-        setState(initialState);
-      },
     }),
     [state, hydrated, stats, myReservations, loadSession, refreshCompetitions],
   );

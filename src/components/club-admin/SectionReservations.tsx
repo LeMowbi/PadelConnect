@@ -259,14 +259,25 @@ export function SectionReservations({
   // commune (des terrains peuvent offrir des horaires/durées différents).
   const weekKeys = new Set(week.map((d) => d.key));
   const weekRes = clubRes.filter((r) => weekKeys.has(r.dateKey));
-  const cellClosed = (dKey: string, slot: CourtSlot, court: string) =>
-    clubRanges.some((r) => rangeBlocks(r, dKey, slot.t, court, slot.d)) ||
-    overlapsAny(
-      slot,
-      clubBlocked.filter((b) => b.dateKey === dKey && b.court === court),
-    );
+  const cellClosed = (dKey: string, slot: CourtSlot, court: string) => {
+    if (clubRanges.some((r) => rangeBlocks(r, dKey, slot.t, court, slot.d))) return true;
+    if (
+      overlapsAny(
+        slot,
+        clubBlocked.filter((b) => b.dateKey === dKey && b.court === court),
+      )
+    )
+      return true;
+    // Cellule retenue par un TOURNOI publié : non réservable (le planning l'affiche « tournoi »)
+    // → hors dénominateur, sinon une semaine de tournoi paraissait sous-remplie à tort.
+    const cb = competitionBlockedCourts(club.id, dKey, slot.t, slot.d, comps);
+    return cb === 'all' || cb.includes(court);
+  };
   let sellable = 0;
-  for (const d of week) for (const c of courts) for (const s of grid[c] ?? []) if (!s.x && !cellClosed(d.key, s, c)) sellable++;
+  for (const d of week) {
+    if (hasFullDayCompetition(club.id, d.key, comps)) continue; // journée entière au tournoi
+    for (const c of courts) for (const s of grid[c] ?? []) if (!s.x && !cellClosed(d.key, s, c)) sellable++;
+  }
   const capacity = Math.max(1, sellable);
   const occupancy = Math.min(100, Math.round((weekRes.length / capacity) * 100));
   const byHour = new Map<string, number>();
@@ -359,10 +370,11 @@ export function SectionReservations({
               toast.show('Période fermée ✓ — plus aucun créneau réservable dessus');
             } else if (status === 'reservations') {
               hapticWarning();
-              // Le gérant ne PEUT pas annuler une résa depuis l'app : on l'oriente vers le
-              // joueur (son WhatsApp est sur la carte de la réservation, plus bas).
+              // Depuis la 75 le gérant PEUT annuler un créneau depuis l'app (« Annuler ce
+              // créneau », carte de la résa plus bas) — et le joueur, lui, ne peut PLUS annuler
+              // à moins de 5 h : on oriente vers le bon outil, pas vers une impasse.
               toast.show(
-                'Une réservation à venir existe sur cette période — contacte le joueur (WhatsApp sur sa carte) pour qu’il annule',
+                'Une réservation à venir existe sur cette période — annule d’abord son créneau (« Annuler ce créneau » sur sa carte), puis referme la période',
                 {
                   icon: 'alert-circle',
                 },

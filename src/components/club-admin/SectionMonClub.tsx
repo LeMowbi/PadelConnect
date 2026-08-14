@@ -10,6 +10,7 @@ import { SAMPLE_SLOTS, type Club } from '@/data/clubs';
 import { courtsFor, resolvedGridFor, type ScheduleCtx } from '@/lib/availability';
 import { canAddCourtSlot, durationLabel, offeredDurations, overlaps, slotEnd, toMin, type CourtSlot } from '@/lib/courtSchedule';
 import { clubAddCoach, clubRemoveCoach, clubSetCoachPrice, fetchClubCoaches, type ServerCoach } from '@/lib/coachesServer';
+import { confirmAsync } from '@/lib/confirm';
 import { isPlayed, MAX_CLUB_PHOTOS, useApp, type Reservation } from '@/store/AppContext';
 import { fcfa, initials } from '@/lib/format';
 import { pickImage } from '@/lib/pickImage';
@@ -898,6 +899,14 @@ export function SectionMonClub({ club }: { club: Club }) {
       toast.show(`« ${n} » a des réservations à venir — annule-les ou attends qu’elles soient jouées.`, { icon: 'alert-circle' });
       return;
     }
+    // Destructif (grille du terrain + photo Storage supprimées, créneau retiré de la vente) :
+    // confirmation explicite AVANT d'agir — un tap sur la corbeille ne doit pas suffire.
+    const sure = await confirmAsync(
+      `Retirer « ${n} » ?`,
+      'Le terrain sort de la vente : sa grille horaire et sa photo seront supprimées. Les réservations déjà jouées restent dans l’historique.',
+      { confirmLabel: 'Retirer', destructive: true },
+    );
+    if (!sure) return;
     // Opération ENTIÈRE sous le verrou de grille : deux retraits rapprochés ne peuvent plus se
     // croiser (le 2e repartait d'une liste périmée et RESSUSCITAIT le 1er terrain retiré), et la
     // purge de la grille ne peut plus être sautée en silence par un 'busy'.
@@ -1363,7 +1372,7 @@ export function SectionMonClub({ club }: { club: Club }) {
                         if (!ok) toast.show('Retrait impossible — réessaie', { icon: 'alert-circle' });
                       }}
                       style={styles.courtPhotoRemove}
-                      hitSlop={13}
+                      hitSlop={14}
                       accessibilityRole="button"
                       accessibilityLabel={`Retirer la photo du ${c}`}
                     >

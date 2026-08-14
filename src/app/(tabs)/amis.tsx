@@ -92,6 +92,12 @@ export default function AmisScreen() {
       toast.show(`Tu es déjà ami avec ${name}.`);
     } else if (res.status === 'pending') {
       toast.show('Demande déjà envoyée — en attente de sa réponse.');
+    } else if (res.status === 'not_found') {
+      // Refus PERMANENT déguisé par le serveur (53) : compte supprimé entre-temps, ou un blocage
+      // (dans un sens ou l'autre) volontairement masqué. « Réessaie » serait un mensonge en boucle
+      // → même message terminal que la recherche, et on rend le formulaire.
+      hapticWarning();
+      toast.show('Personne avec ce numéro sur PadelConnect.', { icon: 'alert-circle' });
     } else {
       hapticWarning();
       toast.show('Envoi impossible — réessaie dans un instant', { icon: 'alert-circle' });

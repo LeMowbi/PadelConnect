@@ -308,8 +308,23 @@ function CoachSettings({
   const [slots, setSlots] = useState<string[]>(profile.slots);
   const [saving, setSaving] = useState(false);
   const [priceError, setPriceError] = useState<string | null>(null);
+  // Resynchronisation RENDER-PHASE quand `profile` se rafraîchit (session / premier plan) : les
+  // champs NON touchés suivent le serveur — sinon « Enregistrer » depuis un écran resté monté
+  // réécrivait dispos/tarif PÉRIMÉS par-dessus une modif faite sur le web ou un autre appareil
+  // (onSave envoie les trois champs). Patron WaveLink : ajuster l'état quand une prop change.
+  const [synced, setSynced] = useState(profile);
+  const [touched, setTouched] = useState<{ specialty?: boolean; price?: boolean; slots?: boolean }>({});
+  if (synced !== profile) {
+    setSynced(profile);
+    if (!touched.specialty) setSpecialty(profile.specialty);
+    if (!touched.price) setPrice(profile.price ? String(profile.price) : '');
+    if (!touched.slots) setSlots(profile.slots);
+  }
 
-  const toggleSlot = (t: string) => setSlots((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t].sort()));
+  const toggleSlot = (t: string) => {
+    setTouched((c) => ({ ...c, slots: true }));
+    setSlots((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t].sort()));
+  };
 
   const save = async () => {
     if (saving) return;
@@ -322,8 +337,11 @@ function CoachSettings({
     }
     setPriceError(null);
     setSaving(true);
-    await onSave(specialty.trim(), p, slots);
+    const ok = await onSave(specialty.trim(), p, slots);
     setSaving(false);
+    // Sauvegarde acceptée : la fiche locale redevient le miroir du serveur — les prochaines
+    // modifs distantes se resynchronisent à nouveau (touched repart à zéro).
+    if (ok) setTouched({});
   };
 
   return (
@@ -331,7 +349,10 @@ function CoachSettings({
       <Txt variant="muted">Les joueurs voient ta spécialité, ton tarif indicatif et tes disponibilités sur la fiche du club.</Txt>
       <TextInput
         value={specialty}
-        onChangeText={setSpecialty}
+        onChangeText={(t) => {
+          setSpecialty(t);
+          setTouched((c) => ({ ...c, specialty: true }));
+        }}
         placeholder="Spécialité (ex. Initiation, Compétition)"
         placeholderTextColor={colors.textMuted}
         style={styles.input}
@@ -342,6 +363,7 @@ function CoachSettings({
         onChangeText={(t) => {
           setPrice(t);
           setPriceError(null);
+          setTouched((c) => ({ ...c, price: true }));
         }}
         placeholder="Tarif indicatif du cours (FCFA, optionnel)"
         placeholderTextColor={colors.textMuted}
