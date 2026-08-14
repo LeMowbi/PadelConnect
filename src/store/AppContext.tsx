@@ -86,6 +86,7 @@ import {
   type SlotOccupancy,
 } from '@/lib/reservations';
 import { blockUser as blockUserRpc, fetchBlockedUserIds } from '@/lib/moderation';
+import { fetchFavoritePlayerIds, reconcileMyLevels, toggleFavoritePlayer as toggleFavoritePlayerRpc } from '@/lib/social';
 import { samePhone } from '@/lib/phone';
 import { alertAsync } from '@/lib/confirm';
 import { overlaps, type CourtSlot } from '@/lib/courtSchedule';
@@ -276,6 +277,8 @@ export type AppState = {
   // Comptes que J'AI bloqués (modération UGC, 51) : miroir persisté — un échec réseau au
   // montage d'un écran ne fait plus réapparaître les avis / matchs ouverts d'un compte bloqué.
   blockedUserIds: string[];
+  // Joueurs que JE suis (80) : leurs matchs ouverts remontent + push à la création.
+  favoritePlayerIds: string[];
   operatorNews: OperatorNews | null; // actu d’accueil publiée par l’opérateur
   dismissedNewsId: string | null; // id de l’actu fermée par le joueur (réapparaît si nouvelle)
 };
@@ -379,6 +382,8 @@ type AppContextType = {
   removeFriend: (id: string) => Promise<boolean>; // false = échec serveur (réseau) → l’ami reste affiché
   // Bloquer un joueur (modération UGC) : écrit le serveur puis le miroir state.blockedUserIds.
   blockUserAccount: (userId: string) => Promise<boolean>;
+  // Suivre / ne plus suivre un joueur (80). 'not_found' = compte disparu ou blocage masqué.
+  toggleFavoritePlayer: (userId: string) => Promise<'added' | 'removed' | 'not_found' | null>;
   toggleFavorite: (clubId: string) => void;
   addClubPhoto: (clubId: string, uri: string) => Promise<boolean>;
   removeClubPhoto: (clubId: string, uri: string) => Promise<boolean>;
@@ -653,6 +658,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               accountType: 'player',
               serverManagedClubId: null,
               blockedUserIds: [],
+              favoritePlayerIds: [],
               clubCommission: {},
               operatorPayments: {},
               // Préférences PAR COMPTE aussi (alignées sur loggedOutState) : sans quoi B hérite
@@ -706,6 +712,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           void AsyncStorage.removeItem(PENDING_AVATAR_KEY); // avatar serveur déjà présent → on nettoie
         }
       }
+      // Moteur de niveau (80) : rattrape mes matchs « validés à 48 h » (chemin lazy, aucune
+      // écriture serveur à T+48 h). Fire-and-forget ; si des matchs ont été appliqués, on relit
+      // le niveau frais (gardé par l'époque de session).
+      void reconcileMyLevels().then((n) => {
+        if (n > 0 && stillCurrent()) {
+          void supabase
+            .from('profiles')
+            .select('level')
+            .eq('id', userId)
+            .maybeSingle()
+            .then(({ data }) => {
+              if (data && stillCurrent()) setState((s) => ({ ...s, level: clampLevel(Number(data.level ?? s.level)) }));
+            });
+        }
+      });
       // Réservations : le serveur est la source de vérité → on remplace le miroir local
       // par les résas pertinentes (les miennes ; club/opérateur : celles de leur périmètre,
       // via RLS), l’occupation de TOUS (disponibilité), et les clubs ajoutés côté serveur.
@@ -735,6 +756,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         myLessons,
         ratings,
         blockedUsers,
+        favPlayers,
       ] = await Promise.all([
         fetchReservations(),
         fetchOccupancy(),
@@ -758,6 +780,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         fetchMyLessons(userId),
         fetchClubRatings(),
         fetchBlockedUserIds(),
+        fetchFavoritePlayerIds(),
       ]);
       if (!stillCurrent()) return; // déconnexion survenue pendant le chargement → on n’écrit rien
       // null = échec réseau → on garde les invitations existantes (≠ tableau vide = « aucune »).
@@ -811,6 +834,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         clubRatings: ratings ?? s.clubRatings,
         // Comptes que j'ai bloqués (modération 51). null = échec réseau → on garde le miroir.
         blockedUserIds: blockedUsers ?? s.blockedUserIds,
+        favoritePlayerIds: favPlayers ?? s.favoritePlayerIds,
       }));
       // Resynchronise les rappels locaux (résas créées sur un autre appareil incluses). isOwner
       // distingue MES résas (je peux annuler) d’une invitation d’ami (rappels adaptés, cf.
@@ -916,6 +940,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             serverComps,
             compRegs,
             blockedUsers,
+            favPlayers,
             prof,
           ] = await Promise.all([
             fetchOccupancy(),
@@ -946,6 +971,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             fetchMyCompRegistrations(),
             // Comptes bloqués (un blocage fait sur un autre appareil masque ici aussi).
             fetchBlockedUserIds(),
+            fetchFavoritePlayerIds(),
             // RÔLE/profil : si l’opérateur vient d’accorder l’accès gérant (#39), l'Espace
             // Club apparaît au retour dans l’app, sans réinstaller.
             supabase
@@ -983,6 +1009,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ...(clubCfgWriteRef.current === cfgW ? clubConfigSlices(s, configs) : {}),
             ...competitionSlices(s, serverComps, compRegs),
             blockedUserIds: blockedUsers ?? s.blockedUserIds,
+            favoritePlayerIds: favPlayers ?? s.favoritePlayerIds,
             role: prof ? ((prof.role as AppState['role']) ?? s.role) : s.role,
             accountType: prof ? (prof.account_type === 'club' ? 'club' : 'player') : s.accountType,
             serverManagedClubId: prof ? (prof.managed_club_id ?? null) : s.serverManagedClubId,
@@ -1844,6 +1871,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (accept)
           void fetchFriends().then((friends) => friends && sessionEpochRef.current === epoch && setState((s) => ({ ...s, friends })));
         return true;
+      },
+      // Suivre / ne plus suivre un joueur (80) : écriture honnête (serveur d'abord) + garde
+      // d'époque (favoritePlayerIds est purgé à la déconnexion/bascule de compte).
+      toggleFavoritePlayer: async (userId) => {
+        const epoch = sessionEpochRef.current;
+        const res = await toggleFavoritePlayerRpc(userId);
+        if (!res || res === 'not_found') return res ?? null;
+        if (sessionEpochRef.current !== epoch) return null;
+        setState((s) => ({
+          ...s,
+          favoritePlayerIds:
+            res === 'added'
+              ? s.favoritePlayerIds.includes(userId)
+                ? s.favoritePlayerIds
+                : [...s.favoritePlayerIds, userId]
+              : s.favoritePlayerIds.filter((x) => x !== userId),
+        }));
+        return res;
       },
       // Bloquer un joueur (modération UGC) : serveur d'abord, puis miroir persisté — les écrans
       // lisent state.blockedUserIds (une seule source de vérité, jamais réinitialisée par un

@@ -101,6 +101,7 @@ export const initialState: AppState = {
   // Comptes que J'AI bloqués (modération UGC) : miroir persisté — un échec réseau au montage
   // d'un écran ne fait plus réapparaître les avis / matchs ouverts d'un compte bloqué.
   blockedUserIds: [],
+  favoritePlayerIds: [],
   // Aucune actu d’accueil par défaut : le bandeau n’apparaît QUE si l’opérateur en publie une
   // (synchronisée serveur, visible par tous). Évite un bandeau de démo qui s’affiche puis
   // disparaît au chargement quand aucune actu n’est réellement publiée.
@@ -171,6 +172,7 @@ export function loggedOutState(s: AppState): AppState {
     compResults: {},
     officialResults: [],
     blockedUserIds: [], // liste liée au compte → purgée à la déconnexion
+    favoritePlayerIds: [], // idem : les joueurs suivis appartiennent au compte
     // Préférences liées au compte : sans reset, le compte SUIVANT sur le même appareil hérite des
     // choix du précédent. dismissedNewsId : sinon B ne voit jamais l'actu GLOBALE que A avait fermée.
     // managedClubId : remis au défaut (pilote seulement le filtre local, l'accès reste gardé par le rôle).
