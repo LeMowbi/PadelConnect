@@ -23,6 +23,13 @@
 //     concordantes) ou « Vos scores ne correspondent pas » (discordantes) aux autres saisisseurs.
 //   • operator_news INSERT / UPDATE (47, si la case « push » était cochée et que l'actu change)
 //     → notif de l'ACTU à tous les joueurs.
+//   • reservations INSERT d'un match OUVERT (80/81) → deux branches best-effort en plus de la
+//     notif gérant : « partenaire suivi » aux joueurs qui ont mis le créateur en FAVORI, puis
+//     « un match à ton niveau vient d'ouvrir » aux SUIVEURS du club (match_alerts + fourchette).
+//   • reservations UPDATE (status → cancelled JOUEUR uniquement) → alerte LISTE D'ATTENTE (81)
+//     aux inscrits dont l'attente chevauche le créneau libéré (one-shot). PAS sur club_cancelled :
+//     l'annulation club re-bloque le créneau (75), il n'est jamais réellement libéré.
+//   • events INSERT (82, agenda du padel, si « push » coché) → broadcast à tous les comptes.
 // L'envoi passe par l'API Push d'Expo (pas besoin de gérer APNs soi-même : Expo route vers
 // Apple/Google). ⚠️ LES 8 WEBHOOKS doivent écouter INSERT **ET** UPDATE (corrigé en base le
 // 2026-07-16 : `reservations` et `reservation_participants` avaient dérivé en INSERT-seul /
@@ -46,11 +53,21 @@ type Notif = {
   body: string;
   // 'club_reservation' / 'club_tournament' = push destiné au GÉRANT → l'app ouvre l'Espace Club.
   data?: {
-    kind: 'friend_request' | 'reservation' | 'club_reservation' | 'tournament' | 'club_tournament' | 'lesson' | 'news' | 'open_match' | 'waitlist' | 'event';
+    kind:
+      | 'friend_request'
+      | 'reservation'
+      | 'club_reservation'
+      | 'tournament'
+      | 'club_tournament'
+      | 'lesson'
+      | 'news'
+      | 'open_match'
+      | 'waitlist'
+      | 'event';
     id?: string;
     clubId?: string;
     dateKey?: string;
-    time?: unknown;
+    time?: string; // le routeur client (notifications.ts) l'attend en string (query param du tunnel)
   };
 };
 
@@ -128,13 +145,17 @@ Deno.serve(async (req) => {
       const name = `${data?.first_name ?? ''} ${data?.last_name ?? ''}`.trim();
       return name || 'Un joueur';
     };
-    // LISTE D'ATTENTE (81) : un créneau vient de se LIBÉRER (annulation joueur OU club) →
-    // notifier les inscrits dont l'attente CHEVAUCHE l'intervalle libéré (même arithmétique
-    // demi-ouverte [t, t+d) que la dispo), puis SUPPRIMER les entrées notifiées (one-shot,
-    // premier arrivé premier servi). Renvoie les notifs à empiler — jamais d'exception
-    // (un échec ici ne doit pas casser les pushes d'annulation).
+    // LISTE D'ATTENTE (81) : un créneau vient de se LIBÉRER (annulation JOUEUR uniquement —
+    // une annulation CLUB re-bloque le créneau, cf. branche club_cancelled) → notifier les
+    // inscrits dont l'attente CHEVAUCHE l'intervalle libéré (même arithmétique demi-ouverte
+    // [t, t+d) que la dispo). One-shot HONNÊTE : seules les entrées des joueurs qui ONT un
+    // jeton push sont consommées — et seulement APRÈS l'envoi Expo (via waitlistConsumedIds) ;
+    // un joueur sans jeton (ou un envoi en échec) garde son alerte pour la prochaine libération.
+    // Jamais d'exception : un échec ici ne doit pas casser les pushes d'annulation.
     const toMin = (t: string): number => {
-      const [h, m] = String(t ?? '').split(':').map(Number);
+      const [h, m] = String(t ?? '')
+        .split(':')
+        .map(Number);
       return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : NaN;
     };
     const waitlistAlerts = async (rec: Record<string, unknown>): Promise<Notif[]> => {
@@ -158,26 +179,30 @@ Deno.serve(async (req) => {
         if (!userIds.length) return [];
         const { data: profs } = await supabase
           .from('profiles')
-          .select('expo_push_token')
+          .select('id, expo_push_token')
           .in('id', userIds)
           .not('expo_push_token', 'is', null);
+        const withToken = new Set((profs ?? []).filter((p) => p.expo_push_token).map((p) => p.id as string));
         const targets = (profs ?? []).map((p) => p.expo_push_token as string).filter(Boolean);
-        // One-shot : les entrées qui ont déclenché l'alerte disparaissent (notifiées ou pas —
-        // le créneau n'est plus « complet », l'attente n'a plus d'objet).
-        await supabase.from('slot_waitlist').delete().in('id', hits.map((w) => w.id as string));
         if (!targets.length) return [];
-        return [{
-          targets,
-          title: 'Un créneau s’est libéré 🏃',
-          body: `${rec.club_name ?? 'Le club'} — ${rec.date_label ?? ''} à ${rec.time ?? ''} : fonce, premier arrivé premier servi.`,
-          data: { kind: 'waitlist', clubId, dateKey, time: rec.time },
-        }];
+        // Consommation DIFFÉRÉE (après l'envoi Expo) et limitée aux joueurs réellement notifiés.
+        waitlistConsumedIds.push(...hits.filter((w) => withToken.has(w.user_id as string)).map((w) => w.id as string));
+        return [
+          {
+            targets,
+            title: 'Un créneau s’est libéré 🏃',
+            body: `${rec.club_name ?? 'Le club'} — ${rec.date_label ?? ''} à ${rec.time ?? ''} : fonce, premier arrivé premier servi.`,
+            data: { kind: 'waitlist', clubId, dateKey, time: String(rec.time ?? '') },
+          },
+        ];
       } catch {
         return []; // best-effort : jamais bloquer la branche d'annulation
       }
     };
 
     const notifs: Notif[] = [];
+    // Entrées de liste d'attente à supprimer APRÈS un envoi Expo réussi (alerte one-shot honnête).
+    const waitlistConsumedIds: string[] = [];
 
     if (table === 'reservations' && type === 'INSERT') {
       // Nouvelle réservation (INSERT uniquement — jamais un DELETE) → prévenir le(s) gérant(s).
@@ -197,9 +222,7 @@ Deno.serve(async (req) => {
             .from('blocked_users')
             .select('blocker_id, blocked_id')
             .or(`blocker_id.eq.${record.user_id},blocked_id.eq.${record.user_id}`);
-          const excluded = new Set(
-            (blocks ?? []).flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]),
-          );
+          const excluded = new Set((blocks ?? []).flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]));
           fanIds = fanIds.filter((id: string) => !excluded.has(id)).slice(0, 100);
           if (fanIds.length) {
             const { data: profs } = await supabase
@@ -221,7 +244,9 @@ Deno.serve(async (req) => {
       }
       // ALERTES « un match à ton niveau vient d'ouvrir » (81) : suiveurs du CLUB ayant activé
       // match_alerts, niveau dans la fourchette du match (fourchette absente = tous niveaux),
-      // hors créateur / bloqués / déjà notifiés « partenaire suivi ». Plafond 100 (log si écrêté).
+      // hors créateur / bloqués / déjà notifiés « partenaire suivi ». PLAFOND 100 appliqué À LA
+      // SOURCE (tri par récence de follow) : sans le limit(), un club à milliers de suiveurs
+      // ferait exploser l'URL du `in(...)` PostgREST → requête en échec → plus aucune alerte.
       if (record.open_match === true && record.user_id && record.club_id) {
         try {
           const already = new Set<string>();
@@ -231,10 +256,13 @@ Deno.serve(async (req) => {
             .from('blocked_users')
             .select('blocker_id, blocked_id')
             .or(`blocker_id.eq.${record.user_id},blocked_id.eq.${record.user_id}`);
-          const blocked = new Set(
-            (blocks ?? []).flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]),
-          );
-          const { data: fols } = await supabase.from('club_followers').select('user_id').eq('club_id', record.club_id);
+          const blocked = new Set((blocks ?? []).flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]));
+          const { data: fols } = await supabase
+            .from('club_followers')
+            .select('user_id')
+            .eq('club_id', record.club_id)
+            .order('created_at', { ascending: false })
+            .limit(100);
           let ids = [...new Set((fols ?? []).map((f: { user_id: string }) => f.user_id))].filter(
             (id) => id && id !== record.user_id && !already.has(id) && !blocked.has(id),
           );
@@ -251,7 +279,6 @@ Deno.serve(async (req) => {
               const lv = Number(p.level ?? 0);
               return (lo == null || lv >= lo) && (hi == null || lv <= hi);
             });
-            if (eligible.length > 100) console.log(`alerte niveau écrêtée : ${eligible.length} → 100`);
             const targets = eligible
               .slice(0, 100)
               .map((p: { expo_push_token: string }) => p.expo_push_token)
@@ -673,11 +700,7 @@ Deno.serve(async (req) => {
           data: { kind: 'news' },
         });
       }
-    } else if (
-      table === 'events' &&
-      record.push === true &&
-      (type === 'INSERT' || (type === 'UPDATE' && oldRecord.push !== true))
-    ) {
+    } else if (table === 'events' && record.push === true && (type === 'INSERT' || (type === 'UPDATE' && oldRecord.push !== true))) {
       // AGENDA du padel (82) : événement publié avec la case « push » → broadcast. Garde
       // anti-doublon : INSERT, ou UPDATE qui vient d'activer le push (une simple correction de
       // texte d'un événement déjà poussé ne repart pas). MÊME anti-phishing que l'actu : le
@@ -733,6 +756,13 @@ Deno.serve(async (req) => {
     });
     if (dead.length > 0) {
       await supabase.from('profiles').update({ expo_push_token: null }).in('expo_push_token', dead);
+    }
+
+    // LISTE D'ATTENTE : consommer les alertes SEULEMENT si l'envoi Expo a réellement abouti
+    // (au moins un ticket 'ok' dans le lot). En cas d'échec total, les entrées survivent et
+    // repartiront à la prochaine libération — jamais d'alerte engloutie en silence.
+    if (waitlistConsumedIds.length > 0 && tickets.some((t) => t?.status === 'ok')) {
+      await supabase.from('slot_waitlist').delete().in('id', waitlistConsumedIds);
     }
 
     return new Response('ok', { status: 200 });

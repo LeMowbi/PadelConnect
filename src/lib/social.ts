@@ -144,6 +144,14 @@ export async function setClubFollow(clubId: string, on: boolean): Promise<boolea
   return !error && data === true;
 }
 
+// Mes clubs suivis côté serveur (RLS select-own) — sert à la réconciliation de session avec les
+// cœurs favoris locaux (les cœurs posés AVANT la 81 n'ont pas de ligne serveur). null = échec réseau.
+export async function fetchMyFollowedClubIds(): Promise<string[] | null> {
+  const { data, error } = await supabase.from('club_followers').select('club_id');
+  if (error) return null;
+  return ((data ?? []) as { club_id: string }[]).map((r) => r.club_id).filter(Boolean);
+}
+
 // ─── Fidélité « 10 parties = 1 récompense » (82) ────────────────────────────────
 
 export type Loyalty = { played: number; claimed: number };

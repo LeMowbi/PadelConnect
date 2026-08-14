@@ -287,10 +287,16 @@ export default function ReserverScreen() {
 
   // CRÉNEAU COMPLET (81) : le créneau EXISTE bien dans la grille ouverte du club (un horaire
   // fermé ou hérité d'un deep-link périmé n'a rien à attendre) et est encore À VENIR, mais plus
-  // aucun terrain n'y est libre → au lieu des chips de terrain, on propose la liste d'attente.
-  // `effectiveDuration` peut être null ici (plus aucune durée offerte), d'où un test sur `free`.
+  // AUCUN couple (terrain, durée) n'y est libre. ⚠️ PAS `free.length === 0` : `free` est aussi
+  // vide quand le créneau offre DEUX durées et que le joueur n'a pas encore choisi
+  // (`effectiveDuration` null) — on afficherait « Complet » sur un créneau libre.
   const slotFull =
-    !!day && !!slot && !compToday && openSlots.includes(slot) && slotTimestamp(day.key, slot) > Date.now() && free.length === 0;
+    !!day &&
+    !!slot &&
+    !compToday &&
+    openSlots.includes(slot) &&
+    slotTimestamp(day.key, slot) > Date.now() &&
+    (slotsByTime?.get(slot)?.length ?? 0) === 0;
   // Ai-je DÉJÀ posé mon alerte sur ce (club, jour, heure) ? (miroir serveur, jamais deviné)
   const alerted = !!day && !!slot && (waitlist ?? []).some((w) => w.clubId === club.id && w.dateKey === day.key && w.time === slot);
 
@@ -309,9 +315,18 @@ export default function ReserverScreen() {
       toast.show('Alerte retirée.');
       return;
     }
-    // Durée envoyée = celle du créneau quand elle est connue, sinon la session standard : elle
-    // sert au serveur à repérer les libérations qui CHEVAUCHENT ce créneau (même arithmétique 68).
-    const res = await joinSlotWaitlist(club.id, day.key, slot, effectiveDuration ?? 90);
+    // Durée envoyée = celle du créneau. Sur un créneau COMPLET, `effectiveDuration` est null
+    // (aucun couple libre) → on la dérive de la GRILLE (plus petite durée offerte à cette heure,
+    // fenêtre la plus précise) : un club « tout en 1h » attendrait sinon sur [t, t+90) et serait
+    // alerté par la libération du créneau SUIVANT (t+60), jamais demandé.
+    const grid = resolvedGridFor(club, ctx);
+    const waitDur: 60 | 90 =
+      effectiveDuration === 60 || effectiveDuration === 90
+        ? effectiveDuration
+        : allCourts.some((c) => slotDurationAt(grid, c, slot) === 60)
+          ? 60
+          : 90;
+    const res = await joinSlotWaitlist(club.id, day.key, slot, waitDur);
     setWaitBusy(false);
     if (res === 'ok') {
       setWaitlist((cur) => [...(cur ?? []), { clubId: club.id, dateKey: day.key, time: slot }]);
@@ -377,6 +392,13 @@ export default function ReserverScreen() {
     setSubmitting(false);
     if (res.ok) {
       hapticSuccess();
+      // J'avais une ALERTE de liste d'attente sur ce créneau et je viens de le réserver : on la
+      // retire (best-effort) — sinon la prochaine annulation d'un voisin me pousserait « un
+      // créneau s'est libéré » pour un créneau que j'occupe déjà.
+      if (alerted) {
+        void leaveSlotWaitlist(club.id, day.key, slot);
+        setWaitlist((cur) => (cur ?? []).filter((w) => !(w.clubId === club.id && w.dateKey === day.key && w.time === slot)));
+      }
       // Fige l'instantané AVANT le re-rendu de succès (la dispo va muter — cf. déclaration de `booked`).
       // On fige AUSSI le jour (libellé absolu), l'heure et startsAt : l'écran de succès ne doit plus
       // lire `day!`/`slot!` — après une nuit en arrière-plan, useTodayKey recale `dates`, l'ancien

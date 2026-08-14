@@ -8,26 +8,28 @@
 --    table `club_followers` (suivre un club — brique PARTAGÉE avec les annonces club, SQL 83).
 --    Le ciblage vit dans notify-club (branche INSERT reservations, plafond 100).
 -- 3) LISTE D'ATTENTE sur créneau complet : `slot_waitlist` + join/leave ; notify-club pousse
---    « un créneau s'est libéré » sur annulation (joueur OU club) puis SUPPRIME les entrées
---    notifiées (alerte one-shot, premier arrivé premier servi).
+--    « un créneau s'est libéré » sur annulation JOUEUR uniquement, puis SUPPRIME les entrées
+--    notifiées (alerte one-shot, premier arrivé premier servi). PAS de push sur `club_cancelled` :
+--    l'annulation club RE-BLOQUE le créneau (75), il n'est donc jamais réellement libéré.
 
 -- ── 1) Fourchette de niveau ─────────────────────────────────────────────────────
 
 alter table public.reservations add column if not exists open_level_min numeric;
 alter table public.reservations add column if not exists open_level_max numeric;
 
-do $$
-begin
-  if not exists (select 1 from pg_constraint
-                 where conname = 'reservations_open_level_range_chk'
-                   and conrelid = 'public.reservations'::regclass) then
-    alter table public.reservations add constraint reservations_open_level_range_chk check (
-      (open_level_min is null or (open_level_min >= 1 and open_level_min <= 7))
-      and (open_level_max is null or (open_level_max >= 1 and open_level_max <= 7))
-      and (open_level_min is null or open_level_max is null or open_level_min <= open_level_max)
-    );
-  end if;
-end $$;
+-- Fourchette bornée [1,7], min ≤ max, et UNIQUEMENT sur un match ouvert (une résa privée forgée
+-- ne peut pas porter de fourchette — parité stricte avec la spec). Drop + add : idempotent ET
+-- remplaçable si la règle évolue.
+alter table public.reservations drop constraint if exists reservations_open_level_range_chk;
+alter table public.reservations add constraint reservations_open_level_range_chk check (
+  (open_level_min is null and open_level_max is null)
+  or (
+    open_match
+    and (open_level_min is null or (open_level_min >= 1 and open_level_min <= 7))
+    and (open_level_max is null or (open_level_max >= 1 and open_level_max <= 7))
+    and (open_level_min is null or open_level_max is null or open_level_min <= open_level_max)
+  )
+);
 
 -- join_open_match : recopie STRICTE de la 57 + garde de fourchette ('level').
 create or replace function public.join_open_match(p_id uuid)
@@ -132,6 +134,11 @@ as $$
     order by r.starts_at;
 $$;
 
+-- ⚠️ Le drop + create ci-dessus EFFACE les privilèges posés par la 53/68 : re-fermer `anon`
+-- (sinon la clé anon — embarquée dans l'app — permet de récolter les matchs ouverts sans compte).
+revoke execute on function public.fetch_open_matches() from public, anon;
+grant execute on function public.fetch_open_matches() to authenticated;
+
 -- ── 2) Alertes de match + suivi de club ─────────────────────────────────────────
 
 alter table public.profiles add column if not exists match_alerts boolean not null default false;
@@ -175,6 +182,7 @@ end;
 $$;
 
 revoke execute on function public.follow_club(text, boolean) from public, anon;
+grant execute on function public.follow_club(text, boolean) to authenticated;
 
 -- ── 3) Liste d'attente sur créneau complet ──────────────────────────────────────
 
@@ -203,6 +211,7 @@ create or replace function public.slot_start_ms(p_date_key text, p_time text)
 returns bigint
 language sql
 immutable
+set search_path = public
 as $$
   select (extract(epoch from (p_date_key || ' ' || p_time)::timestamp) * 1000)::bigint;
 $$;
@@ -219,13 +228,20 @@ declare
 begin
   if v_uid is null then return 'error'; end if;
   if coalesce(p_club_id, '') = '' or p_date_key !~ '^\d{4}-\d{2}-\d{2}$' or p_time !~ '^\d{2}:\d{2}$'
-     or p_duration not in (60, 90) then
+     or p_duration is null or p_duration not in (60, 90) then
     return 'error';
   end if;
   -- Purge best-effort de MES attentes passées (l'alerte one-shot supprime déjà les notifiées).
   delete from public.slot_waitlist
     where user_id = v_uid and public.slot_start_ms(date_key, "time") < v_now;
   if public.slot_start_ms(p_date_key, p_time) <= v_now then return 'past'; end if;
+  -- Écriture BORNÉE (idiome MAX_UPCOMING des résas) : pas d'attente à plus de 90 jours, et au
+  -- plus 20 attentes actives par joueur — un compte ne peut pas gonfler la table indéfiniment.
+  if p_date_key > to_char(now() + interval '90 days', 'YYYY-MM-DD') then return 'error'; end if;
+  if (select count(*) from public.slot_waitlist w
+      where w.user_id = v_uid and public.slot_start_ms(w.date_key, w."time") > v_now) >= 20 then
+    return 'error';
+  end if;
   insert into public.slot_waitlist (user_id, club_id, date_key, "time", duration_min)
     values (v_uid, p_club_id, p_date_key, p_time, p_duration)
     on conflict (user_id, club_id, date_key, "time") do update set duration_min = excluded.duration_min;
@@ -249,3 +265,5 @@ $$;
 
 revoke execute on function public.join_slot_waitlist(text, text, text, int) from public, anon;
 revoke execute on function public.leave_slot_waitlist(text, text, text) from public, anon;
+grant execute on function public.join_slot_waitlist(text, text, text, int) to authenticated;
+grant execute on function public.leave_slot_waitlist(text, text, text) to authenticated;

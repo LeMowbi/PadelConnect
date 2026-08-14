@@ -5,6 +5,7 @@ import * as Linking from 'expo-linking';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState as RNAppState } from 'react-native';
 import { setClubStatusMap, type Club, type CustomClub, type PriceTier } from '@/data/clubs';
+import { type AmericanoState } from '@/lib/americano';
 import {
   approveClubRequest as approveClubRequestRpc,
   createClub as createClubRpc,
@@ -46,6 +47,7 @@ import {
   fetchTournamentFee,
   registerCompetition as registerCompetitionRpc,
   rejectCompetition as rejectCompetitionRpc,
+  saveAmericanoState as saveAmericanoStateRpc,
   setTournamentFee as setTournamentFeeRpc,
   setWaveLink as setWaveLinkRpc,
   confirmTournamentPayment as confirmTournamentPaymentRpc,
@@ -86,7 +88,13 @@ import {
   type SlotOccupancy,
 } from '@/lib/reservations';
 import { blockUser as blockUserRpc, fetchBlockedUserIds } from '@/lib/moderation';
-import { fetchFavoritePlayerIds, reconcileMyLevels, setClubFollow, toggleFavoritePlayer as toggleFavoritePlayerRpc } from '@/lib/social';
+import {
+  fetchFavoritePlayerIds,
+  fetchMyFollowedClubIds,
+  reconcileMyLevels,
+  setClubFollow,
+  toggleFavoritePlayer as toggleFavoritePlayerRpc,
+} from '@/lib/social';
 import { samePhone } from '@/lib/phone';
 import { alertAsync } from '@/lib/confirm';
 import { overlaps, type CourtSlot } from '@/lib/courtSchedule';
@@ -371,6 +379,9 @@ type AppContextType = {
   setTournamentFee: (amount: number) => Promise<{ ok: boolean }>; // opérateur : frais fixe tournois joueurs
   setWaveLink: (link: string) => Promise<{ ok: boolean }>; // opérateur : lien de paiement Wave (v2)
   confirmTournamentPayment: (id: string) => Promise<{ ok: boolean }>; // opérateur : confirme un paiement Wave
+  // Americano auto-géré (82) : enregistre l’état (joueurs, terrains, rondes, scores) côté serveur
+  // puis met à jour le miroir local. false = refus serveur / hors-ligne → l’UI ne bascule pas.
+  saveAmericano: (id: string, americano: AmericanoState) => Promise<boolean>;
   // Réservations : SERVEUR = source de vérité quand connecté (sinon miroir local, démo).
   addReservation: (r: Omit<Reservation, 'id' | 'createdAt' | 'bookedBy' | 'userId'>) => Promise<AddReservationResult>;
   cancelReservation: (id: string) => Promise<boolean>;
@@ -557,6 +568,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     remindersOnRef.current = state.remindersOn;
   }, [state.remindersOn]);
+  // Cœurs favoris suivis en ref (même motif que remindersOnRef) : lus par la réconciliation
+  // `club_followers` de loadSession sans remettre la liste dans ses dépendances.
+  const favoriteClubIdsRef = useRef(state.favoriteClubIds);
+  useEffect(() => {
+    favoriteClubIdsRef.current = state.favoriteClubIds;
+  }, [state.favoriteClubIds]);
 
   // NOTE : le NIVEAU est écrit par le client UNE SEULE FOIS, à l’inscription (quiz levelQuiz,
   // borné [1.0, 7.0] côté serveur par handle_new_user — cf. supabase/36_audit_hardening.sql).
@@ -727,6 +744,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             .then(({ data }) => {
               if (data && stillCurrent()) setState((s) => ({ ...s, level: clampLevel(Number(data.level ?? s.level)) }));
             });
+        }
+      });
+      // Suivi de club (81) : réconciliation one-shot des cœurs favoris avec `club_followers`.
+      // Les cœurs posés AVANT la 81 (ou sur un autre appareil) n'ont pas de ligne serveur → les
+      // alertes « un match à ton niveau » ne partiraient jamais. AJOUT dans les deux sens, jamais
+      // de suppression : les favoris sont locaux à l'appareil, effacer les follows d'un autre
+      // téléphone casserait ses alertes. Fire-and-forget, SET idempotent (rejouable sans risque).
+      void fetchMyFollowedClubIds().then((serverIds) => {
+        if (!serverIds || !stillCurrent()) return;
+        const localIds = favoriteClubIdsRef.current;
+        for (const id of localIds) if (!serverIds.includes(id)) void setClubFollow(id, true);
+        const missing = serverIds.filter((id) => !localIds.includes(id));
+        if (missing.length && stillCurrent()) {
+          setState((s) => ({ ...s, favoriteClubIds: [...new Set([...s.favoriteClubIds, ...missing])] }));
         }
       });
       // Réservations : le serveur est la source de vérité → on remplace le miroir local
@@ -1612,6 +1643,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }));
         return { ok: true };
       },
+      // Organisateur (ou gérant hôte / opérateur) : enregistre l’état de l’americano. Écriture
+      // HONNÊTE — on attend le serveur avant de refléter la grille/les scores dans le miroir
+      // local (le prochain fetch confirmera). false = refus (droits, tournoi clôturé) ou réseau.
+      saveAmericano: async (id, americano) => {
+        const ok = await saveAmericanoStateRpc(id, americano);
+        if (!ok) return false;
+        setState((s) => ({
+          ...s,
+          myCompetitions: s.myCompetitions.map((c) => (c.id === id ? { ...c, americano } : c)),
+        }));
+        return true;
+      },
       addReservation: async (r) => {
         // Garde-fou : on ne réserve jamais un créneau dont l’heure de début est passée.
         if (r.startsAt <= Date.now()) return { ok: false, reason: 'past' };
@@ -1924,9 +1967,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       toggleFavorite: (clubId) => {
         const nowOn = !state.favoriteClubIds.includes(clubId);
+        // Updater DÉFENSIF : `nowOn` est lu sur le state du rendu — deux taps dans la même frame
+        // liraient le même état et ajouteraient l'id EN DOUBLE sans le garde-fou `includes`.
         setState((s) => ({
           ...s,
-          favoriteClubIds: nowOn ? [...s.favoriteClubIds, clubId] : s.favoriteClubIds.filter((x) => x !== clubId),
+          favoriteClubIds: nowOn
+            ? s.favoriteClubIds.includes(clubId)
+              ? s.favoriteClubIds
+              : [...s.favoriteClubIds, clubId]
+            : s.favoriteClubIds.filter((x) => x !== clubId),
         }));
         // Suivi de club SERVEUR (81) : SET idempotent best-effort — sert au ciblage des push
         // (« un match à ton niveau », annonces club 83). Le cœur LOCAL reste la vérité
