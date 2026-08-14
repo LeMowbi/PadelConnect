@@ -101,7 +101,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   🚀 **L'app est EN LIGNE (v1.0) depuis le 2026-07-10** sur les stores CI/SN/US ; l'UE attend la
   vérification « commerçant » DSA d'Apple (bloque UNIQUEMENT les stores européens, rien d'autre).
   La **v1.0.1** (build #63 = correctifs de l'audit complet) a été mise en revue par le porteur le
-  2026-07-13, **publication automatique** à l'approbation Apple (24-48 h). ✅ **Tout le SQL `02`→`82`
+  2026-07-13, **publication automatique** à l'approbation Apple (24-48 h). ✅ **Tout le SQL `02`→`83`
   est appliqué EN BASE** (`80` moteur de niveau, `81` matchs ouverts intelligents — re-appliquée le
   2026-08-14 avec revokes/grants + bornes waitlist —, `82` rétention, appliquées le 2026-08-14 ;
   76 sync cours↔annulation club + 77 garde atomique appliqués le 2026-07-17 ;
@@ -111,11 +111,12 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   Management le 2026-07-11, table `reservations` vide → risque nul). ⚠️ **NE JAMAIS recoller
   `68_creneaux_duree.sql` SEUL** : ses `create or replace` ÉCRASERAIENT les durcissements `69`→`72`
   (validation `d∈{60,90}`, gardes anti-orphelin, verrou commun, retrait de terrain) ; si on doit
-  recoller la 68, recoller ENSUITE `69`→`82` dans l'ordre (la 68 recrée `fetch_open_matches` et la
+  recoller la 68, recoller ENSUITE `69`→`83` dans l'ordre (la 68 recrée `fetch_open_matches` et la
   57 `join_open_match` : recollées seules, elles EFFACERAIENT la fourchette de niveau de la 81).
   Reste au porteur : le lien Wave (Espace opérateur), FCM Android + empreinte assetlinks.
-  (`notify-club` est déployée — v36 le 2026-08-14 : push gérant avec nom du club, favoris/alertes
-  de niveau plafonnées à la source, liste d'attente one-shot honnête, agenda ; HMAC temps constant.)
+  (`notify-club` est déployée — v39 le 2026-08-14 : push gérant avec nom du club, favoris/alertes
+  de niveau plafonnées à la source, liste d'attente one-shot honnête, agenda, annonces club,
+  parts Wave, cours collectifs ; HMAC temps constant.)
 - Un module natif nouveau (ex. `expo-contacts`) ⇒ **nouveau build requis** + config plugin dans
   `app.json` avec la chaîne de permission.
 
@@ -128,8 +129,9 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `82` (voir dossier `supabase/`) — **toutes
-  appliquées en base** (`65`→`82` vérifiées via l'API Management ; `75` annulation club, `76` sync
+  **SQL Editor → Run**. Migrations actuelles : `02` → `83` (voir dossier `supabase/`) — **toutes
+  appliquées en base** (`65`→`83` vérifiées via l'API Management ; `83` club & monétisation
+  prouvée 39/39 assertions live ; `75` annulation club, `76` sync
   cours↔annulation club, `77` garde atomique club_cancel, `78` motif `blocked_slots.reason` GÉNÉRIQUE
   — lisible par tous les joueurs, donc jamais le motif du club — + refus d'annuler une résa déjà jouée ;
   `79` `reservations.court` NOT NULL + contrainte non-blanc, posée + vérifiée le 2026-08-14).
@@ -386,11 +388,12 @@ p_proposed_court, p_proposed_date_key, p_proposed_time, p_proposed_duration_min)
 - **Serveur post-audit 7 ✅ FAIT (confirmé porteur, 2026-07-03)** : SQL `49` (re-corrigée) → `53`
   collées DANS L'ORDRE, notify-club redéployée, dossier `site/` re-déployé (privacy + /get, AASA ok)
   — voir docs/AUDIT-SERVEUR.md §0-SEXIES.
-- **SQL serveur ✅ FAIT** : `54`→`82` **tous appliqués en base** (Management API ; `65`→`77` posés/
-  vérifiés 2026-07-16, `78` posée 2026-07-19, `79`→`82` posées + vérifiées 2026-08-14 : `court`
+- **SQL serveur ✅ FAIT** : `54`→`83` **tous appliqués en base** (Management API ; `65`→`77` posés/
+  vérifiés 2026-07-16, `78` posée 2026-07-19, `79`→`83` posées + vérifiées 2026-08-14 : `court`
   NOT NULL anti résa-fantôme, moteur de niveau, matchs ouverts intelligents, rétention).
-  `notify-club` déployée (v36 le 2026-08-14 — push gérant AVEC nom du club, multi-clubs, favoris,
-  alertes de niveau, liste d'attente, agenda ; HMAC temps constant). Il ne reste au porteur
+  `notify-club` déployée (v39 le 2026-08-14 — push gérant AVEC nom du club, multi-clubs, favoris,
+  alertes de niveau, liste d'attente, agenda, annonces club, parts Wave, cours collectifs ;
+  HMAC temps constant). Il ne reste au porteur
   que : le lien Wave (Espace opérateur → Finances), FCM Android + empreinte SHA-256 d'assetlinks.
 - **Webhook sécurisé ✅ FAIT (2026-07-06)** : `WEBHOOK_SECRET` posé dans les secrets des Edge
   Functions + en-tête `x-webhook-secret` sur les 8 webhooks + `notify-club` redéployée (le secret
@@ -595,6 +598,12 @@ puis ligue par divisions (en dernier). REFUSÉS/plus tard : prix creux (×2), ca
 **Plan d'exécution détaillé : `docs/PLAN-V3-FONCTIONNALITES.md`** (lots A→E, SQL 80→84,
 3 nouveaux webhooks). Règle porteur : Fable = sensible (moteur niveau, gardes, SQL, notify-club),
 Opus = écrans/libs/tests.
+ÉTAT (2026-08-14) : lots **A, B, C livrés + contre-lus** (correctifs appliqués — dont 2 pièges
+de privilèges anon sur des drop+create, refermés et vérifiés en base) ; lot **D serveur FAIT**
+(SQL 83 appliquée + prouvée 39/39, webhooks club_news/share_payments créés, notify-club v39) ;
+lot **D écrans en cours** ; lot **E (ligue) après le build #68** (prérequis : moteur de niveau
+en production quelques semaines). SQL 80→83 et les 11 webhooks : TOUT est déjà posé en base via
+l'API — le porteur n'a RIEN à coller.
 
 ## 11. Où regarder
 
