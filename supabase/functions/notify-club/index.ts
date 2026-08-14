@@ -29,7 +29,8 @@
 //   • reservations UPDATE (status → cancelled JOUEUR uniquement) → alerte LISTE D'ATTENTE (81)
 //     aux inscrits dont l'attente chevauche le créneau libéré (one-shot). PAS sur club_cancelled :
 //     l'annulation club re-bloque le créneau (75), il n'est jamais réellement libéré.
-//   • events INSERT (82, agenda du padel, si « push » coché) → broadcast à tous les comptes.
+//   • events INSERT — ou UPDATE qui vient d'ACTIVER le push — (82, agenda du padel) →
+//     broadcast à tous les comptes (anti-doublon : un événement déjà poussé ne repart pas).
 //   • club_news INSERT (83, si « push » coché) → annonce du club à ses SUIVEURS (club_followers).
 //   • share_payments INSERT (declared) → « part déclarée payée » au CRÉATEUR de la résa ;
 //     UPDATE (→ confirmed) → « ta part est confirmée » au PAYEUR.

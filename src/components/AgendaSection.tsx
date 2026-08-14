@@ -7,7 +7,13 @@ import { fetchEvents, type AgendaEvent } from '@/lib/agenda';
 import { alertAsync } from '@/lib/confirm';
 import { dateKeyLabel } from '@/lib/days';
 import { hapticLight } from '@/lib/haptics';
-import { canRemindEvent, cancelEventReminder, scheduleEventReminder, scheduledEventReminderIds } from '@/lib/notifications';
+import {
+  canRemindEvent,
+  cancelEventReminder,
+  scheduleEventReminder,
+  scheduledEventReminderIds,
+  sweepEventReminders,
+} from '@/lib/notifications';
 import { useTodayKey } from '@/lib/useTodayKey';
 import { colors, radius, spacing } from '@/theme';
 
@@ -32,7 +38,18 @@ export function AgendaSection() {
   useEffect(() => {
     let alive = true;
     // Échec réseau → on garde la liste existante (jamais de section qui disparaît hors-ligne).
-    const load = () => void fetchEvents(todayKey).then((rows) => alive && setEvents((cur) => rows ?? (cur === undefined ? null : cur)));
+    const load = () =>
+      void fetchEvents(todayKey).then((rows) => {
+        if (!alive) return;
+        setEvents((cur) => rows ?? (cur === undefined ? null : cur));
+        // Rappels ORPHELINS (événement supprimé par l'opérateur) : balayés UNIQUEMENT sur une
+        // liste fraîche ET complète (< 20 = non tronquée) — jamais sur un échec réseau (§8).
+        if (rows && rows.length < 20) {
+          void sweepEventReminders(rows.map((r) => r.id)).then(() =>
+            scheduledEventReminderIds().then((ids) => alive && ids && setRemindedIds(ids)),
+          );
+        }
+      });
     load();
     // Retour au premier plan : l'opérateur peut avoir publié un événement entre-temps.
     const sub = AppState.addEventListener('change', (st) => st === 'active' && load());
@@ -67,9 +84,15 @@ export function AgendaSection() {
       toast.show('Rappel retiré');
       return;
     }
-    const ok = await scheduleEventReminder(ev);
+    const res = await scheduleEventReminder(ev);
     setBusyId(null);
-    if (!ok) {
+    if (res === 'full') {
+      // Budget de rappels d'agenda atteint (plafond iOS de 64 notifications locales partagé
+      // avec les rappels de match) : message honnête plutôt qu'un rappel silencieusement jeté.
+      toast.show('Trop de rappels posés — retire-en un pour en ajouter un nouveau.', { icon: 'alert-circle' });
+      return;
+    }
+    if (!res) {
       toast.show('Rappel impossible — autorise les notifications dans les réglages.', { icon: 'alert-circle' });
       return;
     }

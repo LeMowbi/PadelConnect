@@ -18,8 +18,11 @@
 
 alter table public.competitions add column if not exists americano jsonb;
 
-create or replace function public.save_americano_state(p_id uuid, p_state jsonb)
-returns boolean
+-- Retour TEXTE (motif) plutôt que boolean : l'écran distingue « tournoi clôturé entre-temps »
+-- (réessayer est vain) d'un simple échec réseau. Type de retour changé → drop + create.
+drop function if exists public.save_americano_state(uuid, jsonb);
+create function public.save_americano_state(p_id uuid, p_state jsonb)
+returns text -- 'ok' | 'invalid' | 'gone' | 'forbidden'
 language plpgsql
 security definer
 set search_path = public
@@ -27,30 +30,39 @@ as $$
 declare
   v_comp record;
 begin
-  if auth.uid() is null then return false; end if;
+  if auth.uid() is null then return 'forbidden'; end if;
   -- Taille bornée (l'état grandit avec rondes + scores ; 16 joueurs × 7 rondes ≪ 16 Ko) et
-  -- forme minimale : un OBJET jsonb (le détail est validé côté client, l'état n'est qu'affiché).
-  if p_state is null or jsonb_typeof(p_state) <> 'object' or pg_column_size(p_state) > 16384 then
-    return false;
+  -- FORME validée : un objet portant les 4 clés attendues, chacune un tableau — un état forgé
+  -- difforme ferait planter la fiche du tournoi chez TOUS les spectateurs (le client re-valide
+  -- aussi à la lecture, défense en profondeur).
+  if p_state is null or jsonb_typeof(p_state) <> 'object' or pg_column_size(p_state) > 16384
+     -- `is distinct from` et pas `<>` : une clé ABSENTE donne jsonb_typeof(...) = NULL, et
+     -- `NULL <> 'array'` vaut NULL (pas true) — le refus ne se déclencherait jamais.
+     or jsonb_typeof(p_state -> 'players') is distinct from 'array'
+     or jsonb_typeof(p_state -> 'rounds') is distinct from 'array'
+     or jsonb_typeof(p_state -> 'scores') is distinct from 'array'
+     or jsonb_typeof(p_state -> 'courts') is distinct from 'number' then
+    return 'invalid';
   end if;
   select id, organizer_id, club_id, status, format into v_comp
     from public.competitions where id = p_id
     for update;
-  if v_comp.id is null or v_comp.status <> 'published' then return false; end if;
+  if v_comp.id is null or v_comp.status <> 'published' then return 'gone'; end if;
   -- Organisateur du tournoi, gérant du club hôte (tournoi club) ou opérateur.
   if v_comp.organizer_id <> auth.uid()
      and not public.can_manage_club(v_comp.club_id)
      and not exists (select 1 from public.profiles where id = auth.uid() and role = 'operator') then
-    return false;
+    return 'forbidden';
   end if;
   -- Réservé au format americano (le seul dont l'app génère les rondes).
-  if position('americano' in lower(coalesce(v_comp.format, ''))) = 0 then return false; end if;
+  if position('americano' in lower(coalesce(v_comp.format, ''))) = 0 then return 'forbidden'; end if;
   update public.competitions set americano = p_state where id = p_id;
-  return true;
+  return 'ok';
 end;
 $$;
 
 revoke execute on function public.save_americano_state(uuid, jsonb) from public, anon;
+grant execute on function public.save_americano_state(uuid, jsonb) to authenticated;
 
 -- fetch_competitions : la SIGNATURE de retour change (colonne `americano` ajoutée EN FIN) →
 -- drop + create (convention §8). Recopie STRICTE de la 68 sinon.
@@ -95,6 +107,11 @@ as $$
     or public.can_manage_club(c.club_id);
 $$;
 
+-- ⚠️ Le drop + create EFFACE les privilèges posés par 53/58/62/68 (même piège que
+-- fetch_open_matches à la 81) : re-fermer anon, re-donner authenticated EXPLICITEMENT.
+revoke execute on function public.fetch_competitions() from public, anon;
+grant execute on function public.fetch_competitions() to authenticated;
+
 -- ── 2) Réglages opérateur génériques (liste blanche) ───────────────────────────
 
 create table if not exists public.app_config (
@@ -106,7 +123,7 @@ create table if not exists public.app_config (
 alter table public.app_config enable row level security;
 drop policy if exists app_config_select_all on public.app_config;
 create policy app_config_select_all on public.app_config
-  for select using (true); -- lisible par tous (réglages publics : texte de récompense…)
+  for select to authenticated using (true); -- lisible connecté (le seul lecteur est la carte fidélité)
 -- Écritures via la RPC uniquement (liste blanche).
 
 create or replace function public.set_app_config(p_key text, p_value text)
@@ -130,6 +147,7 @@ end;
 $$;
 
 revoke execute on function public.set_app_config(text, text) from public, anon;
+grant execute on function public.set_app_config(text, text) to authenticated;
 
 -- ── 2bis) Fidélité ──────────────────────────────────────────────────────────────
 
@@ -241,6 +259,31 @@ revoke execute on function public.my_loyalty() from public, anon;
 revoke execute on function public.claim_loyalty() from public, anon;
 revoke execute on function public.fetch_loyalty_claims() from public, anon;
 revoke execute on function public.serve_loyalty_claim(uuid) from public, anon;
+grant execute on function public.my_loyalty() to authenticated;
+grant execute on function public.claim_loyalty() to authenticated;
+grant execute on function public.fetch_loyalty_claims() to authenticated;
+grant execute on function public.serve_loyalty_claim(uuid) to authenticated;
+
+-- Mes cycles réclamés (83-correctifs) : la carte fidélité affiche EN PERMANENCE les récompenses
+-- réclamées pas encore servies (« montre cet écran au club ») — sans ça, l'écran de preuve ne
+-- survivait pas au démontage de l'onglet. Lecture directe possible (RLS select-own) mais la RPC
+-- fige le contrat.
+create or replace function public.my_loyalty_claims()
+returns table (cycle int, claimed_at timestamptz, served boolean)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select lc.cycle, lc.claimed_at, lc.served
+    from public.loyalty_claims lc
+    where lc.user_id = auth.uid()
+    order by lc.cycle desc
+    limit 20;
+$$;
+
+revoke execute on function public.my_loyalty_claims() from public, anon;
+grant execute on function public.my_loyalty_claims() to authenticated;
 
 -- ── 3) Agenda du padel ivoirien ─────────────────────────────────────────────────
 
@@ -285,8 +328,11 @@ begin
       returning id into v_id;
   else
     update public.events
+      -- `push = push or …` : la colonne GARDE la trace d'un push déjà parti — une simple
+      -- correction de texte ne l'efface pas (le tag « Poussé » resterait honnête, et la garde
+      -- anti-doublon de notify-club `old.push !== true` ne redevient jamais ré-armable).
       set title = trim(p_title), date_key = p_date_key, place = trim(coalesce(p_place, '')),
-          link = v_link, push = coalesce(p_push, false)
+          link = v_link, push = push or coalesce(p_push, false)
       where id = p_id
       returning id into v_id;
   end if;
@@ -312,3 +358,5 @@ $$;
 
 revoke execute on function public.upsert_event(uuid, text, text, text, text, boolean) from public, anon;
 revoke execute on function public.delete_event(uuid) from public, anon;
+grant execute on function public.upsert_event(uuid, text, text, text, text, boolean) to authenticated;
+grant execute on function public.delete_event(uuid) to authenticated;

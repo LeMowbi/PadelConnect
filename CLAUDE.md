@@ -139,9 +139,10 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - **Edge Function** `supabase/functions/notify-club/index.ts` (Deno) : envoie les push via
   l'API Expo. Déclenchée par des **Database Webhooks** (INSERT + UPDATE). Redéploiement **sans
   terminal** : Dashboard → Edge Functions → notify-club → Edit → coller le code → Deploy.
-  Webhooks à brancher (voir `docs/PUSH-SETUP.md`, 8 au total) : `reservations`,
-  `reservation_participants`, `competitions`, **`friend_requests`**, **`lessons`**,
-  **`coaches`**, **`match_results`**, **`operator_news`**.
+  Webhooks à brancher (voir `docs/PUSH-SETUP.md`, 11 au total — TOUS déjà créés en base via
+  l'API) : `reservations`, `reservation_participants`, `competitions`, **`friend_requests`**,
+  **`lessons`**, **`coaches`**, **`match_results`**, **`operator_news`**, **`events`** (82),
+  **`club_news`** (83, INSERT seul) et **`share_payments`** (83).
 - **Convention réseau** : un fetch serveur renvoie `null` en cas d'échec réseau (≠ `[]`/`{}` =
   succès vide). Les appelants font `x ?? s.existant` ou `if (!x) return` pour ne pas écraser le
   miroir local hors-ligne.

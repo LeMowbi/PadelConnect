@@ -104,8 +104,9 @@ export function teamsToShow(comp: Competition, myTeam?: string): string[] {
 // « Prénom & Partenaire » qui contient le joueur classé. Sert UNIQUEMENT à PRÉ-REMPLIR la
 // clôture — l’organisateur garde le dernier mot. Renvoie {} tant qu’aucun score n’est saisi
 // (sinon on suggérerait un « vainqueur » à 0 point, tiré de l’ordre alphabétique).
-// Une place dont l’équipe est inconnue (joueur ajouté à la main) ou DÉJÀ classée plus haut
-// (les 2 joueurs d’une même équipe sur le podium) reste vide : jamais de sélection invisible.
+// Les places se remplissent en PROMOTION : si les 2 joueurs d’une même équipe sont 1ᵉʳ et 2ᵉ
+// individuellement, l’équipe du 3ᵉ MONTE en 2ᵉ place (jamais de « trou » 1ᵉʳ + 3ᵉ sans 2ᵉ).
+// Une équipe inconnue (joueur ajouté à la main) est simplement sautée : pas de sélection invisible.
 export function americanoPodiumTeams(comp: Competition, myTeam?: string): { first?: string; second?: string; third?: string } {
   const state = comp.americano;
   if (!state?.rounds?.length || !state.scores?.length) return {};
@@ -116,14 +117,13 @@ export function americanoPodiumTeams(comp: Competition, myTeam?: string): { firs
     return teams.find((t) => t.split(' & ').some((n) => n.trim().toLocaleLowerCase() === key));
   };
   const top = podium(standings(state.players, state.rounds, state.scores));
-  const first = teamOf(top.first);
-  const second = teamOf(top.second);
-  const third = teamOf(top.third);
-  return {
-    first,
-    second: second && second !== first ? second : undefined,
-    third: third && third !== first && third !== second ? third : undefined,
-  };
+  // Équipes des 3 premiers joueurs, dédoublonnées en GARDANT l'ordre du classement.
+  const ranked: string[] = [];
+  for (const p of [top.first, top.second, top.third]) {
+    const t = teamOf(p);
+    if (t && !ranked.includes(t)) ranked.push(t);
+  }
+  return { first: ranked[0], second: ranked[1], third: ranked[2] };
 }
 
 // Le tournoi a-t-il des frais d’inscription (≠ gratuit) ? Sert à proposer de contacter

@@ -134,6 +134,10 @@ export async function syncMatchReminders(reservations: ReminderInput[], enabled:
 //    (`kind: 'match-reminder'`), donc une resync des matchs ne les efface jamais.
 const EVENT_PREFIX = 'event-';
 const EVENT_REMINDER_HOUR = '18:00'; // la veille à 18 h (heure d’Abidjan = UTC, cf. slotTimestamp)
+// Budget PROPRE aux rappels d'agenda : les rappels de match occupent déjà jusqu'à
+// 2 × MAX_SCHEDULED_RESERVATIONS = 56 des 64 notifications locales d'iOS — sans plafond ici,
+// 20 événements rappelés feraient déborder et iOS jetterait des rappels EN SILENCE.
+const MAX_EVENT_REMINDERS = 8;
 
 // Horodatage du rappel d’un événement : la veille du jour J à 18 h.
 export function eventReminderAt(dateKey: string): number {
@@ -154,10 +158,13 @@ export async function scheduledEventReminderIds(): Promise<string[] | null> {
   return all.filter((n) => n.identifier.startsWith(EVENT_PREFIX)).map((n) => n.identifier.slice(EVENT_PREFIX.length));
 }
 
-// Pose le rappel d’un événement. false = refusé (permission, web, veille 18 h passée).
-export async function scheduleEventReminder(ev: { id: string; title: string; dateKey: string; place: string }): Promise<boolean> {
+// Pose le rappel d’un événement. false = refusé (permission, web, veille 18 h passée) ;
+// 'full' = budget de rappels d'agenda atteint (l'UI invite à en retirer un d'abord).
+export async function scheduleEventReminder(ev: { id: string; title: string; dateKey: string; place: string }): Promise<boolean | 'full'> {
   if (!canRemindEvent(ev.dateKey)) return false;
   if (!(await ensureNotificationPermission())) return false;
+  const existing = await scheduledEventReminderIds();
+  if (existing && !existing.includes(ev.id) && existing.length >= MAX_EVENT_REMINDERS) return 'full';
   await Notifications.scheduleNotificationAsync({
     identifier: `${EVENT_PREFIX}${ev.id}`,
     content: {
@@ -174,6 +181,18 @@ export async function scheduleEventReminder(ev: { id: string; title: string; dat
 export async function cancelEventReminder(id: string): Promise<void> {
   if (!isNative) return;
   await Notifications.cancelScheduledNotificationAsync(`${EVENT_PREFIX}${id}`);
+}
+
+// Balaye les rappels ORPHELINS : un événement supprimé par l'opérateur côté serveur laisserait
+// sinon son rappel local armé (« C'est demain 📅 » pour un événement annulé). Appelé par la
+// section agenda de l'accueil UNIQUEMENT sur une liste fraîche ET complète (rows non-null,
+// non tronquée) — jamais après un échec réseau (§8 : on ne détruit rien sur un blip).
+export async function sweepEventReminders(liveIds: string[]): Promise<void> {
+  if (!isNative) return;
+  const scheduled = await scheduledEventReminderIds();
+  if (!scheduled) return;
+  const keep = new Set(liveIds);
+  await Promise.all(scheduled.filter((id) => !keep.has(id)).map((id) => cancelEventReminder(id)));
 }
 
 // ─── Tap sur une notification → navigation ────────────────────────────────────

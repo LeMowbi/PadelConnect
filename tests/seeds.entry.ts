@@ -100,6 +100,13 @@ check(amPodium.second === 'Bob & Cyr', 'americanoPodiumTeams : 2ᵉ place = l’
 check(amPodium.third === undefined, 'americanoPodiumTeams : une équipe déjà classée n’est jamais reproposée');
 const amEmpty = { ...amComp, americano: { ...amComp.americano!, scores: [] } };
 check(Object.keys(americanoPodiumTeams(amEmpty)).length === 0, 'americanoPodiumTeams : aucun score ⇒ aucune suggestion');
+// Promotion : quand les 2 premiers joueurs sont du MÊME duo, l'équipe suivante MONTE en 2ᵉ
+// place (jamais de podium « 1ᵉʳ + 3ᵉ sans 2ᵉ »).
+const amPromo = americanoPodiumTeams({ ...amComp, teamNames: ['Awa & Bob', 'Yann & Cyr'] } as typeof amComp);
+check(
+  amPromo.first === 'Awa & Bob' && amPromo.second === 'Yann & Cyr',
+  'americanoPodiumTeams : promotion — l’équipe suivante monte quand le duo de tête truste les 2 premières places',
+);
 
 console.log(failed === 0 ? '\nTOUTES LES DONNÉES SEEDS SONT COHÉRENTES.' : `\n${failed} incohérence(s) seeds.`);
 if (failed > 0) process.exitCode = 1;

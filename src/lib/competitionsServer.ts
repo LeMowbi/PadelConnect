@@ -4,6 +4,7 @@
 // joueur → en attente de validation du club hôte ; frais fixe figé à la création.
 
 import { type Competition } from '@/data/competitions';
+import { safeAmericano } from '@/lib/americano';
 import { dateKeyLabel } from '@/lib/days';
 import { supabase } from './supabase';
 
@@ -81,7 +82,9 @@ function rowToCompetition(r: CompetitionRow, myUserId: string): Competition {
     closed: r.status === 'closed',
     rejectReason: r.reject_reason ?? undefined,
     paymentStatus: r.payment_status === 'paid' ? 'paid' : 'unpaid',
-    americano: r.americano ?? undefined,
+    // Forme VALIDÉE à la lecture (safeAmericano) : un état forgé difforme est traité comme
+    // « pas d'americano » au lieu de faire planter la fiche chez tous les spectateurs.
+    americano: safeAmericano(r.americano),
   };
 }
 
@@ -230,8 +233,13 @@ export async function setTournamentFee(amount: number): Promise<boolean> {
 }
 
 // Sauvegarde l'état americano (organisateur / gérant hôte / opérateur, tournoi publié,
-// format americano — gardes serveur, SQL 82). true = enregistré.
-export async function saveAmericanoState(compId: string, state: import('@/lib/americano').AmericanoState): Promise<boolean> {
+// format americano — gardes serveur, SQL 82). 'gone' = tournoi clôturé/disparu entre-temps
+// (réessayer est vain — l'UI le dit) ; 'error' = refus (droits, forme) ou échec réseau.
+export async function saveAmericanoState(
+  compId: string,
+  state: import('@/lib/americano').AmericanoState,
+): Promise<'ok' | 'gone' | 'error'> {
   const { data, error } = await supabase.rpc('save_americano_state', { p_id: compId, p_state: state });
-  return !error && data === true;
+  if (error) return 'error';
+  return data === 'ok' ? 'ok' : data === 'gone' ? 'gone' : 'error';
 }

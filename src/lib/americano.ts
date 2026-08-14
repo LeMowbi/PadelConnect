@@ -41,6 +41,39 @@ export type AmericanoScore = { round: number; courtIndex: number; scoreA: number
 // SQL 82) : la génération/le classement restent purs (client), le serveur ne fait qu'afficher.
 export type AmericanoState = { players: string[]; courts: number; rounds: AmericanoRound[]; scores: AmericanoScore[] };
 
+// Valide un état lu du SERVEUR avant de le faire entrer dans l'app (rowToCompetition) : le jsonb
+// n'est typé que superficiellement côté SQL — un état forgé difforme (clé manquante, types
+// inattendus) ferait planter la fiche du tournoi chez TOUS les spectateurs (`am.scores.length`…).
+// Renvoie l'état tel quel s'il a la forme attendue, undefined sinon (≡ « pas d'americano »).
+// Défense en profondeur : la 82 valide aussi la forme à l'écriture, ceci protège les lectures.
+export function safeAmericano(raw: unknown): AmericanoState | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const s = raw as Partial<AmericanoState>;
+  if (!Array.isArray(s.players) || !s.players.every((p) => typeof p === 'string')) return undefined;
+  if (typeof s.courts !== 'number' || !Number.isFinite(s.courts)) return undefined;
+  if (!Array.isArray(s.rounds) || !Array.isArray(s.scores)) return undefined;
+  const okTeam = (t: unknown): boolean => Array.isArray(t) && t.length === 2 && t.every((p) => typeof p === 'string');
+  const okRound = (r: unknown): boolean =>
+    !!r &&
+    typeof r === 'object' &&
+    typeof (r as AmericanoRound).round === 'number' &&
+    Array.isArray((r as AmericanoRound).matches) &&
+    (r as AmericanoRound).matches.every(
+      (m) => !!m && typeof m === 'object' && typeof m.courtIndex === 'number' && okTeam(m.teamA) && okTeam(m.teamB),
+    ) &&
+    Array.isArray((r as AmericanoRound).resting) &&
+    (r as AmericanoRound).resting.every((p) => typeof p === 'string');
+  const okScore = (x: unknown): boolean =>
+    !!x &&
+    typeof x === 'object' &&
+    typeof (x as AmericanoScore).round === 'number' &&
+    typeof (x as AmericanoScore).courtIndex === 'number' &&
+    typeof (x as AmericanoScore).scoreA === 'number' &&
+    typeof (x as AmericanoScore).scoreB === 'number';
+  if (!s.rounds.every(okRound) || !s.scores.every(okScore)) return undefined;
+  return s as AmericanoState;
+}
+
 // Une ligne de classement. `played` = matchs RÉELLEMENT joués (un score enregistré), pas les
 // matchs prévus — c'est ce qui rend « points / played » (moyenne par match) honnête.
 export type AmericanoStanding = { player: AmericanoPlayer; points: number; played: number };

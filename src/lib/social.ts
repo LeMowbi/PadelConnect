@@ -185,6 +185,20 @@ export async function setLoyaltyReward(text: string): Promise<boolean> {
   return !error && data === true;
 }
 
+export type MyLoyaltyClaim = { cycle: number; claimedAt: number; served: boolean };
+
+// MES cycles réclamés (le justificatif « montre cet écran au club » doit SURVIVRE au démontage
+// de l'onglet — sans cette lecture, la preuve ne s'affichait qu'une fois). null = échec réseau.
+export async function fetchMyLoyaltyClaims(): Promise<MyLoyaltyClaim[] | null> {
+  const { data, error } = await supabase.rpc('my_loyalty_claims');
+  if (error) return null;
+  return ((data ?? []) as { cycle: number; claimed_at: string; served: boolean }[]).map((r) => ({
+    cycle: r.cycle,
+    claimedAt: new Date(r.claimed_at).getTime(),
+    served: r.served === true,
+  }));
+}
+
 export type LoyaltyClaim = { id: string; userId: string; playerName: string; cycle: number; claimedAt: number; served: boolean };
 
 // Opérateur : réclamations à servir (les non servies d'abord). null = échec réseau.

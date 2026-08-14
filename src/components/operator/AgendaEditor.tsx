@@ -5,7 +5,7 @@ import { CalendarPicker } from '@/components/CalendarPicker';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, Tag, Txt } from '@/components/ui';
 import { opStyles } from '@/components/operator/styles';
-import { deleteEvent, fetchEvents, upsertEvent, type AgendaEvent } from '@/lib/agenda';
+import { deleteEvent, fetchAllEvents, upsertEvent, type AgendaEvent } from '@/lib/agenda';
 import { confirmAsync } from '@/lib/confirm';
 import { DAY_MS, dateKeyLabel, dayKey } from '@/lib/days';
 import { useTodayKey } from '@/lib/useTodayKey';
@@ -33,8 +33,10 @@ export function AgendaEditor() {
 
   useEffect(() => {
     let alive = true;
+    // TOUS les événements (passés compris — l'opérateur peut corriger/supprimer un événement
+    // passé, contrairement à l'accueil joueur qui ne montre que le futur).
     // Échec réseau → on garde la liste existante (jamais de liste vidée à tort, §8).
-    void fetchEvents(todayKey).then((rows) => alive && setEvents((cur) => rows ?? (cur === undefined ? null : cur)));
+    void fetchAllEvents().then((rows) => alive && setEvents((cur) => rows ?? (cur === undefined ? null : cur)));
     return () => {
       alive = false;
     };
@@ -42,7 +44,7 @@ export function AgendaEditor() {
 
   // Rechargement après écriture (création / modification / suppression).
   const reload = async () => {
-    const rows = await fetchEvents(todayKey);
+    const rows = await fetchAllEvents();
     setEvents((cur) => rows ?? (cur === undefined ? null : cur));
   };
 
@@ -68,12 +70,20 @@ export function AgendaEditor() {
 
   const save = async () => {
     if (!canSubmit || !dateKey) return;
-    // Lien : on préfixe https:// s’il manque, et on REFUSE une saisie invalide plutôt que de la
-    // laisser tomber en silence (même règle que l’actu d’accueil, cf. setOperatorNews).
+    // Lien : on préfixe https:// s’il manque et on FORCE https (le serveur — SQL 82 — refuse
+    // net un http:// ; sans cette normalisation, l’opérateur bouclait sur un message « vérifie
+    // ta connexion » qui accusait le réseau au lieu du lien). Saisie invalide = refus explicite.
     let url = link.trim();
     if (url && !/^https?:\/\//i.test(url)) url = `https://${url}`;
-    if (url && !/^https?:\/\/.+\..+/i.test(url)) {
+    url = url.replace(/^http:\/\//i, 'https://');
+    if (url && !/^https:\/\/.+\..+/i.test(url)) {
       toast.show('Lien invalide — corrige-le (https://…) ou vide le champ.', { icon: 'alert-circle' });
+      return;
+    }
+    // Le préfixage a pu faire déborder la borne serveur (colonne link ≤ 300) : refus NET ici
+    // plutôt qu’une erreur SQL brute.
+    if (url.length > 300) {
+      toast.show('Lien trop long (300 caractères maximum).', { icon: 'alert-circle' });
       return;
     }
     setSaving(true);
@@ -125,7 +135,7 @@ export function AgendaEditor() {
         </Txt>
       ) : events.length === 0 ? (
         <Txt variant="small" color={colors.textMuted}>
-          Aucun événement à venir pour l’instant.
+          Aucun événement pour l’instant.
         </Txt>
       ) : (
         events.map((ev, i) => (
@@ -139,6 +149,7 @@ export function AgendaEditor() {
                 <Txt variant="small" color={colors.textMuted} numberOfLines={1}>
                   {dateKeyLabel(ev.dateKey)}
                   {ev.place ? ` · ${ev.place}` : ''}
+                  {ev.dateKey < todayKey ? ' · passé' : ''}
                 </Txt>
               </View>
               {ev.push ? <Tag label="Poussé" tone="purple" icon="notifications" /> : null}

@@ -380,8 +380,9 @@ type AppContextType = {
   setWaveLink: (link: string) => Promise<{ ok: boolean }>; // opérateur : lien de paiement Wave (v2)
   confirmTournamentPayment: (id: string) => Promise<{ ok: boolean }>; // opérateur : confirme un paiement Wave
   // Americano auto-géré (82) : enregistre l’état (joueurs, terrains, rondes, scores) côté serveur
-  // puis met à jour le miroir local. false = refus serveur / hors-ligne → l’UI ne bascule pas.
-  saveAmericano: (id: string, americano: AmericanoState) => Promise<boolean>;
+  // puis met à jour le miroir local. 'gone' = tournoi clôturé/disparu (réessayer est vain) ;
+  // 'error' = refus (droits, forme) ou hors-ligne → l’UI ne bascule pas.
+  saveAmericano: (id: string, americano: AmericanoState) => Promise<'ok' | 'gone' | 'error'>;
   // Réservations : SERVEUR = source de vérité quand connecté (sinon miroir local, démo).
   addReservation: (r: Omit<Reservation, 'id' | 'createdAt' | 'bookedBy' | 'userId'>) => Promise<AddReservationResult>;
   cancelReservation: (id: string) => Promise<boolean>;
@@ -1645,15 +1646,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       // Organisateur (ou gérant hôte / opérateur) : enregistre l’état de l’americano. Écriture
       // HONNÊTE — on attend le serveur avant de refléter la grille/les scores dans le miroir
-      // local (le prochain fetch confirmera). false = refus (droits, tournoi clôturé) ou réseau.
+      // local (le prochain fetch confirmera). 'gone' = tournoi clôturé entre-temps (l'UI le dit,
+      // au lieu d'inviter à réessayer en vain) ; 'error' = refus/réseau.
       saveAmericano: async (id, americano) => {
-        const ok = await saveAmericanoStateRpc(id, americano);
-        if (!ok) return false;
-        setState((s) => ({
-          ...s,
-          myCompetitions: s.myCompetitions.map((c) => (c.id === id ? { ...c, americano } : c)),
-        }));
-        return true;
+        const epoch = sessionEpochRef.current; // motif registerCompetition : réponse tardive inerte
+        const res = await saveAmericanoStateRpc(id, americano);
+        if (res !== 'ok') return res;
+        if (sessionEpochRef.current === epoch) {
+          setState((s) => ({
+            ...s,
+            myCompetitions: s.myCompetitions.map((c) => (c.id === id ? { ...c, americano } : c)),
+          }));
+        }
+        return 'ok';
       },
       addReservation: async (r) => {
         // Garde-fou : on ne réserve jamais un créneau dont l’heure de début est passée.

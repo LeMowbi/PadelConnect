@@ -195,16 +195,24 @@ export default function CompetitionDetail() {
   const thirdName = thirdPick ?? amPodium.third ?? '';
 
   // Enregistrement HONNÊTE de l’état americano : on attend le serveur, la section ne bascule
-  // qu’au OK (le store ne met à jour son miroir que dans ce cas), sinon toast d’échec.
+  // qu’au OK (le store ne met à jour son miroir que dans ce cas), sinon toast d’échec — un
+  // tournoi CLÔTURÉ entre-temps a son propre message (réessayer serait vain).
   const saveAm = async (next: AmericanoState, okText: string): Promise<boolean> => {
     if (savingAm) return false;
     setSavingAm(true);
-    const ok = await saveAmericano(comp.id, next);
+    const res = await saveAmericano(comp.id, next);
     setSavingAm(false);
-    if (ok) hapticSuccess();
+    if (res === 'ok') hapticSuccess();
     else hapticWarning();
-    showToast(ok ? okText : 'Enregistrement impossible — réessaie.', ok ? 'success' : 'error');
-    return ok;
+    showToast(
+      res === 'ok'
+        ? okText
+        : res === 'gone'
+          ? 'Ce tournoi vient d’être clôturé — le résultat ne peut plus changer.'
+          : 'Enregistrement impossible — vérifie ta connexion et réessaie.',
+      res === 'ok' ? 'success' : 'error',
+    );
+    return res === 'ok';
   };
 
   const addPlayer = () => {

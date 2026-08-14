@@ -19,7 +19,16 @@ import { levelLabel } from '@/lib/format';
 import { hapticSuccess } from '@/lib/haptics';
 import { isValidPhone } from '@/lib/phone';
 import { pickImage } from '@/lib/pickImage';
-import { claimLoyalty, fetchLoyaltyReward, fetchMatchAlerts, fetchMyLoyalty, setMatchAlerts, type Loyalty } from '@/lib/social';
+import {
+  claimLoyalty,
+  fetchLoyaltyReward,
+  fetchMatchAlerts,
+  fetchMyLoyalty,
+  fetchMyLoyaltyClaims,
+  setMatchAlerts,
+  type Loyalty,
+  type MyLoyaltyClaim,
+} from '@/lib/social';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { GENDERS, ageFrom, genderLabel, maskBirthDate, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
 import { colors, gradients, radius, spacing } from '@/theme';
@@ -710,15 +719,18 @@ function LoyaltyCard() {
   // null = texte inconnu (échec réseau) ; '' = récompense pas encore réglée par l’opérateur.
   const [reward, setReward] = useState<string | null>(null);
   const [claiming, setClaiming] = useState(false); // garde anti double-tap
-  const [awarded, setAwarded] = useState<number | null>(null); // n° du cycle tout juste réclamé
+  // Mes cycles réclamés, lus du SERVEUR : le justificatif « montre cet écran au club » doit
+  // SURVIVRE au démontage de l’onglet (le lendemain au club, il est encore là). null = inconnu.
+  const [myClaims, setMyClaims] = useState<MyLoyaltyClaim[] | null>(null);
 
   // Chargement au montage ET au retour au premier plan (une partie a pu se jouer entre-temps,
-  // ou l’opérateur a réglé la récompense).
+  // ou l’opérateur a réglé la récompense / servi un cycle).
   useEffect(() => {
     let alive = true;
     const load = () => {
       void fetchMyLoyalty().then((l) => alive && l && setLoyalty(l));
       void fetchLoyaltyReward().then((t) => alive && t !== null && setReward(t));
+      void fetchMyLoyaltyClaims().then((c) => alive && c && setMyClaims(c));
     };
     load();
     const sub = AppState.addEventListener('change', (st) => st === 'active' && load());
@@ -742,12 +754,12 @@ function LoyaltyCard() {
     // Dans tous les cas on relit le compteur serveur : il fait foi (une partie a pu être
     // annulée entre-temps, ou la récompense déjà réclamée depuis un autre appareil).
     const fresh = await fetchMyLoyalty();
+    const freshClaims = await fetchMyLoyaltyClaims();
     setClaiming(false);
     if (fresh) setLoyalty(fresh);
+    if (freshClaims) setMyClaims(freshClaims);
     if (res === 'ok') {
       hapticSuccess();
-      // Les cycles se réclament dans l’ordre : le n° réclamé = le total de cycles après coup.
-      setAwarded(fresh ? fresh.claimed : (loyalty?.claimed ?? 0) + 1);
     } else if (res === 'not_yet') {
       toast.show('Pas encore : il faut 10 parties jouées depuis ta dernière récompense.', { icon: 'information-circle' });
     } else {
@@ -792,22 +804,25 @@ function LoyaltyCard() {
         </Txt>
       ) : null}
 
-      {/* Réclamation faite : l’écran à montrer pour recevoir la récompense. */}
-      {awarded !== null ? (
-        <PopIn>
-          <View style={styles.rewardBox}>
-            <Ionicons name="gift" size={20} color={colors.amberDark} />
-            <View style={{ flex: 1 }}>
-              <Txt variant="body" style={{ fontWeight: '700' }}>
-                Récompense n°{awarded} à réclamer
-              </Txt>
-              <Txt variant="small" color={colors.textMuted}>
-                Montre cet écran au club ou à PadelConnect pour la recevoir.
-              </Txt>
+      {/* Cycles réclamés PAS ENCORE SERVIS (état serveur, permanent) : le justificatif reste
+          affiché tant que le club/PadelConnect n’a pas marqué la remise « servie ». */}
+      {(myClaims ?? [])
+        .filter((c) => !c.served)
+        .map((c) => (
+          <PopIn key={c.cycle}>
+            <View style={styles.rewardBox}>
+              <Ionicons name="gift" size={20} color={colors.amberDark} />
+              <View style={{ flex: 1 }}>
+                <Txt variant="body" style={{ fontWeight: '700' }}>
+                  Récompense n°{c.cycle} à recevoir
+                </Txt>
+                <Txt variant="small" color={colors.textMuted}>
+                  Montre cet écran au club ou à PadelConnect pour la recevoir.
+                </Txt>
+              </View>
             </View>
-          </View>
-        </PopIn>
-      ) : null}
+          </PopIn>
+        ))}
 
       {pending > 0 ? (
         <View style={{ marginTop: spacing.md }}>

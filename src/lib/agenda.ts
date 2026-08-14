@@ -14,6 +14,12 @@ export type AgendaEvent = {
   push: boolean; // la publication a envoyé une notification
 };
 
+type EventRow = { id: string; title: string; date_key: string; place: string; link: string; push: boolean };
+
+function toEvent(r: EventRow): AgendaEvent {
+  return { id: r.id, title: r.title, dateKey: r.date_key, place: r.place ?? '', link: r.link ?? '', push: r.push === true };
+}
+
 // Événements à venir (l'accueil n'affiche que le futur). Convention §8 : null = échec réseau.
 export async function fetchEvents(todayKey: string): Promise<AgendaEvent[] | null> {
   const { data, error } = await supabase
@@ -23,14 +29,19 @@ export async function fetchEvents(todayKey: string): Promise<AgendaEvent[] | nul
     .order('date_key', { ascending: true })
     .limit(20);
   if (error) return null;
-  return ((data ?? []) as { id: string; title: string; date_key: string; place: string; link: string; push: boolean }[]).map((r) => ({
-    id: r.id,
-    title: r.title,
-    dateKey: r.date_key,
-    place: r.place ?? '',
-    link: r.link ?? '',
-    push: r.push === true,
-  }));
+  return ((data ?? []) as EventRow[]).map(toEvent);
+}
+
+// Opérateur : TOUS les événements, passés compris (corriger ou supprimer un événement passé
+// resterait impossible avec la vue « futur seul » de l'accueil). Les plus récents d'abord.
+export async function fetchAllEvents(): Promise<AgendaEvent[] | null> {
+  const { data, error } = await supabase
+    .from('events')
+    .select('id, title, date_key, place, link, push')
+    .order('date_key', { ascending: false })
+    .limit(50);
+  if (error) return null;
+  return ((data ?? []) as EventRow[]).map(toEvent);
 }
 
 // Opérateur : crée (id null) ou modifie un événement. Renvoie l'id, ou null si refusé/échec
