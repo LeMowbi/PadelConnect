@@ -53,6 +53,9 @@ function reservationToRow(
     // Colonnes « match ouvert » (45) envoyées SEULEMENT pour un match ouvert : une réservation
     // normale reste insérable même si la migration 45 n'est pas encore collée (colonnes inconnues).
     ...(r.openMatch ? { open_match: true, open_level: r.openLevel ?? '' } : {}),
+    // Fourchette de niveau (81) — seulement sur un match OUVERT, null = ouvert à tous.
+    ...(r.openMatch && r.openLevelMin != null ? { open_level_min: r.openLevelMin } : {}),
+    ...(r.openMatch && r.openLevelMax != null ? { open_level_max: r.openLevelMax } : {}),
     // open_capacity (57) persistée dès que la capacité DIFFÈRE du défaut serveur (4) : un 1v1
     // PRIVÉ doit rester distinguable d'un 2v2 en aval (accueil, mes résas, part par joueur).
     // Un 2v2 privé n'envoie rien (défaut serveur 4) → une résa normale reste insérable sans la 57.

@@ -150,8 +150,11 @@ create policy club_followers_select_own on public.club_followers
   for select using (user_id = auth.uid());
 -- Écritures via la RPC (validation + un seul point d'entrée).
 
-create or replace function public.toggle_club_follow(p_club_id text)
-returns text -- 'added' | 'removed' | 'error'
+-- SET idempotent (pas un toggle) : le client synchronise son cœur favori LOCAL vers le serveur
+-- en best-effort — un toggle re-joué après un échec réseau inverserait l'intention.
+drop function if exists public.toggle_club_follow(text);
+create or replace function public.follow_club(p_club_id text, p_on boolean)
+returns boolean
 language plpgsql
 security definer
 set search_path = public
@@ -160,18 +163,18 @@ declare
   v_uid uuid := auth.uid();
   v_club text := nullif(trim(coalesce(p_club_id, '')), '');
 begin
-  if v_uid is null or v_club is null or length(v_club) > 64 then return 'error'; end if;
-  if exists (select 1 from public.club_followers where user_id = v_uid and club_id = v_club) then
+  if v_uid is null or v_club is null or length(v_club) > 64 then return false; end if;
+  if p_on then
+    insert into public.club_followers (user_id, club_id) values (v_uid, v_club)
+      on conflict do nothing;
+  else
     delete from public.club_followers where user_id = v_uid and club_id = v_club;
-    return 'removed';
   end if;
-  insert into public.club_followers (user_id, club_id) values (v_uid, v_club)
-    on conflict do nothing;
-  return 'added';
+  return true;
 end;
 $$;
 
-revoke execute on function public.toggle_club_follow(text) from anon;
+revoke execute on function public.follow_club(text, boolean) from public, anon;
 
 -- ── 3) Liste d'attente sur créneau complet ──────────────────────────────────────
 
@@ -244,5 +247,5 @@ begin
 end;
 $$;
 
-revoke execute on function public.join_slot_waitlist(text, text, text, int) from anon;
-revoke execute on function public.leave_slot_waitlist(text, text, text) from anon;
+revoke execute on function public.join_slot_waitlist(text, text, text, int) from public, anon;
+revoke execute on function public.leave_slot_waitlist(text, text, text) from public, anon;

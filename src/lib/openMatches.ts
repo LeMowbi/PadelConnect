@@ -19,6 +19,9 @@ export type OpenMatch = {
   placesLeft: number; // places restantes aux côtés du créateur (capacité − 1 − arrivés)
   capacity: number; // 2 = 1v1 · 4 = 2v2
   durationMin: number; // durée réelle du créneau (60|90, créneaux modulables 68) — 90 par défaut
+  // Fourchette de niveau (81) : null = ouvert à tous. Le refus est SERVEUR (join → 'level').
+  levelMin: number | null;
+  levelMax: number | null;
 };
 
 export async function fetchOpenMatches(): Promise<OpenMatch[] | null> {
@@ -40,6 +43,8 @@ export async function fetchOpenMatches(): Promise<OpenMatch[] | null> {
       places_left: number;
       capacity: number;
       duration_min: number;
+      open_level_min: number | null;
+      open_level_max: number | null;
     }[]
   ).map((r) => ({
     id: r.id,
@@ -56,12 +61,14 @@ export async function fetchOpenMatches(): Promise<OpenMatch[] | null> {
     placesLeft: r.places_left,
     capacity: r.capacity ?? 4,
     durationMin: r.duration_min ?? 90,
+    levelMin: r.open_level_min == null ? null : Number(r.open_level_min),
+    levelMax: r.open_level_max == null ? null : Number(r.open_level_max),
   }));
 }
 
 // Rejoindre : la place est prise IMMÉDIATEMENT (le créateur reçoit un push). Statuts serveur
 // distincts pour des messages honnêtes ('full' ≠ 'gone' ≠ 'already') ; 'error' = échec réseau.
-export type JoinResult = 'ok' | 'full' | 'gone' | 'own' | 'already' | 'forbidden' | 'error';
+export type JoinResult = 'ok' | 'full' | 'gone' | 'own' | 'already' | 'forbidden' | 'level' | 'error';
 
 export async function joinOpenMatch(id: string): Promise<JoinResult> {
   const { data, error } = await supabase.rpc('join_open_match', { p_id: id });

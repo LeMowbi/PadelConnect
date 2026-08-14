@@ -86,7 +86,7 @@ import {
   type SlotOccupancy,
 } from '@/lib/reservations';
 import { blockUser as blockUserRpc, fetchBlockedUserIds } from '@/lib/moderation';
-import { fetchFavoritePlayerIds, reconcileMyLevels, toggleFavoritePlayer as toggleFavoritePlayerRpc } from '@/lib/social';
+import { fetchFavoritePlayerIds, reconcileMyLevels, setClubFollow, toggleFavoritePlayer as toggleFavoritePlayerRpc } from '@/lib/social';
 import { samePhone } from '@/lib/phone';
 import { alertAsync } from '@/lib/confirm';
 import { overlaps, type CourtSlot } from '@/lib/courtSchedule';
@@ -168,6 +168,8 @@ export type Reservation = {
   clubConfirmed?: boolean; // le gérant a confirmé la réservation (visible par le joueur)
   openMatch?: boolean; // match OUVERT (45) : visible dans « Matchs ouverts », rejoignable
   openLevel?: string; // niveau souhaité du match ouvert (ex. « 3–4 », libre)
+  openLevelMin?: number | null; // fourchette de niveau (81) — null/absent = ouvert à tous
+  openLevelMax?: number | null; // (le refus hors fourchette est SERVEUR : join → 'level')
   openCapacity?: number; // nombre de joueurs attendus : 2 = 1v1, 4 = 2v2 (défaut 4)
   cancelledByClub?: boolean; // 75 : annulée par le CLUB (chevauchement résa hors app), pas par le joueur
   cancelReason?: string; // 75 : motif d'annulation club affiché au joueur (ex. « déjà pris au téléphone »)
@@ -1920,13 +1922,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setState((s) => ({ ...s, friends: s.friends.filter((f) => f.id !== id) }));
         return true;
       },
-      toggleFavorite: (clubId) =>
+      toggleFavorite: (clubId) => {
+        const nowOn = !state.favoriteClubIds.includes(clubId);
         setState((s) => ({
           ...s,
-          favoriteClubIds: s.favoriteClubIds.includes(clubId)
-            ? s.favoriteClubIds.filter((x) => x !== clubId)
-            : [...s.favoriteClubIds, clubId],
-        })),
+          favoriteClubIds: nowOn ? [...s.favoriteClubIds, clubId] : s.favoriteClubIds.filter((x) => x !== clubId),
+        }));
+        // Suivi de club SERVEUR (81) : SET idempotent best-effort — sert au ciblage des push
+        // (« un match à ton niveau », annonces club 83). Le cœur LOCAL reste la vérité
+        // d'affichage : un échec réseau ne dégrade que le ciblage, jamais l'UI.
+        if (state.serverUserId) void setClubFollow(clubId, nowOn);
+      },
       // Photo de club : un fichier local est d’abord ENVOYÉ au Storage (URL publique) pour que
       // les joueurs la voient sur tous les appareils ; une URL https est gardée telle quelle.
       // Puis on enregistre la liste des photos côté serveur (config club).

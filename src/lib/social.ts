@@ -77,3 +77,69 @@ export async function reconcileMyLevels(): Promise<number> {
   const { data, error } = await supabase.rpc('reconcile_my_levels');
   return error ? 0 : Number(data ?? 0);
 }
+
+// ─── Liste d'attente sur créneau complet (81) ───────────────────────────────────
+
+// Poser une alerte « me prévenir si ça se libère ». 'past' = créneau déjà passé.
+export async function joinSlotWaitlist(
+  clubId: string,
+  dateKey: string,
+  time: string,
+  durationMin: 60 | 90,
+): Promise<'ok' | 'past' | 'error'> {
+  const { data, error } = await supabase.rpc('join_slot_waitlist', {
+    p_club_id: clubId,
+    p_date_key: dateKey,
+    p_time: time,
+    p_duration: durationMin,
+  });
+  if (error) return 'error';
+  return data === 'ok' || data === 'past' ? data : 'error';
+}
+
+// Retirer mon alerte. true = retirée (false = absente ou échec réseau).
+export async function leaveSlotWaitlist(clubId: string, dateKey: string, time: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('leave_slot_waitlist', { p_club_id: clubId, p_date_key: dateKey, p_time: time });
+  return !error && data === true;
+}
+
+// Mes alertes posées (pour afficher l'état « Alerte posée ✓ » dans le tunnel). null = échec réseau.
+export async function fetchMySlotWaitlist(): Promise<{ clubId: string; dateKey: string; time: string }[] | null> {
+  const { data, error } = await supabase.from('slot_waitlist').select('club_id, date_key, time');
+  if (error) return null;
+  return ((data ?? []) as { club_id: string; date_key: string; time: string }[]).map((r) => ({
+    clubId: r.club_id,
+    dateKey: r.date_key,
+    time: r.time,
+  }));
+}
+
+// ─── Alertes « un match à ton niveau » (81) ─────────────────────────────────────
+
+// Préférence serveur (le ciblage se fait dans notify-club). true = enregistrée.
+export async function setMatchAlerts(on: boolean): Promise<boolean> {
+  const { data: session } = await supabase.auth.getSession();
+  const uid = session?.session?.user?.id;
+  if (!uid) return false;
+  const { error } = await supabase.from('profiles').update({ match_alerts: on }).eq('id', uid);
+  return !error;
+}
+
+// Lecture de la préférence (l'écran Profil la charge à l'ouverture — pas de tranche store).
+export async function fetchMatchAlerts(): Promise<boolean | null> {
+  const { data: session } = await supabase.auth.getSession();
+  const uid = session?.session?.user?.id;
+  if (!uid) return null;
+  const { data, error } = await supabase.from('profiles').select('match_alerts').eq('id', uid).maybeSingle();
+  if (error || !data) return null;
+  return data.match_alerts === true;
+}
+
+// ─── Suivre un club (81) — synchronise le cœur favori LOCAL vers le serveur ─────
+
+// SET idempotent (pas un toggle) : re-jouable sans risque après un échec réseau. Best-effort —
+// le cœur local reste la vérité d'affichage, le serveur ne sert qu'au ciblage des push.
+export async function setClubFollow(clubId: string, on: boolean): Promise<boolean> {
+  const { data, error } = await supabase.rpc('follow_club', { p_club_id: clubId, p_on: on });
+  return !error && data === true;
+}
