@@ -148,7 +148,8 @@ function routeForNotification(data: NotificationData | null | undefined): string
     case 'tournament':
       return data.id ? `/competition/${data.id}` : '/competitions';
     case 'news':
-      // Actu publiée par l'opérateur (47) → l'accueil, où le bandeau l'affiche en haut.
+    case 'event':
+      // Actu opérateur (47) / événement de l'agenda (82) → l'accueil, qui les affiche.
       return '/';
     case 'open_match':
       // Match ouvert d'un partenaire suivi / à mon niveau (80-81) → l'onglet Réserver, où la

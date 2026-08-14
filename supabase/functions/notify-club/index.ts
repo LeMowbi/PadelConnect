@@ -46,7 +46,7 @@ type Notif = {
   body: string;
   // 'club_reservation' / 'club_tournament' = push destiné au GÉRANT → l'app ouvre l'Espace Club.
   data?: {
-    kind: 'friend_request' | 'reservation' | 'club_reservation' | 'tournament' | 'club_tournament' | 'lesson' | 'news' | 'open_match' | 'waitlist';
+    kind: 'friend_request' | 'reservation' | 'club_reservation' | 'tournament' | 'club_tournament' | 'lesson' | 'news' | 'open_match' | 'waitlist' | 'event';
     id?: string;
     clubId?: string;
     dateKey?: string;
@@ -671,6 +671,25 @@ Deno.serve(async (req) => {
           title: live.title ?? 'Actu PadelConnect 📣',
           body: live.subtitle ?? 'Ouvre l’app pour découvrir la nouveauté.',
           data: { kind: 'news' },
+        });
+      }
+    } else if (
+      table === 'events' &&
+      record.push === true &&
+      (type === 'INSERT' || (type === 'UPDATE' && oldRecord.push !== true))
+    ) {
+      // AGENDA du padel (82) : événement publié avec la case « push » → broadcast. Garde
+      // anti-doublon : INSERT, ou UPDATE qui vient d'activer le push (une simple correction de
+      // texte d'un événement déjà poussé ne repart pas). MÊME anti-phishing que l'actu : le
+      // texte est RELU en base par id — un appel forgé ne peut pas injecter son propre message.
+      const { data: ev } = await supabase.from('events').select('id, title, date_key, place, push').eq('id', record.id).maybeSingle();
+      if (ev && ev.push === true) {
+        const { data: players } = await supabase.from('profiles').select('expo_push_token').not('expo_push_token', 'is', null);
+        notifs.push({
+          targets: (players ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
+          title: '📅 Agenda padel — ' + (ev.title ?? ''),
+          body: `${ev.date_key ?? ''}${ev.place ? ' · ' + ev.place : ''} — ouvre l’app pour les détails.`,
+          data: { kind: 'event' },
         });
       }
     }
