@@ -208,7 +208,7 @@ export default function Statistiques() {
               {levelHistory.map((h) => {
                 const up = h.delta >= 0;
                 return (
-                  <View key={`${h.at}-${h.levelAfter}`} style={styles.levelEntry}>
+                  <View key={h.id} style={styles.levelEntry}>
                     <Ionicons name={up ? 'arrow-up' : 'arrow-down'} size={16} color={up ? colors.green : colors.coral} />
                     <Txt variant="body" color={up ? colors.green : colors.coral} style={{ fontWeight: '700' }}>
                       {deltaLabel(h.delta)}

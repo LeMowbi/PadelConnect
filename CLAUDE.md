@@ -110,8 +110,8 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   `68_creneaux_duree.sql` SEUL** : ses `create or replace` ÉCRASERAIENT les durcissements `69`→`72`
   (validation `d∈{60,90}`, gardes anti-orphelin, verrou commun, retrait de terrain) ; si on doit
   recoller la 68, recoller ENSUITE `69`→`79` dans l'ordre. Reste au porteur : le lien Wave (Espace
-  opérateur), FCM Android + empreinte assetlinks. (`notify-club` est déployée — v32 le 2026-08-14,
-  push gérant avec nom du club ; compare HMAC en temps constant.)
+  opérateur), FCM Android + empreinte assetlinks. (`notify-club` est déployée — v34 le 2026-08-14 :
+  push gérant avec nom du club, favoris/alertes de niveau, liste d'attente ; HMAC temps constant.)
 - Un module natif nouveau (ex. `expo-contacts`) ⇒ **nouveau build requis** + config plugin dans
   `app.json` avec la chaîne de permission.
 
@@ -144,9 +144,12 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 
 ## 9. Décisions d'architecture importantes
 
-- **Niveau (level)** : attribué **UNE SEULE FOIS côté serveur** dans `close_competition` (tournois
-  officiels, idempotent). Le client ne fait que **dériver l'affichage** du palmarès → sûr à la
-  réinstallation, jamais de double attribution.
+- **Niveau (level)** : initialisé par le QUIZ d'inscription (levelQuiz, plafonds anti-fantaisie),
+  puis ajusté **UNIQUEMENT côté serveur** : par le MOTEUR DE NIVEAU (80 — matchs validés en
+  MIROIR, ±delta selon l'écart des camps, écrêtage symétrique ±0.5/7 j, historique
+  `level_history`, trigger protect_level 34) et par `close_competition` (tournois officiels,
+  ±0.5, idempotent). Le chemin « score validé à 48 h » donne les POINTS mais n'ajuste pas le
+  niveau. Le client ne fait qu'afficher → sûr à la réinstallation.
 - **Upload photo/avatar** : `pickImage` renvoie une **URI `file://`** en natif (lue par
   `new File(uri).base64()`), un **data-URI** seulement sur le web. Ne jamais persister une URI
   locale côté serveur si l'upload échoue.

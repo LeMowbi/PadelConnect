@@ -556,12 +556,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     remindersOnRef.current = state.remindersOn;
   }, [state.remindersOn]);
 
-  // NOTE : le NIVEAU est écrit par le client UNE SEULE FOIS, à l’inscription (choix initial du
-  // joueur, borné [1.0, 7.0] côté serveur par handle_new_user — cf. supabase/36_audit_hardening.sql).
-  // Ensuite, il n’est PLUS JAMAIS modifié par le client : seul close_competition (tournois
-  // officiels) l’ajuste côté serveur, protégé en base par le trigger protect_level
-  // (34_level_integrity.sql) — anti-triche. Le client se contente de LIRE `level` (loadSession,
-  // reread après clôture) et de l’afficher.
+  // NOTE : le NIVEAU est écrit par le client UNE SEULE FOIS, à l’inscription (quiz levelQuiz,
+  // borné [1.0, 7.0] côté serveur par handle_new_user — cf. supabase/36_audit_hardening.sql).
+  // Ensuite, il n’est PLUS JAMAIS modifié par le client : il n’évolue que CÔTÉ SERVEUR — moteur
+  // de niveau (80, matchs validés en MIROIR, écrêtage ±0.5/7 j) et close_competition (tournois
+  // officiels, ±0.5) — protégé en base par le trigger protect_level (34) — anti-triche. Le client
+  // se contente de LIRE `level` (loadSession, reread après clôture/validation) et de l’afficher.
 
   // « Époque » de session : incrémentée à chaque déconnexion / réinitialisation. Toute
   // requête en vol (loadSession, rafraîchissement au premier plan) capture l’époque au

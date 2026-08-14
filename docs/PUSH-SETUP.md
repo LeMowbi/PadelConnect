@@ -133,6 +133,11 @@ Dashboard Supabase → **Database → Webhooks** → *Create a new hook* :
 
 La fonction lit la table + le type d'événement et envoie au bon destinataire (gérant du club,
 joueur, auteur de la réservation, opérateur, organisateur du tournoi, ami invité, coach ou élève).
+> 🆕 Chantier v3 (2026-08-14) : le webhook `reservations` alimente AUSSI, sans configuration
+> supplémentaire, les push « partenaire suivi a créé un match » + « un match à ton niveau vient
+> d'ouvrir » (INSERT, notify-club v33/v34) et « un créneau s'est libéré » (UPDATE → annulation
+> JOUEUR, liste d'attente 81 — pas sur une annulation CLUB, qui re-bloque le créneau).
+
 **Au total, 8 webhooks** doivent exister : `reservations`, `reservation_participants`,
 `competitions`, `friend_requests`, `lessons`, `coaches`, `match_results`, `operator_news`.
 

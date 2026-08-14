@@ -40,6 +40,7 @@ export async function fetchPublicReliability(userIds: string[]): Promise<Record<
 // ─── Moteur de niveau ───────────────────────────────────────────────────────────
 
 export type LevelHistoryEntry = {
+  id: string;
   delta: number;
   levelBefore: number;
   levelAfter: number;
@@ -51,11 +52,17 @@ export type LevelHistoryEntry = {
 export async function fetchMyLevelHistory(limit = 10): Promise<LevelHistoryEntry[] | null> {
   const { data, error } = await supabase
     .from('level_history')
-    .select('delta, level_before, level_after, reason, created_at')
+    .select('id, delta, level_before, level_after, reason, created_at')
+    // Tri secondaire par id : reconcile_my_levels applique jusqu'à 50 matchs dans UNE transaction
+    // (created_at identiques) — sans lui, l'ordre serait arbitraire entre ces lignes.
     .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .limit(limit);
   if (error) return null;
-  return ((data ?? []) as { delta: number; level_before: number; level_after: number; reason: string; created_at: string }[]).map((r) => ({
+  return (
+    (data ?? []) as { id: string; delta: number; level_before: number; level_after: number; reason: string; created_at: string }[]
+  ).map((r) => ({
+    id: r.id,
     delta: Number(r.delta),
     levelBefore: Number(r.level_before),
     levelAfter: Number(r.level_after),

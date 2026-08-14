@@ -127,7 +127,7 @@ export async function syncMatchReminders(reservations: ReminderInput[], enabled:
 // Route l’utilisateur vers l’écran concerné au lieu de rouvrir l’app là où elle en était.
 // `kind` couvre les rappels locaux (match-reminder) ET les push serveur (notify-club) qui
 // portent désormais un payload `data` (friend_request / reservation / tournament).
-type NotificationData = { kind?: string; id?: string; reservationId?: string };
+type NotificationData = { kind?: string; id?: string; reservationId?: string; clubId?: string; dateKey?: string; time?: string };
 
 function routeForNotification(data: NotificationData | null | undefined): string | null {
   switch (data?.kind) {
@@ -150,6 +150,16 @@ function routeForNotification(data: NotificationData | null | undefined): string
     case 'news':
       // Actu publiée par l'opérateur (47) → l'accueil, où le bandeau l'affiche en haut.
       return '/';
+    case 'open_match':
+      // Match ouvert d'un partenaire suivi / à mon niveau (80-81) → l'onglet Réserver, où la
+      // section « Matchs ouverts » l'affiche (pas d'écran par match individuel).
+      return '/reserver';
+    case 'waitlist':
+      // « Un créneau s'est libéré » (81) → tunnel du club pré-rempli jour/heure (mêmes query
+      // params que la proposition d'annulation club, 75) — sinon l'onglet Réserver.
+      return data.clubId && data.dateKey && data.time
+        ? `/reserver/${data.clubId}?dateKey=${data.dateKey}&time=${encodeURIComponent(data.time)}`
+        : '/reserver';
     default:
       return null;
   }

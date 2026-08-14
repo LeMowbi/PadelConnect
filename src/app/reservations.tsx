@@ -275,7 +275,11 @@ export default function ReservationsScreen() {
     setScoreSending(false);
     if (res === 'validated') {
       hapticSuccess();
-      toast.show('Score validé ✓ — le match compte au classement');
+      toast.show('Score validé ✓ — le match compte au classement et ajuste ton niveau');
+      // Le moteur de niveau (80) vient d'ajuster les niveaux côté serveur : on resynchronise
+      // (comme closeCompetition relit le niveau) — sinon Statistiques afficherait un niveau
+      // périmé au-dessus d'un historique frais jusqu'au prochain retour au premier plan.
+      void refreshSession();
     } else if (res === 'waiting') {
       // Règle 49 réelle : seule une saisie GAGNANTE restée SEULE est auto-validée à 48 h ;
       // sinon il faut qu'un joueur du camp perdant confirme. Promesse honnête selon le cas.

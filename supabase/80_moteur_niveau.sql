@@ -1,18 +1,19 @@
 -- 80 — MOTEUR DE NIVEAU + fiabilité publique + joueurs favoris (chantier v3, lot A).
 -- À coller dans Supabase → SQL Editor → Run. Idempotent.
 --
--- 1) MOTEUR DE NIVEAU : le niveau [1..7] s'ajuste automatiquement quand un match est VALIDÉ par
---    le pipeline anti-triche EXISTANT (submit_match_score : un perdant reconnaît le score, ou une
---    saisie unique gagnante restée 48 h). Gagnants +delta, perdants −delta ; delta dépend de
---    l'écart de niveau des camps (battre plus fort rapporte plus), borné [0.02, 0.30] ; gain
---    ÉCRÊTÉ à +0.5 par joueur par 7 jours glissants (anti-farming entre complices) — les pertes
---    ne sont pas écrêtées. Seuls les COMPTES AYANT SAISI un score bougent (les joueurs sans app
---    n'ont pas de camp fiable). Idempotence DURE : unique(reservation_id, user_id) dans
---    level_history — un match n'ajuste jamais deux fois. Les ±0.5 des tournois officiels
---    (close_competition, trigger protect_level 34) restent INCHANGÉS ; leur journalisation dans
---    level_history viendra avec la ligue (SQL 84).
--- 2) reconcile_my_levels : le chemin « validé à 48 h » est LAZY (aucune écriture à T+48 h) → le
---    client réconcilie ses matchs à l'ouverture de session (motif « purge à l'ouverture »).
+-- 1) MOTEUR DE NIVEAU : le niveau [1..7] s'ajuste automatiquement quand un match est validé par
+--    le chemin MIROIR du pipeline anti-triche EXISTANT (submit_match_score : un PERDANT reconnaît
+--    le score). Le chemin « saisie unique gagnante à 48 h » garde ses +3 points de classement mais
+--    n'ajuste PAS le niveau (sinon gain sans perte possible = plus de somme nulle). Gagnants
+--    +delta, perdants −delta ; delta dépend de l'écart de niveau des camps (battre plus fort
+--    rapporte plus), borné [0.02, 0.30] ; gains ET pertes ÉCRÊTÉS à ±0.5 par joueur par 7 jours
+--    glissants (anti-farming ET anti-sandbagging — le niveau filtre l'accès aux matchs, 81).
+--    Seuls les COMPTES AYANT SAISI un score bougent. Idempotence DURE :
+--    unique(reservation_id, user_id) — un match n'ajuste jamais deux fois. Les ±0.5 des tournois
+--    officiels (close_competition, trigger protect_level 34) restent INCHANGÉS ; leur
+--    journalisation dans level_history viendra avec la ligue (SQL 84).
+-- 2) reconcile_my_levels : rattrape les matchs à MIROIR COMPLET dont l'application a été manquée
+--    (app fermée au moment de la validation) — appelé à l'ouverture de session.
 -- 3) public_reliability : taux de présence AGRÉGÉ (jamais le détail — il reste réservé au club
 --    via fetch_reliability) pour le badge public « Fiable · N % ».
 -- 4) favorite_players : suivre un joueur (ses matchs ouverts remontent + push à la création,
@@ -56,10 +57,9 @@ declare
   v_players uuid[];
   v_pc int;
   v_wn int;
-  v_n int; v_dc int; v_w int; v_l int; v_first timestamptz;
+  v_dc int; v_w int; v_l int;
   v_winners uuid[];
   v_losers uuid[];
-  v_opponents uuid[];
   v_avg_win numeric;
   v_avg_opp numeric;
   v_delta numeric;
@@ -96,34 +96,27 @@ begin
   if v_pc < 2 then return false; end if;
   v_wn := least(2, v_pc - 1);
 
-  -- Règle de VALIDATION — miroir exact de submit_match_score / fetch_leaderboard.
-  select count(*), count(distinct canon), count(*) filter (where i_won),
-         count(*) filter (where not i_won), min(created_at)
-    into v_n, v_dc, v_w, v_l, v_first
+  -- Règle de VALIDATION, restreinte au chemin MIROIR (un perdant a reconnu) : le chemin
+  -- « saisie unique gagnante à 48 h » valide bien les +3 points du classement, mais n'ajuste
+  -- PAS le niveau — sinon le moteur n'est plus à somme nulle (gain sans perte : deux complices
+  -- monteraient de +0,5/semaine sans jamais rien risquer), et comme aucune ligne d'historique
+  -- n'est écrite ici, une reconnaissance TARDIVE du perdant déclenchera l'ajustement complet.
+  select count(distinct canon), count(*) filter (where i_won), count(*) filter (where not i_won)
+    into v_dc, v_w, v_l
     from public.match_results where reservation_id = p_reservation_id;
-  if not (v_dc = 1 and (
-       (v_n = 1 and v_w = 1 and v_first < now() - interval '48 hours')
-       or (v_w >= 1 and v_w <= v_wn and v_l >= 1)
-     )) then
+  if not (v_dc = 1 and v_w >= 1 and v_w <= v_wn and v_l >= 1) then
     return false;
   end if;
 
-  -- Camps : seuls les ENTRANTS bougent. L'écart de niveau se mesure contre les perdants
-  -- entrants s'il y en a, sinon contre les AUTRES joueurs du match (chemin 48 h : leur niveau
-  -- sert au calcul, le leur ne bouge pas).
+  -- Camps : seuls les ENTRANTS bougent (les joueurs sans saisie n'ont pas de camp fiable).
+  -- Le chemin miroir garantit v_losers non vide — l'écart se mesure gagnants vs perdants.
   select coalesce(array_agg(user_id), '{}') into v_winners
     from public.match_results where reservation_id = p_reservation_id and i_won;
   select coalesce(array_agg(user_id), '{}') into v_losers
     from public.match_results where reservation_id = p_reservation_id and not i_won;
-  if coalesce(array_length(v_losers, 1), 0) > 0 then
-    v_opponents := v_losers;
-  else
-    select coalesce(array_agg(u), '{}') into v_opponents
-      from unnest(v_players) u where not (u = any (v_winners));
-  end if;
 
   select avg(level) into v_avg_win from public.profiles where id = any (v_winners);
-  select avg(level) into v_avg_opp from public.profiles where id = any (v_opponents);
+  select avg(level) into v_avg_opp from public.profiles where id = any (v_losers);
   -- delta = base 0.10 + 0.05 × (niveau adverse − niveau gagnant), borné [0.02, 0.30].
   v_delta := round(least(0.30, greatest(0.02,
                0.10 + 0.05 * (coalesce(v_avg_opp, coalesce(v_avg_win, 3)) - coalesce(v_avg_win, 3))
@@ -147,10 +140,15 @@ begin
     update public.profiles set level = v_after where id = v_uid;
   end loop;
 
-  -- Perdants : pas d'écrêtage (perdre contre plus faible coûte, c'est le principe).
+  -- Perdants : écrêtage SYMÉTRIQUE (−0,5 / 7 j glissants) — sans lui, un joueur fort pouvait
+  -- se « sandbagger » à coups de défaites déclarées et entrer dans les fourchettes débutants (81).
   foreach v_uid in array v_losers loop
+    select coalesce(sum(-delta) filter (where delta < 0), 0) into v_week
+      from public.level_history
+      where user_id = v_uid and reason = 'match' and created_at > now() - interval '7 days';
+    v_gain := least(v_delta, greatest(0, 0.5 - v_week)); -- ici v_gain = ampleur de la PERTE autorisée
     select level into v_before from public.profiles where id = v_uid for update;
-    v_after := round(least(7, greatest(1, v_before - v_delta))::numeric, 2);
+    v_after := round(least(7, greatest(1, v_before - v_gain))::numeric, 2);
     insert into public.level_history (reservation_id, user_id, delta, level_before, level_after, reason)
       values (p_reservation_id, v_uid, v_after - v_before, v_before, v_after, 'match')
       on conflict do nothing;
@@ -161,7 +159,10 @@ begin
 end;
 $$;
 
-revoke execute on function public.apply_match_level(uuid) from anon;
+-- Verrouillage complet : apply_match_level n'est appelée QUE par submit_match_score et
+-- reconcile_my_levels (SECURITY DEFINER du même propriétaire — les privilèges du propriétaire
+-- suffisent). `from anon` seul serait INOPÉRANT : PUBLIC garde le grant par défaut.
+revoke execute on function public.apply_match_level(uuid) from public, anon, authenticated;
 
 -- ── 3) submit_match_score : recopie STRICTE de la 68 + appel du moteur à la validation ──
 
@@ -278,7 +279,8 @@ begin
         and (res.user_id = v_uid or exists (
               select 1 from public.reservation_participants rp
               where rp.reservation_id = res.id and rp.user_id = v_uid and rp.status = 'accepted'))
-        and exists (select 1 from public.match_results mr where mr.reservation_id = res.id)
+        and exists (select 1 from public.match_results mr where mr.reservation_id = res.id and mr.i_won)
+        and exists (select 1 from public.match_results mr where mr.reservation_id = res.id and not mr.i_won)
         and not exists (select 1 from public.level_history lh where lh.reservation_id = res.id)
       limit 50
   loop
@@ -288,7 +290,7 @@ begin
 end;
 $$;
 
-revoke execute on function public.reconcile_my_levels() from anon;
+revoke execute on function public.reconcile_my_levels() from public, anon;
 
 -- ── 5) Fiabilité PUBLIQUE (agrégat seul — le détail reste réservé au club) ──────
 
@@ -324,7 +326,7 @@ begin
 end;
 $$;
 
-revoke execute on function public.public_reliability(uuid[]) from anon;
+revoke execute on function public.public_reliability(uuid[]) from public, anon;
 
 -- ── 6) Joueurs favoris ──────────────────────────────────────────────────────────
 
@@ -370,4 +372,4 @@ begin
 end;
 $$;
 
-revoke execute on function public.toggle_favorite_player(uuid) from anon;
+revoke execute on function public.toggle_favorite_player(uuid) from public, anon;
