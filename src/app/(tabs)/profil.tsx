@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { Avatar } from '@/components/Avatar';
 import { BottomSheet } from '@/components/BottomSheet';
@@ -17,6 +17,7 @@ import { canAccessOperator, canSeeClubSpace } from '@/lib/access';
 import { levelLabel } from '@/lib/format';
 import { isValidPhone } from '@/lib/phone';
 import { pickImage } from '@/lib/pickImage';
+import { fetchMatchAlerts, setMatchAlerts } from '@/lib/social';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { GENDERS, ageFrom, genderLabel, maskBirthDate, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
 import { colors, gradients, radius, spacing } from '@/theme';
@@ -65,6 +66,31 @@ export default function ProfilScreen() {
     setEmailBusy(false);
     if (res.ok) setEmailMsg(`Lien de confirmation envoyé à ${emailDraft.trim().toLowerCase()}. Ouvre-le pour valider.`);
     else setEmailMsg(res.error ?? 'Impossible — réessaie.');
+  };
+
+  // Alerte « un match à ton niveau vient d’ouvrir » (81) : préférence SERVEUR (le ciblage —
+  // clubs suivis × fourchette de niveau — vit dans notify-club), donc réservée aux comptes
+  // connectés. Tri-état : null = pas encore lue (ou échec réseau) → interrupteur neutre,
+  // désactivé, marqué « … » — on ne fait jamais croire à un réglage qu’on ne connaît pas.
+  const connected = !!state.serverUserId;
+  const [alertsOn, setAlertsOn] = useState<boolean | null>(null);
+  const [alertsBusy, setAlertsBusy] = useState(false);
+  useEffect(() => {
+    if (!connected) return;
+    let alive = true;
+    void fetchMatchAlerts().then((v) => alive && v != null && setAlertsOn(v));
+    return () => {
+      alive = false;
+    };
+  }, [connected]);
+  // Écriture HONNÊTE : on n’affiche le nouvel état QUE si le serveur l’a accepté.
+  const toggleMatchAlerts = async (next: boolean) => {
+    if (alertsBusy || alertsOn === null) return; // anti double-tap + état inconnu
+    setAlertsBusy(true);
+    const ok = await setMatchAlerts(next);
+    setAlertsBusy(false);
+    if (ok) setAlertsOn(next);
+    else toast.show('Connexion impossible — réessaie', { icon: 'alert-circle' });
   };
 
   const confirmDelete = async () => {
@@ -377,9 +403,9 @@ export default function ProfilScreen() {
         </Card>
       </View>
 
-      {/* Rappels */}
+      {/* Notifications */}
       <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title="Rappels" />
+        <SectionHeader title="Notifications" />
         <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
           <IconCircle icon="notifications" color={colors.coral} bg={colors.coralSoft} />
           <View style={{ flex: 1 }}>
@@ -397,6 +423,36 @@ export default function ProfilScreen() {
             thumbColor={colors.white}
           />
         </Card>
+        {/* Alerte « un match à ton niveau vient d’ouvrir » (81) — préférence serveur : visible
+            seulement une fois connecté (un compte local n’a rien à régler côté ciblage). */}
+        {connected ? (
+          <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm }}>
+            <IconCircle icon="flash" color={colors.purple} bg={colors.purpleSoft} />
+            <View style={{ flex: 1 }}>
+              <Txt variant="body" style={{ fontWeight: '600' }}>
+                Matchs à mon niveau
+              </Txt>
+              <Txt variant="small" color={colors.textMuted}>
+                Reçois une notification quand un match ouvert compatible se crée dans un club que tu suis (cœur ♥).
+              </Txt>
+            </View>
+            {/* Réglage pas encore connu : on le dit, plutôt que de montrer un faux « désactivé ». */}
+            {alertsOn === null ? (
+              <Txt variant="small" color={colors.textMuted}>
+                …
+              </Txt>
+            ) : null}
+            <Switch
+              value={alertsOn === true}
+              onValueChange={(v) => void toggleMatchAlerts(v)}
+              disabled={alertsOn === null || alertsBusy}
+              trackColor={{ true: colors.signature, false: colors.border }}
+              thumbColor={colors.white}
+              accessibilityRole="switch"
+              accessibilityLabel="Matchs à mon niveau"
+            />
+          </Card>
+        ) : null}
       </View>
 
       {/* Espaces pro — affichés UNIQUEMENT selon le rôle vérifié côté serveur (state.role) :

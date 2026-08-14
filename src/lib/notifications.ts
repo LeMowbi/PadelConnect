@@ -1,6 +1,6 @@
 // Rappels de match LOCAUX (sans serveur) via expo-notifications : une notification
 // programmée ~2 h avant chaque réservation à venir. L’utilisateur active/désactive le tout
-// via l’interrupteur « Rappels » du profil. Web : tout est neutralisé (no-op).
+// via l’interrupteur « Rappels de match » du profil. Web : tout est neutralisé (no-op).
 //
 // Ce fichier gère aussi le TAP sur une notification (locale OU push serveur) : on route vers
 // l’écran concerné plutôt que de rouvrir l’app là où elle en était (cf. useNotificationTapRouter).
