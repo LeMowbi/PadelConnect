@@ -9,10 +9,14 @@ import { durationLabel } from '@/lib/courtSchedule';
 import { dateKeyLabel } from '@/lib/days';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { fetchOpenMatches, joinOpenMatch, type OpenMatch } from '@/lib/openMatches';
+import { fetchPublicReliability, type PublicReliability } from '@/lib/social';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
 const PREVIEW = 4; // liste repliée par défaut (l'onglet Réserver reste centré sur la grille)
+// Badge de fiabilité affiché seulement à partir de 5 parties : un nouveau joueur n'est pas
+// pénalisé par une poignée de réservations (même règle que PlayerSheet).
+const RELIABILITY_MIN_PLAYED = 5;
 
 // MATCHS OUVERTS (45, modèle Playtomic) : des joueurs ont réservé leur terrain et cherchent
 // du monde — un tap et tu es de la partie (place prise immédiatement, créateur prévenu).
@@ -27,6 +31,9 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
   // (le prénom du créateur est un contenu joueur) — feuille ouverte par le bouton « ⋯ » de la ligne.
   const [moderating, setModerating] = useState<OpenMatch | null>(null);
   const [moderationBusy, setModerationBusy] = useState(false); // garde anti double-tap (2 actions)
+  // Fiabilité publique des CRÉATEURS (badge « Fiable · N % »), par compte. Un id absent = pas
+  // encore chargé ou échec réseau → aucun badge (convention §8 : jamais de chiffre inventé).
+  const [reliability, setReliability] = useState<Record<string, PublicReliability>>({});
 
   const load = async () => {
     const ms = await fetchOpenMatches();
@@ -115,6 +122,28 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
     );
   };
 
+  // On masque les matchs des comptes que j'ai bloqués (modération UGC — prénom du créateur
+  // affiché). Miroir du STORE : persisté, chargé en session et au premier plan (convention §8).
+  // Calculé AVANT les retours anticipés : les hooks qui suivent doivent rester inconditionnels.
+  const visible = (matches ?? []).filter((m) => !state.blockedUserIds.includes(m.creatorId));
+  // UN SEUL appel groupé pour tous les créateurs visibles (clé = ids distincts triés : l'appel
+  // ne repart que si la liste des créateurs change réellement).
+  const creatorKey = Array.from(new Set(visible.map((m) => m.creatorId)))
+    .sort()
+    .join(',');
+  useEffect(() => {
+    if (!creatorKey) return;
+    let alive = true;
+    // setState APRÈS await (React Compiler) : jamais de setState synchrone dans l'effet.
+    void fetchPublicReliability(creatorKey.split(',')).then((res) => {
+      if (!alive || !res) return; // null = échec réseau : on garde ce qu'on a déjà
+      setReliability((cur) => ({ ...cur, ...res }));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [creatorKey]);
+
   // Chargement / hors-ligne : sur l'ÉCRAN DÉDIÉ (full), une page vide serait illisible — on
   // affiche un squelette puis, en échec réseau, une carte « Réessayer » (motif classement.tsx).
   // En section d'accueil, on reste discret : rien (pas de section fantôme).
@@ -145,10 +174,6 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
     ) : null;
   }
 
-  // On masque les matchs des comptes que j'ai bloqués (modération UGC — prénom du créateur
-  // affiché). Miroir du STORE : persisté, chargé en session et au premier plan (convention §8).
-  const visible = matches.filter((m) => !state.blockedUserIds.includes(m.creatorId));
-
   // AUCUN match ouvert : la section reste VISIBLE avec le mode d'emploi — sinon la
   // fonctionnalité est introuvable tant que personne n'a créé le premier match (retour porteur).
   if (visible.length === 0) {
@@ -168,8 +193,14 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
     );
   }
 
+  // Joueurs favoris (80) : les matchs des joueurs que je suis passent EN TÊTE — partition
+  // stable (l'ordre serveur, par date, est conservé dans chaque groupe).
+  const favs = state.favoritePlayerIds;
+  const ordered = favs.length
+    ? [...visible.filter((m) => favs.includes(m.creatorId)), ...visible.filter((m) => !favs.includes(m.creatorId))]
+    : visible;
   // Sur l'écran dédié (full), on montre TOUT ; en section d'accueil, un aperçu repliable.
-  const shown = full || showAll ? visible : visible.slice(0, PREVIEW);
+  const shown = full || showAll ? ordered : ordered.slice(0, PREVIEW);
   const me = state.serverUserId;
 
   return (
@@ -182,6 +213,9 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
         {shown.map((m, i) => {
           const mine = m.creatorId === me;
           const joined = state.participantReservationIds.includes(m.id);
+          const followed = favs.includes(m.creatorId);
+          const rel = reliability[m.creatorId];
+          const reliable = rel && rel.played >= RELIABILITY_MIN_PLAYED ? rel : undefined;
           return (
             <View key={m.id}>
               {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : <View style={{ height: spacing.sm }} />}
@@ -201,8 +235,12 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
                   {/* Format scannable (badge) + urgence corail « dernière place » (même idiome que
                       les tournois, CompetitionCard) — plus lisible qu'une phrase grise noyée. */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.xs, marginTop: 2 }}>
+                    {/* Joueur suivi : la raison pour laquelle ce match est remonté en tête. */}
+                    {followed ? <Tag label="Partenaire suivi" tone="signature" icon="heart" /> : null}
                     <Tag label={m.capacity === 2 ? '1v1' : '2v2'} tone={m.capacity === 2 ? 'signature' : 'purple'} />
                     <Tag label={durationLabel(m.durationMin)} tone="neutral" />
+                    {/* Fiabilité PUBLIQUE du créateur (agrégat de présence, jamais le détail). */}
+                    {reliable ? <Tag label={`Fiable · ${reliable.presencePct} %`} tone="green" icon="shield-checkmark-outline" /> : null}
                     {m.placesLeft === 1 ? <Tag label="Dernière place !" tone="coral" icon="flame" /> : null}
                   </View>
                   <Txt variant="small" color={colors.textMuted} numberOfLines={1} style={{ marginTop: 2 }}>

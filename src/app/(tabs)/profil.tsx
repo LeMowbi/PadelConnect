@@ -189,12 +189,16 @@ export default function ProfilScreen() {
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Mon niveau" />
         <Card>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs }}>
             <Txt variant="label">Niveau de jeu</Txt>
             <Txt variant="display" color={colors.signature} style={{ fontSize: 28 }}>
               {level.toFixed(2)}
             </Txt>
           </View>
+          {/* Niveau calculé (80) : plus rien à déclarer, il suit les résultats réels. */}
+          <Txt variant="small" color={colors.textFaint} style={{ marginBottom: spacing.md }}>
+            Ajusté automatiquement après tes matchs validés
+          </Txt>
           <View style={styles.gaugeTrack}>
             <View style={[styles.gaugeFill, { width: lvlPct }]} />
           </View>

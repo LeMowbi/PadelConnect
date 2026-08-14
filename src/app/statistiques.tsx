@@ -1,10 +1,15 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { BarChart } from '@/components/BarChart';
 import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
-import { Card, IconCircle, SectionHeader, StatTile, Txt } from '@/components/ui';
+import { SkeletonLines } from '@/components/Skeleton';
+import { Card, Divider, IconCircle, SectionHeader, StatTile, Txt } from '@/components/ui';
+import { dateKeyLabel, dayKey } from '@/lib/days';
+import { levelLabel } from '@/lib/format';
 import { fetchLeaderboard, fetchMyRank } from '@/lib/leaderboard';
+import { fetchMyLevelHistory, type LevelHistoryEntry } from '@/lib/social';
 import { isPlayed, useApp } from '@/store/AppContext';
 import { colors, radius, shadows, spacing } from '@/theme';
 
@@ -14,6 +19,18 @@ import { colors, radius, shadows, spacing } from '@/theme';
 // réseau → on affiche « — » sans inventer de chiffre, convention §8).
 
 const MONTHS_FR = ['jan', 'fév', 'mar', 'avr', 'mai', 'juin', 'juil', 'aoû', 'sep', 'oct', 'nov', 'déc'];
+
+const LEVEL_HISTORY_LIMIT = 5; // les 5 derniers ajustements de niveau (carte « Évolution du niveau »)
+
+// Ajustement lisible : « +0,20 » / « −0,10 » (virgule décimale française, vrai signe moins).
+function deltaLabel(delta: number): string {
+  return `${delta >= 0 ? '+' : '−'}${Math.abs(delta).toFixed(2).replace('.', ',')}`;
+}
+
+// Motif de l'ajustement : les tournois officiels (±0,50) restent distincts des matchs validés.
+function reasonLabel(entry: LevelHistoryEntry): string {
+  return entry.reason === 'tournament' ? 'tournoi' : entry.delta >= 0 ? 'victoire' : 'défaite';
+}
 
 // Activité des 6 derniers mois (UTC, comme tout le projet) : nombre de parties jouées par mois.
 function monthlyPlayed(timestamps: number[], now: number): { label: string; value: number }[] {
@@ -39,14 +56,18 @@ export default function Statistiques() {
   const [rank, setRank] = useState<number | null | undefined>(undefined);
   const [points, setPoints] = useState<number | null | undefined>(undefined);
   const [matchWins, setMatchWins] = useState<number | null | undefined>(undefined);
+  // Historique des ajustements de niveau (80) : undefined = chargement, null = échec réseau,
+  // [] = aucun ajustement pour l'instant (convention §8).
+  const [levelHistory, setLevelHistory] = useState<LevelHistoryEntry[] | null | undefined>(undefined);
   const alive = useRef(true);
 
   useEffect(() => {
     alive.current = true;
     // setState APRÈS await (React Compiler) : pas de setState synchrone dans le corps de l'effet.
     void (async () => {
-      const [r, board] = await Promise.all([fetchMyRank(), fetchLeaderboard(100)]);
+      const [r, board, history] = await Promise.all([fetchMyRank(), fetchLeaderboard(100), fetchMyLevelHistory(LEVEL_HISTORY_LIMIT)]);
       if (!alive.current) return;
+      setLevelHistory(history);
       setRank(r);
       if (board === null) {
         setPoints(null);
@@ -163,6 +184,49 @@ export default function Statistiques() {
         </Card>
       </View>
 
+      {/* Évolution du niveau (80) : le niveau s'ajuste tout seul quand un match est VALIDÉ
+          (un perdant reconnaît le score) et aux tournois officiels — rien n'est déclaratif. */}
+      <View style={{ marginTop: spacing.xl }}>
+        <SectionHeader title="Évolution du niveau" />
+        <Card>
+          <View style={styles.levelRow}>
+            <IconCircle icon="trending-up" color={colors.signature} bg={colors.signatureSoft} size={46} />
+            <View style={{ flex: 1 }}>
+              <Txt variant="h3">Niveau {state.level.toFixed(2)}</Txt>
+              <Txt variant="muted">{levelLabel(state.level)}</Txt>
+            </View>
+          </View>
+          <Divider style={{ marginVertical: spacing.md }} />
+          {levelHistory === undefined ? (
+            <SkeletonLines lines={3} />
+          ) : levelHistory === null ? (
+            <Txt variant="muted">Historique indisponible — reviens quand tu es en ligne.</Txt>
+          ) : levelHistory.length === 0 ? (
+            <Txt variant="muted">Ton niveau s’ajustera automatiquement après tes premiers matchs validés.</Txt>
+          ) : (
+            <View style={{ gap: spacing.sm }}>
+              {levelHistory.map((h) => {
+                const up = h.delta >= 0;
+                return (
+                  <View key={`${h.at}-${h.levelAfter}`} style={styles.levelEntry}>
+                    <Ionicons name={up ? 'arrow-up' : 'arrow-down'} size={16} color={up ? colors.green : colors.coral} />
+                    <Txt variant="body" color={up ? colors.green : colors.coral} style={{ fontWeight: '700' }}>
+                      {deltaLabel(h.delta)}
+                    </Txt>
+                    <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }} numberOfLines={1}>
+                      · {reasonLabel(h)}
+                    </Txt>
+                    <Txt variant="small" color={colors.textFaint}>
+                      {dateKeyLabel(dayKey(new Date(h.at)))}
+                    </Txt>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </Card>
+      </View>
+
       <View style={styles.note}>
         <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
           Tes points : 100 pour un tournoi officiel gagné, 10 pour un tournoi joué, 3 pour une victoire de match confirmée, 2 par partie
@@ -185,6 +249,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   grid: { flexDirection: 'row', gap: spacing.sm },
+  levelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  levelEntry: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   note: {
     flexDirection: 'row',
     gap: spacing.sm,
