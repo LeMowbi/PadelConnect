@@ -577,6 +577,16 @@ appliqué avec **Opus**. **19 constats confirmés : 1 HIGH · 7 MEDIUM · 11 LOW
 - **Docs recalées** : ce fichier (build 61, SQL 02→72, anti-recollage 68) ; `docs/PLAN-CRENEAUX-DUREE-VARIABLE.md`
   (numérotation « SQL 69 » périmée) ; `site/get.html` (canonical `/get`).
 
+### Chantier v3 EN COURS (2026-08-14) — 19 fonctionnalités validées par le porteur
+
+Playtomic/IN2 : niveau calculé, fourchettes + alertes matchs ouverts, liste d'attente, quiz de
+niveau, fiabilité publique, joueurs favoris, americano auto, fidélité, agenda, filtres,
+récurrent, carnets, parts Wave, cours collectifs, annonces club, avis structurés, fiche hub —
+puis ligue par divisions (en dernier). REFUSÉS/plus tard : prix creux (×2), carte des clubs.
+**Plan d'exécution détaillé : `docs/PLAN-V3-FONCTIONNALITES.md`** (lots A→E, SQL 80→84,
+3 nouveaux webhooks). Règle porteur : Fable = sensible (moteur niveau, gardes, SQL, notify-club),
+Opus = écrans/libs/tests.
+
 ## 11. Où regarder
 
 - `docs/PUSH-SETUP.md` — configuration des push & webhooks (étapes Dashboard).
