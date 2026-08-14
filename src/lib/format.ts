@@ -29,6 +29,13 @@ export function pctLabel(rate: number): string {
   return Number.isInteger(p) ? `${p}` : p.toFixed(1).replace('.', ',');
 }
 
+// Niveau CHIFFRÉ en toutes lettres, sans zéro inutile : 3 → « 3 », 3.5 → « 3,5 » (virgule
+// française, comme pctLabel). Sert partout où un niveau est montré au demi-point : quiz
+// d'inscription, fourchettes des matchs ouverts (81).
+export function levelText(n: number): string {
+  return Number.isInteger(n) ? `${n}` : n.toFixed(1).replace('.', ',');
+}
+
 // Libellé du niveau de jeu (1.0 → 7.0).
 export function levelLabel(n: number): string {
   if (n < 2.5) return 'Débutant';

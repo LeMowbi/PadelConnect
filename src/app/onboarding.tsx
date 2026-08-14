@@ -10,7 +10,7 @@ import { Logo } from '@/components/Logo';
 import { Stepper } from '@/components/Stepper';
 import { Button, Card, IconCircle, Txt } from '@/components/ui';
 import { type Club } from '@/data/clubs';
-import { levelLabel } from '@/lib/format';
+import { levelLabel, levelText } from '@/lib/format';
 import { QUIZ_QUESTIONS, levelFromQuiz, type QuizAnswers } from '@/lib/levelQuiz';
 import { isValidPhone } from '@/lib/phone';
 import { clearPendingReferral, getPendingReferral } from '@/lib/pendingReferral';
@@ -27,10 +27,6 @@ type FieldKey = 'firstName' | 'lastName' | 'email' | 'phone' | 'password' | 'bir
 // Validation e-mail volontairement simple (présence d’un @ et d’un point) — la vraie
 // vérification, c’est le clic sur le lien de confirmation reçu par mail.
 const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
-
-// Niveau du quiz en toutes lettres, sans zéro inutile : 3 → « 3 », 3.5 → « 3,5 » (virgule
-// française, comme pctLabel). Les niveaux du quiz tombent toujours au demi-point.
-const levelText = (n: number) => (Number.isInteger(n) ? `${n}` : n.toFixed(1).replace('.', ','));
 
 // Inscription en 3 étapes (Stepper du kit). Chaque étape ne valide QUE ses propres champs
 // (cf. goNext) — la liste sert aussi de filet de sécurité pour retrouver l’étape d’un champ.

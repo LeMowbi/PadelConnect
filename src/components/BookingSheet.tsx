@@ -5,6 +5,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleShee
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BookingConfirmation } from './BookingConfirmation';
 import { Chip } from './Chip';
+import { LevelRangePicker } from './LevelRangePicker';
 import { Reveal } from './Reveal';
 import { useToast } from './Toast';
 import { Button, IconCircle, Txt } from './ui';
@@ -15,6 +16,7 @@ import { freeCourts, type AvailCtx } from '@/lib/availability';
 import { durationLabel } from '@/lib/courtSchedule';
 import { dateKeyLabel, slotTimestamp, type DayOption } from '@/lib/days';
 import { fcfa, perPlayerOf } from '@/lib/format';
+import { snapLevel, type LevelRange } from '@/lib/levelRange';
 import { priceForSlot } from '@/lib/pricing';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, shadows, spacing } from '@/theme';
@@ -92,7 +94,9 @@ export function BookingSheet({
   // indépendant de la visibilité — un 1v1 comme un 2v2 peut rester privé ou être ouvert. MÊME
   // logique que la fiche club (reserver/[clubId].tsx) — la réservation rapide l'offre aussi.
   const [openMatch, setOpenMatch] = useState(false);
-  const [openLevel, setOpenLevel] = useState('');
+  // FOURCHETTE de niveau (81) — remplace l'ancien champ texte libre `openLevel` : vide des deux
+  // côtés = ouvert à tous. Même composant/logique que le tunnel (LevelRangePicker).
+  const [openRange, setOpenRange] = useState<LevelRange>({ min: null, max: null });
   const [format, setFormat] = useState<2 | 4>(4);
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false); // attente de la confirmation serveur
@@ -155,7 +159,11 @@ export function BookingSheet({
       // moins une place à prendre (équipe déjà complète = inutile).
       openCapacity: format,
       openMatch: openMatch && invited.length < format - 1,
-      openLevel: openMatch ? openLevel : '',
+      // `openLevel` (texte libre) n'est plus alimenté : la fourchette CHIFFRÉE la remplace (81).
+      // La colonne reste envoyée vide pour ne rien casser en aval (cartes, notify-club).
+      openLevel: '',
+      openLevelMin: openMatch ? openRange.min : null,
+      openLevelMax: openMatch ? openRange.max : null,
     });
     setSubmitting(false);
     if (res.ok) {
@@ -423,12 +431,12 @@ export function BookingSheet({
                             <Txt variant="label" style={{ marginTop: spacing.md }}>
                               NIVEAU SOUHAITÉ
                             </Txt>
-                            <View style={styles.row}>
-                              {['Tous niveaux', '2–3', '3–4', '4–5', '5+'].map((lv) => {
-                                const value = lv === 'Tous niveaux' ? '' : lv;
-                                return <Chip key={lv} label={lv} active={openLevel === value} onPress={() => setOpenLevel(value)} />;
-                              })}
-                            </View>
+                            <LevelRangePicker
+                              min={openRange.min}
+                              max={openRange.max}
+                              anchor={snapLevel(state.level)}
+                              onChange={setOpenRange}
+                            />
                             <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
                               Ton terrain est bloqué quoi qu’il arrive. Les autres rejoignent depuis « Matchs ouverts » (tu es prévenu à
                               chaque arrivée). Le prix du terrain se partage entre les joueurs.

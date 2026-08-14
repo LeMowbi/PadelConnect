@@ -8,6 +8,7 @@ import { Button, Card, Divider, SectionHeader, Tag, Txt } from '@/components/ui'
 import { durationLabel } from '@/lib/courtSchedule';
 import { dateKeyLabel } from '@/lib/days';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
+import { levelInRange, levelRangeText } from '@/lib/levelRange';
 import { fetchOpenMatches, joinOpenMatch, type OpenMatch } from '@/lib/openMatches';
 import { fetchPublicReliability, type PublicReliability } from '@/lib/social';
 import { useApp } from '@/store/AppContext';
@@ -78,6 +79,9 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
       return;
     }
     hapticWarning();
+    // 'level' (81) : le créateur a fixé une fourchette de niveau et le serveur m'a refusé —
+    // on redit la fourchette DEMANDÉE (la garde est serveur, jamais un simple masquage d'UI).
+    const rangeText = levelRangeText(m.levelMin, m.levelMax);
     toast.show(
       res === 'full'
         ? 'Complet — un joueur a pris la dernière place.'
@@ -87,7 +91,11 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
             ? 'Tu es déjà dans ce match.'
             : res === 'own'
               ? 'C’est ton propre match 😊'
-              : 'Connexion impossible — réessaie',
+              : res === 'level'
+                ? rangeText
+                  ? `Ce match cherche un niveau ${rangeText}.`
+                  : 'Ce match cherche un niveau précis.'
+                : 'Connexion impossible — réessaie',
       { icon: 'alert-circle' },
     );
     if (res === 'full' || res === 'gone') void load(); // liste périmée → on la corrige
@@ -216,6 +224,11 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
           const followed = favs.includes(m.creatorId);
           const rel = reliability[m.creatorId];
           const reliable = rel && rel.played >= RELIABILITY_MIN_PLAYED ? rel : undefined;
+          // Fourchette de niveau (81) : '' = ouvert à tous. `outOfRange` est le MIROIR EXACT de la
+          // garde serveur (join → 'level') — on grise « Rejoindre » avec la raison plutôt que de
+          // laisser le joueur se faire refuser après coup. Sans compte, on ne présume rien.
+          const rangeText = levelRangeText(m.levelMin, m.levelMax);
+          const outOfRange = !!me && !levelInRange(state.level, m.levelMin, m.levelMax);
           return (
             <View key={m.id}>
               {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : <View style={{ height: spacing.sm }} />}
@@ -239,13 +252,17 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
                     {followed ? <Tag label="Partenaire suivi" tone="signature" icon="heart" /> : null}
                     <Tag label={m.capacity === 2 ? '1v1' : '2v2'} tone={m.capacity === 2 ? 'signature' : 'purple'} />
                     <Tag label={durationLabel(m.durationMin)} tone="neutral" />
+                    {/* Fourchette de niveau demandée par le créateur (81) — barrière RÉELLE. */}
+                    {rangeText ? <Tag label={`Niveau ${rangeText}`} tone="amber" icon="stats-chart-outline" /> : null}
                     {/* Fiabilité PUBLIQUE du créateur (agrégat de présence, jamais le détail). */}
                     {reliable ? <Tag label={`Fiable · ${reliable.presencePct} %`} tone="green" icon="shield-checkmark-outline" /> : null}
                     {m.placesLeft === 1 ? <Tag label="Dernière place !" tone="coral" icon="flame" /> : null}
                   </View>
                   <Txt variant="small" color={colors.textMuted} numberOfLines={1} style={{ marginTop: 2 }}>
                     par {m.creatorName}
-                    {m.level ? ` · niveau ${m.level}` : ' · tous niveaux'}
+                    {/* Fourchette affichée en badge : le niveau ne se répète pas ici. Sinon, on
+                        garde l'ancien texte libre (matchs créés avant la 81) ou « tous niveaux ». */}
+                    {rangeText ? '' : m.level ? ` · niveau ${m.level}` : ' · tous niveaux'}
                     {m.placesLeft > 1 ? ` · ${m.placesLeft} places` : ''}
                   </Txt>
                 </View>
@@ -256,10 +273,15 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
                 ) : (
                   <Button
                     size="sm"
-                    label={joining === m.id ? '…' : 'Rejoindre'}
-                    icon="enter-outline"
+                    label={joining === m.id ? '…' : outOfRange ? `Niveau ${rangeText} demandé` : 'Rejoindre'}
+                    icon={outOfRange ? 'lock-closed' : 'enter-outline'}
                     onPress={() => void join(m)}
-                    disabled={!!joining}
+                    disabled={!!joining || outOfRange}
+                    accessibilityLabel={
+                      outOfRange
+                        ? `Rejoindre impossible : ce match cherche un niveau ${rangeText}`
+                        : `Rejoindre le match de ${m.creatorName}`
+                    }
                   />
                 )}
                 {!mine && me ? (

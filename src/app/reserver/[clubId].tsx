@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { Confetti } from '@/components/Confetti';
+import { LevelRangePicker } from '@/components/LevelRangePicker';
 import { PopIn } from '@/components/PopIn';
 import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
@@ -29,7 +30,9 @@ import {
 import { durationLabel, offeredDurations, slotDurationAt } from '@/lib/courtSchedule';
 import { dateKeyLabel, nextDays, slotTimestamp } from '@/lib/days';
 import { fcfa, perPlayerOf } from '@/lib/format';
+import { snapLevel, type LevelRange } from '@/lib/levelRange';
 import { minPrice, priceForSlot, priceTiersFor } from '@/lib/pricing';
+import { fetchMySlotWaitlist, joinSlotWaitlist, leaveSlotWaitlist } from '@/lib/social';
 import { useTodayKey } from '@/lib/useTodayKey';
 import { useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
@@ -84,7 +87,9 @@ export default function ReserverScreen() {
   // Match OUVERT (45, modèle Playtomic) : le terrain est bloqué normalement, et les places
   // restantes deviennent rejoignables par les autres joueurs (« Matchs ouverts »).
   const [openMatch, setOpenMatch] = useState(false);
-  const [openLevel, setOpenLevel] = useState('');
+  // FOURCHETTE de niveau du match ouvert (81) — remplace l'ancien champ texte libre `openLevel` :
+  // vide des deux côtés = ouvert à tous. Le refus d'un joueur hors fourchette est SERVEUR.
+  const [openRange, setOpenRange] = useState<LevelRange>({ min: null, max: null });
   // FORMAT du match, indépendant de la visibilité : 4 = 2v2 (défaut), 2 = 1v1. Un 1v1 comme un
   // 2v2 peut rester PRIVÉ (toi + tes invités) ou être OUVERT (les places libres se rejoignent).
   // Le format borne le nombre d'invités (1v1 = 1 invité max, 2v2 = 3).
@@ -143,6 +148,22 @@ export default function ReserverScreen() {
     if (!club || !day) return null;
     return new Map(openSlotsFor(club, ctx).map((s) => [s, freeCourtSlotsAt(club, day.key, s, ctx)]));
   }, [club, day, ctx]);
+
+  // LISTE D'ATTENTE (81) : mes alertes « préviens-moi si ça se libère », chargées au montage.
+  // null = pas encore chargé OU échec réseau (convention §8) : on n'affiche jamais « Alerte
+  // posée » sur la foi d'un état inventé, et un échec n'efface pas ce qu'on sait déjà.
+  const [waitlist, setWaitlist] = useState<{ clubId: string; dateKey: string; time: string }[] | null>(null);
+  const [waitBusy, setWaitBusy] = useState(false); // garde anti double-tap (pose/retrait)
+  useEffect(() => {
+    let alive = true;
+    // setState APRÈS await (règle React Compiler) — jamais de setState synchrone dans l'effet.
+    void fetchMySlotWaitlist().then((rows) => {
+      if (alive && rows) setWaitlist(rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [state.serverUserId]);
 
   // Anneau qui se dilate autour du badge de succès (même anim que BookingConfirmation.tsx),
   // démarré seulement une fois l’écran de succès affiché et arrêté à la sortie (règle React
@@ -264,6 +285,50 @@ export default function ReserverScreen() {
     return (grid[c] ?? []).some((x) => !x.x) ? `${c} · autre horaire` : `${c} · fermé`;
   };
 
+  // CRÉNEAU COMPLET (81) : le créneau EXISTE bien dans la grille ouverte du club (un horaire
+  // fermé ou hérité d'un deep-link périmé n'a rien à attendre) et est encore À VENIR, mais plus
+  // aucun terrain n'y est libre → au lieu des chips de terrain, on propose la liste d'attente.
+  // `effectiveDuration` peut être null ici (plus aucune durée offerte), d'où un test sur `free`.
+  const slotFull =
+    !!day && !!slot && !compToday && openSlots.includes(slot) && slotTimestamp(day.key, slot) > Date.now() && free.length === 0;
+  // Ai-je DÉJÀ posé mon alerte sur ce (club, jour, heure) ? (miroir serveur, jamais deviné)
+  const alerted = !!day && !!slot && (waitlist ?? []).some((w) => w.clubId === club.id && w.dateKey === day.key && w.time === slot);
+
+  // Pose / retrait de l'alerte. Écriture HONNÊTE : le miroir local ne bouge qu'au retour serveur.
+  const toggleWaitlist = async () => {
+    if (!day || !slot || waitBusy) return;
+    setWaitBusy(true);
+    if (alerted) {
+      const ok = await leaveSlotWaitlist(club.id, day.key, slot);
+      setWaitBusy(false);
+      if (!ok) {
+        toast.show('Retrait impossible — vérifie ton réseau et réessaie', { icon: 'cloud-offline-outline' });
+        return;
+      }
+      setWaitlist((cur) => (cur ?? []).filter((w) => !(w.clubId === club.id && w.dateKey === day.key && w.time === slot)));
+      toast.show('Alerte retirée.');
+      return;
+    }
+    // Durée envoyée = celle du créneau quand elle est connue, sinon la session standard : elle
+    // sert au serveur à repérer les libérations qui CHEVAUCHENT ce créneau (même arithmétique 68).
+    const res = await joinSlotWaitlist(club.id, day.key, slot, effectiveDuration ?? 90);
+    setWaitBusy(false);
+    if (res === 'ok') {
+      setWaitlist((cur) => [...(cur ?? []), { clubId: club.id, dateKey: day.key, time: slot }]);
+      hapticSuccess();
+      toast.show('Alerte posée ✓ — on te prévient dès qu’un terrain se libère.');
+    } else if (res === 'past') {
+      // Le créneau est devenu passé pendant que l'écran restait ouvert : réessayer est vain.
+      hapticWarning();
+      setSlot(null);
+      setDuration(null);
+      toast.show('Ce créneau vient de passer — choisis-en un autre.', { icon: 'alert-circle' });
+    } else {
+      hapticWarning();
+      toast.show('Connexion impossible — vérifie ton réseau et réessaie', { icon: 'cloud-offline-outline' });
+    }
+  };
+
   const ready = !!day && !!slot && !!effectiveDuration && !!effectiveCourt && !compToday;
   const hasTiers = priceTiersFor(club).length > 0;
   const slotPrice = slot
@@ -303,7 +368,11 @@ export default function ReserverScreen() {
       // moins une place à prendre (équipe déjà complète = inutile).
       openCapacity: format,
       openMatch: openMatch && invited.length < format - 1,
-      openLevel: openMatch ? openLevel : '',
+      // `openLevel` (texte libre) n'est plus alimenté : la fourchette CHIFFRÉE la remplace (81).
+      // La colonne reste envoyée vide pour ne rien casser en aval (cartes, notify-club).
+      openLevel: '',
+      openLevelMin: openMatch ? openRange.min : null,
+      openLevelMax: openMatch ? openRange.max : null,
     });
     setSubmitting(false);
     if (res.ok) {
@@ -449,7 +518,7 @@ export default function ReserverScreen() {
                 // silencieusement en 1v1 ouvert (maxGuests=1) sans re-choix explicite.
                 setFormat(4);
                 setOpenMatch(false);
-                setOpenLevel('');
+                setOpenRange({ min: null, max: null });
               }}
               full
             />
@@ -528,7 +597,10 @@ export default function ReserverScreen() {
                 {periodSlots.map((s) => {
                   const isPast = !!day && slotTimestamp(day.key, s) <= Date.now();
                   const noCourt = !!day && (slotsByTime?.get(s)?.length ?? 0) === 0;
-                  const blocked = !day || compToday || isPast || noCourt;
+                  // Un créneau COMPLET reste SÉLECTIONNABLE (81) : c'est là qu'on propose la liste
+                  // d'attente (« me prévenir si ça se libère »). Seuls le passé et une journée de
+                  // tournoi restent inaccessibles — eux n'ont rien à attendre.
+                  const blocked = !day || compToday || isPast;
                   // Avec des plages tarifaires, on montre le prix MINIMUM réellement offert à ce
                   // créneau (une durée peut être moins chère qu'une autre sur le même horaire).
                   const label = isPast
@@ -585,7 +657,39 @@ export default function ReserverScreen() {
           </Reveal>
         ) : null}
 
-        {day && slot && effectiveDuration ? (
+        {/* Créneau COMPLET (81) : plus aucun terrain libre → liste d'attente au lieu des chips
+            (l'alerte est une écriture serveur : réservée aux comptes connectés). */}
+        {slotFull ? (
+          <Reveal>
+            <Label text="Terrain" />
+            <View style={styles.fullBox}>
+              <Ionicons name="people" size={18} color={colors.coral} />
+              <View style={{ flex: 1 }}>
+                <Txt variant="body" style={{ fontWeight: '700' }}>
+                  Complet à {slot}
+                </Txt>
+                <Txt variant="small" color={colors.textMuted}>
+                  Tous les terrains sont pris à cet horaire. Choisis un autre créneau — ou pose une alerte : on te prévient dès qu’une place
+                  se libère (premier arrivé, premier servi).
+                </Txt>
+              </View>
+            </View>
+            {state.serverUserId ? (
+              <View style={{ marginTop: spacing.sm }}>
+                <Button
+                  label={waitBusy ? '…' : alerted ? 'Alerte posée ✓ (toucher pour retirer)' : '🔔 Me prévenir si ça se libère'}
+                  variant={alerted ? 'secondary' : 'primary'}
+                  onPress={() => void toggleWaitlist()}
+                  disabled={waitBusy}
+                  accessibilityLabel={
+                    alerted ? 'Retirer mon alerte sur ce créneau' : 'Me prévenir par notification si un terrain se libère à ce créneau'
+                  }
+                  full
+                />
+              </View>
+            ) : null}
+          </Reveal>
+        ) : day && slot && effectiveDuration ? (
           <Reveal>
             <Label text="Terrain" />
             <View style={styles.wrap}>
@@ -738,12 +842,7 @@ export default function ReserverScreen() {
                 <Txt variant="label" style={{ marginTop: spacing.md }}>
                   Niveau souhaité
                 </Txt>
-                <View style={[styles.wrap, { marginTop: spacing.sm }]}>
-                  {['Tous niveaux', '2–3', '3–4', '4–5', '5+'].map((lv) => {
-                    const value = lv === 'Tous niveaux' ? '' : lv;
-                    return <Chip key={lv} label={lv} active={openLevel === value} onPress={() => setOpenLevel(value)} />;
-                  })}
-                </View>
+                <LevelRangePicker min={openRange.min} max={openRange.max} anchor={snapLevel(state.level)} onChange={setOpenRange} />
                 <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
                   Ton terrain est bloqué quoi qu’il arrive. Les autres rejoignent depuis « Matchs ouverts » (tu es prévenu à chaque
                   arrivée). Le prix du terrain se partage entre les joueurs.
@@ -847,6 +946,18 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   priceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.lg },
+  // Bloc « Complet » (liste d'attente) — même langage visuel que la bannière de tournoi.
+  fullBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+  },
   summary: { alignSelf: 'stretch', marginTop: spacing.xs, gap: spacing.sm },
   successHero: {
     alignItems: 'center',
