@@ -204,6 +204,9 @@ function routeForNotification(data: NotificationData | null | undefined): string
     case 'event':
       // Actu opérateur (47) / événement de l'agenda (82) → l'accueil, qui les affiche.
       return '/';
+    case 'club_news':
+      // Annonce d'un club suivi (83) → sa fiche, où la section « Annonces » l'affiche.
+      return data.clubId ? `/club/${data.clubId}` : '/';
     case 'open_match':
       // Match ouvert d'un partenaire suivi / à mon niveau (80-81) → l'onglet Réserver, où la
       // section « Matchs ouverts » l'affiche (pas d'écran par match individuel).

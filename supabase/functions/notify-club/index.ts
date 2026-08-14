@@ -30,11 +30,18 @@
 //     aux inscrits dont l'attente chevauche le créneau libéré (one-shot). PAS sur club_cancelled :
 //     l'annulation club re-bloque le créneau (75), il n'est jamais réellement libéré.
 //   • events INSERT (82, agenda du padel, si « push » coché) → broadcast à tous les comptes.
+//   • club_news INSERT (83, si « push » coché) → annonce du club à ses SUIVEURS (club_followers).
+//   • share_payments INSERT (declared) → « part déclarée payée » au CRÉATEUR de la résa ;
+//     UPDATE (→ confirmed) → « ta part est confirmée » au PAYEUR.
+//   • lessons UPDATE (→ cancelled, capacity > 1) → en plus du coach, les ÉLÈVES inscrits
+//     (lesson_students) sont prévenus que le cours collectif saute.
 // L'envoi passe par l'API Push d'Expo (pas besoin de gérer APNs soi-même : Expo route vers
-// Apple/Google). ⚠️ LES 8 WEBHOOKS doivent écouter INSERT **ET** UPDATE (corrigé en base le
+// Apple/Google). ⚠️ LES 11 WEBHOOKS doivent écouter INSERT **ET** UPDATE (corrigé en base le
 // 2026-07-16 : `reservations` et `reservation_participants` avaient dérivé en INSERT-seul /
-// UPDATE-seul) : reservations, reservation_participants, competitions, friend_requests, lessons,
-// coaches, match_results, operator_news (cf. docs/PUSH-SETUP.md).
+// UPDATE-seul), SAUF `club_news` (INSERT seul, décision assumée — le push ne part qu'à la
+// création d'une annonce) : reservations, reservation_participants, competitions,
+// friend_requests, lessons, coaches, match_results, operator_news, events, club_news,
+// share_payments (cf. docs/PUSH-SETUP.md).
 //
 // Aucune clé secrète ici — on lit les jetons en base via la SERVICE ROLE (injectée par
 // Supabase dans les variables d'environnement de la fonction).
@@ -63,7 +70,8 @@ type Notif = {
       | 'news'
       | 'open_match'
       | 'waitlist'
-      | 'event';
+      | 'event'
+      | 'club_news';
     id?: string;
     clubId?: string;
     dateKey?: string;
@@ -144,6 +152,23 @@ Deno.serve(async (req) => {
       const { data } = await supabase.from('profiles').select('first_name, last_name').eq('id', userId).maybeSingle();
       const name = `${data?.first_name ?? ''} ${data?.last_name ?? ''}`.trim();
       return name || 'Un joueur';
+    };
+    // Nom affiché d'un club. Les 9 clubs FONDATEURS ne sont pas dans la table `clubs`
+    // (embarqués dans l'app) : miroir de src/data/clubs.ts pour ne pas dire « Ton club ».
+    const FOUNDER_NAMES: Record<string, string> = {
+      'abidjan-padel': 'Abidjan Padel',
+      'district-club': 'District Club',
+      'elite-club': 'Elite Club',
+      'ivoire-padel': 'Ivoire Padel Club',
+      'padel-magic': 'Padel Magic',
+      'padel-palmeraie': 'Padel Palmeraie',
+      'padel-zone-4': 'Padel Zone 4',
+      padelta: 'Padelta',
+      padelhouse: 'PadelHouse',
+    };
+    const clubName = async (clubId: string): Promise<string> => {
+      const { data } = await supabase.from('clubs').select('name').eq('id', clubId).maybeSingle();
+      return data?.name ?? FOUNDER_NAMES[clubId] ?? 'Ton club';
     };
     // LISTE D'ATTENTE (81) : un créneau vient de se LIBÉRER (annulation JOUEUR uniquement —
     // une annulation CLUB re-bloque le créneau, cf. branche club_cancelled) → notifier les
@@ -551,6 +576,26 @@ Deno.serve(async (req) => {
         body: `Le cours avec ${record.student_name ?? 'un joueur'} du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} n’aura pas lieu — le créneau est libéré.`,
         data: { kind: 'lesson' },
       });
+      // COURS COLLECTIF (83, capacity > 1) : les ÉLÈVES inscrits doivent aussi le savoir —
+      // sans ce push, le cours disparaît en silence de leur liste. kind 'reservation' (leurs
+      // cours vivent dans « Mes réservations », l'Espace Coach leur est fermé).
+      if (Number(record.capacity ?? 1) > 1) {
+        const { data: studs } = await supabase.from('lesson_students').select('user_id').eq('lesson_id', record.id);
+        const studIds = (studs ?? []).map((s: { user_id: string }) => s.user_id).filter(Boolean);
+        if (studIds.length) {
+          const { data: toks } = await supabase
+            .from('profiles')
+            .select('expo_push_token')
+            .in('id', studIds)
+            .not('expo_push_token', 'is', null);
+          notifs.push({
+            targets: (toks ?? []).map((t: { expo_push_token: string }) => t.expo_push_token).filter(Boolean),
+            title: 'Cours collectif annulé',
+            body: `Le cours collectif du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} (${record.club_name ?? ''}) n’aura pas lieu.`,
+            data: { kind: 'reservation' },
+          });
+        }
+      }
     } else if (table === 'lessons' && type === 'UPDATE' && record.status === 'cancelled' && oldRecord.status === 'pending') {
       // L'élève a retiré sa DEMANDE avant la réponse → petit mot au coach (sa liste se met à jour).
       notifs.push({
@@ -565,21 +610,7 @@ Deno.serve(async (req) => {
     ) {
       // Un club vient de PROMOUVOIR (ou re-promouvoir) ce compte en coach → on le lui annonce,
       // sinon il ne découvre son Espace Coach que par hasard en rouvrant son profil.
-      // Les 9 clubs FONDATEURS ne sont pas dans la table `clubs` (embarqués dans l'app) : on
-      // garde leur nom ici pour ne pas dire « Ton club » (miroir de src/data/clubs.ts).
-      const FOUNDER_NAMES: Record<string, string> = {
-        'abidjan-padel': 'Abidjan Padel',
-        'district-club': 'District Club',
-        'elite-club': 'Elite Club',
-        'ivoire-padel': 'Ivoire Padel Club',
-        'padel-magic': 'Padel Magic',
-        'padel-palmeraie': 'Padel Palmeraie',
-        'padel-zone-4': 'Padel Zone 4',
-        padelta: 'Padelta',
-        padelhouse: 'PadelHouse',
-      };
-      const { data: clubRow } = await supabase.from('clubs').select('name').eq('id', record.club_id).maybeSingle();
-      const promoClub = clubRow?.name ?? FOUNDER_NAMES[record.club_id as string] ?? 'Ton club';
+      const promoClub = await clubName(record.club_id as string);
       notifs.push({
         targets: await userToken(record.user_id),
         title: 'Tu es maintenant coach 🎾',
@@ -715,6 +746,78 @@ Deno.serve(async (req) => {
           data: { kind: 'event' },
         });
       }
+    } else if (table === 'club_news' && type === 'INSERT' && record.push === true && record.club_id) {
+      // ANNONCE CLUB (83, si la case « push » était cochée à la CRÉATION — le webhook est
+      // INSERT seul, une correction de texte ne re-pousse jamais) → aux SUIVEURS du club
+      // (cœur favori synchronisé via club_followers), hors bloqués avec l'auteur de l'annonce.
+      // MÊME anti-phishing que l'actu/l'agenda : le texte est RELU en base par id — un appel
+      // forgé ne peut pas injecter son propre message. Plafond 100 À LA SOURCE (récence).
+      const { data: nw } = await supabase
+        .from('club_news')
+        .select('id, club_id, title, push, created_by')
+        .eq('id', record.id)
+        .maybeSingle();
+      if (nw && nw.push === true) {
+        const { data: fols } = await supabase
+          .from('club_followers')
+          .select('user_id')
+          .eq('club_id', nw.club_id)
+          .order('created_at', { ascending: false })
+          .limit(100);
+        let ids = [...new Set((fols ?? []).map((f: { user_id: string }) => f.user_id))].filter(Boolean);
+        if (nw.created_by && ids.length) {
+          const { data: blocks } = await supabase
+            .from('blocked_users')
+            .select('blocker_id, blocked_id')
+            .or(`blocker_id.eq.${nw.created_by},blocked_id.eq.${nw.created_by}`);
+          const excluded = new Set((blocks ?? []).flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]));
+          ids = ids.filter((id: string) => id !== nw.created_by && !excluded.has(id));
+        }
+        if (ids.length) {
+          const { data: profs } = await supabase
+            .from('profiles')
+            .select('expo_push_token')
+            .in('id', ids)
+            .not('expo_push_token', 'is', null);
+          const targets = (profs ?? []).map((p: { expo_push_token: string }) => p.expo_push_token).filter(Boolean);
+          if (targets.length) {
+            notifs.push({
+              targets,
+              title: 'Annonce de ton club 📣',
+              body: `${await clubName(nw.club_id as string)} : ${nw.title ?? ''}`,
+              data: { kind: 'club_news', clubId: nw.club_id },
+            });
+          }
+        }
+      }
+    } else if (table === 'share_payments' && type === 'INSERT' && record.status === 'declared') {
+      // PART WAVE déclarée (83) : un participant dit « j'ai payé ma part » → prévenir le
+      // CRÉATEUR de la résa (c'est lui qui encaisse et confirme).
+      const { data: resa } = await supabase
+        .from('reservations')
+        .select('user_id, club_name, date_label, time')
+        .eq('id', record.reservation_id)
+        .maybeSingle();
+      notifs.push({
+        targets: await userToken(resa?.user_id ?? ''),
+        title: 'Part déclarée payée 💸',
+        body: `${await userName(record.user_id)} a déclaré avoir payé sa part du match du ${resa?.date_label ?? ''} à ${resa?.time ?? ''} (${resa?.club_name ?? ''}) — confirme la réception.`,
+        data: { kind: 'reservation', id: record.reservation_id },
+      });
+    } else if (table === 'share_payments' && type === 'UPDATE' && record.status === 'confirmed' && oldRecord.status !== 'confirmed') {
+      // Part CONFIRMÉE par le créateur → petit reçu au payeur (transition seule : un UPDATE
+      // re-joué sur une ligne déjà confirmée ne re-pousse pas).
+      const { data: resa } = await supabase
+        .from('reservations')
+        .select('club_name, date_label, time')
+        .eq('id', record.reservation_id)
+        .maybeSingle();
+      notifs.push({
+        targets: await userToken(record.user_id),
+        title: 'Ta part est confirmée ✓',
+        body: `Ta part du match du ${resa?.date_label ?? ''} à ${resa?.time ?? ''} (${resa?.club_name ?? ''}) est bien reçue.`,
+        data: { kind: 'reservation', id: record.reservation_id },
+      });
     }
 
     // Aplatis toutes les notifs en messages Expo (une entrée par destinataire).

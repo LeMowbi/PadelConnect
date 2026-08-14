@@ -138,8 +138,20 @@ joueur, auteur de la réservation, opérateur, organisateur du tournoi, ami invi
 > d'ouvrir » (INSERT, notify-club v33/v34) et « un créneau s'est libéré » (UPDATE → annulation
 > JOUEUR, liste d'attente 81 — pas sur une annulation CLUB, qui re-bloque le créneau).
 
-**Au total, 8 webhooks** doivent exister : `reservations`, `reservation_participants`,
-`competitions`, `friend_requests`, `lessons`, `coaches`, `match_results`, `operator_news`.
+> 🆕 Chantier v3, lots C-D (2026-08-14, DÉJÀ CRÉÉS via l'API — rien à faire) : 3 webhooks de plus,
+> clonés avec le même en-tête secret :
+>
+> - **`events`** (INSERT + UPDATE) → push d'un événement de l'AGENDA publié avec la case « push »
+>   (anti-doublon + anti-phishing par relecture en base, notify-club v35).
+> - **`club_news`** (INSERT **seul**, décision assumée : le push ne part qu'à la création d'une
+>   annonce) → annonce d'un club à ses SUIVEURS (cœur favori), notify-club v38.
+> - **`share_payments`** (INSERT + UPDATE) → « part déclarée payée » au créateur du match partagé,
+>   « ta part est confirmée » au payeur (notify-club v38). Le webhook `lessons` existant pousse
+>   AUSSI, depuis la v38, l'annulation d'un cours COLLECTIF à ses élèves inscrits.
+
+**Au total, 11 webhooks** doivent exister : `reservations`, `reservation_participants`,
+`competitions`, `friend_requests`, `lessons`, `coaches`, `match_results`, `operator_news`,
+`events`, `club_news`, `share_payments`.
 
 ## 4 bis. ✅ FAIT (2026-07-06) — Webhook sécurisé par secret
 
