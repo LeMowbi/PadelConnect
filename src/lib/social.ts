@@ -143,3 +143,60 @@ export async function setClubFollow(clubId: string, on: boolean): Promise<boolea
   const { data, error } = await supabase.rpc('follow_club', { p_club_id: clubId, p_on: on });
   return !error && data === true;
 }
+
+// ─── Fidélité « 10 parties = 1 récompense » (82) ────────────────────────────────
+
+export type Loyalty = { played: number; claimed: number };
+
+// Mon compteur (parties réellement jouées + cycles déjà réclamés). null = échec réseau.
+export async function fetchMyLoyalty(): Promise<Loyalty | null> {
+  const { data, error } = await supabase.rpc('my_loyalty');
+  if (error) return null;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  return { played: Number(row.played ?? 0), claimed: Number(row.claimed ?? 0) };
+}
+
+// Réclamer la récompense du cycle suivant. 'not_yet' = pas encore 10 nouvelles parties.
+export async function claimLoyalty(): Promise<'ok' | 'not_yet' | 'error'> {
+  const { data, error } = await supabase.rpc('claim_loyalty');
+  if (error) return 'error';
+  return data === 'ok' || data === 'not_yet' ? data : 'error';
+}
+
+// Texte de la récompense, réglé par l'opérateur (app_config). null = échec réseau, '' = non réglé.
+export async function fetchLoyaltyReward(): Promise<string | null> {
+  const { data, error } = await supabase.from('app_config').select('value').eq('key', 'loyalty_reward').maybeSingle();
+  if (error) return null;
+  return data?.value ?? '';
+}
+
+// Opérateur : règle le texte de la récompense. true = enregistré.
+export async function setLoyaltyReward(text: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('set_app_config', { p_key: 'loyalty_reward', p_value: text });
+  return !error && data === true;
+}
+
+export type LoyaltyClaim = { id: string; userId: string; playerName: string; cycle: number; claimedAt: number; served: boolean };
+
+// Opérateur : réclamations à servir (les non servies d'abord). null = échec réseau.
+export async function fetchLoyaltyClaims(): Promise<LoyaltyClaim[] | null> {
+  const { data, error } = await supabase.rpc('fetch_loyalty_claims');
+  if (error) return null;
+  return ((data ?? []) as { id: string; user_id: string; player_name: string; cycle: number; claimed_at: string; served: boolean }[]).map(
+    (r) => ({
+      id: r.id,
+      userId: r.user_id,
+      playerName: r.player_name,
+      cycle: r.cycle,
+      claimedAt: new Date(r.claimed_at).getTime(),
+      served: r.served,
+    }),
+  );
+}
+
+// Opérateur : marque une réclamation « servie » (remise en main propre faite). true = ok.
+export async function serveLoyaltyClaim(id: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('serve_loyalty_claim', { p_id: id });
+  return !error && data === true;
+}

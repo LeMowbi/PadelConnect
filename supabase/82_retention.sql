@@ -52,6 +52,49 @@ $$;
 
 revoke execute on function public.save_americano_state(uuid, jsonb) from public, anon;
 
+-- fetch_competitions : la SIGNATURE de retour change (colonne `americano` ajoutée EN FIN) →
+-- drop + create (convention §8). Recopie STRICTE de la 68 sinon.
+drop function if exists public.fetch_competitions();
+create function public.fetch_competitions()
+returns table (
+  id uuid, organizer_id uuid, organizer_type text, organizer_name text, organizer_phone text,
+  club_id text, club_name text, title text, format text, level text,
+  date_key text, end_date_key text, courts text[], slots text[],
+  capacity int, fee text, reward text, official boolean, status text, commission int,
+  winner text, second text, third text, loser text, registered int, teams text[],
+  reject_reason text, payment_status text, wave_link text, slot_durations int[], americano jsonb
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select c.id, c.organizer_id, c.organizer_type, c.organizer_name,
+    case when c.organizer_id = auth.uid()
+              or public.can_manage_club(c.club_id)
+              or exists (select 1 from public.competition_registrations r
+                           where r.competition_id = c.id and r.user_id = auth.uid())
+         then c.organizer_phone else null end,
+    c.club_id, c.club_name, c.title, c.format, c.level,
+    c.date_key, c.end_date_key, c.courts, c.slots,
+    c.capacity, c.fee, c.reward, c.official, c.status, c.commission,
+    c.winner, c.second, c.third, c.loser,
+    (select count(*) from public.competition_registrations r where r.competition_id = c.id)::int,
+    (select coalesce(array_agg(trim(coalesce(pr.first_name, '') || ' & ' || rg.partner) order by rg.created_at), '{}')
+       from public.competition_registrations rg
+       join public.profiles pr on pr.id = rg.user_id
+       where rg.competition_id = c.id),
+    c.reject_reason,
+    c.payment_status,
+    (select tc.wave_link from public.tournament_config tc where tc.id = true),
+    c.slot_durations,
+    c.americano
+  from public.competitions c
+  where c.status in ('published', 'closed')
+    or c.organizer_id = auth.uid()
+    or public.can_manage_club(c.club_id);
+$$;
+
 -- ── 2) Réglages opérateur génériques (liste blanche) ───────────────────────────
 
 create table if not exists public.app_config (

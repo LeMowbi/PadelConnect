@@ -50,6 +50,8 @@ export type Competition = {
   closed?: boolean;
   // Paiement Wave des frais (v2) : 'unpaid' tant que l’opérateur n’a pas confirmé, 'paid' ensuite.
   paymentStatus?: 'unpaid' | 'paid';
+  // État americano auto-géré (82) — présent seulement si l'organisateur a lancé la gestion.
+  americano?: import('@/lib/americano').AmericanoState;
 };
 
 // Tournoi visible publiquement (listes, accueil, fiche club) : ni « en attente », ni « refusé ».

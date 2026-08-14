@@ -37,6 +37,10 @@ export type AmericanoRound = { round: number; matches: AmericanoMatch[]; resting
 // Un score saisi, rattaché à un match par le couple (numéro de ronde, index de terrain).
 export type AmericanoScore = { round: number; courtIndex: number; scoreA: number; scoreB: number };
 
+// État COMPLET d'un americano en cours, tel que persisté côté serveur (competitions.americano,
+// SQL 82) : la génération/le classement restent purs (client), le serveur ne fait qu'afficher.
+export type AmericanoState = { players: string[]; courts: number; rounds: AmericanoRound[]; scores: AmericanoScore[] };
+
 // Une ligne de classement. `played` = matchs RÉELLEMENT joués (un score enregistré), pas les
 // matchs prévus — c'est ce qui rend « points / played » (moyenne par match) honnête.
 export type AmericanoStanding = { player: AmericanoPlayer; points: number; played: number };

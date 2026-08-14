@@ -36,6 +36,7 @@ type CompetitionRow = {
   teams: string[] | null;
   reject_reason: string | null;
   payment_status: string | null; // 'unpaid' | 'paid' (Wave, v2)
+  americano: import('@/lib/americano').AmericanoState | null; // état americano auto-géré (82)
   wave_link: string | null; // lien de paiement Wave de l'opérateur (identique sur chaque ligne)
   slot_durations: number[] | null; // durée (min) de chaque créneau tournoi, alignée sur slots (68)
 };
@@ -80,6 +81,7 @@ function rowToCompetition(r: CompetitionRow, myUserId: string): Competition {
     closed: r.status === 'closed',
     rejectReason: r.reject_reason ?? undefined,
     paymentStatus: r.payment_status === 'paid' ? 'paid' : 'unpaid',
+    americano: r.americano ?? undefined,
   };
 }
 
@@ -224,5 +226,12 @@ export async function fetchTournamentFee(): Promise<number | null> {
 
 export async function setTournamentFee(amount: number): Promise<boolean> {
   const { data, error } = await supabase.rpc('set_tournament_fee', { p_amount: Math.max(0, Math.round(amount)) });
+  return !error && data === true;
+}
+
+// Sauvegarde l'état americano (organisateur / gérant hôte / opérateur, tournoi publié,
+// format americano — gardes serveur, SQL 82). true = enregistré.
+export async function saveAmericanoState(compId: string, state: import('@/lib/americano').AmericanoState): Promise<boolean> {
+  const { data, error } = await supabase.rpc('save_americano_state', { p_id: compId, p_state: state });
   return !error && data === true;
 }
