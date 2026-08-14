@@ -46,8 +46,11 @@ type Notif = {
   body: string;
   // 'club_reservation' / 'club_tournament' = push destiné au GÉRANT → l'app ouvre l'Espace Club.
   data?: {
-    kind: 'friend_request' | 'reservation' | 'club_reservation' | 'tournament' | 'club_tournament' | 'lesson' | 'news';
+    kind: 'friend_request' | 'reservation' | 'club_reservation' | 'tournament' | 'club_tournament' | 'lesson' | 'news' | 'open_match' | 'waitlist';
     id?: string;
+    clubId?: string;
+    dateKey?: string;
+    time?: unknown;
   };
 };
 
@@ -125,6 +128,54 @@ Deno.serve(async (req) => {
       const name = `${data?.first_name ?? ''} ${data?.last_name ?? ''}`.trim();
       return name || 'Un joueur';
     };
+    // LISTE D'ATTENTE (81) : un créneau vient de se LIBÉRER (annulation joueur OU club) →
+    // notifier les inscrits dont l'attente CHEVAUCHE l'intervalle libéré (même arithmétique
+    // demi-ouverte [t, t+d) que la dispo), puis SUPPRIMER les entrées notifiées (one-shot,
+    // premier arrivé premier servi). Renvoie les notifs à empiler — jamais d'exception
+    // (un échec ici ne doit pas casser les pushes d'annulation).
+    const toMin = (t: string): number => {
+      const [h, m] = String(t ?? '').split(':').map(Number);
+      return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : NaN;
+    };
+    const waitlistAlerts = async (rec: Record<string, unknown>): Promise<Notif[]> => {
+      try {
+        const clubId = rec.club_id as string;
+        const dateKey = rec.date_key as string;
+        const start = toMin(rec.time as string);
+        const dur = Number(rec.duration_min ?? 90);
+        if (!clubId || !dateKey || !Number.isFinite(start)) return [];
+        const { data: waits } = await supabase
+          .from('slot_waitlist')
+          .select('id, user_id, time, duration_min')
+          .eq('club_id', clubId)
+          .eq('date_key', dateKey);
+        const hits = (waits ?? []).filter((w) => {
+          const ws = toMin(w.time as string);
+          const wd = Number(w.duration_min ?? 90);
+          return Number.isFinite(ws) && ws < start + dur && start < ws + wd; // chevauchement [t, t+d)
+        });
+        const userIds = [...new Set(hits.map((w) => w.user_id as string))].filter((id) => id && id !== rec.user_id);
+        if (!userIds.length) return [];
+        const { data: profs } = await supabase
+          .from('profiles')
+          .select('expo_push_token')
+          .in('id', userIds)
+          .not('expo_push_token', 'is', null);
+        const targets = (profs ?? []).map((p) => p.expo_push_token as string).filter(Boolean);
+        // One-shot : les entrées qui ont déclenché l'alerte disparaissent (notifiées ou pas —
+        // le créneau n'est plus « complet », l'attente n'a plus d'objet).
+        await supabase.from('slot_waitlist').delete().in('id', hits.map((w) => w.id as string));
+        if (!targets.length) return [];
+        return [{
+          targets,
+          title: 'Un créneau s’est libéré 🏃',
+          body: `${rec.club_name ?? 'Le club'} — ${rec.date_label ?? ''} à ${rec.time ?? ''} : fonce, premier arrivé premier servi.`,
+          data: { kind: 'waitlist', clubId, dateKey, time: rec.time },
+        }];
+      } catch {
+        return []; // best-effort : jamais bloquer la branche d'annulation
+      }
+    };
 
     const notifs: Notif[] = [];
 
@@ -168,6 +219,57 @@ Deno.serve(async (req) => {
           }
         }
       }
+      // ALERTES « un match à ton niveau vient d'ouvrir » (81) : suiveurs du CLUB ayant activé
+      // match_alerts, niveau dans la fourchette du match (fourchette absente = tous niveaux),
+      // hors créateur / bloqués / déjà notifiés « partenaire suivi ». Plafond 100 (log si écrêté).
+      if (record.open_match === true && record.user_id && record.club_id) {
+        try {
+          const already = new Set<string>();
+          const favRows = await supabase.from('favorite_players').select('user_id').eq('fav_user_id', record.user_id);
+          for (const f of favRows.data ?? []) already.add(f.user_id as string);
+          const { data: blocks } = await supabase
+            .from('blocked_users')
+            .select('blocker_id, blocked_id')
+            .or(`blocker_id.eq.${record.user_id},blocked_id.eq.${record.user_id}`);
+          const blocked = new Set(
+            (blocks ?? []).flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]),
+          );
+          const { data: fols } = await supabase.from('club_followers').select('user_id').eq('club_id', record.club_id);
+          let ids = [...new Set((fols ?? []).map((f: { user_id: string }) => f.user_id))].filter(
+            (id) => id && id !== record.user_id && !already.has(id) && !blocked.has(id),
+          );
+          if (ids.length) {
+            const { data: profs } = await supabase
+              .from('profiles')
+              .select('id, expo_push_token, level, match_alerts')
+              .in('id', ids)
+              .eq('match_alerts', true)
+              .not('expo_push_token', 'is', null);
+            const lo = record.open_level_min == null ? null : Number(record.open_level_min);
+            const hi = record.open_level_max == null ? null : Number(record.open_level_max);
+            const eligible = (profs ?? []).filter((p: { level: number }) => {
+              const lv = Number(p.level ?? 0);
+              return (lo == null || lv >= lo) && (hi == null || lv <= hi);
+            });
+            if (eligible.length > 100) console.log(`alerte niveau écrêtée : ${eligible.length} → 100`);
+            const targets = eligible
+              .slice(0, 100)
+              .map((p: { expo_push_token: string }) => p.expo_push_token)
+              .filter(Boolean);
+            if (targets.length) {
+              const range = lo != null || hi != null ? ` · niveau ${lo ?? '≤'}${lo != null && hi != null ? '–' : ''}${hi ?? '+'}` : '';
+              notifs.push({
+                targets,
+                title: 'Un match à ton niveau vient d’ouvrir 🎾',
+                body: `${record.club_name ?? ''} · ${record.date_label ?? ''} à ${record.time ?? ''}${range}.`,
+                data: { kind: 'open_match', id: record.id },
+              });
+            }
+          }
+        } catch {
+          // best-effort : l'alerte ne doit jamais casser la notif gérant
+        }
+      }
     } else if (
       table === 'reservations' &&
       type === 'UPDATE' &&
@@ -192,6 +294,7 @@ Deno.serve(async (req) => {
         body: `${record.booked_by_name ?? 'Un joueur'} a annulé son créneau du ${record.date_label ?? ''} à ${record.time ?? ''} (${record.court ?? ''} · ${record.club_name ?? ''}).`,
         data: { kind: 'club_reservation', id: record.id },
       });
+      notifs.push(...(await waitlistAlerts(record)));
       // Et prévenir les PARTICIPANTS (amis invités / joueurs qui avaient rejoint un match
       // ouvert) : sans ça, le match disparaît en silence de leurs réservations.
       const { data: parts } = await supabase.from('reservation_participants').select('user_id, status').eq('reservation_id', record.id);
@@ -206,6 +309,9 @@ Deno.serve(async (req) => {
         });
       }
     } else if (table === 'reservations' && type === 'UPDATE' && record.status === 'club_cancelled' && oldRecord.status === 'booked') {
+      // ⚠️ PAS d'alerte liste d'attente ici : une annulation CLUB (75) re-bloque immédiatement le
+      // créneau d'origine (occupé hors app) — il ne redevient PAS réservable, pousser « fonce »
+      // serait un mensonge. Seule l'annulation JOUEUR (ci-dessus) libère réellement le créneau.
       // Le CLUB vient d'annuler la réservation (75) car le créneau chevauche une réservation prise
       // HORS APP → prévenir le joueur (auteur) + les participants, avec le motif et, si le club en a
       // proposé une, l'alternative (jour/heure/terrain). Tap sur la notif → « Mes réservations ».
