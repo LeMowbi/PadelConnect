@@ -6,12 +6,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Chip } from '@/components/Chip';
-import { LevelStepper } from '@/components/LevelStepper';
 import { Logo } from '@/components/Logo';
 import { Stepper } from '@/components/Stepper';
 import { Button, Card, IconCircle, Txt } from '@/components/ui';
 import { type Club } from '@/data/clubs';
 import { levelLabel } from '@/lib/format';
+import { QUIZ_QUESTIONS, levelFromQuiz, type QuizAnswers } from '@/lib/levelQuiz';
 import { isValidPhone } from '@/lib/phone';
 import { clearPendingReferral, getPendingReferral } from '@/lib/pendingReferral';
 import { pickImage } from '@/lib/pickImage';
@@ -19,16 +19,23 @@ import { GENDERS, ageFrom, maskBirthDate, parseBirthDate, zodiacFor, type Gender
 import { useApp } from '@/store/AppContext';
 import { colors, font, gradients, radius, shadows, spacing } from '@/theme';
 
-type FieldKey = 'firstName' | 'lastName' | 'email' | 'phone' | 'password' | 'birth' | 'gender';
+// « quiz » n’est pas un champ de saisie : c’est le bloc des 4 questions de niveau. Il entre
+// quand même dans FieldKey pour profiter de la mécanique existante (erreur d’étape + scroll
+// automatique vers le bloc fautif), exactement comme le champ « sexe ».
+type FieldKey = 'firstName' | 'lastName' | 'email' | 'phone' | 'password' | 'birth' | 'gender' | 'quiz';
 
 // Validation e-mail volontairement simple (présence d’un @ et d’un point) — la vraie
 // vérification, c’est le clic sur le lien de confirmation reçu par mail.
 const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
+// Niveau du quiz en toutes lettres, sans zéro inutile : 3 → « 3 », 3.5 → « 3,5 » (virgule
+// française, comme pctLabel). Les niveaux du quiz tombent toujours au demi-point.
+const levelText = (n: number) => (Number.isInteger(n) ? `${n}` : n.toFixed(1).replace('.', ','));
+
 // Inscription en 3 étapes (Stepper du kit). Chaque étape ne valide QUE ses propres champs
 // (cf. goNext) — la liste sert aussi de filet de sécurité pour retrouver l’étape d’un champ.
 const STEP_LABELS = ['Compte', 'Profil', 'Parrainage'];
-const STEP_FIELDS: FieldKey[][] = [['email', 'phone', 'password'], ['firstName', 'lastName', 'birth', 'gender'], []];
+const STEP_FIELDS: FieldKey[][] = [['email', 'phone', 'password'], ['firstName', 'lastName', 'birth', 'gender', 'quiz'], []];
 const FIELD_ORDER: FieldKey[] = STEP_FIELDS.flat();
 
 export default function Onboarding() {
@@ -42,7 +49,10 @@ export default function Onboarding() {
   const [birth, setBirth] = useState('');
   const [gender, setGender] = useState<Gender | null>(null);
   const [photoUri, setPhotoUri] = useState<string | undefined>(undefined);
-  const [lvl, setLvl] = useState(3.0);
+  // Quiz de niveau (v3) : le joueur ne choisit plus son niveau, il répond à 4 questions et
+  // l’app en DÉRIVE le niveau de départ (barème pur `levelFromQuiz`, src/lib/levelQuiz.ts).
+  // Partial : une question sans réponse reste absente ; les 4 sont exigées pour continuer.
+  const [answers, setAnswers] = useState<Partial<QuizAnswers>>({});
   const [referralCode, setReferralCode] = useState(''); // parrainage (facultatif)
   // Étape courante du formulaire (0 = Compte, 1 = Profil, 2 = Parrainage). État global au
   // composant (pas par étape) : le pré-remplissage du parrainage marche quel que soit l’écran.
@@ -108,6 +118,13 @@ export default function Onboarding() {
   const birthDate = parseBirthDate(birth);
   const zodiac = birthDate ? zodiacFor(birthDate) : null;
 
+  // Niveau de départ dérivé du quiz — null tant que les 4 réponses ne sont pas posées (le
+  // barème les exige toutes). Déstructuré plutôt que casté : aucune réponse manquante ne peut
+  // se glisser dans levelFromQuiz.
+  const { frequency, racketSport, competition, selfAssess } = answers;
+  const quizLevel =
+    frequency && racketSport && competition && selfAssess ? levelFromQuiz({ frequency, racketSport, competition, selfAssess }) : null;
+
   const choosePhoto = async () => {
     const uri = await pickImage({ square: true });
     if (uri) setPhotoUri(uri);
@@ -123,6 +140,8 @@ export default function Onboarding() {
     // Date de naissance optionnelle : on ne signale une erreur QUE si elle est mal saisie.
     if (birth.trim().length > 0 && !birthDate) e.birth = 'Date invalide — vérifie le jour, le mois et l’année.';
     if (!gender) e.gender = 'Choisis une option.';
+    // Les 4 questions du quiz sont obligatoires : sans elles, pas de niveau de départ.
+    if (quizLevel === null) e.quiz = 'Réponds aux 4 questions pour connaître ton niveau.';
     return e;
   };
 
@@ -177,7 +196,7 @@ export default function Onboarding() {
       lastName: lastName.trim(),
       birthDate: birth.trim() || undefined,
       gender: gender!,
-      level: lvl,
+      level: quizLevel ?? undefined, // jamais null ici (validate() bloque l’étape sans les 4 réponses)
       referralCode: referralCode.trim() || undefined,
       photoUri, // envoyée au stockage à la 1ʳᵉ session (mise de côté d’ici là)
     });
@@ -861,18 +880,67 @@ export default function Onboarding() {
                 ) : null}
               </View>
 
-              <Txt variant="label" style={styles.fieldLabel}>
-                Ton niveau de jeu
-              </Txt>
-              <View style={styles.levelBox}>
-                <LevelStepper value={lvl} onChange={setLvl} />
-                <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
-                  {levelLabel(lvl)} · évoluera selon tes tournois officiels
+              {/* Quiz de niveau : 4 questions à la place du choix libre — un niveau DÉRIVÉ est
+                  plus juste qu’un niveau déclaré (les « 6 » fantaisistes se voyaient en deux
+                  échanges). Une seule réponse par question ; le bloc entier porte l’erreur. */}
+              <View
+                onLayout={(e) => {
+                  positions.current.quiz = e.nativeEvent.layout.y;
+                }}
+              >
+                <Txt variant="label" style={styles.fieldLabel}>
+                  Ton niveau de jeu
                 </Txt>
-                {/* Clin d’œil pour inciter à l’honnêteté (sinon le terrain s’en charge 😅). */}
-                <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs, textAlign: 'center' }}>
-                  Joue franc-jeu 😉 — un « 6 » qui perd 6-0, ça se voit en 2 échanges.
+                <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.xs }}>
+                  4 questions rapides — on calcule ton niveau de départ pour t’associer aux bons joueurs.
                 </Txt>
+                {QUIZ_QUESTIONS.map((q) => (
+                  <View key={q.key} style={{ marginTop: spacing.lg }}>
+                    <Txt variant="body" style={{ fontWeight: '700' }}>
+                      {q.title}
+                    </Txt>
+                    <Txt variant="small" color={colors.textFaint} style={{ marginTop: 2 }}>
+                      {q.help}
+                    </Txt>
+                    <View style={styles.genderRow}>
+                      {q.options.map((o) => (
+                        <Chip
+                          key={o.value}
+                          label={o.label}
+                          active={answers[q.key] === o.value}
+                          onPress={() => {
+                            setAnswers((cur) => ({ ...cur, [q.key]: o.value }));
+                            clearError('quiz');
+                          }}
+                          size="lg"
+                        />
+                      ))}
+                    </View>
+                  </View>
+                ))}
+                {quizLevel !== null ? (
+                  <View style={styles.levelBox}>
+                    <Txt variant="small" color={colors.textMuted}>
+                      Ton niveau de départ
+                    </Txt>
+                    <Txt variant="display" color={colors.signature} style={{ fontSize: 32 }}>
+                      {levelText(quizLevel)}
+                    </Txt>
+                    <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.xs }}>
+                      {levelLabel(quizLevel)}
+                    </Txt>
+                    {/* Clin d’œil pour inciter à l’honnêteté (sinon le terrain s’en charge 😅). */}
+                    <Txt variant="small" color={colors.textFaint} style={styles.levelHint}>
+                      Réponds franc-jeu 😉 — un « 6 » qui perd 6-0, ça se voit en 2 échanges. Ton niveau s’ajustera tout seul avec tes
+                      matchs et tes tournois.
+                    </Txt>
+                  </View>
+                ) : null}
+                {errors.quiz ? (
+                  <Txt variant="small" color={colors.danger} style={{ marginTop: spacing.sm }}>
+                    {errors.quiz}
+                  </Txt>
+                ) : null}
               </View>
             </>
           ) : (
@@ -1330,8 +1398,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.lg,
     paddingVertical: spacing.lg,
-    marginTop: spacing.sm,
+    marginTop: spacing.lg,
   },
+  levelHint: { marginTop: spacing.sm, textAlign: 'center', paddingHorizontal: spacing.md },
   input: {
     backgroundColor: colors.surface,
     borderWidth: 1,
