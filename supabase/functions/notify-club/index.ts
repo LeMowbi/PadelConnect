@@ -136,6 +136,38 @@ Deno.serve(async (req) => {
         body: `${record.booked_by_name ?? 'Un joueur'} — ${record.club_name ?? ''} · ${record.date_label ?? ''} à ${record.time ?? ''} (${record.court ?? ''}).`,
         data: { kind: 'club_reservation', id: record.id },
       });
+      // JOUEURS FAVORIS (80) : match OUVERT créé → prévenir ceux qui SUIVENT le créateur
+      // (« ton partenaire habituel a créé un match »). Blocages exclus dans les deux sens.
+      if (record.open_match === true && record.user_id) {
+        const fans = await supabase.from('favorite_players').select('user_id').eq('fav_user_id', record.user_id);
+        let fanIds = (fans.data ?? []).map((f: { user_id: string }) => f.user_id).filter(Boolean);
+        if (fanIds.length) {
+          const { data: blocks } = await supabase
+            .from('blocked_users')
+            .select('blocker_id, blocked_id')
+            .or(`blocker_id.eq.${record.user_id},blocked_id.eq.${record.user_id}`);
+          const excluded = new Set(
+            (blocks ?? []).flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]),
+          );
+          fanIds = fanIds.filter((id: string) => !excluded.has(id)).slice(0, 100);
+          if (fanIds.length) {
+            const { data: profs } = await supabase
+              .from('profiles')
+              .select('expo_push_token')
+              .in('id', fanIds)
+              .not('expo_push_token', 'is', null);
+            const targets = (profs ?? []).map((p: { expo_push_token: string }) => p.expo_push_token).filter(Boolean);
+            if (targets.length) {
+              notifs.push({
+                targets,
+                title: 'Ton partenaire habituel a créé un match 🎾',
+                body: `${record.booked_by_name ?? 'Un joueur'} — ${record.club_name ?? ''} · ${record.date_label ?? ''} à ${record.time ?? ''}.`,
+                data: { kind: 'open_match', id: record.id },
+              });
+            }
+          }
+        }
+      }
     } else if (
       table === 'reservations' &&
       type === 'UPDATE' &&
