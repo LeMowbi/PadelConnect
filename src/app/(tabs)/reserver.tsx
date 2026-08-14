@@ -73,10 +73,10 @@ export default function ReserverScreen() {
   // La dernière vue utilisée est mémorisée (l’écran rouvre comme tu l’avais laissé).
   const view = state.reserverView;
   const setView = setReserverView;
-  const [sheet, setSheet] = useState<{ club: Club; time: string; durationMin: 60 | 90 } | null>(null);
+  const [sheet, setSheet] = useState<{ club: Club; day: DayOption; time: string; durationMin: 60 | 90 } | null>(null);
   // Un même horaire peut offrir des durées DIFFÉRENTES selon le terrain (68) : si un club+heure
   // propose plusieurs durées, on les fait choisir avant d’ouvrir la feuille de réservation.
-  const [durationChoice, setDurationChoice] = useState<{ club: Club; time: string; durations: (60 | 90)[] } | null>(null);
+  const [durationChoice, setDurationChoice] = useState<{ club: Club; day: DayOption; time: string; durations: (60 | 90)[] } | null>(null);
   const pickDay = (d: DayOption) => {
     hapticLight(); // tap léger à chaque étape du tunnel (jour → créneau → terrain)
     setSelDayKey(d.key);
@@ -167,9 +167,11 @@ export default function ReserverScreen() {
     hapticLight(); // aligné sur pickDay/pickSlot : tout le tunnel « Réserver » émet un tap léger
     const durations = [...new Set(freeCourtSlotsAt(club, day.key, time, ctx).map((x) => x.durationMin))].sort((a, b) => a - b);
     if (durations.length > 1) {
-      setDurationChoice({ club, time, durations });
+      // Jour CAPTURÉ au tap : la feuille de choix peut rester ouverte à cheval sur minuit —
+      // sans capture, BookingSheet monterait sur le jour recalé (la résa glisserait de date).
+      setDurationChoice({ club, day, time, durations });
     } else {
-      setSheet({ club, time, durationMin: durations[0] ?? 90 });
+      setSheet({ club, day, time, durationMin: durations[0] ?? 90 });
     }
   };
 
@@ -397,7 +399,13 @@ export default function ReserverScreen() {
         </View>
 
         {sheet ? (
-          <BookingSheet club={sheet.club} day={day} time={sheet.time} durationMin={sheet.durationMin} onClose={() => setSheet(null)} />
+          <BookingSheet
+            club={sheet.club}
+            day={sheet.day}
+            time={sheet.time}
+            durationMin={sheet.durationMin}
+            onClose={() => setSheet(null)}
+          />
         ) : null}
 
         {/* Choix de la durée AVANT la feuille de réservation, seulement quand ce (club, heure)
@@ -414,7 +422,7 @@ export default function ReserverScreen() {
                 key={d}
                 label={`${durationLabel(d)} · ${fcfa(priceForSlot(durationChoice.club, durationChoice.time, d))}`}
                 onPress={() => {
-                  setSheet({ club: durationChoice.club, time: durationChoice.time, durationMin: d });
+                  setSheet({ club: durationChoice.club, day: durationChoice.day, time: durationChoice.time, durationMin: d });
                   setDurationChoice(null);
                 }}
                 size="lg"

@@ -39,7 +39,7 @@ export default function CoachAdmin() {
     if (ls) setLoaded({ lessons: ls, failed: false });
     else setLoaded((cur) => (cur.lessons === null ? { lessons: null, failed: true } : cur));
   };
-  const { refreshControl } = usePullToRefresh(reload);
+  const { refreshControl, webRefreshButton } = usePullToRefresh(reload);
 
   useEffect(() => {
     if (!userId) return;
@@ -131,7 +131,13 @@ export default function CoachAdmin() {
     .slice(0, 10);
 
   return (
-    <Screen back title="Espace Coach" subtitle={club ? `${club.name} — tes cours` : 'Tes cours'} refreshControl={refreshControl}>
+    <Screen
+      back
+      title="Espace Coach"
+      subtitle={club ? `${club.name} — tes cours` : 'Tes cours'}
+      refreshControl={refreshControl}
+      headerRight={webRefreshButton}
+    >
       {/* Demandes à traiter */}
       <View style={{ marginTop: spacing.md }}>
         <SectionHeader title={`Demandes de cours${pending.length ? ` · ${pending.length}` : ''}`} />

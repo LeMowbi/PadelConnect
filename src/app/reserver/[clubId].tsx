@@ -256,8 +256,12 @@ export default function ReserverScreen() {
     if (free.includes(c)) return c;
     const alt = atSlot.find((x) => x.court === c); // libre à cette heure, mais à une autre durée
     if (alt) return `${c} · en ${durationLabel(alt.durationMin)}`;
-    const hasSlot = slot ? slotDurationAt(resolvedGridFor(club, ctx), c, slot) !== null : false;
-    return hasSlot ? `${c} · pris` : `${c} · fermé`;
+    const grid = resolvedGridFor(club, ctx);
+    const hasSlot = slot ? slotDurationAt(grid, c, slot) !== null : false;
+    if (hasSlot) return `${c} · pris`;
+    // Pas de créneau à CETTE heure : « autre horaire » si le terrain ouvre ailleurs dans la
+    // journée (grilles décalées), « fermé » s'il n'ouvre nulle part.
+    return (grid[c] ?? []).some((x) => !x.x) ? `${c} · autre horaire` : `${c} · fermé`;
   };
 
   const ready = !!day && !!slot && !!effectiveDuration && !!effectiveCourt && !compToday;

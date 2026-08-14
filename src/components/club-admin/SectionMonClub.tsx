@@ -473,6 +473,11 @@ export function SectionMonClub({ club }: { club: Club }) {
   const openSlots = grid.filter((t) => storedSlots.includes(t));
   const { open: openTime, close: closeTime } = inferOpenClose(grid);
   const courts = courtsFor(club, state.clubCourts);
+  // Ref alignée à CHAQUE rendu : les écritures qui suivent une attente (confirmation humaine,
+  // verrou) repartent de la liste COURANTE — pas de l'instantané du tap (un terrain ajouté sur
+  // l'autre appareil pendant la boîte de dialogue serait silencieusement supprimé sinon).
+  const courtsRef = useRef(courts);
+  courtsRef.current = courts;
   // Bornes ouverture/fermeture pour la VALIDATION TARIFAIRE (ClubInfoCard : les plages doivent
   // couvrir [openMin, closeMin)). Sous grille par terrain, le miroir `slots`@90 peut FINIR avant
   // le dernier créneau réel (ex. un 1h à 21:00 avec un miroir qui s'arrête à 20:00) → ce créneau
@@ -911,7 +916,7 @@ export function SectionMonClub({ club }: { club: Club }) {
     // croiser (le 2e repartait d'une liste périmée et RESSUSCITAIT le 1er terrain retiré), et la
     // purge de la grille ne peut plus être sautée en silence par un 'busy'.
     const res = await withGridLock(async () => {
-      const remaining = courts.filter((c) => c !== n);
+      const remaining = courtsRef.current.filter((c) => c !== n);
       const okCourts = await setClubCourts(club.id, remaining);
       // Le SERVEUR (72) refuse le retrait si une résa à venir vit sur ce terrain (miroir local
       // possiblement périmé : un joueur vient de réserver) → 'denied'. Pas de purge de grille dans

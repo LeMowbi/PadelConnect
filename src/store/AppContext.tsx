@@ -580,6 +580,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // par-dessus la saisie fraîche du gérant. Chaque relecture capture ce compteur au départ et,
   // s'il a bougé, JETTE sa tranche clubInfo (le miroir local, plus frais, est conservé).
   const clubOvrWriteRef = useRef(0);
+  // Même course pour la fiche COACH : un fetchMyCoachProfile en vol qui résout APRÈS
+  // saveCoachSettings réécrirait l'instantané pré-sauvegarde (et le formulaire, resynchronisé,
+  // repartirait sur les vieilles valeurs). Toute relecture jette sa tranche si le compteur a bougé.
+  const coachWriteRef = useRef(0);
   // Id du compte serveur COURANT, suivi dans une ref (comme remindersOnRef) : permet à
   // loadSession de détecter une BASCULE de compte (A→B) au moment où elle s'exécute, sans
   // remettre serverUserId dans ses dépendances — pour bumper l'époque et invalider toute
@@ -707,6 +711,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // via RLS), l’occupation de TOUS (disponibilité), et les clubs ajoutés côté serveur.
       const cfgW = clubCfgWriteRef.current; // écriture club_config pendant la relecture → tranche jetée
       const ovrW = clubOvrWriteRef.current; // écriture club_overrides pendant la relecture → idem
+      const coachW = coachWriteRef.current; // écriture fiche coach pendant la relecture → idem
       const [
         reservationsRes,
         occ,
@@ -799,7 +804,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // on garde l’existant ; null = aucune actu publiée → bandeau retiré.
         operatorNews: news === undefined ? s.operatorNews : news,
         // Ma fiche coach : undefined = échec réseau → on garde ; null = pas (ou plus) coach.
-        coachProfile: coachProfile === undefined ? s.coachProfile : coachProfile,
+        coachProfile: coachProfile === undefined || coachWriteRef.current !== coachW ? s.coachProfile : coachProfile,
         // Mes cours côté élève. null = échec réseau → on garde le miroir.
         myLessons: myLessons ?? s.myLessons,
         // Notes moyennes des clubs (cartes « 4.2 ★ (12) »). null = échec réseau → on garde.
@@ -882,6 +887,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const ok = () => sessionEpochRef.current === epoch;
       const cfgW = clubCfgWriteRef.current; // écriture club_config pendant la relecture → tranche jetée
       const ovrW = clubOvrWriteRef.current; // écriture club_overrides pendant la relecture → idem
+      const coachW = coachWriteRef.current; // écriture fiche coach pendant la relecture → idem
       // Ré-enregistre le jeton de push à CHAQUE retour au premier plan (pas seulement au
       // démarrage/à la connexion) : un utilisateur qui refuse d'abord puis ACTIVE les
       // notifications dans les Réglages iOS est alors capté sans redémarrer l'app. Idempotent
@@ -962,7 +968,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             friends: friends ?? s.friends,
             friendRequests: friendReqs ?? s.friendRequests,
             // undefined = échec réseau → on garde ; null = pas (ou plus) coach / d'actu.
-            coachProfile: coachProfile === undefined ? s.coachProfile : coachProfile,
+            coachProfile: coachProfile === undefined || coachWriteRef.current !== coachW ? s.coachProfile : coachProfile,
             myLessons: myLessons ?? s.myLessons,
             clubRatings: ratings ?? s.clubRatings,
             operatorNews: news === undefined ? s.operatorNews : news,
@@ -996,19 +1002,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       })();
     };
-    const sub = RNAppState.addEventListener('change', (st) => st === 'active' && refreshMirror());
-    // Même resynchronisation quand un push arrive alors que l’app est déjà au premier plan —
-    // mais DÉBOUNCÉE (8 s, trailing) : un soir chargé, chaque résa/join/annulation du club est un
-    // push, et chaque refreshMirror = ~20 requêtes + un setState global. La rafale de pushes se
-    // replie en UNE resynchronisation, qui capte l'état final. Le retour premier plan, lui, reste
-    // immédiat (une seule occurrence par nature).
+    // Resynchronisation sur push au premier plan, LEADING + TRAILING (fenêtre 8 s) : un push
+    // ISOLÉ rafraîchit IMMÉDIATEMENT (la bannière « Réservation confirmée » ne doit pas surplomber
+    // un écran périmé) ; une RAFALE (soir chargé : chaque résa/join/annulation = un push, et chaque
+    // refreshMirror = ~20 requêtes + un setState global) se replie en UNE resynchronisation en fin
+    // de fenêtre — le timer n'est jamais repoussé (pas de famine). Le retour premier plan reste
+    // immédiat et purge le timer (le refresh qu'il déclenche couvre la rafale en cours).
+    const PUSH_REFRESH_MS = 8000;
     let pushTimer: ReturnType<typeof setTimeout> | null = null;
-    const offPush = onPushReceivedInForeground(() => {
-      if (pushTimer) clearTimeout(pushTimer);
-      pushTimer = setTimeout(() => {
+    let lastRefreshAt = 0;
+    const runRefresh = () => {
+      lastRefreshAt = Date.now();
+      refreshMirror();
+    };
+    const sub = RNAppState.addEventListener('change', (st) => {
+      if (st !== 'active') return;
+      if (pushTimer) {
+        clearTimeout(pushTimer);
         pushTimer = null;
-        refreshMirror();
-      }, 8000);
+      }
+      runRefresh();
+    });
+    const offPush = onPushReceivedInForeground(() => {
+      const since = Date.now() - lastRefreshAt;
+      if (since >= PUSH_REFRESH_MS) {
+        runRefresh();
+      } else if (!pushTimer) {
+        pushTimer = setTimeout(() => {
+          pushTimer = null;
+          runRefresh();
+        }, PUSH_REFRESH_MS - since);
+      }
     });
     return () => {
       sub.remove();
@@ -1988,6 +2012,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         const ok = await updateCoachProfile(specialty, price, slots);
         if (!ok || sessionEpochRef.current !== epoch) return false;
+        coachWriteRef.current += 1; // invalide les relectures en vol (voir coachWriteRef)
         setState((s) => (s.coachProfile ? { ...s, coachProfile: { ...s.coachProfile, specialty, price: price ?? undefined, slots } } : s));
         return true;
       },
@@ -1995,11 +2020,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const userId = state.serverUserId;
         if (!userId) return;
         const epoch = sessionEpochRef.current;
+        const coachW = coachWriteRef.current;
         const [cp, lessons] = await Promise.all([fetchMyCoachProfile(), fetchMyLessons(userId)]);
         if (sessionEpochRef.current !== epoch) return;
         setState((s) => ({
           ...s,
-          coachProfile: cp === undefined ? s.coachProfile : cp, // undefined = échec réseau → on garde
+          // undefined = échec réseau ; compteur bougé = sauvegarde pendant la relecture → on garde
+          coachProfile: cp === undefined || coachWriteRef.current !== coachW ? s.coachProfile : cp,
           myLessons: lessons ?? s.myLessons,
         }));
       },

@@ -456,7 +456,7 @@ Deno.serve(async (req) => {
         const when = `du ${resa?.date_label ?? ''} à ${resa?.time ?? ''} (${resa?.club_name ?? ''})`;
         const otherEntrants = all.map((e) => e.user_id).filter((id) => id !== record.user_id);
         // Classe un ensemble de saisies (même règle que la SQL 49) : validé = 1 canon, 1 ≤ « je
-        // gagne » ≤ floor(joueurs/2), ET au moins un « je perds » (le camp perdant reconnaît). La
+        // gagne » ≤ least(2, joueurs-1) — le `wn` ci-dessus —, ET au moins un « je perds ». La
         // porte « saisie unique à 48 h » n'est PAS déclenchée par un webhook (aucune écriture à
         // T+48 h) — on ne notifie donc « validé » que via le miroir perdant, jamais deux « je
         // gagne » seuls (anti-triche §9, aligné sur submit_match_score).

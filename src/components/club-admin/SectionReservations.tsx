@@ -275,7 +275,8 @@ export function SectionReservations({
   };
   let sellable = 0;
   for (const d of week) {
-    if (hasFullDayCompetition(club.id, d.key, comps)) continue; // journée entière au tournoi
+    // Raccourci O(terrains×créneaux) : équivalent au `cb === 'all'` de cellClosed, en un test par jour.
+    if (hasFullDayCompetition(club.id, d.key, comps)) continue;
     for (const c of courts) for (const s of grid[c] ?? []) if (!s.x && !cellClosed(d.key, s, c)) sellable++;
   }
   const capacity = Math.max(1, sellable);

@@ -46,7 +46,8 @@ export function BookingSheet({
   // il retomberait sur le NOUVEAU jour pendant que la feuille est ouverte, et la résa (ou l'écran
   // de succès + « Ajouter au calendrier ») partirait silencieusement sur la mauvaise date. Figé,
   // un créneau devenu passé est refusé proprement par la garde 'past' d'addReservation.
-  const [sel] = useState(() => ({ key: day.key, label: day.label }));
+  // Libellé ABSOLU (« Lun 15 juin ») : le label relatif (« Demain 15 ») deviendrait faux après minuit.
+  const [sel] = useState(() => ({ key: day.key, label: dateKeyLabel(day.key) }));
 
   const ctx: AvailCtx = {
     clubs: activeClubs(state.customClubs, state.clubInfo),

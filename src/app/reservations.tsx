@@ -24,6 +24,7 @@ import { dateKeyLabel, dayKey, slotTimestamp } from '@/lib/days';
 import { fcfa, perPlayerOf } from '@/lib/format';
 import { APP_DOMAIN } from '@/lib/referrals';
 import { openMaps } from '@/lib/maps';
+import { onPushReceivedInForeground } from '@/lib/notifications';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { colors, radius, spacing } from '@/theme';
 
@@ -93,7 +94,7 @@ export default function ReservationsScreen() {
   // au lieu de disparaître en silence (demande porteur). Le serveur garde la trace
   // (status='cancelled') ; on ne montre que MON périmètre (créateur ou participant) — un
   // gérant-joueur ne voit pas ici les annulations des autres clients de son club.
-  const [cancelled, setCancelled] = useState<Reservation[]>([]);
+  const [cancelledRows, setCancelledRows] = useState<Reservation[]>([]);
   const inMyPerimeter = (r: Reservation) => r.userId === state.serverUserId || state.participantReservationIds.includes(r.id);
 
   const loadScores = async () => {
@@ -102,7 +103,11 @@ export default function ReservationsScreen() {
   };
   const loadCancelled = async () => {
     const rows = await fetchCancelledReservations();
-    if (rows) setCancelled(rows.filter(inMyPerimeter)); // null = échec réseau → on garde l'existant (§8)
+    // null = échec réseau → on garde l'existant (§8). Lignes BRUTES : le périmètre (créateur ou
+    // participant) se filtre AU RENDU — un filtre au chargement figerait participantReservationIds
+    // dans la closure de l'écouteur AppState/push (un match rejoint en cours de session serait
+    // masqué des « Annulées » jusqu'au prochain montage).
+    if (rows) setCancelledRows(rows);
   };
   useEffect(() => {
     if (!state.serverUserId) return;
@@ -113,13 +118,12 @@ export default function ReservationsScreen() {
     });
     void fetchCancelledReservations().then((rows) => {
       if (!alive || !rows) return;
-      setCancelled(rows.filter((r) => r.userId === state.serverUserId || state.participantReservationIds.includes(r.id)));
+      setCancelledRows(rows);
     });
     return () => {
       alive = false;
     };
     // participantReservationIds ne doit pas re-déclencher le chargement (seul le compte compte).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.serverUserId]);
 
   // Retour au premier plan : recharge les ANNULÉES (+ scores) — sinon, quand le club annule mon
@@ -135,15 +139,27 @@ export default function ReservationsScreen() {
         void loadScores();
       }
     });
-    return () => sub.remove();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Push reçu app OUVERTE (annulation club 75, score validé…) : mêmes rechargements — sinon la
+    // résa quittait « À venir » (refreshMirror) mais la carte « Annulée par le club » n'apparaissait
+    // qu'au prochain retour d'arrière-plan (disparition en silence, le cas que cet écran corrige).
+    const offPush = onPushReceivedInForeground(() => {
+      void loadCancelled();
+      void loadScores();
+    });
+    return () => {
+      sub.remove();
+      offPush();
+    };
   }, [state.serverUserId]);
 
   // Tirer pour rafraîchir : resynchronise MES réservations (refreshSession → « À venir » perd la
   // résa annulée par le club, plus de double-affichage avec « Annulées »), mes cours, scores et annulées.
-  const { refreshControl } = usePullToRefresh(async () => {
+  const { refreshControl, webRefreshButton } = usePullToRefresh(async () => {
     await Promise.all([refreshSession(), refreshLessons(), loadScores(), loadCancelled()]);
   });
+
+  // Périmètre appliqué au RENDU (cf. loadCancelled) : toujours calé sur l'état courant.
+  const cancelled = cancelledRows.filter(inMyPerimeter);
 
   const now = Date.now();
   // « Mes réservations » = celles que j’ai créées + celles où un ami m’a invité (résa
@@ -324,6 +340,7 @@ export default function ReservationsScreen() {
     <Screen
       back
       title="Mes réservations"
+      headerRight={webRefreshButton}
       subtitle="À venir, statut du club, passées"
       refreshControl={state.serverUserId ? refreshControl : undefined}
     >
@@ -868,7 +885,9 @@ export default function ReservationsScreen() {
                         <Ionicons name="information-circle-outline" size={16} color={colors.coralDark} />
                         <Txt variant="small" color={colors.coralDark} style={{ flex: 1 }}>
                           Ce créneau chevauchait une réservation prise hors application.
-                          {r.cancelReason ? ` Motif : ${r.cancelReason}.` : ''}
+                          {/* Motif réservé à l'AUTEUR (doctrine 78 / push participants) : il peut
+                            nommer un tiers — les participants ont l'explication générique. */}
+                          {isOwner(r) && r.cancelReason ? ` Motif : ${r.cancelReason}.` : ''}
                         </Txt>
                       </View>
                       {/* Seul l'AUTEUR de la réservation peut re-réserver (le créneau de courtoisie lui
@@ -979,7 +998,7 @@ export default function ReservationsScreen() {
               if (target) {
                 void cancelReservation(target.id).then((ok) => {
                   // La résa annulée reste visible (section « Annulées ») au lieu de disparaître.
-                  if (ok) setCancelled((cur) => [target, ...cur.filter((x) => x.id !== target.id)]);
+                  if (ok) setCancelledRows((cur) => [target, ...cur.filter((x) => x.id !== target.id)]);
                   toast.show(ok ? 'Réservation annulée' : 'Annulation impossible — réessaie', ok ? undefined : { icon: 'alert-circle' });
                 });
               }

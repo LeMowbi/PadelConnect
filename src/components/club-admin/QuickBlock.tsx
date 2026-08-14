@@ -40,6 +40,9 @@ export function QuickBlock({
   const [slot, setSlot] = useState<CourtSlot | null>(null);
   const [confirmUnblock, setConfirmUnblock] = useState<CourtSlot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Garde anti double-tap (comme ClubCancelForm/ClosePanel) : deux taps rapprochés = deux RPC,
+  // et le second « Débloquer » revenait en erreur après un déblocage pourtant réussi.
+  const [busy, setBusy] = useState(false);
 
   const tsOf = (t: string) => slotTimestamp(day.key, t);
   const reset = () => {
@@ -176,9 +179,12 @@ export function QuickBlock({
                                 label="Débloquer"
                                 icon="lock-open"
                                 onPress={() => {
+                                  if (busy) return;
+                                  setBusy(true);
                                   // On ATTEND le serveur : un échec de déblocage affiche une erreur
                                   // (comme le blocage), au lieu de fermer la boîte en silence.
                                   void onUnblock(day.key, slot.t, court, slot.d).then((ok) => {
+                                    setBusy(false);
                                     if (!ok) {
                                       setError('Impossible de débloquer ce créneau.');
                                       return;
@@ -186,6 +192,7 @@ export function QuickBlock({
                                     setConfirmUnblock(null);
                                   });
                                 }}
+                                disabled={busy}
                                 full
                               />
                             </View>
@@ -208,7 +215,10 @@ export function QuickBlock({
                           key={reason}
                           label={reason}
                           onPress={() => {
+                            if (busy) return;
+                            setBusy(true);
                             void onBlock(day.key, slot.t, court, slot.d, reason, tsOf(slot.t)).then((ok) => {
+                              setBusy(false);
                               if (!ok) {
                                 setError('Impossible de bloquer ce créneau.');
                                 return;

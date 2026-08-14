@@ -41,9 +41,13 @@ export function ClosePanel({
   const [closing, setClosing] = useState(false);
   const runClose = (...args: Parameters<typeof onClose>) => {
     setClosing(true);
-    void Promise.resolve(onClose(...args)).then((ok) => {
-      if (ok === false) setClosing(false);
-    });
+    void Promise.resolve(onClose(...args)).then(
+      (ok) => {
+        if (ok === false) setClosing(false);
+      },
+      // Rejet inattendu du parent : même traitement qu'un échec — on rend la main au bouton.
+      () => setClosing(false),
+    );
   };
 
   // Americano : tournoi par rotation → clôture par un podium (2ᵉ/3ᵉ place), pas une fin de tableau.
