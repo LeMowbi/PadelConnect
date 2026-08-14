@@ -86,3 +86,16 @@ export function addWeeks(key: string, n: number): string {
   const d = weekStart(key);
   return dayKey(new Date(d.getTime() + 7 * n * DAY_MS));
 }
+
+// ——— Réservation récurrente (83) : les N mêmes jours de semaine à venir ———
+
+// Les `weeks` prochaines occurrences du jour de semaine de `firstDateKey` (INCLUSE) : la brique
+// PURE du « créneau récurrent » de l'Espace Club (le serveur reçoit la liste de dates, le client
+// la calcule). weeks borné [1, 26] (6 mois — même plafond que block_recurring côté serveur).
+export function recurringDates(firstDateKey: string, weeks: number): string[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(firstDateKey)) return [];
+  const n = Math.max(1, Math.min(26, Math.floor(weeks)));
+  const [y, m, d] = firstDateKey.split('-').map(Number);
+  const start = Date.UTC(y, m - 1, d, 12); // midi UTC : insensible aux bascules d'heure
+  return Array.from({ length: n }, (_, i) => dayKey(new Date(start + i * 7 * DAY_MS)));
+}

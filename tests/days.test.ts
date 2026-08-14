@@ -7,7 +7,7 @@
 // EST présent, simplement étiqueté « Demain » (et non « Samedi 13 »). La liste produit
 // toujours n jours consécutifs sans trou — ce test le verrouille.
 
-import { dayKey, nextDays, weekKeyOf } from '../src/lib/days.ts';
+import { dayKey, nextDays, recurringDates, weekKeyOf } from '../src/lib/days.ts';
 
 let failed = 0;
 const check = (cond: boolean, msg: string) => {
@@ -71,6 +71,25 @@ check(weekKeyOf(new Date(2026, 5, 14, 23, 59).getTime()) === '2026-06-08', 'Dima
 check(weekKeyOf(new Date(2026, 5, 15, 0, 0).getTime()) === '2026-06-15', 'Lundi 15 juin 00:00 → semaine du lundi 15 juin');
 check(weekKeyOf(new Date(2026, 5, 8, 0, 0).getTime()) === '2026-06-08', 'Lundi 8 juin 00:00 → sa propre semaine');
 check(weekKeyOf(new Date(2026, 6, 1, 12, 0).getTime()) === '2026-06-29', 'Mercredi 1ᵉʳ juillet → semaine à cheval du lundi 29 juin');
+
+// 7) recurringDates (83) : N occurrences du MÊME jour de semaine, première date incluse,
+//    bascules de mois/année propres, bornes [1, 26], format invalide → [].
+const rec = recurringDates('2026-08-20', 4); // un jeudi
+check(
+  rec.length === 4 && rec[0] === '2026-08-20' && rec[1] === '2026-08-27' && rec[2] === '2026-09-03' && rec[3] === '2026-09-10',
+  'recurringDates : 4 jeudis consécutifs, bascule de mois comprise',
+);
+check(
+  rec.every((k, i) => i === 0 || dayDiff(rec[i - 1], k) === 7),
+  'recurringDates : exactement 7 jours entre chaque occurrence',
+);
+const recYear = recurringDates('2026-12-24', 3);
+check(recYear[2] === '2027-01-07', 'recurringDates : bascule d\u2019ann\u00e9e propre (24 d\u00e9c \u2192 7 janv)');
+check(
+  recurringDates('2026-08-20', 99).length === 26 && recurringDates('2026-08-20', 0).length === 1,
+  'recurringDates : weeks born\u00e9 [1, 26]',
+);
+check(recurringDates('pas-une-date', 4).length === 0, 'recurringDates : format invalide \u2192 []');
 
 console.log(failed === 0 ? '\nTOUS LES TESTS JOURS PASSENT.' : `\n${failed} test(s) jours en échec.`);
 if (failed > 0) process.exitCode = 1;

@@ -215,6 +215,30 @@ export async function unblockSlotRow(clubId: string, dateKey: string, time: stri
   return !error && data === true;
 }
 
+// Créneau RÉCURRENT (83) : ferme le même (terrain, heure, durée) sur plusieurs dates (calculées
+// par `recurringDates`). Résultat HONNÊTE du serveur : `blocked` = dates posées, `conflicts` =
+// dates refusées (une résa joueur y vit déjà). null = refus global (droits, bornes) ou réseau.
+export async function blockRecurringRows(b: {
+  clubId: string;
+  court: string;
+  time: string;
+  durationMin: 60 | 90;
+  dateKeys: string[];
+  reason: string;
+}): Promise<{ blocked: string[]; conflicts: string[] } | null> {
+  const { data, error } = await supabase.rpc('block_recurring', {
+    p_club_id: b.clubId,
+    p_court: b.court,
+    p_time: b.time,
+    p_duration: b.durationMin,
+    p_date_keys: b.dateKeys,
+    p_reason: b.reason,
+  });
+  if (error || !data) return null;
+  const raw = data as { blocked?: string[]; conflicts?: string[] };
+  return { blocked: raw.blocked ?? [], conflicts: raw.conflicts ?? [] };
+}
+
 // Annulation : passe par la fonction serveur (SECURITY DEFINER) qui vérifie l’auteur ET le
 // délai des 5h (règle non contournable côté serveur) et met la résa en statut 'cancelled'
 // (le créneau se libère, mais la trace reste pour que le club voie l’annulation).
