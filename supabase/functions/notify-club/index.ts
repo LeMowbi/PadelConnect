@@ -6,6 +6,8 @@
 //     (le joueur a annulé — terrain à libérer côté préparation).
 //   • reservation_participants INSERT → notif à l'AMI INVITÉ (nouvelle invitation à jouer).
 //   • reservation_participants UPDATE (accepted) → notif à l'AUTEUR (un invité a accepté).
+//   • reservation_participants UPDATE (accepted → declined) → notif à l'AUTEUR d'un MATCH OUVERT
+//     (un joueur a quitté ton match — une place se relibère).
 //   • competitions INSERT (tournoi JOUEUR en attente) → notif au(x) gérant(s) du club hôte (à valider).
 //   • competitions UPDATE (pending → published) → notif à l'ORGANISATEUR (tournoi validé) ET, si
 //     frais > 0, à l'OPÉRATEUR (« frais à encaisser ») — donc seulement après validation du club.
@@ -18,6 +20,7 @@
 //   • lessons UPDATE (→ accepted) → notif à l'ÉLÈVE (cours accepté, terrain réservé) — le club
 //     reçoit la notif « nouvelle réservation » via le webhook reservations, automatiquement.
 //   • lessons UPDATE (→ declined) → notif à l'ÉLÈVE (cours refusé, aucun terrain réservé).
+//   • lessons UPDATE (pending → cancelled) → notif au COACH (l'élève a retiré sa demande).
 //   • match_results INSERT / UPDATE (une SAISIE de score par joueur, 46) → selon l'état du
 //     match : « Score à saisir » aux autres joueurs (1ʳᵉ saisie), « Match validé » (saisies
 //     concordantes) ou « Vos scores ne correspondent pas » (discordantes) aux autres saisisseurs.
@@ -147,6 +150,28 @@ Deno.serve(async (req) => {
       const { data } = await supabase.from('profiles').select('expo_push_token').eq('role', 'operator').not('expo_push_token', 'is', null);
       return (data ?? []).map((m: { expo_push_token: string }) => m.expo_push_token).filter(Boolean);
     };
+    // TOUS les jetons de push (broadcast actu opérateur / agenda), PAGINÉ : PostgREST plafonne
+    // toute requête à `db-max-rows` (défaut 1000) → au-delà de 1000 comptes, un simple select
+    // n'enverrait qu'aux 1000 premières lignes, dans un ordre arbitraire, SANS erreur. On boucle
+    // par pages de 1000 (tri par id stable) jusqu'à épuisement.
+    const allPlayerTokens = async (): Promise<string[]> => {
+      const out: string[] = [];
+      const PAGE = 1000;
+      for (let page = 0; ; page++) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('expo_push_token')
+          .not('expo_push_token', 'is', null)
+          .order('id', { ascending: true })
+          .range(page * PAGE, page * PAGE + PAGE - 1);
+        if (error) break;
+        const batch = (data ?? []) as { expo_push_token: string }[];
+        for (const t of batch) if (t.expo_push_token) out.push(t.expo_push_token);
+        if (batch.length < PAGE) break; // dernière page atteinte
+        if (page > 100) break; // garde-fou dur (100 000 comptes) — jamais une boucle infinie
+      }
+      return out;
+    };
     // Nom affiché d'un utilisateur (prénom + nom) — pour personnaliser une notif sociale.
     const userName = async (userId: string): Promise<string> => {
       if (!userId) return 'Un joueur';
@@ -191,11 +216,16 @@ Deno.serve(async (req) => {
         const start = toMin(rec.time as string);
         const dur = Number(rec.duration_min ?? 90);
         if (!clubId || !dateKey || !Number.isFinite(start)) return [];
+        // Borné À LA SOURCE (récence) : le nombre d'inscrits DISTINCTS sur un club/jour n'est
+        // pas plafonné côté serveur (81 borne par joueur, pas par créneau) — sans limit, un
+        // `in(...)` sur des centaines d'ids exploserait l'URL PostgREST → 0 alerte silencieuse.
         const { data: waits } = await supabase
           .from('slot_waitlist')
           .select('id, user_id, time, duration_min')
           .eq('club_id', clubId)
-          .eq('date_key', dateKey);
+          .eq('date_key', dateKey)
+          .order('created_at', { ascending: false })
+          .limit(200);
         const hits = (waits ?? []).filter((w) => {
           const ws = toMin(w.time as string);
           const wd = Number(w.duration_min ?? 90);
@@ -203,16 +233,30 @@ Deno.serve(async (req) => {
         });
         const userIds = [...new Set(hits.map((w) => w.user_id as string))].filter((id) => id && id !== rec.user_id);
         if (!userIds.length) return [];
-        const { data: profs } = await supabase
-          .from('profiles')
-          .select('id, expo_push_token')
-          .in('id', userIds)
-          .not('expo_push_token', 'is', null);
-        const withToken = new Set((profs ?? []).filter((p) => p.expo_push_token).map((p) => p.id as string));
-        const targets = (profs ?? []).map((p) => p.expo_push_token as string).filter(Boolean);
+        // Jetons relus par TRANCHES de 100 ids (idiome club_news) — jamais un in() géant.
+        const tokenByUser = new Map<string, string>();
+        const targets: string[] = [];
+        for (let i = 0; i < userIds.length; i += 100) {
+          const { data: profs } = await supabase
+            .from('profiles')
+            .select('id, expo_push_token')
+            .in('id', userIds.slice(i, i + 100))
+            .not('expo_push_token', 'is', null);
+          for (const p of profs ?? []) {
+            if (p.expo_push_token) {
+              tokenByUser.set(p.id as string, p.expo_push_token as string);
+              targets.push(p.expo_push_token as string);
+            }
+          }
+        }
         if (!targets.length) return [];
-        // Consommation DIFFÉRÉE (après l'envoi Expo) et limitée aux joueurs réellement notifiés.
-        waitlistConsumedIds.push(...hits.filter((w) => withToken.has(w.user_id as string)).map((w) => w.id as string));
+        // Consommation DIFFÉRÉE + PAR CIBLE : chaque entrée porte son jeton ; à la fin, seules
+        // celles dont le jeton a reçu un ticket Expo 'ok' sont supprimées (one-shot honnête —
+        // un joueur dont l'envoi a échoué garde son alerte, cf. bloc de purge en fin de handler).
+        for (const w of hits) {
+          const tok = tokenByUser.get(w.user_id as string);
+          if (tok) waitlistConsumed.push({ id: w.id as string, token: tok });
+        }
         return [
           {
             targets,
@@ -228,7 +272,8 @@ Deno.serve(async (req) => {
 
     const notifs: Notif[] = [];
     // Entrées de liste d'attente à supprimer APRÈS un envoi Expo réussi (alerte one-shot honnête).
-    const waitlistConsumedIds: string[] = [];
+    // On garde le jeton de chaque entrée pour ne consommer que celles réellement notifiées ('ok').
+    const waitlistConsumed: { id: string; token: string }[] = [];
 
     if (table === 'reservations' && type === 'INSERT') {
       // Nouvelle réservation (INSERT uniquement — jamais un DELETE) → prévenir le(s) gérant(s).
@@ -240,32 +285,48 @@ Deno.serve(async (req) => {
       });
       // JOUEURS FAVORIS (80) : match OUVERT créé → prévenir ceux qui SUIVENT le créateur
       // (« ton partenaire habituel a créé un match »). Blocages exclus dans les deux sens.
+      // best-effort (try/catch, comme la branche alertes) : une panne ici ne doit pas empêcher
+      // la notif GÉRANT déjà empilée. Plafond À LA SOURCE (récence) comme les autres fan-out.
       if (record.open_match === true && record.user_id) {
-        const fans = await supabase.from('favorite_players').select('user_id').eq('fav_user_id', record.user_id);
-        let fanIds = (fans.data ?? []).map((f: { user_id: string }) => f.user_id).filter(Boolean);
-        if (fanIds.length) {
-          const { data: blocks } = await supabase
-            .from('blocked_users')
-            .select('blocker_id, blocked_id')
-            .or(`blocker_id.eq.${record.user_id},blocked_id.eq.${record.user_id}`);
-          const excluded = new Set((blocks ?? []).flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]));
-          fanIds = fanIds.filter((id: string) => !excluded.has(id)).slice(0, 100);
-          if (fanIds.length) {
-            const { data: profs } = await supabase
-              .from('profiles')
-              .select('expo_push_token')
-              .in('id', fanIds)
-              .not('expo_push_token', 'is', null);
-            const targets = (profs ?? []).map((p: { expo_push_token: string }) => p.expo_push_token).filter(Boolean);
-            if (targets.length) {
-              notifs.push({
-                targets,
-                title: 'Ton partenaire habituel a créé un match 🎾',
-                body: `${record.booked_by_name ?? 'Un joueur'} — ${record.club_name ?? ''} · ${record.date_label ?? ''} à ${record.time ?? ''}.`,
-                data: { kind: 'open_match', id: record.id },
-              });
+        try {
+          const { data: fans, error: fansErr } = await supabase
+            .from('favorite_players')
+            .select('user_id')
+            .eq('fav_user_id', record.user_id)
+            .order('created_at', { ascending: false })
+            .limit(100);
+          let fanIds = (fans ?? []).map((f: { user_id: string }) => f.user_id).filter(Boolean);
+          if (!fansErr && fanIds.length) {
+            // FAIL-CLOSED (§8) : si la lecture des blocages ÉCHOUE, on abandonne ce push facultatif
+            // plutôt que de notifier peut-être un compte bloqué (harcèlement). null ≠ [] : un [] est
+            // une absence réelle de blocage, un échec (error) ferme la branche.
+            const { data: blocks, error: blkErr } = await supabase
+              .from('blocked_users')
+              .select('blocker_id, blocked_id')
+              .or(`blocker_id.eq.${record.user_id},blocked_id.eq.${record.user_id}`);
+            if (!blkErr && blocks) {
+              const excluded = new Set(blocks.flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]));
+              fanIds = fanIds.filter((id: string) => !excluded.has(id));
+              if (fanIds.length) {
+                const { data: profs } = await supabase
+                  .from('profiles')
+                  .select('expo_push_token')
+                  .in('id', fanIds.slice(0, 100))
+                  .not('expo_push_token', 'is', null);
+                const targets = (profs ?? []).map((p: { expo_push_token: string }) => p.expo_push_token).filter(Boolean);
+                if (targets.length) {
+                  notifs.push({
+                    targets,
+                    title: 'Ton partenaire habituel a créé un match 🎾',
+                    body: `${record.booked_by_name ?? 'Un joueur'} — ${record.club_name ?? ''} · ${record.date_label ?? ''} à ${record.time ?? ''}.`,
+                    data: { kind: 'open_match', id: record.id },
+                  });
+                }
+              }
             }
           }
+        } catch {
+          // best-effort : le push « partenaire suivi » ne doit jamais casser la notif gérant
         }
       }
       // ALERTES « un match à ton niveau vient d'ouvrir » (81) : suiveurs du CLUB ayant activé
@@ -278,11 +339,14 @@ Deno.serve(async (req) => {
           const already = new Set<string>();
           const favRows = await supabase.from('favorite_players').select('user_id').eq('fav_user_id', record.user_id);
           for (const f of favRows.data ?? []) already.add(f.user_id as string);
-          const { data: blocks } = await supabase
+          // FAIL-CLOSED (§8) : un ÉCHEC de lecture des blocages abandonne l'alerte (ne jamais
+          // notifier un bloqué). null (error) ≠ [] (aucun blocage réel).
+          const { data: blocks, error: blkErr } = await supabase
             .from('blocked_users')
             .select('blocker_id, blocked_id')
             .or(`blocker_id.eq.${record.user_id},blocked_id.eq.${record.user_id}`);
-          const blocked = new Set((blocks ?? []).flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]));
+          if (blkErr || !blocks) throw new Error('blocked_users read failed — fail closed');
+          const blocked = new Set(blocks.flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]));
           const { data: fols } = await supabase
             .from('club_followers')
             .select('user_id')
@@ -729,9 +793,8 @@ Deno.serve(async (req) => {
         // TOUS les comptes (joueurs, gérants ET opérateur) : le bandeau d'accueil est visible par
         // tous, et l'opérateur reçoit ainsi sa propre actu — c'est sa confirmation d'envoi (sinon
         // il publie et ne voit jamais rien partir sur SON téléphone).
-        const { data: players } = await supabase.from('profiles').select('expo_push_token').not('expo_push_token', 'is', null);
         notifs.push({
-          targets: (players ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
+          targets: await allPlayerTokens(), // paginé : pas de cap silencieux à 1000 comptes
           title: live.title ?? 'Actu PadelConnect 📣',
           body: live.subtitle ?? 'Ouvre l’app pour découvrir la nouveauté.',
           data: { kind: 'news' },
@@ -744,9 +807,8 @@ Deno.serve(async (req) => {
       // texte est RELU en base par id — un appel forgé ne peut pas injecter son propre message.
       const { data: ev } = await supabase.from('events').select('id, title, date_key, place, push').eq('id', record.id).maybeSingle();
       if (ev && ev.push === true) {
-        const { data: players } = await supabase.from('profiles').select('expo_push_token').not('expo_push_token', 'is', null);
         notifs.push({
-          targets: (players ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
+          targets: await allPlayerTokens(), // paginé : pas de cap silencieux à 1000 comptes
           title: '📅 Agenda padel — ' + (ev.title ?? ''),
           body: `${ev.date_key ?? ''}${ev.place ? ' · ' + ev.place : ''} — ouvre l’app pour les détails.`,
           data: { kind: 'event' },
@@ -862,23 +924,34 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Jetons ayant reçu un ticket Expo 'ok' (par jeton) — sert à la purge d'attente PAR CIBLE.
+    const okTokens = new Set<string>();
     // Jetons d'appareils désinstallés (DeviceNotRegistered) → purgés en base (on cesse d'envoyer
     // dans le vide et on n'accumule pas de jetons morts).
     const dead: string[] = [];
     tickets.forEach((t, i) => {
-      if (t?.status === 'error' && t?.details?.error === 'DeviceNotRegistered' && messages[i]?.to) {
-        dead.push(messages[i].to);
-      }
+      const to = messages[i]?.to;
+      if (!to) return;
+      if (t?.status === 'ok') okTokens.add(to);
+      if (t?.status === 'error' && t?.details?.error === 'DeviceNotRegistered') dead.push(to);
     });
-    if (dead.length > 0) {
-      await supabase.from('profiles').update({ expo_push_token: null }).in('expo_push_token', dead);
+    // Purge des jetons morts PAR TRANCHES de 100 (un in() géant casserait l'URL après un broadcast).
+    for (let i = 0; i < dead.length; i += 100) {
+      await supabase
+        .from('profiles')
+        .update({ expo_push_token: null })
+        .in('expo_push_token', dead.slice(i, i + 100));
     }
 
-    // LISTE D'ATTENTE : consommer les alertes SEULEMENT si l'envoi Expo a réellement abouti
-    // (au moins un ticket 'ok' dans le lot). En cas d'échec total, les entrées survivent et
-    // repartiront à la prochaine libération — jamais d'alerte engloutie en silence.
-    if (waitlistConsumedIds.length > 0 && tickets.some((t) => t?.status === 'ok')) {
-      await supabase.from('slot_waitlist').delete().in('id', waitlistConsumedIds);
+    // LISTE D'ATTENTE : consommer UNIQUEMENT les entrées dont le jeton a été réellement notifié
+    // ('ok') — un joueur dont l'envoi a échoué (jeton mort, débit dépassé) garde son alerte pour
+    // la prochaine libération. Suppression par tranches de 100.
+    const toConsume = [...new Set(waitlistConsumed.filter((e) => okTokens.has(e.token)).map((e) => e.id))];
+    for (let i = 0; i < toConsume.length; i += 100) {
+      await supabase
+        .from('slot_waitlist')
+        .delete()
+        .in('id', toConsume.slice(i, i + 100));
     }
 
     return new Response('ok', { status: 200 });
