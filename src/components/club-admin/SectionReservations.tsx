@@ -8,6 +8,7 @@ import { LegendDot } from '@/components/club-admin/LegendDot';
 import { QuickBlock, type CourtStatus } from '@/components/club-admin/QuickBlock';
 import { BlockRangeForm } from '@/components/club-admin/BlockRangeForm';
 import { ClubCancelForm } from '@/components/club-admin/ClubCancelForm';
+import { RecurringForm } from '@/components/club-admin/RecurringForm';
 import { type Club } from '@/data/clubs';
 import {
   competitionBlockedCourts,
@@ -23,7 +24,10 @@ import { fcfa } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
 import { confirmAsync } from '@/lib/confirm';
 import { hapticLight, hapticSuccess, hapticWarning } from '@/lib/haptics';
+import { clubUsePass, fetchClubPasses, fetchPassUses } from '@/lib/passes';
 import {
+  blockRecurringRows,
+  fetchBlockedSlotNotes,
   fetchCancelledReservations,
   fetchClubBlockedReasons,
   fetchNoShowReservations,
@@ -45,13 +49,24 @@ export function SectionReservations({
   comps: import('@/data/competitions').Competition[];
   onSelectCell: (cell: SelectedCell) => void;
 }) {
-  const { state, blockSlot, unblockSlot, blockRange, unblockRange, confirmReservationByClub, markNoShow, clubCancelReservation } = useApp();
+  const {
+    state,
+    blockSlot,
+    unblockSlot,
+    blockRange,
+    unblockRange,
+    confirmReservationByClub,
+    markNoShow,
+    clubCancelReservation,
+    refreshSession,
+  } = useApp();
   const toast = useToast();
   const [planDayKey, setPlanDayKey] = useState<string | null>(null);
   // Résa en cours d'annulation par le club (chevauchement hors app) : id ouvert dans un mini-form.
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [showBlockForm, setShowBlockForm] = useState(false);
   const [showRangeForm, setShowRangeForm] = useState(false);
+  const [showRecurringForm, setShowRecurringForm] = useState(false);
   // Garde anti double-tap du bouton « Rouvrir » d’une période (id en cours, ou null).
   const [unblockingRangeId, setUnblockingRangeId] = useState<string | null>(null);
 
@@ -74,6 +89,20 @@ export function SectionReservations({
       alive = false;
     };
   }, [club.id, rangeCount]);
+  // Notes privées des créneaux RÉCURRENTS (83) : le miroir partagé ne porte que le générique
+  // « Récurrent » (lisible par tous) — le nom du client (RLS gérant) s'incruste ici. Rechargées
+  // quand le nombre de blocages bouge (une série vient d'être posée / un créneau rouvert).
+  const [slotNotes, setSlotNotes] = useState<Record<string, string>>({});
+  const blockedCount = state.blockedSlots.filter((b) => b.clubId === club.id).length;
+  useEffect(() => {
+    let alive = true;
+    void fetchBlockedSlotNotes(club.id).then((m) => {
+      if (alive && m) setSlotNotes(m);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [club.id, blockedCount]);
   // Historique paginé par SEMAINES : un club actif accumule vite des centaines de résas —
   // tout rendre d'un coup gèle l'ouverture de l'onglet (même esprit que PAST_PREVIEW joueur).
   const [weeksShown, setWeeksShown] = useState(4);
@@ -140,6 +169,53 @@ export function SectionReservations({
     );
   };
 
+  // ── Carnets de séances (17) ───────────────────────────────────────────────────
+  // `passBalance` = séances restantes par joueur dans CE club (somme de ses carnets) : le bouton
+  // « Décompter du carnet » n'apparaît que si le joueur en a. `passUsed` = résas déjà décomptées
+  // (badge « Décomptée ✓ »). Convention §8 : null = échec réseau → on garde ce qui est affiché.
+  const [passBalance, setPassBalance] = useState<Record<string, number>>({});
+  const [passUsed, setPassUsed] = useState<Set<string>>(() => new Set());
+  const [usingPassId, setUsingPassId] = useState<string | null>(null); // garde anti double-tap
+  useEffect(() => {
+    let alive = true;
+    void fetchClubPasses(club.id).then((rows) => {
+      if (!alive || !rows) return;
+      const byUser: Record<string, number> = {};
+      for (const p of rows) byUser[p.userId] = (byUser[p.userId] ?? 0) + p.remaining;
+      setPassBalance(byUser);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [club.id]);
+
+  // Un tap = une séance décomptée (idempotent côté serveur : un double-tap rend 'already').
+  // Messages HONNÊTES par motif — « plus de solde » et « déjà décomptée » ne sont pas des pannes.
+  const onUsePass = (r: Reservation) => {
+    if (usingPassId) return;
+    setUsingPassId(r.id);
+    void clubUsePass(r.id).then((res) => {
+      setUsingPassId(null);
+      if (res === 'ok' || res === 'already') {
+        // Le badge s'affiche dans les deux cas : la séance EST décomptée sur cette réservation.
+        setPassUsed((cur) => new Set(cur).add(r.id));
+      }
+      if (res === 'ok') {
+        hapticSuccess();
+        toast.show('Séance décomptée du carnet ✓');
+        // Miroir local du solde : la ligne du joueur suit sans attendre un rechargement complet.
+        if (r.userId) setPassBalance((cur) => ({ ...cur, [r.userId as string]: Math.max(0, (cur[r.userId as string] ?? 1) - 1) }));
+        return;
+      }
+      hapticWarning();
+      if (res === 'already') toast.show('Déjà décomptée', { icon: 'information-circle' });
+      else if (res === 'none') toast.show('Ce joueur n’a plus de solde dans ton club', { icon: 'alert-circle' });
+      else if (res === 'forbidden') toast.show('Action réservée au gérant du club', { icon: 'alert-circle' });
+      else if (res === 'gone') toast.show('Réservation introuvable ou déjà annulée', { icon: 'alert-circle' });
+      else toast.show('Action impossible — vérifie ta connexion', { icon: 'cloud-offline-outline' });
+    });
+  };
+
   // Le club marque une absence : créneau libéré + absence comptée (même après l’appel tardif).
   // Confirmation obligatoire — l’absence pénalise la fiabilité du joueur, un tap par erreur
   // aurait des conséquences injustes.
@@ -166,6 +242,21 @@ export function SectionReservations({
   };
   // « Jouée » = heure de fin passée (la même règle que côté joueur — base de la commission).
   const upcomingRes = clubRes.filter((r) => !isPlayed(r, now)).sort((a, b) => a.startsAt - b.startsAt);
+  // Résas AFFICHÉES déjà décomptées d'un carnet : requête BORNÉE à la page visible (motif des
+  // autres requêtes de cet écran). Fusion (jamais de remplacement) : une ligne pass_uses ne
+  // disparaît jamais côté serveur, et le décompte à peine fait reste marqué.
+  const shownUpcomingKey = upcomingRes
+    .slice(0, upcomingShown)
+    .map((r) => r.id)
+    .join(',');
+  useEffect(() => {
+    if (!shownUpcomingKey) return;
+    let alive = true;
+    void fetchPassUses(shownUpcomingKey.split(',')).then((ids) => alive && ids && setPassUsed((cur) => new Set([...cur, ...ids])));
+    return () => {
+      alive = false;
+    };
+  }, [shownUpcomingKey]);
   const pastRes = clubRes.filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt);
   // Historique regroupé PAR SEMAINE (le décompte de la commission est hebdomadaire). Groupage en
   // O(n) via une Map d'index (au lieu d'un `.find` par item = O(n²)) : un club actif accumule des
@@ -247,7 +338,8 @@ export function SectionReservations({
     const resa = clubRes.find((r) => r.dateKey === dKey && r.court === court && overlapsAny(slot, [r]));
     if (resa) return { state: 'reserved', label: resa.bookedBy?.name ?? 'Joueur' };
     const blk = clubBlocked.find((b) => b.dateKey === dKey && b.court === court && overlapsAny(slot, [b]));
-    if (blk) return { state: 'blocked', label: blk.reason };
+    // Note privée gérant (récurrent) prioritaire sur le motif public générique.
+    if (blk) return { state: 'blocked', label: slotNotes[`${blk.dateKey}|${blk.time}|${blk.court}`] || blk.reason };
     const rng = clubRanges.find((r) => rangeBlocks(r, dKey, time, court, d));
     if (rng) return { state: 'blocked', label: rangeReasons[rng.id] || 'Fermé sur période' };
     return { state: 'free' };
@@ -397,6 +489,61 @@ export function SectionReservations({
               toast.show('Action réservée au gérant du club', { icon: 'alert-circle' });
             }
             return status;
+          }}
+        />
+      ) : null}
+
+      {/* Créneau récurrent (12) : le même créneau chaque semaine pour un habitué (payé au club).
+          C'est une série de blocages — d'où sa place à côté des deux formulaires ci-dessus. */}
+      <View style={{ marginTop: spacing.sm }}>
+        <Button
+          size="sm"
+          label={showRecurringForm ? 'Replier' : '+ Créneau récurrent (habitué)'}
+          icon={showRecurringForm ? 'chevron-up' : 'repeat'}
+          variant="secondary"
+          onPress={() => setShowRecurringForm((v) => !v)}
+          full
+        />
+      </View>
+      {showRecurringForm ? (
+        <RecurringForm
+          days={week}
+          courts={courts}
+          grid={grid}
+          onSubmit={async (input) => {
+            const res = await blockRecurringRows({
+              clubId: club.id,
+              court: input.court,
+              time: input.time,
+              durationMin: input.durationMin,
+              dateKeys: input.dateKeys,
+              // Note PRIVÉE gérant (83, blocked_slot_notes — RLS) : le planning public ne
+              // montre que « Récurrent », le nom de l'habitué n'est lisible que par le club.
+              reason: `Récurrent · ${input.name}`,
+            });
+            if (!res) {
+              hapticWarning();
+              toast.show('Série non posée — vérifie ta connexion', { icon: 'cloud-offline-outline' });
+              return null;
+            }
+            // Résultat HONNÊTE : une date déjà réservée par un joueur part en conflit, le reste
+            // passe. On nomme les dates en conflit (3 max, sinon le toast devient illisible).
+            const conflicts = res.conflicts.length
+              ? ` · ${res.conflicts.length} en conflit (${res.conflicts.slice(0, 3).map(dateKeyLabel).join(', ')}${
+                  res.conflicts.length > 3 ? '…' : ''
+                }) — déjà réservés par un joueur`
+              : '';
+            if (res.blocked.length === 0) {
+              hapticWarning();
+              toast.show(`Aucun créneau posé${conflicts || ' — vérifie le terrain et l’heure'}`, { icon: 'alert-circle' });
+              return res;
+            }
+            hapticSuccess();
+            toast.show(`${res.blocked.length} créneau${res.blocked.length > 1 ? 'x posés' : ' posé'} ✓${conflicts}`);
+            // Le planning et la dispo lisent le MIROIR des fermetures : on le recharge (le
+            // serveur a écrit en direct, aucune action du store n'a mis le miroir à jour).
+            await refreshSession();
+            return res;
           }}
         />
       ) : null}
@@ -710,6 +857,29 @@ export function SectionReservations({
                   avant, un tap par erreur compterait une absence injuste des jours à l’avance. */}
               {r.startsAt <= now ? (
                 <Button size="sm" label="Pas venu" icon="person-remove-outline" variant="ghost" onPress={() => onMarkNoShow(r)} full />
+              ) : null}
+              {/* Carnet (17) : le joueur a payé d'avance N séances au club — un tap en décompte
+                  une. Le bouton n'apparaît que s'il lui reste du solde ICI ; une résa déjà
+                  décomptée porte son badge (le serveur refuse de toute façon un second décompte). */}
+              {passUsed.has(r.id) ? (
+                <View style={{ marginTop: spacing.sm, alignItems: 'flex-start' }}>
+                  <Tag label="Décomptée du carnet ✓" tone="green" icon="ticket-outline" />
+                </View>
+              ) : r.userId && (passBalance[r.userId] ?? 0) > 0 ? (
+                <Button
+                  size="sm"
+                  label={
+                    usingPassId === r.id
+                      ? 'Décompte…'
+                      : `Décompter du carnet (${passBalance[r.userId]} restante${passBalance[r.userId] > 1 ? 's' : ''})`
+                  }
+                  icon="ticket-outline"
+                  variant="secondary"
+                  disabled={usingPassId === r.id}
+                  accessibilityLabel={`Décompter une séance du carnet de ${r.bookedBy?.name ?? 'ce joueur'}`}
+                  onPress={() => onUsePass(r)}
+                  full
+                />
               ) : null}
               {/* Annulation par le CLUB (75) : ce créneau chevauche une réservation prise HORS APP
                   (téléphone / sur place). On l'annule à tout moment sans pénaliser le joueur, et on

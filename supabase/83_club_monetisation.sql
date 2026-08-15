@@ -17,10 +17,33 @@
 
 -- ── 12) Réservation récurrente (fermetures en série) ────────────────────────────
 
+-- CONFIDENTIALITÉ (doctrine 78/54) : `blocked_slots.reason` est LISIBLE PAR TOUS les joueurs
+-- (le fetch de dispo sélectionne la colonne). Le motif d'un créneau récurrent porte le NOM du
+-- client du gérant (« Récurrent · Awa ») → il ne part JAMAIS dans blocked_slots : la colonne
+-- publique reçoit le générique « Récurrent », le libellé réel vit ici, lisible du seul gérant
+-- (RLS can_manage_club). FK composite ON DELETE CASCADE : débloquer le créneau purge la note.
+create table if not exists public.blocked_slot_notes (
+  club_id text not null,
+  date_key text not null,
+  "time" text not null,
+  court text not null,
+  note text not null default '',
+  primary key (club_id, date_key, "time", court),
+  foreign key (club_id, date_key, "time", court)
+    references public.blocked_slots (club_id, date_key, "time", court) on delete cascade
+);
+
+alter table public.blocked_slot_notes enable row level security;
+drop policy if exists blocked_slot_notes_select_managers on public.blocked_slot_notes;
+create policy blocked_slot_notes_select_managers on public.blocked_slot_notes
+  for select using (public.can_manage_club(club_id));
+-- Écritures via block_recurring uniquement.
+
 -- Pose le MÊME créneau (terrain, heure, durée) sur plusieurs dates (le client calcule les
 -- dates du jour de semaine choisi). Retour jsonb { blocked: [dates], conflicts: [dates] } —
 -- null = refus global (droits, paramètres invalides). Chaque date passe les MÊMES gardes que
 -- block_slot (chevauchement d'intervalle avec une résa 'booked' → la date part en conflicts).
+-- p_reason (« Récurrent · {nom} ») = note PRIVÉE gérant ; le public ne voit que « Récurrent ».
 create or replace function public.block_recurring(
   p_club_id text,
   p_court text,
@@ -79,10 +102,14 @@ begin
     ) then
       v_conflicts := v_conflicts || dk;
     else
+      -- Motif PUBLIC générique (jamais le nom du client — cf. blocked_slot_notes ci-dessus).
       insert into public.blocked_slots (club_id, date_key, time, court, reason, created_by, duration_min)
-        values (p_club_id, dk, p_time, p_court, left(trim(coalesce(p_reason, '')), 200), auth.uid(), p_duration)
+        values (p_club_id, dk, p_time, p_court, 'Récurrent', auth.uid(), p_duration)
         on conflict (club_id, date_key, time, court)
           do update set reason = excluded.reason, duration_min = excluded.duration_min;
+      insert into public.blocked_slot_notes (club_id, date_key, "time", court, note)
+        values (p_club_id, dk, p_time, p_court, left(trim(coalesce(p_reason, '')), 200))
+        on conflict (club_id, date_key, "time", court) do update set note = excluded.note;
       v_blocked := v_blocked || dk;
     end if;
   end loop;
@@ -742,7 +769,9 @@ alter table public.reviews add constraint reviews_rating_facilities_chk
 -- submit_review gagne 3 notes OPTIONNELLES (default null → les anciens clients continuent de
 -- marcher). ⚠️ DROP de l'ancienne signature 3-args OBLIGATOIRE : sinon deux surcharges
 -- coexistent et PostgREST ne sait plus choisir (« could not choose best candidate »).
+-- Le drop de la signature 6-args rend le fichier RE-COLLABLE (idempotence §8).
 drop function if exists public.submit_review(text, integer, text);
+drop function if exists public.submit_review(text, integer, text, integer, integer, integer);
 create function public.submit_review(
   p_club_id text,
   p_rating integer,

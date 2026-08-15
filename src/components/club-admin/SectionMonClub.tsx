@@ -6,6 +6,8 @@ import { ClubPhoto } from '@/components/ClubPhoto';
 import { useToast } from '@/components/Toast';
 import { Button, Card, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
 import { ClubInfoCard } from '@/components/club-admin/ClubInfoCard';
+import { ClubNewsEditor } from '@/components/club-admin/ClubNewsEditor';
+import { ClubPassesCard } from '@/components/club-admin/ClubPassesCard';
 import { SAMPLE_SLOTS, type Club } from '@/data/clubs';
 import { courtsFor, resolvedGridFor, type ScheduleCtx } from '@/lib/availability';
 import { canAddCourtSlot, durationLabel, offeredDurations, overlaps, slotEnd, toMin, type CourtSlot } from '@/lib/courtSchedule';
@@ -1223,6 +1225,13 @@ export function SectionMonClub({ club }: { club: Club }) {
         </Card>
       </View>
 
+      {/* Annonces du club (20) : publiées sur la page du club, poussées (au choix) aux joueurs
+          qui le SUIVENT — à la différence des offres ci-dessus, qui restent purement affichées. */}
+      <View style={{ marginTop: spacing.xl }}>
+        <SectionHeader title="Annonces" />
+        <ClubNewsEditor clubId={club.id} clubName={club.name} />
+      </View>
+
       {/* Coachs RÉSERVABLES : un compte joueur promu coach reçoit son « Espace Coach » et les
           joueurs lui demandent un cours dans l’app (terrain réservé à son acceptation). */}
       <View style={{ marginTop: spacing.xl }}>
@@ -1354,6 +1363,13 @@ export function SectionMonClub({ club }: { club: Club }) {
             </>
           )}
         </Card>
+      </View>
+
+      {/* Carnets de séances (17) : crédités par téléphone, décomptés une réservation à la fois
+          depuis l’onglet « Réservations ». */}
+      <View style={{ marginTop: spacing.xl }}>
+        <SectionHeader title="Carnets" />
+        <ClubPassesCard clubId={club.id} clubName={club.name} connected={connected} />
       </View>
 
       {/* Terrains (courts) — avec une photo par terrain (montrée sur la fiche du club) */}

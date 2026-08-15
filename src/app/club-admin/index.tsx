@@ -20,6 +20,7 @@ import { competitionBlockedCourts, courtsFor, hasFullDayCompetition, rangeBlocks
 import { overlaps, slotDurationAt } from '@/lib/courtSchedule';
 import { openWhatsApp } from '@/lib/contact';
 import { dateKeyLabel, slotTimestamp } from '@/lib/days';
+import { fetchBlockedSlotNotes } from '@/lib/reservations';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { isPlayed, useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
@@ -125,6 +126,18 @@ export default function ClubAdmin() {
   // confirmée reste confirmable — la pastille doit la compter comme la liste l'affiche.
   const pendingConfirm = clubRes.filter((r) => !r.clubConfirmed && !isPlayed(r, now)).length;
   const clubBlocked = state.blockedSlots.filter((b) => b.clubId === club.id);
+  // Notes privées des créneaux RÉCURRENTS (83, RLS gérant) : le miroir partagé ne porte que le
+  // générique « Récurrent » — le nom du client s'incruste ici (clé dateKey|time|court).
+  const [slotNotes, setSlotNotes] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let alive = true;
+    void fetchBlockedSlotNotes(club.id).then((m) => {
+      if (alive && m) setSlotNotes(m);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [club.id, clubBlocked.length]);
   // Fermetures sur période + récurrentes par terrain (54) : le détail d'un créneau doit les
   // montrer — une case « Libre » avec un bouton « Bloquer » sur un créneau que le serveur
   // refuse serait un mensonge.
@@ -549,7 +562,8 @@ export default function ClubAdmin() {
                       ) : blk ? (
                         <>
                           <Txt variant="small" color={colors.coral} style={{ flex: 1, fontWeight: '600' }} numberOfLines={1}>
-                            Bloqué · {blk.reason}
+                            {/* Note privée gérant (récurrent) prioritaire sur le motif public. */}
+                            Bloqué · {slotNotes[`${blk.dateKey}|${blk.time}|${blk.court}`] || blk.reason}
                           </Txt>
                           <Button
                             size="sm"

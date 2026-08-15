@@ -164,6 +164,24 @@ export async function fetchClubBlockedReasons(clubId: string): Promise<Record<st
   return map;
 }
 
+// Notes PRIVÉES des créneaux récurrents (83, RLS gérant seul) : blocked_slots.reason ne porte
+// que le générique « Récurrent » (lisible par tous), le nom du client vit ici. Clé
+// `${dateKey}|${time}|${court}` → note. null = échec réseau (l'UI garde le libellé générique).
+export async function fetchBlockedSlotNotes(clubId: string): Promise<Record<string, string> | null> {
+  const { data, error } = await supabase
+    .from('blocked_slot_notes')
+    .select('date_key, time, court, note')
+    .eq('club_id', clubId)
+    .gte('date_key', dayKey(new Date()))
+    .limit(500);
+  if (error) return null;
+  const map: Record<string, string> = {};
+  for (const r of (data ?? []) as { date_key: string; time: string; court: string; note: string | null }[]) {
+    map[`${r.date_key}|${r.time}|${r.court}`] = r.note ?? '';
+  }
+  return map;
+}
+
 export type BlockRangeStatus = 'ok' | 'reservations' | 'competitions' | 'forbidden' | 'invalid' | 'error';
 
 // Ferme une période côté serveur. 'reservations' = une résa à venir vit dans la période
