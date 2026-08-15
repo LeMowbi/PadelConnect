@@ -21,7 +21,9 @@ const RELIABILITY_MIN_PLAYED = 5;
 
 // MATCHS OUVERTS (45, modèle Playtomic) : des joueurs ont réservé leur terrain et cherchent
 // du monde — un tap et tu es de la partie (place prise immédiatement, créateur prévenu).
-export function OpenMatches({ refreshToken, full = false }: { refreshToken?: number; full?: boolean } = {}) {
+// `clubId` (fiche club « hub », 22) : la section se limite aux matchs de CE club et disparaît
+// complètement s'il n'y en a aucun (pas d'en-tête suivi de vide sur une fiche).
+export function OpenMatches({ refreshToken, full = false, clubId }: { refreshToken?: number; full?: boolean; clubId?: string } = {}) {
   const { state, refreshSession, submitSupportMessage, blockUserAccount } = useApp();
   const toast = useToast();
   // undefined = chargement ; null = échec réseau (≠ [] = aucun match), convention §8.
@@ -133,7 +135,7 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
   // On masque les matchs des comptes que j'ai bloqués (modération UGC — prénom du créateur
   // affiché). Miroir du STORE : persisté, chargé en session et au premier plan (convention §8).
   // Calculé AVANT les retours anticipés : les hooks qui suivent doivent rester inconditionnels.
-  const visible = (matches ?? []).filter((m) => !state.blockedUserIds.includes(m.creatorId));
+  const visible = (matches ?? []).filter((m) => (!clubId || m.clubId === clubId) && !state.blockedUserIds.includes(m.creatorId));
   // UN SEUL appel groupé pour tous les créateurs visibles (clé = ids distincts triés : l'appel
   // ne repart que si la liste des créateurs change réellement).
   const creatorKey = Array.from(new Set(visible.map((m) => m.creatorId)))
@@ -184,7 +186,10 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
 
   // AUCUN match ouvert : la section reste VISIBLE avec le mode d'emploi — sinon la
   // fonctionnalité est introuvable tant que personne n'a créé le premier match (retour porteur).
+  // Sur une FICHE CLUB, on masque au contraire la section : le mode d'emploi vit déjà dans
+  // l'onglet Réserver, et une fiche n'affiche jamais une section vide.
   if (visible.length === 0) {
+    if (clubId) return null;
     return (
       <View style={{ marginTop: spacing.lg }}>
         <SectionHeader title="Matchs ouverts" />
@@ -213,7 +218,7 @@ export function OpenMatches({ refreshToken, full = false }: { refreshToken?: num
 
   return (
     <View style={{ marginTop: spacing.lg }}>
-      <SectionHeader title={`Matchs ouverts · ${visible.length}`} />
+      <SectionHeader title={`${clubId ? 'Matchs ouverts ici' : 'Matchs ouverts'} · ${visible.length}`} />
       <Card>
         <Txt variant="small" color={colors.textMuted}>
           Des joueurs ont déjà leur terrain et cherchent du monde — le prix du terrain se partage entre les joueurs, sur place.
