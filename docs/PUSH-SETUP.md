@@ -161,14 +161,16 @@ publique est dans l'app) pouvait **envoyer de faux push aux gérants** avec un c
 faille réelle. **Configuré par le porteur le 2026-07-06** :
 1. `WEBHOOK_SECRET` posé dans les **secrets des Edge Functions**
    (`…/dashboard/project/<ref>/functions/secrets` → « Add new secret »). Valeur aléatoire, hors dépôt.
-2. En-tête HTTP `x-webhook-secret` (même valeur) ajouté aux **8** Database Webhooks
+2. En-tête HTTP `x-webhook-secret` (même valeur) ajouté aux **11** Database Webhooks
    (`reservations`, `reservation_participants`, `competitions`, `friend_requests`, `lessons`,
-   `coaches`, `match_results`, `operator_news`).
+   `coaches`, `match_results`, `operator_news`, **`events`**, **`club_news`**, **`share_payments`**).
+   🆕 Les 3 derniers (chantier v3, lots C-D) ont été **créés en base via l'API avec l'en-tête
+   secret déjà présent** (clonés à l'identique des webhooks existants) — rien à faire côté porteur.
 3. `notify-club` redéployée.
 
 Comportement : tant que `WEBHOOK_SECRET` n'est pas défini, la fonction marche comme avant (compat) ;
-une fois défini, tout appel sans le bon en-tête reçoit **401**. ⚠️ Si tu ajoutes un 9ᵉ webhook plus
-tard, pense à lui mettre l'en-tête, sinon ses push seront bloqués.
+une fois défini, tout appel sans le bon en-tête reçoit **401**. ⚠️ Si tu ajoutes un **12ᵉ** webhook
+plus tard, pense à lui mettre l'en-tête, sinon ses push seront bloqués.
 
 ## 5. Tester
 

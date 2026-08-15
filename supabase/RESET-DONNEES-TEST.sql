@@ -105,6 +105,13 @@ begin;
   delete from public.club_requests;
   delete from public.operator_payments;
   delete from public.clubs;
+  -- Réglages OPÉRATEUR à effacer AUSSI (sinon un réglage de TEST survit à la remise à zéro) :
+  --   • tournament_config : le LIEN WAVE de paiement + le montant des frais de tournoi — un lien
+  --     Wave de test survivant enverrait de vrais organisateurs vers une caisse de test (argent réel) ;
+  --   • app_config : la récompense fidélité (texte marketing). Le porteur les re-saisit dans
+  --     l'Espace opérateur après le reset (cf. note en tête de fichier).
+  delete from public.tournament_config;
+  delete from public.app_config;
 
   -- 3) Comptes CONSERVÉS, mais remis à neuf :
   --    - niveau ramené au défaut d'inscription (3.0) ; les points du classement, eux, sont
