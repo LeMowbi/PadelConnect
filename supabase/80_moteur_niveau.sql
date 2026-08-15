@@ -291,6 +291,7 @@ end;
 $$;
 
 revoke execute on function public.reconcile_my_levels() from public, anon;
+grant execute on function public.reconcile_my_levels() to authenticated;
 
 -- ── 5) Fiabilité PUBLIQUE (agrégat seul — le détail reste réservé au club) ──────
 
@@ -327,6 +328,7 @@ end;
 $$;
 
 revoke execute on function public.public_reliability(uuid[]) from public, anon;
+grant execute on function public.public_reliability(uuid[]) to authenticated;
 
 -- ── 6) Joueurs favoris ──────────────────────────────────────────────────────────
 
@@ -373,3 +375,4 @@ end;
 $$;
 
 revoke execute on function public.toggle_favorite_player(uuid) from public, anon;
+grant execute on function public.toggle_favorite_player(uuid) to authenticated;
