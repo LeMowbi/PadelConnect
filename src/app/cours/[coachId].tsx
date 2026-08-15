@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Chip } from '@/components/Chip';
+import { CoachGroupLessons } from '@/components/coach/CoachGroupLessons';
 import { PopIn } from '@/components/PopIn';
 import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
@@ -287,6 +288,10 @@ export default function CoursScreen() {
             Le terrain n’est réservé que si {coach.name} accepte ta demande — rien n’est engagé avant.
           </Txt>
         </View>
+
+        {/* Cours COLLECTIFS déjà ouverts par ce coach (19) : une place à prendre tout de suite,
+            sans attendre une réponse — présenté avant le tunnel de demande individuelle. */}
+        <CoachGroupLessons clubId={club.id} coachId={coach.userId} coachName={coach.name} />
 
         <Stepper steps={['Jour', 'Créneau', 'Terrain', 'Envoyer']} current={step} />
         <Label text="Jour" />

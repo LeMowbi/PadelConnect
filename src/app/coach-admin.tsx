@@ -1,18 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppState as RNAppState, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
+import { GroupLessonForm } from '@/components/coach/GroupLessonForm';
 import { Screen } from '@/components/Screen';
 import { SkeletonLines } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
-import { findClub } from '@/data/clubs';
-import { openSlotsFor } from '@/lib/availability';
+import { activeClubs, findClub } from '@/data/clubs';
+import { seedCompetitions } from '@/data/competitions';
+import { courtsFor, freeCourtSlotsAt, openSlotsFor, type AvailCtx } from '@/lib/availability';
 import { fetchCoachLessons, respondLesson, type CoachProfile, type Lesson } from '@/lib/coachesServer';
 import { durationLabel } from '@/lib/courtSchedule';
+import { dateKeyLabel, nextDays, slotTimestamp } from '@/lib/days';
 import { fcfa } from '@/lib/format';
+import { createGroupLesson, fetchGroupLessons, type GroupLesson } from '@/lib/groupLessons';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
+import { useTodayKey } from '@/lib/useTodayKey';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
@@ -31,15 +36,27 @@ export default function CoachAdmin() {
   // (failed ne sert qu’au bloc « Réessayer » du tout premier chargement).
   const [loaded, setLoaded] = useState<{ lessons: Lesson[] | null; failed: boolean }>({ lessons: null, failed: false });
   const [busyId, setBusyId] = useState<string | null>(null);
+  // COURS COLLECTIFS (19) : les sessions à venir du club (tous coachs) — filtrées sur les MIENNES
+  // au rendu. null = pas encore chargé ; un échec réseau garde la liste affichée (§8).
+  const [groupLessons, setGroupLessons] = useState<GroupLesson[] | null>(null);
 
   const userId = state.serverUserId;
+  const profile = state.coachProfile;
+  const clubId = profile?.clubId;
   const reload = async () => {
     if (!userId) return;
     const ls = await fetchCoachLessons(userId);
     if (ls) setLoaded({ lessons: ls, failed: false });
     else setLoaded((cur) => (cur.lessons === null ? { lessons: null, failed: true } : cur));
   };
-  const { refreshControl, webRefreshButton } = usePullToRefresh(reload);
+  const reloadGroupLessons = async () => {
+    if (!clubId) return;
+    const rows = await fetchGroupLessons(clubId);
+    if (rows) setGroupLessons(rows);
+  };
+  const { refreshControl, webRefreshButton } = usePullToRefresh(async () => {
+    await Promise.all([reload(), reloadGroupLessons()]);
+  });
 
   useEffect(() => {
     if (!userId) return;
@@ -60,8 +77,32 @@ export default function CoachAdmin() {
     };
   }, [userId]);
 
-  const profile = state.coachProfile;
-  const club = findClub(profile?.clubId, state.customClubs, state.clubInfo);
+  // Cours collectifs du club : rechargés à l’ouverture et au retour au premier plan (un élève a
+  // pu s’inscrire entre-temps — le compteur « n/cap » doit rester juste).
+  useEffect(() => {
+    if (!clubId) return;
+    let alive = true;
+    const load = () =>
+      void fetchGroupLessons(clubId).then((rows) => {
+        if (!alive || !rows) return; // setState APRÈS l’await (règle React Compiler)
+        setGroupLessons(rows);
+      });
+    load();
+    const sub = RNAppState.addEventListener('change', (st) => {
+      if (st === 'active') load();
+    });
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+  }, [clubId]);
+
+  // Liste des jours proposables, recalée après minuit (retour au premier plan).
+  const todayKey = useTodayKey();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const days = useMemo(() => nextDays(7), [todayKey]);
+
+  const club = findClub(clubId, state.customClubs, state.clubInfo);
 
   // Espace réservé aux coachs : sans session ou sans fiche coach active, on bloque proprement
   // (l’entrée n’apparaît de toute façon que dans le profil d’un compte coach).
@@ -82,6 +123,71 @@ export default function CoachAdmin() {
       </Screen>
     );
   }
+
+  // Disponibilité RÉELLE du club, calculée comme dans le tunnel joueur (availability.ts) : le
+  // formulaire ne propose qu’un créneau OUVERT sur ce terrain et encore LIBRE. Le serveur
+  // applique les mêmes gardes (resolve_court_slots + contrainte d’exclusion) — l’écran ne fait
+  // que refléter honnêtement ce qui a une chance de passer.
+  const ctx: AvailCtx = {
+    clubs: activeClubs(state.customClubs, state.clubInfo),
+    clubSlots: state.clubSlots,
+    clubCourts: state.clubCourts,
+    courtSlots: state.courtSlots,
+    reservations: state.reservations,
+    occupancy: state.occupancy,
+    comps: [...seedCompetitions, ...state.myCompetitions],
+    blocked: state.blockedSlots,
+    ranges: state.blockedRanges,
+    courtClosed: state.clubCourtClosed,
+  };
+  const courts = club ? courtsFor(club, state.clubCourts) : [];
+  // Créneaux proposables d’un terrain, un jour donné : ouverts, encore libres et pas passés.
+  const slotsFor = (court: string, dateKey: string): { time: string; durationMin: 60 | 90 }[] => {
+    if (!club) return [];
+    const out: { time: string; durationMin: 60 | 90 }[] = [];
+    for (const time of openSlotsFor(club, ctx)) {
+      if (slotTimestamp(dateKey, time) <= Date.now()) continue;
+      const hit = freeCourtSlotsAt(club, dateKey, time, ctx).find((x) => x.court === court);
+      if (hit) out.push({ time, durationMin: hit.durationMin });
+    }
+    return out;
+  };
+
+  // Création d’un cours collectif — écriture HONNÊTE : on attend l’id renvoyé par le serveur
+  // avant d’annoncer quoi que ce soit, puis on relit la liste (compteur d’inscrits juste).
+  const createLesson = async (input: {
+    court: string;
+    dateKey: string;
+    time: string;
+    durationMin: 60 | 90;
+    capacity: number;
+    note: string;
+  }): Promise<boolean> => {
+    if (!clubId) return false;
+    const id = await createGroupLesson({
+      clubId,
+      court: input.court,
+      dateKey: input.dateKey,
+      dateLabel: dateKeyLabel(input.dateKey), // libellé ABSOLU (« Lun 8 juin ») : jamais faux demain
+      time: input.time,
+      durationMin: input.durationMin,
+      capacity: input.capacity,
+      note: input.note,
+    });
+    if (!id) {
+      hapticWarning();
+      toast.show('Créneau indisponible ou chevauchement avec un autre de tes cours', { icon: 'alert-circle' });
+      return false;
+    }
+    hapticSuccess();
+    toast.show('Cours collectif créé ✓ — le club confirme la réservation du terrain');
+    await reloadGroupLessons();
+    void refreshSession(); // la réservation créée entre dans le planning du club
+    return true;
+  };
+
+  // Mes sessions à venir (fetch_group_lessons renvoie celles de TOUS les coachs du club).
+  const myGroupLessons = (groupLessons ?? []).filter((l) => l.coachId === userId);
 
   const decide = async (l: Lesson, accept: boolean) => {
     if (busyId) return;
@@ -214,6 +320,50 @@ export default function CoachAdmin() {
             </Card>
           ))
         )}
+      </View>
+
+      {/* Cours collectifs (19) — le coach ouvre une session à plusieurs : le terrain est réservé
+          à son nom (double validation club préservée), les élèves s’inscrivent depuis la fiche
+          du club tant qu’il reste des places. */}
+      <View style={{ marginTop: spacing.xl }}>
+        <SectionHeader title={`Cours collectifs${myGroupLessons.length ? ` · ${myGroupLessons.length}` : ''}`} />
+        {club ? (
+          <GroupLessonForm courts={courts} days={days} slotsFor={slotsFor} onSubmit={createLesson} />
+        ) : (
+          <Card>
+            <Txt variant="muted">Ton club n’est pas encore chargé — reviens dans un instant.</Txt>
+          </Card>
+        )}
+        {myGroupLessons.map((l) => (
+          <Card key={l.id} style={{ marginTop: spacing.sm }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+              <IconCircle icon="people" color={colors.purple} bg={colors.purpleSoft} />
+              <View style={{ flex: 1 }}>
+                <Txt variant="h3" numberOfLines={1}>
+                  {dateKeyLabel(l.dateKey)} à {l.time}
+                </Txt>
+                <Txt variant="muted">
+                  {l.court} · {durationLabel(l.durationMin)}
+                </Txt>
+                {l.note ? (
+                  <Txt variant="small" color={colors.textFaint} numberOfLines={2}>
+                    {l.note}
+                  </Txt>
+                ) : null}
+              </View>
+              <Tag
+                label={`${l.joined}/${l.capacity} inscrits`}
+                tone={l.joined >= l.capacity ? 'neutral' : 'signature'}
+                icon="people-outline"
+              />
+            </View>
+          </Card>
+        ))}
+        {myGroupLessons.length > 0 ? (
+          <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+            Chaque cours bloque le terrain comme une réservation normale — le club la confirme de son côté.
+          </Txt>
+        ) : null}
       </View>
 
       {/* Ma fiche (spécialité, tarif indicatif, disponibilités) */}

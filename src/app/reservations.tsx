@@ -6,6 +6,7 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Chip } from '@/components/Chip';
 import { Reveal, staggerDelay } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
+import { SharePayments } from '@/components/SharePayments';
 import { Button, Card, Divider, EmptyState, SectionHeader, Tag, Txt, type IconName } from '@/components/ui';
 import { ResultCard } from '@/components/ResultCard';
 import { matchTemplates } from '@/lib/matchMessages';
@@ -16,7 +17,9 @@ import { durationLabel } from '@/lib/courtSchedule';
 import { useToast } from '@/components/Toast';
 import { isPlayed, useApp, type Reservation } from '@/store/AppContext';
 import { addReservationToCalendar } from '@/lib/calendar';
+import { confirmAsync } from '@/lib/confirm';
 import { openWhatsApp } from '@/lib/contact';
+import { fetchMyGroupLessons, leaveGroupLesson, type MyGroupLesson } from '@/lib/groupLessons';
 import { hapticSuccess } from '@/lib/haptics';
 import { fetchMyMatchScores, leaveOpenMatch, setMatchOpen, submitMatchScore, type MatchScore, type MatchSet } from '@/lib/matchResults';
 import { CANCEL_DEADLINE_MS, fetchCancelledReservations } from '@/lib/reservations';
@@ -25,10 +28,14 @@ import { fcfa, perPlayerOf } from '@/lib/format';
 import { APP_DOMAIN } from '@/lib/referrals';
 import { openMaps } from '@/lib/maps';
 import { onPushReceivedInForeground } from '@/lib/notifications';
+import { fetchSharePayments, type ShareState } from '@/lib/sharePayments';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { colors, radius, spacing } from '@/theme';
 
 const PAST_PREVIEW = 5; // passées : 5 dernières + « Voir tout »
+// Parts Wave (18) : nombre maximum de résas PARTAGÉES à venir dont on interroge l'état des
+// parts (un appel serveur chacune) — au-delà, la carte reste une carte de réservation normale.
+const SHARE_MAX = 8;
 const MONTHS = ['JANV.', 'FÉVR.', 'MARS', 'AVR.', 'MAI', 'JUIN', 'JUIL.', 'AOÛT', 'SEPT.', 'OCT.', 'NOV.', 'DÉC.'];
 
 // Brouillon de saisie du score : 3 sets max, champs texte vides (jamais muté — les mises à
@@ -97,9 +104,20 @@ export default function ReservationsScreen() {
   const [cancelledRows, setCancelledRows] = useState<Reservation[]>([]);
   const inMyPerimeter = (r: Reservation) => r.userId === state.serverUserId || state.participantReservationIds.includes(r.id);
 
+  // PARTS WAVE (18) : état serveur des parts, par réservation PARTAGÉE à venir affichée.
+  const [shares, setShares] = useState<Record<string, ShareState>>({});
+  // COURS COLLECTIFS (19) : mes inscriptions à venir, côté ÉLÈVE (le terrain est réservé par
+  // le coach — ici on ne gère que MA place).
+  const [groupLessons, setGroupLessons] = useState<MyGroupLesson[]>([]);
+  const [leavingLesson, setLeavingLesson] = useState<string | null>(null); // garde anti double-tap
+
   const loadScores = async () => {
     const list = await fetchMyMatchScores();
     if (list) setScores(Object.fromEntries(list.map((m) => [m.reservationId, m])));
+  };
+  const loadGroupLessons = async () => {
+    const rows = await fetchMyGroupLessons();
+    if (rows) setGroupLessons(rows); // null = échec réseau → on garde la liste affichée (§8)
   };
   const loadCancelled = async () => {
     const rows = await fetchCancelledReservations();
@@ -120,6 +138,10 @@ export default function ReservationsScreen() {
       if (!alive || !rows) return;
       setCancelledRows(rows);
     });
+    void fetchMyGroupLessons().then((rows) => {
+      if (!alive || !rows) return;
+      setGroupLessons(rows);
+    });
     return () => {
       alive = false;
     };
@@ -137,6 +159,7 @@ export default function ReservationsScreen() {
       if (st === 'active') {
         void loadCancelled();
         void loadScores();
+        void loadGroupLessons();
       }
     });
     // Push reçu app OUVERTE (annulation club 75, score validé…) : mêmes rechargements — sinon la
@@ -145,6 +168,7 @@ export default function ReservationsScreen() {
     const offPush = onPushReceivedInForeground(() => {
       void loadCancelled();
       void loadScores();
+      void loadGroupLessons();
     });
     return () => {
       sub.remove();
@@ -155,7 +179,7 @@ export default function ReservationsScreen() {
   // Tirer pour rafraîchir : resynchronise MES réservations (refreshSession → « À venir » perd la
   // résa annulée par le club, plus de double-affichage avec « Annulées »), mes cours, scores et annulées.
   const { refreshControl, webRefreshButton } = usePullToRefresh(async () => {
-    await Promise.all([refreshSession(), refreshLessons(), loadScores(), loadCancelled()]);
+    await Promise.all([refreshSession(), refreshLessons(), loadScores(), loadCancelled(), loadGroupLessons()]);
   });
 
   // Périmètre appliqué au RENDU (cf. loadCancelled) : toujours calé sur l'état courant.
@@ -179,6 +203,42 @@ export default function ReservationsScreen() {
   const past = mine.filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt);
   const pastShown = past.slice(0, pastShownCount);
 
+  // PARTS WAVE (18) : une résa est PARTAGÉE dès qu'on y joue à plusieurs (invités, match ouvert)
+  // ou que c'est celle d'un autre où je suis accepté — seul cas où partager la note a un sens.
+  const isShared = (r: Reservation) =>
+    r.invited.length > 0 || !!r.openMatch || (!isOwner(r) && state.participantReservationIds.includes(r.id));
+  // On n'interroge l'état des parts que pour les résas partagées RÉELLEMENT affichées, et au
+  // plus SHARE_MAX (un appel serveur chacune).
+  const shareTargets = upcoming.filter(isShared).slice(0, SHARE_MAX);
+  const shareKey = shareTargets.map((r) => r.id).join(',');
+  useEffect(() => {
+    if (!state.serverUserId || shareKey === '') return;
+    let alive = true;
+    const load = () => {
+      for (const id of shareKey.split(',')) {
+        void fetchSharePayments(id).then((st) => {
+          // null = échec réseau OU résa hors de mon périmètre (§8) : on garde l'existant.
+          if (alive && st) setShares((cur) => ({ ...cur, [id]: st }));
+        });
+      }
+    };
+    load();
+    const sub = RNAppState.addEventListener('change', (st) => {
+      if (st === 'active') load();
+    });
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+  }, [shareKey, state.serverUserId]);
+
+  // Relecture d'UNE résa après une écriture (lien Wave, part déclarée/confirmée) : l'affichage
+  // suit toujours le serveur, jamais un optimisme local.
+  const reloadShare = async (id: string) => {
+    const st = await fetchSharePayments(id);
+    if (st) setShares((cur) => ({ ...cur, [id]: st }));
+  };
+
   // Mes demandes de COURS (coach) encore vivantes : en attente de réponse du coach, ou refusées
   // à venir (pour que le refus laisse une trace ici, pas seulement une notification). Un cours
   // ACCEPTÉ devient une réservation normale — il apparaît déjà dans « À venir » (badge coach).
@@ -192,6 +252,23 @@ export default function ReservationsScreen() {
     const ok = await cancelMyLesson(id);
     setCancellingLesson(null);
     toast.show(ok ? 'Demande de cours annulée' : 'Annulation impossible — réessaie', ok ? undefined : { icon: 'alert-circle' });
+  };
+
+  // Cours collectif (19) : je rends ma place. Confirmation d'abord (confirmAsync = aussi sur le
+  // web), puis écriture HONNÊTE — la carte ne disparaît qu'après le OUI du serveur.
+  const leaveLesson = async (l: MyGroupLesson) => {
+    if (leavingLesson) return;
+    const yes = await confirmAsync(
+      'Se désinscrire de ce cours ?',
+      `${l.coachName} — ${dateKeyLabel(l.dateKey)} à ${l.time}. Ta place sera rendue aux autres élèves.`,
+      { confirmLabel: 'Se désinscrire', cancelLabel: 'Garder ma place', destructive: true },
+    );
+    if (!yes) return;
+    setLeavingLesson(l.id);
+    const ok = await leaveGroupLesson(l.id);
+    setLeavingLesson(null);
+    if (ok) setGroupLessons((cur) => cur.filter((x) => x.id !== l.id));
+    toast.show(ok ? 'Désinscrit du cours' : 'Désinscription impossible — réessaie', ok ? undefined : { icon: 'alert-circle' });
   };
 
   // Mes tournois : ceux où mon équipe est inscrite ET ceux que J’AI créés (dédupliqués),
@@ -468,6 +545,50 @@ export default function ReservationsScreen() {
         </View>
       ) : null}
 
+      {/* Mes cours collectifs (19) — sessions à plusieurs rejointes chez un coach. Le terrain est
+          réservé par LE COACH : ici on ne gère que ma place (se désinscrire avant le début). */}
+      {groupLessons.length > 0 ? (
+        <View style={{ marginTop: spacing.sm }}>
+          <SectionHeader title={`Mes cours collectifs · ${groupLessons.length}`} />
+          {groupLessons.map((l, i) => (
+            <Reveal key={l.id} delay={staggerDelay(i)}>
+              <Card style={{ marginBottom: spacing.sm }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <View style={{ flex: 1 }}>
+                    <Txt variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>
+                      Cours collectif avec {l.coachName}
+                    </Txt>
+                    <Txt variant="muted">
+                      {l.clubName} · {dateKeyLabel(l.dateKey)} à {l.time}
+                    </Txt>
+                    <Txt variant="small" color={colors.textMuted}>
+                      {l.court} · {durationLabel(l.durationMin)}
+                    </Txt>
+                  </View>
+                  <Tag label="Inscrit ✓" tone="green" icon="checkmark-circle" />
+                </View>
+                {l.note ? (
+                  <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                    {l.note}
+                  </Txt>
+                ) : null}
+                <View style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    label={leavingLesson === l.id ? 'Désinscription…' : 'Se désinscrire'}
+                    icon="exit-outline"
+                    onPress={() => void leaveLesson(l)}
+                    disabled={leavingLesson !== null}
+                    accessibilityLabel={`Se désinscrire du cours de ${l.coachName}, ${dateKeyLabel(l.dateKey)} à ${l.time}`}
+                  />
+                </View>
+              </Card>
+            </Reveal>
+          ))}
+        </View>
+      ) : null}
+
       {/* À venir */}
       <View style={{ marginTop: spacing.sm }}>
         <SectionHeader title={`À venir · ${upcoming.length}`} />
@@ -688,6 +809,19 @@ export default function ReservationsScreen() {
                         );
                       })()
                     : null}
+                  {/* Parts Wave (18) : sur une résa PARTAGÉE, le créateur colle son lien Wave et
+                      confirme les parts reçues ; chaque partenaire paie la sienne et le déclare.
+                      Affiché seulement pour les résas dont l'état des parts est chargé (SHARE_MAX). */}
+                  {state.serverUserId && shareTargets.some((x) => x.id === r.id) ? (
+                    <SharePayments
+                      reservation={r}
+                      owner={owner}
+                      players={players}
+                      meId={state.serverUserId}
+                      share={shares[r.id]}
+                      onReload={() => void reloadShare(r.id)}
+                    />
+                  ) : null}
                 </Card>
               </Reveal>
             );
