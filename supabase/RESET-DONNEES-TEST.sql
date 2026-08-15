@@ -64,6 +64,7 @@ begin;
 
   -- 1) Activité des joueurs — on efface les « enfants » avant les « parents » (clés étrangères).
   delete from public.reservation_participants;
+  delete from public.share_payments;             -- parts Wave (83) — cascade avec reservations, explicite quand même
   delete from public.reservations;               -- inclut les matchs ouverts (open_match)
   delete from public.competition_registrations;
   delete from public.competitions;
@@ -73,13 +74,25 @@ begin;
   delete from public.friend_requests;
   delete from public.friends;
   delete from public.blocked_users;
+  delete from public.lesson_students;            -- élèves des cours collectifs (83)
   delete from public.lessons;
   delete from public.coaches;
+  delete from public.blocked_slot_notes;         -- notes privées des créneaux récurrents (83)
   delete from public.blocked_slots;
   delete from public.blocked_ranges;
   delete from public.referrals;
   delete from public.support_messages;
   delete from public.operator_news;
+  -- Chantier v3 : moteur de niveau (80), suivis/attentes (81), fidélité/agenda (82), lot D (83).
+  delete from public.level_history;
+  delete from public.favorite_players;
+  delete from public.club_followers;
+  delete from public.slot_waitlist;
+  delete from public.loyalty_claims;
+  delete from public.events;
+  delete from public.pass_uses;
+  delete from public.club_passes;
+  delete from public.club_news;
 
   -- 2) Clubs de test + tout ce qui les décrit. Les 9 fondateurs vivent dans le code de l'app :
   --    vider ces tables les remet à leur apparence d'origine (nom, horaires, photos par défaut).

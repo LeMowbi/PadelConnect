@@ -543,6 +543,9 @@ export function SectionReservations({
             // Le planning et la dispo lisent le MIROIR des fermetures : on le recharge (le
             // serveur a écrit en direct, aucune action du store n'a mis le miroir à jour).
             await refreshSession();
+            // Notes privées relues EXPLICITEMENT : re-poser la même série avec un autre nom ne
+            // change pas le NOMBRE de blocages — l'effet indexé sur le compteur ne partirait pas.
+            void fetchBlockedSlotNotes(club.id).then((m) => m && setSlotNotes(m));
             return res;
           }}
         />

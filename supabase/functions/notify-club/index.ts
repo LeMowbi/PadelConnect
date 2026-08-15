@@ -571,10 +571,15 @@ Deno.serve(async (req) => {
       // La réservation née du cours n'a plus lieu (annulation de l'élève OU « pas venu »
       // marqué par le club — trigger lessons_follow_reservation) → prévenir le COACH.
       // Formulation NEUTRE : on ne sait pas ici lequel des deux cas s'est produit.
+      // Formulation dédiée pour un COURS COLLECTIF (sa lesson porte student_name = « Cours
+      // collectif » — « Le cours avec Cours collectif » serait absurde).
       notifs.push({
         targets: await userToken(record.coach_id),
         title: 'Cours annulé',
-        body: `Le cours avec ${record.student_name ?? 'un joueur'} du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} n’aura pas lieu — le créneau est libéré.`,
+        body:
+          Number(record.capacity ?? 1) > 1
+            ? `Ton cours collectif du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} est annulé — le créneau est libéré, les élèves inscrits sont prévenus.`
+            : `Le cours avec ${record.student_name ?? 'un joueur'} du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} n’aura pas lieu — le créneau est libéré.`,
         data: { kind: 'lesson' },
       });
       // COURS COLLECTIF (83, capacity > 1) : les ÉLÈVES inscrits doivent aussi le savoir —
@@ -752,7 +757,10 @@ Deno.serve(async (req) => {
       // INSERT seul, une correction de texte ne re-pousse jamais) → aux SUIVEURS du club
       // (cœur favori synchronisé via club_followers), hors bloqués avec l'auteur de l'annonce.
       // MÊME anti-phishing que l'actu/l'agenda : le texte est RELU en base par id — un appel
-      // forgé ne peut pas injecter son propre message. Plafond 100 À LA SOURCE (récence).
+      // forgé ne peut pas injecter son propre message. L'éditeur promet « envoyée aux joueurs
+      // qui suivent ton club » : plafond LARGE (500, par récence de follow) et jetons relus par
+      // TRANCHES de 100 ids (une seule requête in() exploserait l'URL PostgREST) ; l'écrêtage
+      // éventuel est journalisé au lieu d'être silencieux.
       const { data: nw } = await supabase
         .from('club_news')
         .select('id, club_id, title, push, created_by')
@@ -764,7 +772,8 @@ Deno.serve(async (req) => {
           .select('user_id')
           .eq('club_id', nw.club_id)
           .order('created_at', { ascending: false })
-          .limit(100);
+          .limit(500);
+        if ((fols ?? []).length === 500) console.log(`annonce club ${nw.club_id} : 500 suiveurs atteints, les plus anciens écrêtés`);
         let ids = [...new Set((fols ?? []).map((f: { user_id: string }) => f.user_id))].filter(Boolean);
         if (nw.created_by && ids.length) {
           const { data: blocks } = await supabase
@@ -775,12 +784,15 @@ Deno.serve(async (req) => {
           ids = ids.filter((id: string) => id !== nw.created_by && !excluded.has(id));
         }
         if (ids.length) {
-          const { data: profs } = await supabase
-            .from('profiles')
-            .select('expo_push_token')
-            .in('id', ids)
-            .not('expo_push_token', 'is', null);
-          const targets = (profs ?? []).map((p: { expo_push_token: string }) => p.expo_push_token).filter(Boolean);
+          const targets: string[] = [];
+          for (let i = 0; i < ids.length; i += 100) {
+            const { data: profs } = await supabase
+              .from('profiles')
+              .select('expo_push_token')
+              .in('id', ids.slice(i, i + 100))
+              .not('expo_push_token', 'is', null);
+            for (const p of profs ?? []) if (p.expo_push_token) targets.push(p.expo_push_token as string);
+          }
           if (targets.length) {
             notifs.push({
               targets,

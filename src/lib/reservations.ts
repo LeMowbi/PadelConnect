@@ -173,6 +173,7 @@ export async function fetchBlockedSlotNotes(clubId: string): Promise<Record<stri
     .select('date_key, time, court, note')
     .eq('club_id', clubId)
     .gte('date_key', dayKey(new Date()))
+    .order('date_key', { ascending: true }) // troncature DÉTERMINISTE : les plus proches d'abord
     .limit(500);
   if (error) return null;
   const map: Record<string, string> = {};

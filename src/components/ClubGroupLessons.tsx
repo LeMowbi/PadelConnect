@@ -11,11 +11,15 @@ import { colors, radius, spacing } from '@/theme';
 
 const PREVIEW = 3; // liste repliée par défaut (la fiche club reste centrée sur la réservation)
 
-// COURS COLLECTIFS (19, fiche club) : un coach du club ouvre une session à N places ; les élèves
-// rejoignent tant qu'il en reste. La désinscription vit dans « Mes réservations » (côté élève).
+// COURS COLLECTIFS (19) : un coach du club ouvre une session à N places ; les élèves rejoignent
+// tant qu'il en reste. La désinscription vit dans « Mes réservations » (côté élève).
+// DEUX habits pour un seul composant (règle §3, pas de doublon) :
+//  • fiche CLUB (coachId absent) — tous les cours du club, SectionHeader + 3 max + « Voir tout » ;
+//  • fiche COACH (coachId fourni) — ses cours seulement, en-tête « Ses cours collectifs »,
+//    au-dessus du tunnel de demande individuelle (écran « Réserver un cours »).
 // Section entièrement MASQUÉE tant qu'aucun cours n'est à venir — jamais d'en-tête suivi de vide.
 // Convention §8 : un échec réseau ne vide jamais la liste déjà affichée.
-export function ClubGroupLessons({ clubId }: { clubId: string }) {
+export function ClubGroupLessons({ clubId, coachId, coachName }: { clubId: string; coachId?: string; coachName?: string }) {
   const { state } = useApp();
   const toast = useToast();
   // undefined = chargement ; null = échec réseau (≠ [] = aucun cours).
@@ -38,6 +42,8 @@ export function ClubGroupLessons({ clubId }: { clubId: string }) {
       alive = false;
       sub.remove();
     };
+    // `mine` (déjà inscrit) est calculé côté serveur pour l'utilisateur courant : une session qui
+    // arrive après le premier rendu doit relancer le chargement.
   }, [clubId, state.serverUserId]);
 
   const join = async (l: GroupLesson) => {
@@ -65,77 +71,97 @@ export function ClubGroupLessons({ clubId }: { clubId: string }) {
     if (res !== 'error') void fetchGroupLessons(clubId).then((rows) => rows && setLessons(rows));
   };
 
-  // Chargement, échec réseau ou aucun cours → rien du tout sur la fiche (section discrète).
-  if (!lessons || lessons.length === 0) return null;
-  const shown = showAll ? lessons : lessons.slice(0, PREVIEW);
+  // Chargement, échec réseau ou aucun cours (du club, ou de CE coach) → rien du tout (discret).
+  const visible = coachId ? (lessons ?? []).filter((l) => l.coachId === coachId) : (lessons ?? []);
+  if (!lessons || visible.length === 0) return null;
+  const shown = coachId || showAll ? visible : visible.slice(0, PREVIEW);
 
-  return (
-    <View style={{ marginTop: spacing.lg }}>
-      <SectionHeader
-        title={`Cours collectifs · ${lessons.length}`}
-        actionLabel={lessons.length > PREVIEW ? (showAll ? 'Réduire' : `Voir tout (${lessons.length})`) : undefined}
-        onAction={lessons.length > PREVIEW ? () => setShowAll((v) => !v) : undefined}
-      />
-      <Card>
-        <Txt variant="small" color={colors.textMuted}>
-          Des cours à plusieurs, encadrés par les coachs du club. Le tarif se règle au coach, sur place.
-        </Txt>
-        {shown.map((l, i) => {
-          const left = Math.max(0, l.capacity - l.joined);
-          return (
-            <View key={l.id}>
-              {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : <View style={{ height: spacing.sm }} />}
-              <View style={styles.row}>
-                <View style={styles.when}>
-                  <Txt variant="h3" style={{ textAlign: 'center' }}>
-                    {l.time}
-                  </Txt>
-                  <Txt variant="small" color={colors.textMuted} style={{ textAlign: 'center' }}>
-                    {dateKeyLabel(l.dateKey)}
-                  </Txt>
-                </View>
-                <View style={{ flex: 1 }}>
+  const rows = (
+    <Card style={coachId ? { marginTop: spacing.sm } : undefined}>
+      <Txt variant="small" color={colors.textMuted}>
+        {coachId
+          ? `Sessions à plusieurs déjà ouvertes par ${coachName ?? 'ce coach'} — le terrain est réservé, il ne reste qu’à prendre ta place.`
+          : 'Des cours à plusieurs, encadrés par les coachs du club. Le tarif se règle au coach, sur place.'}
+      </Txt>
+      {shown.map((l, i) => {
+        const left = Math.max(0, l.capacity - l.joined);
+        return (
+          <View key={l.id}>
+            {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : <View style={{ height: spacing.sm }} />}
+            <View style={styles.row}>
+              <View style={styles.when}>
+                <Txt variant="h3" style={{ textAlign: 'center' }}>
+                  {l.time}
+                </Txt>
+                <Txt variant="small" color={colors.textMuted} style={{ textAlign: 'center' }}>
+                  {dateKeyLabel(l.dateKey)}
+                </Txt>
+              </View>
+              <View style={{ flex: 1 }}>
+                {/* Sur la fiche du coach, répéter son nom sur chaque ligne serait du bruit. */}
+                {!coachId ? (
                   <Txt variant="body" numberOfLines={1} style={{ fontWeight: '600' }}>
                     Coach {l.coachName}
                   </Txt>
-                  <View style={styles.tags}>
-                    <Tag label={`${l.joined}/${l.capacity} places`} tone={left === 0 ? 'neutral' : 'signature'} icon="people-outline" />
-                    <Tag label={durationLabel(l.durationMin)} tone="neutral" />
-                    {left === 1 ? <Tag label="Dernière place !" tone="coral" icon="flame" /> : null}
-                  </View>
-                  <Txt variant="small" color={colors.textMuted} numberOfLines={1} style={{ marginTop: 2 }}>
-                    {l.court}
-                  </Txt>
-                  {l.note ? (
-                    <Txt variant="small" color={colors.textFaint} numberOfLines={2} style={{ marginTop: 2 }}>
-                      {l.note}
-                    </Txt>
-                  ) : null}
+                ) : null}
+                <View style={styles.tags}>
+                  <Tag label={`${l.joined}/${l.capacity} places`} tone={left === 0 ? 'neutral' : 'signature'} icon="people-outline" />
+                  <Tag label={durationLabel(l.durationMin)} tone="neutral" />
+                  {left === 1 ? <Tag label="Dernière place !" tone="coral" icon="flame" /> : null}
                 </View>
-                {l.coachId === state.serverUserId ? (
-                  // Le coach qui a ouvert le cours : le serveur lui refuserait de « rejoindre »
-                  // (join_group_lesson → 'gone'), autant le dire clairement plutôt qu'un bouton
-                  // qui échoue. Il gère ses inscrits dans l'Espace Coach.
-                  <Tag label="Ton cours" tone="green" />
-                ) : l.mine ? (
-                  <Tag label="Inscrit ✓" tone="green" />
-                ) : left === 0 ? (
-                  <Tag label="Complet" tone="neutral" />
-                ) : (
-                  <Button
-                    size="sm"
-                    label={joining === l.id ? '…' : 'Rejoindre'}
-                    icon="enter-outline"
-                    onPress={() => void join(l)}
-                    disabled={!!joining}
-                    accessibilityLabel={`Rejoindre le cours du coach ${l.coachName}, ${dateKeyLabel(l.dateKey)} à ${l.time}`}
-                  />
-                )}
+                <Txt variant="small" color={colors.textMuted} numberOfLines={1} style={{ marginTop: 2 }}>
+                  {l.court}
+                </Txt>
+                {l.note ? (
+                  <Txt variant="small" color={colors.textFaint} numberOfLines={2} style={{ marginTop: 2 }}>
+                    {l.note}
+                  </Txt>
+                ) : null}
               </View>
+              {l.coachId === state.serverUserId ? (
+                // Le coach qui a ouvert le cours : le serveur lui refuserait de « rejoindre »
+                // (join_group_lesson → 'gone'), autant le dire clairement plutôt qu'un bouton
+                // qui échoue. Il gère ses inscrits dans l'Espace Coach.
+                <Tag label="Ton cours" tone="green" />
+              ) : l.mine ? (
+                <Tag label="Inscrit ✓" tone="green" />
+              ) : left === 0 ? (
+                <Tag label="Complet" tone="neutral" />
+              ) : (
+                <Button
+                  size="sm"
+                  label={joining === l.id ? '…' : 'Rejoindre'}
+                  icon="enter-outline"
+                  onPress={() => void join(l)}
+                  disabled={!!joining}
+                  accessibilityLabel={`Rejoindre le cours du coach ${l.coachName}, ${dateKeyLabel(l.dateKey)} à ${l.time}`}
+                />
+              )}
             </View>
-          );
-        })}
-      </Card>
+          </View>
+        );
+      })}
+    </Card>
+  );
+
+  if (coachId) {
+    return (
+      <>
+        <Txt variant="label" style={{ marginTop: spacing.lg }}>
+          Ses cours collectifs
+        </Txt>
+        {rows}
+      </>
+    );
+  }
+  return (
+    <View style={{ marginTop: spacing.lg }}>
+      <SectionHeader
+        title={`Cours collectifs · ${visible.length}`}
+        actionLabel={visible.length > PREVIEW ? (showAll ? 'Réduire' : `Voir tout (${visible.length})`) : undefined}
+        onAction={visible.length > PREVIEW ? () => setShowAll((v) => !v) : undefined}
+      />
+      {rows}
     </View>
   );
 }

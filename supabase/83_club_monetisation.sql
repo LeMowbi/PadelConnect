@@ -67,6 +67,15 @@ begin
   if not public.can_manage_club(p_club_id) then return null; end if;
   if coalesce(trim(p_court), '') = '' or public.hhmm_to_min(p_time) is null then return null; end if;
   if p_duration is null or p_duration not in (60, 90) then return null; end if;
+  -- (Contre-lecture lot D) Défense en profondeur : (heure, durée) doit être un créneau OUVERT
+  -- de CE terrain — l'UI ne propose que la grille, mais un appel forgé de gérant créerait
+  -- sinon une fermeture incohérente avec la grille réelle.
+  if not exists (
+    select 1 from public.resolve_court_slots(p_club_id, p_court) rs
+    where not rs.x and rs.t = p_time and rs.d = p_duration
+  ) then
+    return null;
+  end if;
   -- 1 à 26 dates (26 semaines = 6 mois), format strict, réellement calendaires, bornées à 366 j.
   if p_date_keys is null or coalesce(array_length(p_date_keys, 1), 0) < 1 or array_length(p_date_keys, 1) > 26 then
     return null;
@@ -275,8 +284,10 @@ grant execute on function public.my_passes() to authenticated;
 
 alter table public.reservations add column if not exists wave_link text;
 
--- Le CRÉATEUR colle son lien Wave sur SA résa à venir ('' = effacer). https strict : ce lien
--- est OUVERT par les autres joueurs — même règle que les liens d'actu/agenda.
+-- Le CRÉATEUR colle son lien Wave sur SA résa à venir ('' = effacer). ALLOW-LIST de domaine
+-- (contre-lecture lot D) : ce lien est présenté à des INCONNUS (match ouvert) derrière un
+-- bouton « Payer ma part » — une URL https quelconque serait le patron de phishing classique.
+-- Seuls wave.com / pay.wave.com passent (élargir = décision porteur, jamais une liste ouverte).
 create or replace function public.set_reservation_wave_link(p_id uuid, p_link text)
 returns boolean
 language plpgsql
@@ -287,7 +298,7 @@ declare
   v_link text := trim(coalesce(p_link, ''));
 begin
   if auth.uid() is null then return false; end if;
-  if v_link <> '' and (v_link !~ '^https://' or length(v_link) > 300) then return false; end if;
+  if v_link <> '' and (v_link !~ '^https://(pay\.)?wave\.com/' or length(v_link) > 300) then return false; end if;
   update public.reservations
     set wave_link = nullif(v_link, '')
     where id = p_id and user_id = auth.uid() and status = 'booked';
@@ -438,13 +449,20 @@ create policy lesson_students_select_own on public.lesson_students
 -- Coach ACTIF du club : crée un cours collectif = LA RÉSERVATION STANDARD à son nom (mêmes
 -- gardes 68→79, GiST anti double-vente intacte, club_confirmed=false → double validation club
 -- préservée) + la lesson 'accepted' liée, à capacité. Renvoie l'id de la lesson, null = refus.
-create or replace function public.create_group_lesson(
+-- p_price = prix du TERRAIN (priceForSlot côté client, borné ici comme request_lesson) — JAMAIS
+-- le tarif du coach : reservations.price porte partout le prix du terrain (revenu club,
+-- commission) ; le tarif du coach se règle au coach, hors app (contre-lecture lot D, H1).
+-- Signature changée (p_price) → drop des deux versions, re-collable.
+drop function if exists public.create_group_lesson(text, text, text, text, integer, integer, text, text);
+drop function if exists public.create_group_lesson(text, text, text, text, integer, integer, integer, text, text);
+create function public.create_group_lesson(
   p_club_id text,
   p_court text,
   p_date_key text,
   p_time text,
   p_duration integer,
   p_capacity integer,
+  p_price integer,
   p_note text default '',
   p_date_label text default ''
 )
@@ -456,7 +474,6 @@ as $$
 declare
   v_uid uuid := auth.uid();
   v_starts bigint;
-  v_price integer;
   v_courts text[];
   cname text;
   cphone text;
@@ -467,17 +484,19 @@ begin
   if v_uid is null then return null; end if;
   if p_duration is null or p_duration not in (60, 90) then return null; end if;
   if p_capacity is null or p_capacity < 2 or p_capacity > 8 then return null; end if;
+  if p_price is null or p_price < 1000 or p_price > 1000000 then return null; end if;
   if p_date_key !~ '^\d{4}-\d{2}-\d{2}$' or public.hhmm_to_min(p_time) is null then return null; end if;
   begin
     perform p_date_key::date;
   exception when others then
     return null;
   end;
-  -- Coach ACTIF de CE club (le tarif du cours = celui fixé par le club, borné comme en 48).
-  select c.price into v_price from public.coaches c
-    where c.user_id = v_uid and c.club_id = p_club_id and c.active;
-  if not found then return null; end if;
-  if v_price is not null and (v_price < 1000 or v_price > 1000000) then v_price := null; end if;
+  -- Coach ACTIF de CE club (son tarif éventuel reste sur coaches.price, hors résa).
+  if not exists (
+    select 1 from public.coaches c where c.user_id = v_uid and c.club_id = p_club_id and c.active
+  ) then
+    return null;
+  end if;
   -- Terrain déclaré + (heure, durée) = créneau OUVERT de CE terrain (motif request_lesson).
   select courts into v_courts from public.club_config where club_id = p_club_id;
   if v_courts is not null and array_length(v_courts, 1) > 0 and not (p_court = any (v_courts)) then
@@ -505,6 +524,11 @@ begin
   select coalesce(nullif(trim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')), ''), 'Coach'), phone
     into cname, cphone from public.profiles where id = v_uid;
   club_label := coalesce((select name from public.clubs c where c.id = p_club_id), p_club_id);
+  -- Exemption du plafond « 10 résas à venir » (anti-abus JOUEUR) : l'agenda d'un coach qui
+  -- ouvre plusieurs sessions/semaine le dépasse légitimement. GUC transactionnel lu par
+  -- reservations_insert_guard (motif padel.level_write du trigger protect_level, 80/34),
+  -- REMIS À ZÉRO sitôt l'insert fait — il ne couvre jamais une autre écriture.
+  perform set_config('padel.group_lesson', 'on', true);
   begin
     insert into public.reservations (
       user_id, club_id, club_name, date_key, date_label, "time", starts_at, court, price, duration_min,
@@ -512,13 +536,15 @@ begin
     )
     values (
       v_uid, p_club_id, club_label, p_date_key, coalesce(p_date_label, ''), p_time, v_starts, p_court,
-      v_price, p_duration, 1, '[]'::jsonb, cname, cphone, cname, false, 'booked'
+      p_price, p_duration, 1, '[]'::jsonb, cname, cphone, cname, false, 'booked'
     )
     returning id into res_id;
   exception when others then
     -- Conflit d'occupation (contrainte d'exclusion 23P01, terrain fermé, etc.) → refus propre.
+    perform set_config('padel.group_lesson', '', true);
     return null;
   end;
+  perform set_config('padel.group_lesson', '', true);
   insert into public.lessons (
     coach_id, coach_name, club_id, club_name, student_id, student_name,
     date_key, date_label, "time", court, starts_at, price, duration_min,
@@ -526,11 +552,97 @@ begin
   )
   values (
     v_uid, cname, p_club_id, club_label, v_uid, 'Cours collectif',
-    p_date_key, coalesce(p_date_label, ''), p_time, p_court, v_starts, v_price, p_duration,
+    p_date_key, coalesce(p_date_label, ''), p_time, p_court, v_starts, p_price, p_duration,
     'accepted', now(), res_id, p_capacity, left(trim(coalesce(p_note, '')), 200)
   )
   returning id into new_id;
   return new_id;
+end;
+$$;
+
+-- reservations_insert_guard : recopie STRICTE de la version live (68/71) + l'exemption du
+-- plafond quand le GUC padel.group_lesson est posé (uniquement posable par create_group_lesson,
+-- SECURITY DEFINER — un client PostgREST ne peut pas poser un GUC de session serveur).
+create or replace function public.reservations_insert_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now bigint := (extract(epoch from now()) * 1000)::bigint;
+  v_upcoming int;
+  v_courts text[];
+begin
+  -- (71) Verrou CLUB, pris AVANT le verrou club:jour (ordre constant → pas d'interblocage) :
+  -- sérialise l'INSERT avec upsert_club_config (garde anti-orphelin 69/70) — sans lui, une résa
+  -- pouvait se glisser ENTRE la vérification de la garde et l'écriture de la nouvelle grille.
+  perform pg_advisory_xact_lock(hashtext(new.club_id));
+  -- Sérialise avec approve_competition / create_competition (même clé club:jour) : plus de
+  -- fenêtre où une résa et une publication de tournoi se croisent sans se voir.
+  perform pg_advisory_xact_lock(hashtext(new.club_id || ':' || new.date_key));
+  -- Une réservation naît TOUJOURS 'booked' et non confirmée (seules les RPC la font évoluer).
+  new.club_confirmed := false;
+  new.status := 'booked';
+  -- (a) Format date/heure validé PUIS starts_at RECALCULÉ côté serveur (Abidjan = UTC). Une date
+  -- calendaire impossible (« 2026-02-31 ») ferait échouer le cast → refus propre.
+  if new.date_key is null or new.date_key !~ '^\d{4}-\d{2}-\d{2}$'
+     or new."time" is null or new."time" !~ '^([01]\d|2[0-3]):([0-5]\d)$' then
+    raise exception 'invalid slot format';
+  end if;
+  begin
+    new.starts_at := (extract(epoch from (new.date_key || ' ' || new."time")::timestamp) * 1000)::bigint;
+  exception when others then
+    raise exception 'invalid slot format';
+  end;
+  -- Créneau passé : interdit (tolérance 15 min pour l'horloge).
+  if new.starts_at < v_now - 15 * 60000 then
+    raise exception 'reservation must be in the future';
+  end if;
+  -- (b) Durée valide + créneau OUVERT de CE terrain. La grille par terrain (resolve_court_slots)
+  -- remplace l'ancien `time = any(slots)` : elle porte durée ET fermetures. Le terrain doit rester
+  -- déclaré (resolve_court_slots retomberait sur la grille par défaut pour un terrain inconnu).
+  if new.duration_min is null or new.duration_min not in (60, 90) then
+    raise exception 'invalid duration';
+  end if;
+  select c.courts into v_courts from public.club_config c where c.club_id = new.club_id;
+  if v_courts is not null and array_length(v_courts, 1) > 0 and not (new.court = any (v_courts)) then
+    raise exception 'unknown court';
+  end if;
+  if not exists (
+    select 1 from public.resolve_court_slots(new.club_id, new.court) rs
+    where not rs.x and rs.t = new."time" and rs.d = new.duration_min
+  ) then
+    raise exception 'slot closed';
+  end if;
+  -- (c) PÉRIODE fermée (54) : terrain précis ou tout le club ; une heure fermée T ferme [T,T+90).
+  if exists (
+    select 1 from public.blocked_ranges br
+    where br.club_id = new.club_id
+      and new.date_key >= br.date_from and new.date_key <= br.date_to
+      and (br.court is null or br.court = new.court)
+      and (
+        br.times is null
+        or exists (
+          select 1 from unnest(br.times) bt
+          where public.hhmm_to_min(bt) is not null
+            and public.hhmm_to_min(bt) < public.hhmm_to_min(new."time") + new.duration_min
+            and public.hhmm_to_min(new."time") < public.hhmm_to_min(bt) + 90
+        )
+      )
+  ) then
+    raise exception 'slot closed';
+  end if;
+  -- Plafond anti-abus de réservations À VENIR par compte — SAUF cours collectif (83) : la résa
+  -- porteuse est au nom du COACH, dont l'agenda dépasse légitimement 10 sessions à venir.
+  if coalesce(current_setting('padel.group_lesson', true), '') <> 'on' then
+    select count(*) into v_upcoming from public.reservations r
+      where r.user_id = new.user_id and r.status = 'booked' and r.starts_at > v_now;
+    if v_upcoming >= 10 then
+      raise exception 'too many upcoming reservations';
+    end if;
+  end if;
+  return new;
 end;
 $$;
 
@@ -642,12 +754,12 @@ as $$
     limit 30;
 $$;
 
-revoke execute on function public.create_group_lesson(text, text, text, text, integer, integer, text, text) from public, anon;
+revoke execute on function public.create_group_lesson(text, text, text, text, integer, integer, integer, text, text) from public, anon;
 revoke execute on function public.join_group_lesson(uuid) from public, anon;
 revoke execute on function public.leave_group_lesson(uuid) from public, anon;
 revoke execute on function public.fetch_group_lessons(text) from public, anon;
 revoke execute on function public.my_group_lessons() from public, anon;
-grant execute on function public.create_group_lesson(text, text, text, text, integer, integer, text, text) to authenticated;
+grant execute on function public.create_group_lesson(text, text, text, text, integer, integer, integer, text, text) to authenticated;
 grant execute on function public.join_group_lesson(uuid) to authenticated;
 grant execute on function public.leave_group_lesson(uuid) to authenticated;
 grant execute on function public.fetch_group_lessons(text) to authenticated;
@@ -698,11 +810,16 @@ begin
   if length(v_title) < 3 then return null; end if;
   if v_link <> '' and (v_link !~ '^https://' or length(v_link) > 300) then return null; end if;
   if p_id is null then
-    -- Écriture bornée : 100 annonces max par club (la fiche n'en montre que 10).
-    if (select count(*) from public.club_news n where n.club_id = p_club_id) >= 100 then return null; end if;
     insert into public.club_news (club_id, title, body, link, push, created_by)
       values (p_club_id, v_title, left(trim(coalesce(p_body, '')), 1000), v_link, coalesce(p_push, false), auth.uid())
       returning id into v_id;
+    -- Écriture bornée par ROULEMENT (contre-lecture lot D) : au-delà de 100 annonces, les plus
+    -- ANCIENNES partent (la fiche n'en montre que 10) — jamais d'impasse « création refusée »
+    -- que le gérant ne pourrait pas débloquer (l'éditeur ne liste que les 10 dernières).
+    delete from public.club_news n
+      where n.club_id = p_club_id
+        and n.id not in (select n2.id from public.club_news n2 where n2.club_id = p_club_id
+                         order by n2.created_at desc, n2.id desc limit 100);
   else
     update public.club_news
       set title = v_title, body = left(trim(coalesce(p_body, '')), 1000), link = v_link
@@ -853,3 +970,109 @@ revoke execute on function public.submit_review(text, integer, text, integer, in
 revoke execute on function public.fetch_club_ratings() from public, anon;
 grant execute on function public.submit_review(text, integer, text, integer, integer, integer) to authenticated;
 grant execute on function public.fetch_club_ratings() to authenticated;
+
+-- ── Parité delete_club (contre-lecture lot D) ───────────────────────────────────
+-- Recopie STRICTE de la version live (55, complétée à l'audit 7) + purge des tables du
+-- chantier v3 sans FK vers clubs : carnets (pass_uses part en cascade), annonces, suiveurs
+-- (81) et attentes de créneau (81) — sans ça, un club supprimé laissait des carnets « actifs »
+-- dans my_passes et des annonces fantômes.
+create or replace function public.delete_club(p_id text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'operator') then
+    return false; -- réservé à l'opérateur
+  end if;
+  delete from public.club_config where club_id = p_id;
+  delete from public.club_overrides where club_id = p_id;
+  delete from public.club_status where club_id = p_id;
+  delete from public.club_commission where club_id = p_id;
+  delete from public.club_boost where club_id = p_id;
+  delete from public.blocked_slots where club_id = p_id;
+  delete from public.blocked_ranges where club_id = p_id;
+  -- Chantier v3 : carnets (17 — pass_uses suit en cascade), annonces (20), suiveurs (81),
+  -- attentes de créneau (81). Les notes privées (blocked_slot_notes) partent déjà en cascade
+  -- avec blocked_slots ci-dessus.
+  delete from public.club_passes where club_id = p_id;
+  delete from public.club_news where club_id = p_id;
+  delete from public.club_followers where club_id = p_id;
+  delete from public.slot_waitlist where club_id = p_id;
+  -- Avis du club (les signalements liés partent en cascade) — comme promis à la confirmation.
+  delete from public.reviews where club_id = p_id;
+  -- Réservations À VENIR du club supprimé : annulées (le club disparaît — plus de planning ni de
+  -- gérant ; le webhook prévient les joueurs). On garde l'historique passé, comme delete_account.
+  -- Sans ça, des joueurs conservaient une résa « booked » confirmée dans un club fantôme.
+  update public.reservations set status = 'cancelled'
+    where club_id = p_id and status = 'booked' and starts_at > (extract(epoch from now()) * 1000)::bigint;
+  -- Ses coachs redeviennent de simples joueurs (sinon : coach fantôme, deadlock 'other_club',
+  -- demandes de cours en attente sur un club disparu).
+  update public.coaches set active = false where club_id = p_id;
+  update public.lessons set status = 'declined', responded_at = now()
+    where club_id = p_id and status = 'pending';
+  -- Multi-clubs (55) : le club disparaît des listes ; le club ACTIF de chaque gérant concerné
+  -- bascule sur un autre de ses clubs, ou il redevient joueur s'il n'en a plus.
+  delete from public.manager_clubs where club_id = p_id;
+  update public.profiles p
+    set managed_club_id = (select mc.club_id from public.manager_clubs mc where mc.user_id = p.id order by mc.created_at limit 1)
+    where p.managed_club_id = p_id;
+  update public.profiles p
+    set role = 'player', managed_club_id = null
+    where p.managed_club_id is null and p.role = 'club'
+      and not exists (select 1 from public.manager_clubs mc where mc.user_id = p.id);
+  -- Nettoyage du STOCKAGE (bucket public 'club-photos') : sans ça, cover / photos de terrain /
+  -- galerie du club supprimé restaient téléchargeables par URL indéfiniment (asymétrie avec
+  -- delete_account qui purge bien les avatars). Le 1ᵉʳ segment du chemin = l'id du club.
+  -- ⚠️ BUG PLATEFORME découvert le 2026-08-15 : Supabase a ajouté le trigger
+  -- storage.protect_delete qui REFUSE tout delete direct (même à 0 ligne) → delete_club et
+  -- delete_account échouaient EN BLOC. Opt-in délibéré via le GUC transactionnel officiel,
+  -- remis à false sitôt fait.
+  perform set_config('storage.allow_delete_query', 'true', true);
+  delete from storage.objects where bucket_id = 'club-photos' and (storage.foldername(name))[1] = p_id;
+  perform set_config('storage.allow_delete_query', 'false', true);
+  delete from public.clubs where id = p_id;
+  return true;
+end;
+$$;
+
+revoke execute on function public.delete_club(text) from public, anon;
+grant execute on function public.delete_club(text) to authenticated;
+
+-- ── delete_account : MÊME bug plateforme (storage.protect_delete) ───────────────
+-- Recopie STRICTE de la version live + le GUC d'autorisation autour de la purge d'avatar.
+-- Sans ce correctif, la SUPPRESSION DE COMPTE (exigence App Store 5.1.1) échouait en bloc
+-- depuis l'ajout du trigger par Supabase.
+create or replace function public.delete_account()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+begin
+  if uid is null then
+    raise exception 'not authenticated';
+  end if;
+  -- Photo de profil : le bucket `avatars` est PUBLIC et ne suit pas la cascade auth.users —
+  -- on l'efface ici, sinon la photo resterait téléchargeable après la suppression du compte.
+  perform set_config('storage.allow_delete_query', 'true', true);
+  delete from storage.objects
+    where bucket_id = 'avatars' and (storage.foldername(name))[1] = uid::text;
+  perform set_config('storage.allow_delete_query', 'false', true);
+  -- Réservations À VENIR : annulées AVANT la cascade (l'UPDATE déclenche le webhook → le club
+  -- est prévenu qu'un créneau se libère, au lieu d'une disparition silencieuse du planning).
+  update public.reservations
+    set status = 'cancelled'
+    where user_id = uid and status = 'booked'
+      and starts_at > (extract(epoch from now()) * 1000)::bigint;
+  -- La cascade ON DELETE efface profil, réservations, parrainages et participations ; les
+  -- messages de support et demandes de club gardent leur trace (auteur mis à NULL).
+  delete from auth.users where id = uid;
+end;
+$$;
+
+revoke execute on function public.delete_account() from public, anon;
+grant execute on function public.delete_account() to authenticated;

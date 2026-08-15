@@ -16,6 +16,7 @@ import { dateKeyLabel, nextDays, slotTimestamp } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { createGroupLesson, fetchGroupLessons, type GroupLesson } from '@/lib/groupLessons';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
+import { priceForSlot } from '@/lib/pricing';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useTodayKey } from '@/lib/useTodayKey';
 import { useApp } from '@/store/AppContext';
@@ -163,7 +164,7 @@ export default function CoachAdmin() {
     capacity: number;
     note: string;
   }): Promise<boolean> => {
-    if (!clubId) return false;
+    if (!clubId || !club) return false;
     const id = await createGroupLesson({
       clubId,
       court: input.court,
@@ -172,6 +173,9 @@ export default function CoachAdmin() {
       time: input.time,
       durationMin: input.durationMin,
       capacity: input.capacity,
+      // Prix du TERRAIN (motif request_lesson) : figé sur la résa — jamais le tarif du coach,
+      // qui se règle au coach hors app (revenu club et commission restent justes).
+      price: priceForSlot(club, input.time, input.durationMin),
       note: input.note,
     });
     if (!id) {
@@ -222,7 +226,10 @@ export default function CoachAdmin() {
 
   const now = Date.now();
   const { lessons, failed: loadFailed } = loaded;
-  const all = lessons ?? [];
+  // Les COURS COLLECTIFS (83, lesson au nom du coach : studentId = coachId) vivent dans LEUR
+  // section — sans ce filtre, chaque cours apparaissait EN DOUBLE, avec « Cours collectif »
+  // affiché comme nom d'élève dans « Cours à venir » et l'historique.
+  const all = (lessons ?? []).filter((l) => l.studentId !== l.coachId);
   const pending = all.filter((l) => l.status === 'pending' && l.startsAt > now).sort((a, b) => a.startsAt - b.startsAt);
   // Durée RÉELLE du cours (créneaux modulables 1h/1h30, 68 — coachesServer replie déjà à 1h30
   // pour une donnée héritée), pas une durée de session fixe.

@@ -34,6 +34,8 @@ export type MyGroupLesson = {
 
 // Coach actif du club : crée le cours (réservation + lesson, atomique serveur). Renvoie l'id
 // de la lesson, null = refus (pas coach, créneau fermé/pris, chevauchement, bornes) ou réseau.
+// `price` = prix du TERRAIN (priceForSlot — motif request_lesson) : reservations.price porte
+// partout le prix du terrain (revenu club, commission) — jamais le tarif du coach.
 export async function createGroupLesson(input: {
   clubId: string;
   court: string;
@@ -42,6 +44,7 @@ export async function createGroupLesson(input: {
   time: string;
   durationMin: 60 | 90;
   capacity: number;
+  price: number;
   note: string;
 }): Promise<string | null> {
   const { data, error } = await supabase.rpc('create_group_lesson', {
@@ -51,6 +54,7 @@ export async function createGroupLesson(input: {
     p_time: input.time,
     p_duration: input.durationMin,
     p_capacity: input.capacity,
+    p_price: input.price,
     p_note: input.note,
     p_date_label: input.dateLabel,
   });

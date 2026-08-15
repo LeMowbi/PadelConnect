@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Chip } from '@/components/Chip';
-import { CoachGroupLessons } from '@/components/coach/CoachGroupLessons';
+import { ClubGroupLessons } from '@/components/ClubGroupLessons';
 import { PopIn } from '@/components/PopIn';
 import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
@@ -291,7 +291,7 @@ export default function CoursScreen() {
 
         {/* Cours COLLECTIFS déjà ouverts par ce coach (19) : une place à prendre tout de suite,
             sans attendre une réponse — présenté avant le tunnel de demande individuelle. */}
-        <CoachGroupLessons clubId={club.id} coachId={coach.userId} coachName={coach.name} />
+        <ClubGroupLessons clubId={club.id} coachId={coach.userId} coachName={coach.name} />
 
         <Stepper steps={['Jour', 'Créneau', 'Terrain', 'Envoyer']} current={step} />
         <Label text="Jour" />

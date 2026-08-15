@@ -23,15 +23,19 @@ function firstName(name: string): string {
 }
 
 // Normalise le lien collé par le créateur AVANT l’appel serveur : '' = effacement, `http://`
-// promu en `https://`, schéma forcé en minuscules (le serveur exige `^https://` STRICT, 83).
-// Un lien sans schéma est refusé ICI avec un message clair — sinon le serveur répondait un
-// simple `false` et le joueur ne comprenait pas ce qu’on attendait de lui.
+// promu en `https://`, schéma forcé en minuscules. ALLOW-LIST de domaine — miroir EXACT de la
+// garde serveur (83 : `^https://(pay\.)?wave\.com/`) : ce lien est présenté à des INCONNUS
+// (match ouvert) derrière « Payer ma part », une URL quelconque serait du phishing tout cuit.
+// Refus ICI avec un message clair — sinon le serveur répondait un simple `false`.
 function normalizeWaveLink(raw: string): { link: string } | { error: string } {
   const v = raw.trim();
   if (v === '') return { link: '' }; // effacement volontaire (le serveur accepte '')
   const m = /^(https?):\/\/(.+)$/i.exec(v);
-  if (!m) return { error: 'Le lien doit commencer par https:// (ex. https://pay.wave.com/…).' };
+  if (!m) return { error: 'Colle un lien Wave complet (ex. https://pay.wave.com/…).' };
   const link = `https://${m[2]}`;
+  if (!/^https:\/\/(pay\.)?wave\.com\//i.test(link)) {
+    return { error: 'Seuls les liens Wave (pay.wave.com) sont acceptés — les autres joueurs doivent pouvoir payer en confiance.' };
+  }
   if (link.length > 300) return { error: 'Lien trop long (300 caractères maximum).' };
   return { link };
 }
