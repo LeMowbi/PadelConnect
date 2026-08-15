@@ -9,6 +9,9 @@
 --     trouve a été créé pendant les essais). Les 9 clubs FONDATEURS vivent dans le code de
 --     l'app : ils réapparaissent automatiquement, remis à leur état d'origine.
 --   • TON COMPTE OPÉRATEUR EST PRÉSERVÉ (toute ligne profiles avec role = 'operator').
+--   • ⚠️ APRÈS LE RESET, re-saisis dans l'Espace opérateur : le LIEN WAVE de paiement, le
+--     MONTANT des frais de tournoi et le texte de la RÉCOMPENSE FIDÉLITÉ — ces réglages sont
+--     effacés (section 2) pour qu'aucun réglage de TEST ne survive au lancement.
 --
 -- ⚠️ IRRÉVERSIBLE. À lancer UNE FOIS, juste avant d'ouvrir l'app au public.
 -- Comment faire, sans terminal :

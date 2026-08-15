@@ -114,7 +114,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   recoller la 68, recoller ENSUITE `69`→`84` dans l'ordre (la 68 recrée `fetch_open_matches` et la
   57 `join_open_match` : recollées seules, elles EFFACERAIENT la fourchette de niveau de la 81).
   Reste au porteur : le lien Wave (Espace opérateur), FCM Android + empreinte assetlinks.
-  (`notify-club` est déployée — v41 le 2026-08-15 : push gérant avec nom du club, favoris/alertes
+  (`notify-club` est déployée — v42 le 2026-08-15 : push gérant avec nom du club, favoris/alertes
   de niveau plafonnées à la source, liste d'attente one-shot honnête, agenda, annonces club
   jusqu'à 500 suiveurs, parts Wave, cours collectifs ; exclusion des bloqués FAIL-CLOSED, fan-out
   paginés ; HMAC temps constant.)
@@ -393,7 +393,7 @@ p_proposed_court, p_proposed_date_key, p_proposed_time, p_proposed_duration_min)
 - **SQL serveur ✅ FAIT** : `54`→`84` **tous appliqués en base** (Management API ; `65`→`77` posés/
   vérifiés 2026-07-16, `78` posée 2026-07-19, `79`→`83` posées + vérifiées 2026-08-14 : `court`
   NOT NULL anti résa-fantôme, moteur de niveau, matchs ouverts intelligents, rétention).
-  `notify-club` déployée (v41 le 2026-08-15 — push gérant AVEC nom du club, multi-clubs, favoris,
+  `notify-club` déployée (v42 le 2026-08-15 — push gérant AVEC nom du club, multi-clubs, favoris,
   alertes de niveau, liste d'attente, agenda, annonces club, parts Wave, cours collectifs ;
   HMAC temps constant). ⚠️ BUG PLATEFORME réparé le 2026-08-15 : Supabase a ajouté
   `storage.protect_delete` (delete direct interdit dans storage.objects) → `delete_account`

@@ -168,7 +168,7 @@ Deno.serve(async (req) => {
         const batch = (data ?? []) as { expo_push_token: string }[];
         for (const t of batch) if (t.expo_push_token) out.push(t.expo_push_token);
         if (batch.length < PAGE) break; // dernière page atteinte
-        if (page > 100) break; // garde-fou dur (100 000 comptes) — jamais une boucle infinie
+        if (page > 100) break; // garde-fou dur (~102 000 comptes) — jamais une boucle infinie
       }
       return out;
     };
@@ -200,7 +200,7 @@ Deno.serve(async (req) => {
     // une annulation CLUB re-bloque le créneau, cf. branche club_cancelled) → notifier les
     // inscrits dont l'attente CHEVAUCHE l'intervalle libéré (même arithmétique demi-ouverte
     // [t, t+d) que la dispo). One-shot HONNÊTE : seules les entrées des joueurs qui ONT un
-    // jeton push sont consommées — et seulement APRÈS l'envoi Expo (via waitlistConsumedIds) ;
+    // jeton push sont consommées — et seulement APRÈS l'envoi Expo (via waitlistConsumed) ;
     // un joueur sans jeton (ou un envoi en échec) garde son alerte pour la prochaine libération.
     // Jamais d'exception : un échec ici ne doit pas casser les pushes d'annulation.
     const toMin = (t: string): number => {
