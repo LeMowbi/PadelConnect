@@ -14,8 +14,12 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { ClubGroupLessons } from '@/components/ClubGroupLessons';
+import { ClubNewsSection } from '@/components/ClubNewsSection';
+import { ClubPassCard } from '@/components/ClubPassCard';
 import { ClubPhoto } from '@/components/ClubPhoto';
 import { ContactButtons } from '@/components/ContactButtons';
+import { OpenMatches } from '@/components/OpenMatches';
 import { RatingStars } from '@/components/RatingStars';
 import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
@@ -26,7 +30,7 @@ import { StickyBar } from '@/components/StickyBar';
 import { clubGallery, defaultCourts, findClub, offersForClub } from '@/data/clubs';
 import type { PriceTier } from '@/data/clubs';
 import { coaches } from '@/data/coaches';
-import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
+import { compDateLabel, isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { isPlayed, useApp } from '@/store/AppContext';
 import { canAccessClub } from '@/lib/access';
 import { courtsFor, resolvedGridFor, type ScheduleCtx } from '@/lib/availability';
@@ -42,7 +46,14 @@ import { groupTiersByLabel, minPrice, price60Of, priceTiersFor } from '@/lib/pri
 import { shareClub } from '@/lib/share';
 import { openMaps } from '@/lib/maps';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
+import { useTodayKey } from '@/lib/useTodayKey';
 import { colors, radius, spacing } from '@/theme';
+
+// Listes de la fiche (sections « hub » 22 et avis) : repliées à 3 lignes + « Voir tout ».
+const HUB_PREVIEW = 3;
+// Avis structurés (21) : les moyennes par critère n’apparaissent qu’à partir de 3 avis détaillés
+// (en dessous, une moyenne tirée d’un ou deux avis serait trompeuse). Même seuil que le plan v3.
+const STRUCTURED_MIN = 3;
 
 // Date d’un avis serveur (ISO) → libellé court FR, en UTC (comme le reste du projet — jamais
 // le fuseau de l’appareil, sinon le jour affiché peut sauter selon le fuseau du lecteur) ;
@@ -99,7 +110,16 @@ export default function ClubDetail() {
   const [replying, setReplying] = useState(false); // garde anti double-tap : publier la réponse
   const [removing, setRemoving] = useState(false); // garde anti double-tap : supprimer mon avis
   const [serverCoaches, setServerCoaches] = useState<ServerCoach[]>([]); // coachs réservables (serveur)
+  const [showAllCoaches, setShowAllCoaches] = useState(false); // « Ses coachs » replié (22)
+  const [showAllComps, setShowAllComps] = useState(false); // « Prochains tournois ici » replié (22)
+  // Notes par CRITÈRE de MON avis (21) — OPTIONNELLES : null = non renseignée (jamais 0, le
+  // serveur refuserait). Un second tap sur la même étoile efface le critère.
+  const [rCourts, setRCourts] = useState<number | null>(null);
+  const [rService, setRService] = useState<number | null>(null);
+  const [rFacilities, setRFacilities] = useState<number | null>(null);
   const { width: winW } = useWindowDimensions();
+  // Jour d’Abidjan RÉACTIF (recalé au retour au premier plan) : borne « à venir » des tournois.
+  const todayKey = useTodayKey();
 
   // Avis VÉRIFIÉS du serveur : chargés à l’ouverture (effet) et rechargés après chaque action
   // via loadReviews (fonction simple, utilisée seulement dans des handlers → pas de mémo).
@@ -225,24 +245,51 @@ export default function ClubDetail() {
   );
   // Événements du club : publications « événement » + tournois créés par le club (officiels ou non).
   const events = posts.filter((o) => o.kind === 'evenement');
-  // Tournois publics du club (les tournois joueur « en attente » de validation n’apparaissent pas).
-  const clubComps = [...state.myCompetitions, ...seedCompetitions].filter((c) => c.clubId === club.id && isTournamentPublic(c));
+  // Tournois publics du club (les tournois joueur « en attente » de validation n’apparaissent pas),
+  // À VENIR et triés par date : la fiche « hub » (22) annonce ce qui arrive, pas l’historique.
+  // Un tournoi sur PLUSIEURS jours reste listé jusqu’à son dernier jour (endDateKey).
+  const clubComps = [...state.myCompetitions, ...seedCompetitions]
+    .filter((c) => c.clubId === club.id && isTournamentPublic(c) && (c.endDateKey ?? c.dateKey) >= todayKey)
+    .sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+  const compsShown = showAllComps ? clubComps : clubComps.slice(0, HUB_PREVIEW);
   const courtCount = (state.clubCourts[club.id] ?? defaultCourts(club)).length;
   // Coachs de l'annuaire (fiches réelles gérées par le porteur) — les coachs déclarés par les
   // clubs ont TOUS un compte (Espace Coach) et arrivent via serverCoaches, réservables dans l'app.
   const clubCoaches = coaches
     .filter((c) => c.clubId === club.id && !state.hiddenCoachIds.includes(c.id))
     .map((c) => ({ id: c.id, name: c.name, sub: c.level, phone: c.phone }));
+  // « Ses coachs » (22) : liste repliée à 3 lignes AU TOTAL — les coachs réservables d’abord,
+  // l’annuaire ensuite (il complète les places restantes de l’aperçu).
+  const coachTotal = serverCoaches.length + clubCoaches.length;
+  const serverCoachesShown = showAllCoaches ? serverCoaches : serverCoaches.slice(0, HUB_PREVIEW);
+  const clubCoachesShown = showAllCoaches ? clubCoaches : clubCoaches.slice(0, Math.max(0, HUB_PREVIEW - serverCoachesShown.length));
   // Source de vérité : les avis VÉRIFIÉS du serveur (un joueur ne peut noter qu’après avoir joué),
   // MOINS ceux des comptes que j’ai bloqués (modération UGC — ils n’apparaissent plus chez moi).
   const reviews = serverReviews.filter((r) => !state.blockedUserIds.includes(r.userId));
   // Liste repliée : on n’affiche que les premiers avis, avec un bouton « Voir tout ».
-  const REVIEWS_PREVIEW = 3;
-  const reviewsShown = showAllReviews ? reviews : reviews.slice(0, REVIEWS_PREVIEW);
+  const reviewsShown = showAllReviews ? reviews : reviews.slice(0, HUB_PREVIEW);
   const ratingCount = reviews.length;
   const avgRating = ratingCount ? Math.round((reviews.reduce((s, r) => s + r.rating, 0) / ratingCount) * 10) / 10 : 0;
   // « Nouveau » = vraiment 0 avis. En cas d’échec réseau, on ne sait pas encore → repli neutre.
   const showAsNew = ratingCount === 0 && !reviewsError;
+  // Moyennes par CRITÈRE (21) — miroir EXACT de `fetch_club_ratings` (moyenne des avis ayant
+  // renseigné LE critère ; « avis structuré » = au moins un des trois), mais calculées sur les
+  // avis AFFICHÉS : auteurs bloqués exclus, comme la note globale juste au-dessus.
+  const structuredCount = reviews.filter((r) => r.ratingCourts != null || r.ratingService != null || r.ratingFacilities != null).length;
+  const avgCriterion = (pick: (r: ServerReview) => number | undefined): number | null => {
+    const vals = reviews.map(pick).filter((v): v is number => typeof v === 'number');
+    return vals.length ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10 : null;
+  };
+  // Critères MONTRÉS : ceux réellement notés, et seulement à partir de STRUCTURED_MIN avis
+  // détaillés (en dessous, la fiche n’affiche que la note globale — comme avant la 83).
+  const criteriaAvgs =
+    structuredCount >= STRUCTURED_MIN
+      ? [
+          { label: 'Terrains', avg: avgCriterion((r) => r.ratingCourts) },
+          { label: 'Accueil', avg: avgCriterion((r) => r.ratingService) },
+          { label: 'Vestiaires', avg: avgCriterion((r) => r.ratingFacilities) },
+        ].filter((c): c is { label: string; avg: number } => c.avg !== null)
+      : [];
   // Mon avis (modifiable / supprimable) et mon rôle de gérant de CE club (pour répondre).
   const myReview = state.serverUserId ? reviews.find((r) => r.userId === state.serverUserId) : undefined;
   const isManager = canAccessClub(state.role, state.serverManagedClubId, club.id);
@@ -285,6 +332,13 @@ export default function ClubDetail() {
   // résas passées à ce club). Sinon, le formulaire laisse place à une invitation à jouer.
   const hasPlayedHere = myReservations.some((r) => r.clubId === club.id && isPlayed(r));
 
+  // Rangées d’étoiles de la SAISIE (21), dans le même ordre que l’affichage des moyennes.
+  const criteriaInputs = [
+    { key: 'courts', label: 'Terrains', value: rCourts, set: setRCourts },
+    { key: 'service', label: 'Accueil', value: rService, set: setRService },
+    { key: 'facilities', label: 'Vestiaires', value: rFacilities, set: setRFacilities },
+  ];
+
   const submit = async () => {
     if (submitting) return; // garde anti double-tap (le RPC est un upsert, mais on évite 2 allers-retours)
     if (!hasPlayedHere) return; // garde-fou : pas de note sans partie jouée
@@ -294,7 +348,9 @@ export default function ClubDetail() {
     }
     setNoteError(false);
     setSubmitting(true);
-    const res = await submitReview(club.id, rating, text);
+    // Les 3 notes par critère restent FACULTATIVES : `null` = non renseignée (le serveur les
+    // ignore alors), jamais 0 — la contrainte SQL n’accepte que 1..5.
+    const res = await submitReview(club.id, rating, text, { courts: rCourts, service: rService, facilities: rFacilities });
     setSubmitting(false);
     if (!res.ok) {
       showToast(res.reason === 'not_played' ? 'Avis réservé à ceux qui ont joué ici.' : 'Envoi impossible — réessaie.', 'error');
@@ -302,6 +358,9 @@ export default function ClubDetail() {
     }
     setRating(0);
     setText('');
+    setRCourts(null);
+    setRService(null);
+    setRFacilities(null);
     setSent(true);
     hapticSuccess();
     loadReviews();
@@ -316,6 +375,11 @@ export default function ClubDetail() {
     if (!myReview) return;
     setRating(myReview.rating);
     setText(myReview.text);
+    // Notes par critère déjà données : on les repré-remplit aussi (sinon une simple correction
+    // du texte les effacerait — `submit_review` réécrit la ligne entière).
+    setRCourts(myReview.ratingCourts ?? null);
+    setRService(myReview.ratingService ?? null);
+    setRFacilities(myReview.ratingFacilities ?? null);
     setSent(false);
     showToast('Modifie ton avis ci-dessus ↑');
   };
@@ -579,6 +643,9 @@ export default function ClubDetail() {
         Tarif à confirmer auprès du club.
       </Txt>
 
+      {/* Mon carnet de séances dans CE club (17) — masqué tant que je n’en ai aucun. */}
+      <ClubPassCard clubId={club.id} />
+
       {/* Offres & actus (gérées par le club) — la carte n’apparaît que s’il y a du VRAI contenu. */}
       {offers.length > 0 ? (
         <Card style={{ marginTop: spacing.lg }}>
@@ -614,7 +681,7 @@ export default function ClubDetail() {
               {e.detail ? <Txt variant="muted">{e.detail}</Txt> : null}
             </View>
           ))}
-          {clubComps.map((c, i) => (
+          {compsShown.map((c, i) => (
             <Pressable
               key={c.id}
               onPress={() => router.push(`/competition/${c.id}`)}
@@ -627,14 +694,27 @@ export default function ClubDetail() {
                 <Txt variant="body" style={{ fontWeight: '700' }} numberOfLines={1}>
                   {c.title}
                 </Txt>
+                {/* Date DÉRIVÉE de dateKey (compDateLabel) — le libellé figé à la création
+                    (« Demain 30 ») deviendrait faux dès le lendemain. */}
                 <Txt variant="small" color={colors.textMuted}>
-                  {c.date} · {c.registered}/{c.slots} équipes{c.official ? '' : ' · amical'}
+                  {compDateLabel(c)} · {c.registered}/{c.slots} équipes{c.official ? '' : ' · amical'}
                 </Txt>
               </View>
               {c.official ? <Tag label="Officiel" tone="amber" icon="shield-checkmark" /> : null}
               <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </Pressable>
           ))}
+          {clubComps.length > HUB_PREVIEW ? (
+            <View style={{ marginTop: spacing.sm }}>
+              <Button
+                size="sm"
+                variant="ghost"
+                label={showAllComps ? 'Réduire' : `Voir tous les tournois (${clubComps.length})`}
+                icon={showAllComps ? 'chevron-up' : 'chevron-down'}
+                onPress={() => setShowAllComps((v) => !v)}
+              />
+            </View>
+          ) : null}
         </Card>
       ) : null}
 
@@ -651,7 +731,7 @@ export default function ClubDetail() {
               ? 'Réserve ton cours dans l’app : le coach accepte, le terrain est réservé, le club confirme.'
               : 'La réservation d’un cours se fait directement avec le coach.'}
           </Txt>
-          {serverCoaches.map((c, i) => (
+          {serverCoachesShown.map((c, i) => (
             <View key={c.userId}>
               {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
               <View style={[styles.coachRow, { marginTop: i === 0 ? spacing.md : 0 }]}>
@@ -678,11 +758,11 @@ export default function ClubDetail() {
               </View>
             </View>
           ))}
-          {serverCoaches.length > 0 && clubCoaches.length > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
-          {clubCoaches.map((c, i) => (
+          {serverCoachesShown.length > 0 && clubCoachesShown.length > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
+          {clubCoachesShown.map((c, i) => (
             <View key={c.id}>
               {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
-              <View style={[styles.coachRow, { marginTop: i === 0 && serverCoaches.length === 0 ? spacing.md : 0 }]}>
+              <View style={[styles.coachRow, { marginTop: i === 0 && serverCoachesShown.length === 0 ? spacing.md : 0 }]}>
                 <IconCircle icon="person" color={colors.signature} bg={colors.signatureSoft} size={38} />
                 <View style={{ flex: 1 }}>
                   <Txt variant="body" style={{ fontWeight: '600' }}>
@@ -694,6 +774,18 @@ export default function ClubDetail() {
               {c.phone ? <ContactButtons phone={c.phone} style={{ marginTop: spacing.sm }} /> : null}
             </View>
           ))}
+          {/* Aperçu replié à 3 coachs (22) — le club peut en avoir beaucoup plus. */}
+          {coachTotal > HUB_PREVIEW ? (
+            <View style={{ marginTop: spacing.sm }}>
+              <Button
+                size="sm"
+                variant="ghost"
+                label={showAllCoaches ? 'Réduire' : `Voir les ${coachTotal} coachs du club`}
+                icon={showAllCoaches ? 'chevron-up' : 'chevron-down'}
+                onPress={() => setShowAllCoaches((v) => !v)}
+              />
+            </View>
+          ) : null}
           {/* D1 : accès à l’annuaire global des coachs (la tuile du hub a été retirée). */}
           <Pressable
             onPress={() => router.push('/coachs')}
@@ -709,6 +801,15 @@ export default function ClubDetail() {
           </Pressable>
         </Card>
       ) : null}
+
+      {/* Fiche « hub » (22) : ce qui se passe DANS ce club. Chaque section se masque toute seule
+          quand elle est vide — une fiche n’affiche jamais un en-tête suivi de rien. */}
+      {/* Cours collectifs ouverts par les coachs du club (19) */}
+      <ClubGroupLessons clubId={club.id} />
+      {/* Matchs ouverts ICI (45) — mêmes cartes que l’onglet Réserver, filtrées sur ce club */}
+      <OpenMatches clubId={club.id} />
+      {/* Annonces publiées par le club (20) */}
+      <ClubNewsSection clubId={club.id} />
 
       {/* Avis */}
       <View style={{ marginTop: spacing.xl }}>
@@ -748,6 +849,31 @@ export default function ClubDetail() {
                 })}
               </View>
             </View>
+            {/* Détail par critère (21) — seulement à partir de 3 avis détaillés, et uniquement
+                pour les critères réellement notés (les anciens avis n’en ont aucun). */}
+            {criteriaAvgs.length > 0 ? (
+              <>
+                <Divider style={{ marginVertical: spacing.md }} />
+                <View style={styles.criteriaRow}>
+                  {criteriaAvgs.map((c) => (
+                    <View key={c.label} style={styles.criterion}>
+                      <Txt variant="small" color={colors.textMuted}>
+                        {c.label}
+                      </Txt>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                        <Txt variant="body" style={{ fontWeight: '700' }}>
+                          {c.avg.toFixed(1)}
+                        </Txt>
+                        <Ionicons name="star" size={12} color={colors.amber} />
+                      </View>
+                    </View>
+                  ))}
+                </View>
+                <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
+                  Moyennes sur {structuredCount} avis détaillés
+                </Txt>
+              </>
+            ) : null}
           </Card>
         ) : null}
 
@@ -788,6 +914,21 @@ export default function ClubDetail() {
                   Choisis une note d’abord
                 </Txt>
               ) : null}
+              {/* Avis structurés (21) : 3 notes FACULTATIVES qui aident les autres joueurs.
+                  Retoucher la même étoile efface le critère → on n’envoie jamais 0 au serveur. */}
+              <View style={{ marginTop: spacing.md }}>
+                <Txt variant="small" color={colors.textMuted}>
+                  Note le détail si tu veux (facultatif) — retouche une étoile pour l’effacer.
+                </Txt>
+                {criteriaInputs.map((c) => (
+                  <View key={c.key} style={styles.criterionRow}>
+                    <Txt variant="body" style={{ flex: 1 }}>
+                      {c.label}
+                    </Txt>
+                    <RatingStars value={c.value ?? 0} size={22} onChange={(v) => c.set((cur) => (cur === v ? null : v))} />
+                  </View>
+                ))}
+              </View>
               <TextInput
                 placeholder="Partage ton expérience (facultatif)…"
                 placeholderTextColor={colors.textMuted}
@@ -950,7 +1091,7 @@ export default function ClubDetail() {
                 ) : null}
               </Card>
             ))}
-            {reviews.length > REVIEWS_PREVIEW ? (
+            {reviews.length > HUB_PREVIEW ? (
               <View style={{ marginTop: spacing.sm }}>
                 <Button
                   size="sm"
@@ -1073,6 +1214,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   reviewHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
+  // Avis structurés (21) : moyennes par critère (affichage) et rangées d’étoiles (saisie).
+  criteriaRow: { flexDirection: 'row', gap: spacing.sm },
+  criterion: { flex: 1, alignItems: 'center', gap: 2 },
+  // minHeight 44 : cible tactile confortable sur toute la rangée (a11y).
+  criterionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44 },
   replyBox: {
     marginTop: spacing.sm,
     backgroundColor: colors.surfaceAlt,

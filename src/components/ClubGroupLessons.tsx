@@ -112,7 +112,12 @@ export function ClubGroupLessons({ clubId }: { clubId: string }) {
                     </Txt>
                   ) : null}
                 </View>
-                {l.mine ? (
+                {l.coachId === state.serverUserId ? (
+                  // Le coach qui a ouvert le cours : le serveur lui refuserait de « rejoindre »
+                  // (join_group_lesson → 'gone'), autant le dire clairement plutôt qu'un bouton
+                  // qui échoue. Il gère ses inscrits dans l'Espace Coach.
+                  <Tag label="Ton cours" tone="green" />
+                ) : l.mine ? (
                   <Tag label="Inscrit ✓" tone="green" />
                 ) : left === 0 ? (
                   <Tag label="Complet" tone="neutral" />
