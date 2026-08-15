@@ -21,6 +21,7 @@ import { initials, perPlayerOf } from '@/lib/format';
 import { fetchLeaderboard, type LeaderboardRow } from '@/lib/leaderboard';
 import { openWhatsApp } from '@/lib/contact';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
+import { useTodayKey } from '@/lib/useTodayKey';
 import { isBirthdayToday, parseBirthDate, zodiacFor } from '@/lib/zodiac';
 import { isPlayed, useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
@@ -136,8 +137,12 @@ export default function HomeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [state.customClubs, state.clubInfo, state.clubStatus, state.boostedClubIds],
   );
+  // `today` RÉACTIF (recalé au passage de minuit / retour au premier plan) — parité avec
+  // reserver/[clubId] & cours/[coachId] : sans lui l'accueil restait figé sur la veille au réveil
+  // (tournois « à venir » filtrés à tort, prochain match périmé). Le re-rendu qu'il déclenche
+  // recalcule aussi `now` au même passage.
+  const today = useTodayKey();
   const now = Date.now();
-  const today = dayKey(new Date());
   const competitions = [...state.myCompetitions, ...seedCompetitions]
     .filter((c) => isTournamentPublic(c) && c.dateKey >= today)
     .slice(0, 2);
@@ -914,20 +919,6 @@ const styles = StyleSheet.create({
   quickRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.xl },
   quickItem: { alignItems: 'center', gap: spacing.sm, width: '22%' },
   quickIcon: { width: 54, height: 54, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
-  quickBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 4,
-    borderRadius: radius.pill,
-    backgroundColor: colors.coral,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.surface,
-  },
   alert: {
     flexDirection: 'row',
     alignItems: 'center',

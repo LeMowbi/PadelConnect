@@ -37,6 +37,11 @@ import { useTodayKey } from '@/lib/useTodayKey';
 import { useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
+// Plafond d'alertes de créneau actives par joueur — MIROIR EXACT de la borne serveur (SQL 81,
+// join_slot_waitlist). On la reflète côté client pour un message dédié plutôt qu'un 'error'
+// affiché « Connexion impossible ».
+const MAX_WAITLIST = 20;
+
 export default function ReserverScreen() {
   const params = useLocalSearchParams<{ clubId: string; dateKey?: string; time?: string; durationMin?: string; court?: string }>();
   const router = useRouter();
@@ -313,6 +318,15 @@ export default function ReserverScreen() {
       }
       setWaitlist((cur) => (cur ?? []).filter((w) => !(w.clubId === club.id && w.dateKey === day.key && w.time === slot)));
       toast.show('Alerte retirée.');
+      return;
+    }
+    // Miroir de la borne serveur (SQL 81 : 20 alertes actives max). Sans lui, la demande de trop
+    // revenait en 'error' affiché « Connexion impossible » (message trompeur) : on refuse ICI avec
+    // un message dédié, sans toucher au serveur.
+    if ((waitlist ?? []).length >= MAX_WAITLIST) {
+      setWaitBusy(false);
+      hapticWarning();
+      toast.show('Tu as déjà trop d’alertes en attente — retires-en une avant d’en ajouter.', { icon: 'alert-circle' });
       return;
     }
     // Durée envoyée = celle du créneau. Sur un créneau COMPLET, `effectiveDuration` est null

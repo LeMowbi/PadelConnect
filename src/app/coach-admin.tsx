@@ -217,6 +217,9 @@ export default function CoachAdmin() {
       toast.show('L’élève a trop de réservations à venir — il doit en libérer avant que tu acceptes', { icon: 'alert-circle' });
     } else if (res === 'gone') {
       toast.show('Cette demande n’est plus valable (créneau passé ou annulée)', { icon: 'alert-circle' });
+    } else if (res === 'forbidden') {
+      hapticWarning();
+      toast.show('Tu n’es plus le coach de ce cours — impossible d’y répondre', { icon: 'alert-circle' });
     } else {
       hapticWarning();
       toast.show('Connexion impossible — vérifie ton réseau et réessaie', { icon: 'cloud-offline-outline' });

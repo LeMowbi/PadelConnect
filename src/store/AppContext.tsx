@@ -1762,10 +1762,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const res = state.reservations.find((r) => r.id === id);
         // Serveur d’abord (si connecté et résa serveur) : on n’efface le miroir qu’au succès.
         // La fonction serveur refuse l’annulation à moins de 5h (règle non contournable).
+        // Garde d'époque (comme clubCancelReservation) : une déconnexion / bascule de compte
+        // pendant l'aller-retour RPC ne doit pas muter le miroir du compte sorti.
+        const epoch = sessionEpochRef.current;
         if (state.serverUserId && res) {
           const ok = await cancelReservationRow(id);
           if (!ok) return false; // refus serveur (délai 5h) ou réseau → on ne ment pas à l’UI
         }
+        if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps
         void cancelMatchReminder(id); // on retire son rappel local
 
         setState((s) => ({
@@ -1784,8 +1788,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // et l’occupation correspondante, comme pour une annulation. false si refusé.
       markNoShow: async (id) => {
         const res = state.reservations.find((r) => r.id === id);
+        // Garde d'époque (comme clubCancelReservation) : bascule de compte / déconnexion pendant
+        // l'aller-retour RPC ne doit pas muter le miroir du compte sorti.
+        const epoch = sessionEpochRef.current;
         const ok = await markNoShowRow(id, true);
-        if (!ok) return false;
+        if (!ok || sessionEpochRef.current !== epoch) return false;
         setState((s) => ({
           ...s,
           reservations: s.reservations.filter((r) => r.id !== id),
@@ -1995,6 +2002,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // et ceux des joueurs dès la moindre coupure réseau.
       addClubPhoto: async (clubId, uri) => {
         if (!uri) return false;
+        // Garde d'époque (comme setBoost/clubCancelReservation) : upload + écriture config sont
+        // des allers-retours réseau — une bascule de compte / déconnexion entre-temps ne doit pas
+        // injecter la photo dans le miroir du compte sorti.
+        const epoch = sessionEpochRef.current;
         const existing = state.clubPhotos[clubId] ?? [];
         // Plafond pour éviter de dépasser le quota de stockage local (perte de photos).
         if (existing.length >= MAX_CLUB_PHOTOS) return false;
@@ -2017,42 +2028,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const ok = await writeClubConfig(clubId, { photos: next });
           if (!ok) return false;
         }
+        if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps
         setState((s) => ({ ...s, clubPhotos: { ...s.clubPhotos, [clubId]: next } }));
         return true;
       },
       removeClubPhoto: async (clubId, uri) => {
+        // Garde d'époque : l'écriture config est un aller-retour réseau (motif addClubPhoto).
+        const epoch = sessionEpochRef.current;
         const next = (state.clubPhotos[clubId] ?? []).filter((x) => x !== uri);
         if (state.serverUserId) {
           const ok = await writeClubConfig(clubId, { photos: next });
           if (!ok) return false;
           void removeClubPhotoFile(uri); // best-effort : retire aussi le fichier du Storage
         }
+        if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps
         setState((s) => ({ ...s, clubPhotos: { ...s.clubPhotos, [clubId]: next } }));
         return true;
       },
       addClubOffer: async (clubId, kind, title, detail) => {
         const t = title.trim();
         if (!t) return false;
+        // Garde d'époque : l'écriture config est un aller-retour réseau (motif addClubPhoto).
+        const epoch = sessionEpochRef.current;
         const next = [{ id: uid(), kind, title: t, detail: detail.trim() }, ...(state.clubOffers[clubId] ?? [])];
         if (state.serverUserId) {
           const ok = await writeClubConfig(clubId, { offers: next });
           if (!ok) return false;
         }
+        if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps
         setState((s) => ({ ...s, clubOffers: { ...s.clubOffers, [clubId]: next } }));
         return true;
       },
       removeClubOffer: async (clubId, id) => {
+        // Garde d'époque : l'écriture config est un aller-retour réseau (motif addClubPhoto).
+        const epoch = sessionEpochRef.current;
         const next = (state.clubOffers[clubId] ?? []).filter((o) => o.id !== id);
         if (state.serverUserId) {
           const ok = await writeClubConfig(clubId, { offers: next });
           if (!ok) return false;
         }
+        if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps
         setState((s) => ({ ...s, clubOffers: { ...s.clubOffers, [clubId]: next } }));
         return true;
       },
       // Photo « de profil » du club : uploadée si locale (comme addClubPhoto), puis enregistrée
       // dans la config serveur. null = retirer ('' côté serveur — cf. 38_coaches_lessons.sql).
       setClubCover: async (clubId, uri) => {
+        // Garde d'époque : upload + écriture config sont des allers-retours réseau (motif addClubPhoto).
+        const epoch = sessionEpochRef.current;
         const previous = state.clubCovers[clubId];
         let finalUrl = uri;
         if (uri && state.serverUserId && !/^https?:\/\//.test(uri)) {
@@ -2065,6 +2088,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // L’ancienne cover uploadée ne sert plus à rien → suppression best-effort du fichier.
           if (previous && previous !== finalUrl) void removeClubPhotoFile(previous);
         }
+        if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps
         setState((s) => {
           const covers = { ...s.clubCovers };
           if (finalUrl) covers[clubId] = finalUrl;
@@ -2076,6 +2100,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Une photo PAR TERRAIN : la carte complète { terrain: url } est réécrite côté serveur
       // (retirer un terrain = renvoyer la carte sans lui).
       setClubCourtPhoto: async (clubId, court, uri) => {
+        // Garde d'époque : upload + écriture config sont des allers-retours réseau (motif addClubPhoto).
+        const epoch = sessionEpochRef.current;
         const current = state.clubCourtPhotos[clubId] ?? {};
         const previous = current[court];
         let finalUrl = uri;
@@ -2091,6 +2117,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (!ok) return false;
           if (previous && previous !== finalUrl) void removeClubPhotoFile(previous);
         }
+        if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps
         setState((s) => ({ ...s, clubCourtPhotos: { ...s.clubCourtPhotos, [clubId]: next } }));
         return true;
       },
@@ -2480,10 +2507,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return true;
       },
       unblockSlot: async (clubId, dateKey, time, court) => {
+        // Garde d'époque (comme blockSlot) : bascule de compte / déconnexion pendant l'aller-retour
+        // RPC ne doit pas muter le miroir du compte sorti.
+        const epoch = sessionEpochRef.current;
         if (state.serverUserId) {
           const ok = await unblockSlotRow(clubId, dateKey, time, court);
           if (!ok) return false;
         }
+        if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps
         setState((s) => ({
           ...s,
           blockedSlots: s.blockedSlots.filter(

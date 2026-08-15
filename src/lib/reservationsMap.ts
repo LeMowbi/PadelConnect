@@ -26,6 +26,8 @@ export type Row = {
   club_confirmed: boolean | null;
   open_match: boolean | null; // match ouvert (45) — rejoignable par les autres joueurs
   open_level: string | null;
+  open_level_min: number | null; // fourchette de niveau (81) — null = ouvert à tous
+  open_level_max: number | null;
   open_capacity: number | null; // 2 = 1v1 · 4 = 2v2 (v2)
   status: string | null; // 'booked' | 'cancelled' | 'no_show' | 'club_cancelled' (75)
   cancel_reason: string | null; // motif d'une annulation par le club (75)
@@ -63,6 +65,10 @@ export function rowToReservation(row: Row): Reservation {
     clubConfirmed: row.club_confirmed ?? false,
     openMatch: row.open_match ?? false,
     openLevel: row.open_level ?? undefined,
+    // Fourchette de niveau (81) — écrite à l'insert d'un match ouvert, remappée ici pour que le
+    // miroir client la porte (affichage/filtre) au lieu de la perdre à la relecture.
+    openLevelMin: row.open_level_min == null ? null : Number(row.open_level_min),
+    openLevelMax: row.open_level_max == null ? null : Number(row.open_level_max),
     openCapacity: row.open_capacity ?? undefined,
     // Annulation par le CLUB (75) : motif + proposition d'alternative, portés par le même canal que
     // les annulées (fetchCancelledReservations fait select *). Absents = annulation joueur normale.

@@ -5,7 +5,16 @@
 // DIVERSITÉ des partenaires (jamais deux fois le même quand la rotation est complète),
 // classement/podium exacts, et robustesse des saisies de score (rien ne fait sauter le tableau).
 
-import { type AmericanoRound, type AmericanoScore, buildRounds, normalizePlayers, podium, standings } from '../src/lib/americano.ts';
+import {
+  type AmericanoRound,
+  type AmericanoScore,
+  type AmericanoState,
+  buildRounds,
+  normalizePlayers,
+  podium,
+  safeAmericano,
+  standings,
+} from '../src/lib/americano.ts';
 
 let failed = 0;
 const check = (cond: boolean, msg: string) => {
@@ -213,6 +222,39 @@ check(pod.first === 'Ali' && pod.second === 'Cyr' && pod.third === 'Dan', 'podiu
 const small = podium(standings(['Ali', 'Bob'], [], []));
 check(small.first === 'Ali' && small.second === 'Bob' && small.third === undefined, 'moins de 3 classés ⇒ 3ᵉ place vide');
 check(Object.keys(podium([])).length === 0, 'classement vide ⇒ podium vide');
+
+// ── safeAmericano : garde de LECTURE d'un état serveur (jsonb faiblement typé) ──────────
+// Un état forgé difforme ne doit jamais entrer dans l'app (il ferait planter la fiche du tournoi
+// chez tous les spectateurs) : safeAmericano renvoie undefined dès qu'une pièce manque ou a le
+// mauvais type, et l'état intact tel quel.
+console.log('\n— safeAmericano (garde de lecture) —');
+const validState: AmericanoState = {
+  players: ['Awa', 'Yann', 'Bob', 'Cyr'],
+  courts: 1,
+  rounds: [{ round: 1, matches: [{ courtIndex: 0, teamA: ['Awa', 'Bob'], teamB: ['Yann', 'Cyr'] }], resting: [] }],
+  scores: [{ round: 1, courtIndex: 0, scoreA: 24, scoreB: 10 }],
+};
+check(safeAmericano(validState) === validState, 'état valide accepté (renvoyé tel quel)');
+check(safeAmericano(undefined) === undefined, 'undefined ⇒ rejeté (pas d’americano)');
+check(safeAmericano([validState]) === undefined, 'un TABLEAU au lieu d’un objet ⇒ rejeté');
+// Clé manquante : sans `courts`, l'état est incomplet.
+const { courts: _c, ...noCourts } = validState;
+check(safeAmericano(noCourts) === undefined, 'clé manquante (courts absent) ⇒ rejeté');
+// Type faux : `players` doit être un tableau de chaînes, pas de nombres.
+check(safeAmericano({ ...validState, players: [1, 2, 3] }) === undefined, 'type faux (players non-chaînes) ⇒ rejeté');
+// Type faux plus profond : un score dont scoreA n'est pas un nombre.
+check(
+  safeAmericano({ ...validState, scores: [{ round: 1, courtIndex: 0, scoreA: '24', scoreB: 10 }] }) === undefined,
+  'type faux imbriqué (score non numérique) ⇒ rejeté',
+);
+// Équipe malformée (un seul joueur au lieu de deux) dans un match.
+check(
+  safeAmericano({
+    ...validState,
+    rounds: [{ round: 1, matches: [{ courtIndex: 0, teamA: ['Awa'], teamB: ['Yann', 'Cyr'] }], resting: [] }],
+  }) === undefined,
+  'équipe malformée (1 joueur) ⇒ rejeté',
+);
 
 console.log(`\n${failed === 0 ? 'TOUS LES TESTS AMERICANO PASSENT.' : `${failed} ÉCHEC(S).`}`);
 process.exit(failed === 0 ? 0 : 1);

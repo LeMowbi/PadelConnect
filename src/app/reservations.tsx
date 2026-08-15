@@ -96,6 +96,7 @@ export default function ReservationsScreen() {
   const [leftIds, setLeftIds] = useState<string[]>([]);
   const [openOverride, setOpenOverride] = useState<Record<string, boolean>>({});
   const [matchBusy, setMatchBusy] = useState<string | null>(null);
+  const [respondingId, setRespondingId] = useState<string | null>(null); // garde anti double-tap (Accepter/Refuser une invitation)
 
   // ANNULÉES : une réservation annulée reste VISIBLE ici (section dédiée, badge « Annulée »)
   // au lieu de disparaître en silence (demande porteur). Le serveur garde la trace
@@ -288,7 +289,10 @@ export default function ReservationsScreen() {
   // joueur en envoie un en un tap sur WhatsApp. Modèles PURS dans src/lib/matchMessages.ts.
 
   const respond = async (r: Reservation, accept: boolean) => {
+    if (respondingId) return;
+    setRespondingId(r.id);
     const ok = await respondInvitation(r.id, accept);
+    setRespondingId(null);
     if (ok) {
       if (accept) hapticSuccess();
       toast.show(accept ? 'Invitation acceptée ✓' : 'Invitation refusée');
@@ -450,9 +454,23 @@ export default function ReservationsScreen() {
               <Divider style={{ marginVertical: spacing.md }} />
               <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>
-                  <Button size="sm" label="J’accepte" icon="checkmark" onPress={() => respond(r, true)} full />
+                  <Button
+                    size="sm"
+                    label="J’accepte"
+                    icon="checkmark"
+                    onPress={() => respond(r, true)}
+                    disabled={respondingId !== null}
+                    full
+                  />
                 </View>
-                <Button size="sm" label="Refuser" icon="close" variant="ghost" onPress={() => respond(r, false)} />
+                <Button
+                  size="sm"
+                  label="Refuser"
+                  icon="close"
+                  variant="ghost"
+                  onPress={() => respond(r, false)}
+                  disabled={respondingId !== null}
+                />
               </View>
             </Card>
           ))}

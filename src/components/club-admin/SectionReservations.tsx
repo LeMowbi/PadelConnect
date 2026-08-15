@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { BarChart } from '@/components/BarChart';
 import { useToast } from '@/components/Toast';
@@ -24,6 +24,7 @@ import { fcfa } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
 import { confirmAsync } from '@/lib/confirm';
 import { hapticLight, hapticSuccess, hapticWarning } from '@/lib/haptics';
+import { useTodayKey } from '@/lib/useTodayKey';
 import { clubUsePass, fetchClubPasses, fetchPassUses } from '@/lib/passes';
 import {
   blockRecurringRows,
@@ -134,6 +135,9 @@ export function SectionReservations({
     };
   }, [club.id]);
 
+  // `todayKey` recale le planning après minuit (retour au premier plan) — parité avec
+  // AgendaEditor/coach-admin. Le re-rendu qu'il déclenche rafraîchit aussi `now` (Date.now()).
+  const todayKey = useTodayKey();
   const now = Date.now();
   const clubRes = state.reservations.filter((r) => r.clubId === club.id);
 
@@ -279,7 +283,9 @@ export function SectionReservations({
   const clubRanges = state.blockedRanges.filter((r) => r.clubId === club.id).sort((a, b) => a.dateFrom.localeCompare(b.dateFrom));
 
   // Planning par TERRAIN pour un jour donné — chaque terrain a SA grille (1h/1h30, 68).
-  const week = nextDays(7);
+  // Recalé après minuit (todayKey) : `week` démarre AUJOURD'HUI, il ne doit pas rester sur la veille.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const week = useMemo(() => nextDays(7), [todayKey]);
   const courts = courtsFor(club, state.clubCourts);
   // Grille EFFECTIVE de chaque terrain (courtSlots par terrain si réglée, sinon dérivée de la
   // grille club unique) : source de vérité unique pour le planning, les stats et QuickBlock/

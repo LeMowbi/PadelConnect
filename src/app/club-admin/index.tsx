@@ -14,6 +14,7 @@ import { SectionReservations } from '@/components/club-admin/SectionReservations
 import { SectionTournois } from '@/components/club-admin/SectionTournois';
 import { clubsByName, findClub, manageableClubs, type Club } from '@/data/clubs';
 import { canSeeClubSpace } from '@/lib/access';
+import { BLOCK_REASONS, CLUB_TYPES } from '@/lib/clubConstants';
 import { fetchMyManagedClubs, switchManagedClub } from '@/lib/clubsServer';
 import { americanoPodiumTeams, seedCompetitions } from '@/data/competitions';
 import { competitionBlockedCourts, courtsFor, hasFullDayCompetition, rangeBlocks, resolvedGridFor } from '@/lib/availability';
@@ -22,13 +23,11 @@ import { openWhatsApp } from '@/lib/contact';
 import { dateKeyLabel, slotTimestamp } from '@/lib/days';
 import { fetchBlockedSlotNotes } from '@/lib/reservations';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
+import { useTodayKey } from '@/lib/useTodayKey';
 import { isPlayed, useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
 const SECTIONS = ['Réservations', 'Mon club', 'Tournois'] as const;
-// Motifs de blocage d’un créneau hors app (repris dans le bottom sheet de détail créneau).
-const BLOCK_REASONS = ['Résa téléphone/WhatsApp', 'Entretien', 'Privatisé', 'Autre'];
-const CLUB_TYPES: Club['type'][] = ['Couvert', 'Extérieur', 'Mixte'];
 // Guide de démarrage fermé (drapeau local persistant — pas une donnée serveur).
 const GUIDE_SEEN_KEY = 'padelco_club_guide_seen';
 // Les 4 gestes essentiels d'un gérant — un club non rodé qui les ignore crée des doublons
@@ -118,7 +117,10 @@ export default function ClubAdmin() {
       ? `${state.account?.firstName ?? 'Toi'} & ${state.compRegistrations[closingComp.id].partner}`
       : undefined;
 
-  // Données du bottom sheet de détail créneau.
+  // Données du bottom sheet de détail créneau. useTodayKey force un re-rendu au passage de minuit
+  // (retour au premier plan) → `now` (compteur « à confirmer », gardes de créneau passé) ne reste
+  // pas figé sur la veille — parité avec le planning (SectionReservations).
+  useTodayKey();
   const now = Date.now();
   const clubRes = state.reservations.filter((r) => r.clubId === club.id);
   // Réservations à venir en attente de confirmation → rappel visible depuis tous les onglets.

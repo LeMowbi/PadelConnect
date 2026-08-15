@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Chip } from '@/components/Chip';
 import { Button, Card, Txt } from '@/components/ui';
 import { type Club, type PriceTier } from '@/data/clubs';
+import { CLUB_TYPES } from '@/lib/clubConstants';
 import { PRICE_MAX, PRICE_MIN, validateTiers } from '@/lib/pricing';
 import { minutesToSlot } from '@/lib/slots';
 import { type ClubInfo } from '@/store/AppContext';
@@ -13,8 +14,6 @@ import { colors, radius, spacing } from '@/theme';
 // `price` = prix 1h30 (obligatoire dès que la plage est renseignée), `price60` = prix 1h
 // (optionnel — dérivé côté pricing.ts si vide, aux ⅔ du prix 1h30).
 type TierRow = { start: string; end: string; price: string; price60: string; label: string };
-
-const CLUB_TYPES: Club['type'][] = ['Couvert', 'Extérieur', 'Mixte'];
 
 function emptyTiers(club: Club): TierRow[] {
   const seed = (club.priceTiers ?? []).map((t) => ({

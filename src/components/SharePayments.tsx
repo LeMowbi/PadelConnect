@@ -32,7 +32,11 @@ function normalizeWaveLink(raw: string): { link: string } | { error: string } {
   if (v === '') return { link: '' }; // effacement volontaire (le serveur accepte '')
   const m = /^(https?):\/\/(.+)$/i.exec(v);
   if (!m) return { error: 'Colle un lien Wave complet (ex. https://pay.wave.com/…).' };
-  const link = `https://${m[2]}`;
+  // Schéma ET host forcés en minuscules : la garde serveur `^https://(pay\.)?wave\.com/` (83) est
+  // SENSIBLE à la casse — sans ça un `https://Pay.Wave.com/x` passait ce miroir client (champ « vert »)
+  // puis se faisait refuser au serveur (le host, contrairement au chemin, est insensible à la casse
+  // côté DNS : le minusculer ne change pas la cible du lien).
+  const link = `https://${m[2]}`.replace(/^https:\/\/[^/]+/, (h) => h.toLowerCase());
   if (!/^https:\/\/(pay\.)?wave\.com\//i.test(link)) {
     return { error: 'Seuls les liens Wave (pay.wave.com) sont acceptés — les autres joueurs doivent pouvoir payer en confiance.' };
   }

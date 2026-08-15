@@ -109,6 +109,17 @@ export default function Operateur() {
     const { ok } = await operatorSetClubStatus(clubId, current ? 'active' : 'coming_soon');
     if (!ok) toast.show('Changement impossible — réessaie', { icon: 'alert-circle' });
   };
+  // Clubs démo (locaux, !fromServer) : approbation/refus purement locaux (setState du store, pas
+  // d'aller-retour serveur donc jamais d'échec réseau). On donne quand même un RETOUR visible —
+  // comme toggleClubStatus — au lieu d'un tap muet qui laissait douter que l'action ait pris.
+  const approveDemoClub = (id: string, name: string) => {
+    approveClub(id);
+    toast.show(`${name} activé ✅`);
+  };
+  const rejectDemoClub = (id: string, name: string) => {
+    rejectClub(id);
+    toast.show(`${name} refusé`);
+  };
   // Boost serveur (visible par tous) : on prévient si l’écriture échoue. Garde in-flight —
   // `setBoost` écrit une expiration ABSOLUE, donc enchaîner « 30 j » puis « Arrêter » sans
   // attendre pouvait faire arriver les deux RPC dans le désordre et laisser le club boosté
@@ -1352,9 +1363,9 @@ export default function Operateur() {
                   {c.status === 'pending' ? (
                     <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
                       <View style={{ flex: 1 }}>
-                        <Button size="sm" label="Activer le club" icon="checkmark" onPress={() => approveClub(c.id)} full />
+                        <Button size="sm" label="Activer le club" icon="checkmark" onPress={() => approveDemoClub(c.id, c.name)} full />
                       </View>
-                      <Button size="sm" label="Refuser" icon="close" variant="danger" onPress={() => rejectClub(c.id)} />
+                      <Button size="sm" label="Refuser" icon="close" variant="danger" onPress={() => rejectDemoClub(c.id, c.name)} />
                     </View>
                   ) : null}
                 </Card>

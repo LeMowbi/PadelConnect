@@ -3,12 +3,10 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Chip } from '@/components/Chip';
 import { Button, Card, Txt } from '@/components/ui';
+import { BLOCK_REASONS } from '@/lib/clubConstants';
 import { durationLabel, openCourtSlots, type CourtSlot } from '@/lib/courtSchedule';
 import { slotTimestamp } from '@/lib/days';
 import { colors, radius, spacing } from '@/theme';
-
-// Motifs de blocage d’un créneau hors app.
-const BLOCK_REASONS = ['Résa téléphone/WhatsApp', 'Entretien', 'Privatisé', 'Autre'];
 
 // Mini-formulaire « Bloquer un créneau » : date → TERRAIN → un de SES créneaux (heure + durée,
 // 1h/1h30) → motif. Le terrain est choisi AVANT le créneau (68) : chaque terrain a sa propre

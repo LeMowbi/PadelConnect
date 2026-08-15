@@ -8,6 +8,7 @@ import { clubs } from '@/data/clubs';
 import { americanoPodiumTeams, seedCompetitions, teamsToShow, formatFee } from '@/data/competitions';
 import { coaches } from '@/data/coaches';
 import { minPrice, priceTiersFor } from '@/lib/pricing';
+import { weeklyStreak } from '@/store/helpers';
 
 let failed = 0;
 const check = (cond: boolean, msg: string) => {
@@ -106,6 +107,29 @@ const amPromo = americanoPodiumTeams({ ...amComp, teamNames: ['Awa & Bob', 'Yann
 check(
   amPromo.first === 'Awa & Bob' && amPromo.second === 'Yann & Cyr',
   'americanoPodiumTeams : promotion — l’équipe suivante monte quand le duo de tête truste les 2 premières places',
+);
+
+// ── weeklyStreak (helpers.ts, pur) : série de semaines calendaires consécutives jouées ──────
+// Bundlé ici (esbuild résout @/ ; helpers.ts n'importe en runtime que @/lib/days, pur) car les
+// tests node --strip-types ne résolvent pas l'alias @/. Une semaine EN COURS vide ne casse pas la
+// série (elle n'est pas finie), un TROU dans une semaine passée la casse.
+const WEEK_MS = 7 * 86400000;
+const streakNow = Date.UTC(2026, 7, 15, 12, 0, 0); // repère fixe (samedi 15 août 2026)
+check(weeklyStreak([], streakNow) === 0, 'weeklyStreak : aucune partie ⇒ série 0');
+// Semaine courante VIDE mais les 2 précédentes jouées : la série remonte depuis la semaine passée.
+check(
+  weeklyStreak([streakNow - WEEK_MS, streakNow - 2 * WEEK_MS], streakNow) === 2,
+  'weeklyStreak : semaine courante vide ne casse pas — série = 2 (2 semaines passées consécutives)',
+);
+// Série pleine : semaine courante + 2 précédentes jouées.
+check(
+  weeklyStreak([streakNow, streakNow - WEEK_MS, streakNow - 2 * WEEK_MS], streakNow) === 3,
+  'weeklyStreak : 3 semaines consécutives (courante incluse) ⇒ série 3',
+);
+// TROU : semaine courante et 2 semaines avant jouées, mais PAS la semaine passée → la série s'arrête à 1.
+check(
+  weeklyStreak([streakNow, streakNow - 2 * WEEK_MS], streakNow) === 1,
+  'weeklyStreak : un trou (semaine passée non jouée) casse la série ⇒ 1',
 );
 
 console.log(failed === 0 ? '\nTOUTES LES DONNÉES SEEDS SONT COHÉRENTES.' : `\n${failed} incohérence(s) seeds.`);
