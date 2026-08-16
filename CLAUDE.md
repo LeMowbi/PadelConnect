@@ -130,8 +130,10 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `84` (voir dossier `supabase/`) — **toutes
-  appliquées en base** (`65`→`84` vérifiées via l'API Management ; `84` durcissement privilèges —
+  **SQL Editor → Run**. Migrations actuelles : `02` → `88` (voir dossier `supabase/`) — **toutes
+  appliquées en base** (`85`→`88` posées + prouvées via l'API Management le 2026-08-16 — intégrité
+  du cycle de vie, régressions tours 3-5, mark_no_show texte, fenêtre des parts Wave ;
+  `65`→`84` vérifiées via l'API Management ; `84` durcissement privilèges —
   anon fermé sur toutes les RPC SECURITY DEFINER sauf `phone_available`, prouvé en base ; `83` club & monétisation
   prouvée 39/39 assertions live ; `75` annulation club, `76` sync
   cours↔annulation club, `77` garde atomique club_cancel, `78` motif `blocked_slots.reason` GÉNÉRIQUE
@@ -669,6 +671,20 @@ update` AVANT l'UPDATE, patron 73/M4, course rejouée → joiner préservé) + 1
   version 44, `verify_jwt` préservé). Le porteur n'a RIEN à coller.
   Le tour 6 client (auditeur interrompu par la limite de session) est relancé ; la boucle continue
   jusqu'au tour blanc complet.
+- **Tour 6 (fin)** : 1 MEDIUM client — le toggle « Match ouvert/privé » non figé pendant le submit
+  (2 voies) → gardé ; balayage de clôture : TOUS les états lus par les écrans de succès sont figés,
+  gardés ou non consommés (classe fermée). Lens frais (OpenMatches, classement, statistiques,
+  RecurringForm, AgendaSection, coach-admin, ClubPassesCard) : rien.
+- **Tour 7 (gate)** : le traçage exhaustif a exhumé le RENDU INTERMÉDIAIRE du submit (addReservation
+  pousse le miroir PUIS attend linkParticipants) → 2 MEDIUM fermés : voie rapide qui basculait en
+  « Plus aucun terrain libre » + fermetures actives pendant l'envoi (risque de double résa perçue
+  comme un échec → `requestClose` gardé, bascule exclue du submit) ; tunnel qui affichait « Complet »
+  + cloche pendant sa propre résa (alerte jamais nettoyée → `slotFull` exclut `submitting`, toggle
+  gardé). Lens libre (SQL 80-84 froid, libs, amis/accueil/compétition/club, site.js, docs) : AUCUN
+  HIGH/MEDIUM ; 2 LOW fermés — SQL **`88`** (fenêtre des parts Wave close à la FIN du match, aligne
+  le code sur le contrat annoncé ; posée + prouvée 4/4 en base) et le §8 recalé (02→88).
+  Résiduel assumé : bouton retour du tunnel pendant le submit = écran de succès perdu, jamais
+  d'affichage faux (instantané `booked`).
 
 ## 11. Où regarder
 
