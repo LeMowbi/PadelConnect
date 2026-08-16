@@ -200,14 +200,13 @@ export function BookingSheet({
       toast.show('Ce créneau vient d’être fermé par le club — choisis un autre horaire.', { icon: 'alert-circle' });
       onClose();
     } else {
-      // Terrain pris entre-temps (autre joueur / conflit serveur) : on repropose un autre
-      // terrain libre et on prévient (retour tactile comme sur la fiche club).
+      // Terrain pris entre-temps (autre joueur / conflit serveur). MÊME geste que le tunnel :
+      // on désélectionne et on laisse choisir sur la dispo FRAÎCHE (addReservation a resync
+      // l'occupation) — le `free` de CETTE closure est périmé, en proposer un « libre » ou
+      // affirmer « plus aucun » depuis lui pouvait mentir le temps d'une course.
       hapticWarning();
-      const alt = free.find((c) => c !== court) ?? null;
-      setCourt(alt);
-      toast.show(alt ? 'Ce terrain vient d’être pris — réessaie' : 'Plus aucun terrain libre à cet horaire', {
-        icon: 'alert-circle',
-      });
+      setCourt(null);
+      toast.show('Ce terrain vient d’être pris — choisis-en un autre', { icon: 'alert-circle' });
     }
   };
 

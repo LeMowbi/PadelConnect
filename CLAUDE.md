@@ -685,6 +685,16 @@ update` AVANT l'UPDATE, patron 73/M4, course rejouée → joiner préservé) + 1
   le code sur le contrat annoncé ; posée + prouvée 4/4 en base) et le §8 recalé (02→88).
   Résiduel assumé : bouton retour du tunnel pendant le submit = écran de succès perdu, jamais
   d'affichage faux (instantané `booked`).
+- **Tour 9 (gate ultime) — CONVERGENCE ✅** : les 3 correctifs du tour 8 prouvés sains sur pièces
+  (aucun doublon de clé, trigger 89 correct et NÉCESSAIREMENT security definer — RLS slot_waitlist
+  n'a qu'une policy SELECT —, fenêtre 88 cohérente et STRICTEMENT plus large que ce que l'UI
+  expose : rien d'affiché ne peut mentir). Unique constat : 1 LOW cosmétique ANTÉRIEUR (toast
+  « réessaie » de la voie rapide dérivé d'une closure périmée) → fermé en harmonisant sur le geste
+  du tunnel (`setCourt(null)` + « choisis-en un autre », dispo fraîche). Trajectoire de la campagne :
+  HIGH (t4) → MEDIUM (t5-7) → LOW (t8) → cosmétique préexistant (t9) : l'audit a convergé.
+  Affordance résiduelle assumée (préexistante, honnête) : le créateur ne peut plus CONFIRMER une
+  part via l'UI après la fin du match (la carte quitte « À venir ») alors que confirm_share_paid
+  reste ouvert — rien d'affiché n'est faux ; améliorable plus tard si le porteur le souhaite.
 - **Tour 8 (vérification finale des correctifs du tour 7)** : AUCUN HIGH/MEDIUM — 3 LOW fermés :
   la puce du terrain choisi reste visible en tête pendant le submit (elle disparaissait dès que le
   miroir la retirait de `free`, dernier terrain ou pas) ; SQL **`89`** (trigger serveur : réserver un
