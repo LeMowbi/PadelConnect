@@ -632,8 +632,28 @@ Nouvel audit adversarial de TOUT (app/serveur/SQL/site/config/docs), Fable (sens
   harmonisé, BlockRangeForm `useTodayKey`).
 - L1 « add_friend_by_phone mort » = DÉJÀ retiré par la 30 ; L2 « portée player_reliability » = DÉJÀ
   club-scopée en base → aucun des deux ne nécessite d'action.
-- **Reste porteur (audit)** : coller `86` (SQL Editor → Run) + redéployer notify-club (v44) — voir
-  Dashboard → Edge Functions → notify-club → Edit → Deploy. Puis le tour 4 de l'audit continue.
+- **Tour 4** (4 auditeurs adversariaux frais, Fable SQL+edge / Opus client+contrat) :
+  - 🔴 **HIGH corrigé dans la 86** : le correctif R1 utilisait un `UPDATE … FROM LATERAL (…)` qui NE
+    PEUT PAS référencer la table cible `r` (Postgres : « invalid reference to FROM-clause entry ») ;
+    `create or replace` acceptait le corps sans le valider → delete_account aurait échoué à CHAQUE
+    appel une fois la 86 collée (exigence App Store 5.1.1). Réécrit en table dérivée auto-jointe sur
+    `id`. **PROUVÉ sur Postgres 16.13 local** (5 cas ; l'ancien -1 donnait le bug R1, le neuf est bon).
+  - notify-club **v45** : parité COACH au rétablissement d'un cours (régression v44 : seul l'élève
+    était prévenu) ; `club_news` passé FAIL-CLOSED sur l'exclusion des bloqués ; dédup `favorite_players`
+    de l'alerte niveau bornée (order+limit 100) + fail-closed. ⚠️ **à REDÉPLOYER**.
+  - SQL **`87`** : `mark_no_show` renvoie un TEXTE ('ok'/'played'/'gone'/'taken'/'forbidden') au lieu
+    d'un booléen → le gérant a un message HONNÊTE quand le refus est légitime (match déjà joué et noté,
+    85 C6) au lieu de « réessaie » à l'infini. **PROUVÉ 6/6 sur Postgres 16.13 local**. ⚠️ **à coller
+    APRÈS la 86**. Client aligné (`NoShowStatus`, messages dédiés).
+  - Client : garde anti-course pendant le submit (équipe/format figés → le récap ne diverge plus de
+    la résa enregistrée), voie rapide + tunnel.
+  - Décision : `mark_no_show(false)` + résurrection C3 (85) + push « cours rétabli » (v44/v45) sont
+    une CAPACITÉ DÉFENSIVE (aucun bouton « Annuler l'absence » aujourd'hui — la transition no_show→booked
+    n'est atteignable que par correction directe en base) ; l'auditeur l'a jugée non-défaut. Bouton
+    d'annulation d'absence = amélioration OPTIONNELLE possible plus tard si le porteur le souhaite.
+- **Reste porteur (audit)** : coller `86` (corrigée) PUIS `87` (SQL Editor → Run, dans l'ordre) +
+  redéployer notify-club (**v45**) — Dashboard → Edge Functions → notify-club → Edit → Deploy.
+  Le tour 5 de l'audit (auditeurs frais sur les correctifs des tours 3-4) suit.
 
 ## 11. Où regarder
 

@@ -85,6 +85,7 @@ import {
   unblockRangeRow,
   type BlockedRange,
   type BlockRangeStatus,
+  type NoShowStatus,
   type SlotOccupancy,
 } from '@/lib/reservations';
 import { blockUser as blockUserRpc, fetchBlockedUserIds } from '@/lib/moderation';
@@ -472,7 +473,7 @@ type AppContextType = {
   // Opérateur : commission propre à un club (taux 0–1, ex. 0.12 = 12 %).
   operatorSetClubCommission: (clubId: string, rate: number) => Promise<{ ok: boolean }>;
   // Club / opérateur : marque une réservation « pas venu » (absence comptée, créneau libéré).
-  markNoShow: (id: string) => Promise<boolean>;
+  markNoShow: (id: string) => Promise<NoShowStatus>;
   // Club / opérateur : annule une résa qui CHEVAUCHE une réservation hors app (75). Motif + proposition
   // d'alternative optionnels → le joueur les voit dans « Mes réservations » (push via notify-club).
   clubCancelReservation: (
@@ -1791,8 +1792,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Garde d'époque (comme clubCancelReservation) : bascule de compte / déconnexion pendant
         // l'aller-retour RPC ne doit pas muter le miroir du compte sorti.
         const epoch = sessionEpochRef.current;
-        const ok = await markNoShowRow(id, true);
-        if (!ok || sessionEpochRef.current !== epoch) return false;
+        const st = await markNoShowRow(id, true);
+        // On ne mute le miroir QUE sur 'ok' (les refus métier 'played'/'gone'/'forbidden' et les
+        // échecs réseau 'error' laissent l'état intact — l'appelant affiche le message adéquat).
+        if (st !== 'ok' || sessionEpochRef.current !== epoch) return st;
         setState((s) => ({
           ...s,
           reservations: s.reservations.filter((r) => r.id !== id),
@@ -1802,7 +1805,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               )
             : s.occupancy,
         }));
-        return true;
+        return 'ok';
       },
       // Le club (ou l’opérateur) annule une résa qui CHEVAUCHE une réservation prise HORS APP (75) :
       // le serveur passe la résa en 'club_cancelled' (créneau libéré, fiabilité du joueur intacte),

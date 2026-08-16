@@ -108,9 +108,15 @@ export function BookingSheet({
   // Un match n'est « ouvert » que s'il reste une place : équipe complète → privé (affichage +
   // confirmation), sans effacer l'intention `openMatch` (retirer un invité rouvre le choix).
   const effectiveOpen = openMatch && openable;
-  const toggleFriend = (id: string) =>
+  // Pendant l'aller-retour de réservation (`submitting`), on FIGE l'équipe et le format : `invited`
+  // est déjà capturé dans confirm(), mais l'écran de succès lit l'état VIVANT → sans ce gel, ajouter
+  // un invité pendant le round-trip ferait diverger le récap (part/équipe) de la résa enregistrée.
+  const toggleFriend = (id: string) => {
+    if (submitting) return;
     setFriendIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : participantCount < maxGuests ? [...cur, id] : cur));
+  };
   const addExtra = () => {
+    if (submitting) return;
     const n = extraName.trim();
     if (n.length < 2 || participantCount >= maxGuests) return;
     if (extraNames.includes(n)) return; // pas de doublon (clé de liste + retrait par nom)
@@ -120,6 +126,7 @@ export function BookingSheet({
   // Choix du format : passer en 1v1 ne laisse qu'un invité — on garde le premier (ami en
   // priorité) et on retire le surplus pour rester cohérent avec la capacité.
   const selectFormat = (f: 2 | 4) => {
+    if (submitting) return;
     setFormat(f);
     if (f === 2 && participantCount > 1) {
       if (friendIds.length > 0) {
@@ -303,7 +310,10 @@ export function BookingSheet({
                           label={n}
                           icon="checkmark"
                           active
-                          onPress={() => setExtraNames((cur) => cur.filter((x) => x !== n))}
+                          onPress={() => {
+                            if (submitting) return;
+                            setExtraNames((cur) => cur.filter((x) => x !== n));
+                          }}
                         />
                       ))}
                     </View>

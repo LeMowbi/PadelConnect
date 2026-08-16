@@ -346,10 +346,15 @@ export async function fetchNoShowReservations(): Promise<Reservation[] | null> {
 }
 
 // Le club (ou l’opérateur) marque une réservation comme « pas venu » (ou annule l’absence).
-// Fonction serveur (SECURITY DEFINER) qui vérifie le rôle/le club. false si refusé/conflit.
-export async function markNoShowRow(id: string, value: boolean): Promise<boolean> {
+// Fonction serveur (SECURITY DEFINER) qui vérifie le rôle/le club. Renvoie un CODE (87) pour
+// distinguer le refus MÉTIER (match déjà joué et noté) d’un échec réseau — sinon le gérant voyait
+// « réessaie » sur un refus définitif et retentait à l’infini. 'error' = échec réseau/serveur.
+export type NoShowStatus = 'ok' | 'played' | 'taken' | 'gone' | 'forbidden' | 'error';
+export async function markNoShowRow(id: string, value: boolean): Promise<NoShowStatus> {
   const { data, error } = await supabase.rpc('mark_no_show', { p_id: id, p_value: value });
-  return !error && data === true;
+  if (error) return 'error';
+  const s = String(data);
+  return s === 'ok' || s === 'played' || s === 'taken' || s === 'gone' || s === 'forbidden' ? s : 'error';
 }
 
 // Fiabilité des joueurs (annulations + absences) par id de compte — club/opérateur seulement.

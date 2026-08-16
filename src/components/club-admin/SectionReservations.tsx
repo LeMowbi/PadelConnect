@@ -232,14 +232,25 @@ export function SectionReservations({
       { confirmLabel: 'Confirmer l’absence', destructive: true },
     ).then((ok) => {
       if (!ok) return;
-      void markNoShow(r.id).then((done) => {
-        if (done) {
+      void markNoShow(r.id).then((st) => {
+        if (st === 'ok') {
           hapticSuccess();
           toast.show('Absence enregistrée');
           reloadTraces();
-        } else {
+        } else if (st === 'played') {
+          // Refus LÉGITIME et définitif (85 C6) : inutile de retenter → message dédié.
           hapticWarning();
-          toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
+          toast.show('Ce match a déjà été joué et noté — impossible de le marquer « pas venu ».', { icon: 'alert-circle' });
+        } else if (st === 'forbidden') {
+          hapticWarning();
+          toast.show('Tu n’as pas les droits sur cette réservation.', { icon: 'alert-circle' });
+        } else if (st === 'gone') {
+          hapticWarning();
+          toast.show('Cette réservation n’est plus dans un état modifiable.', { icon: 'alert-circle' });
+        } else {
+          // 'error' (échec réseau/serveur) : là, réessayer a du sens.
+          hapticWarning();
+          toast.show('Connexion impossible — réessaie', { icon: 'cloud-offline-outline' });
         }
       });
     });

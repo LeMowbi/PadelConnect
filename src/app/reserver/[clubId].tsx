@@ -250,18 +250,29 @@ export default function ReserverScreen() {
   // pour l'affichage ET la confirmation, sans effacer l'intention `openMatch` (retirer un
   // invité, ou repasser en 2v2, rouvre le choix « ouvert »).
   const effectiveOpen = openMatch && openable;
-  const toggleFriend = (id: string) =>
+  // Pendant l'aller-retour de réservation (`submitting`), on FIGE équipe et format : `invited` est
+  // déjà capturé dans confirm(), mais l'écran de succès lit l'état VIVANT → sans ce gel, modifier la
+  // sélection pendant le round-trip ferait diverger le récap (part/équipe) de la résa enregistrée.
+  const toggleFriend = (id: string) => {
+    if (submitting) return;
     setFriendIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : participantCount < maxGuests ? [...cur, id] : cur));
+  };
   const addExtra = () => {
+    if (submitting) return;
     const n = extraName.trim();
     if (n.length < 2 || participantCount >= maxGuests) return;
     if (extraNames.includes(n)) return; // pas de doublon (clé de liste + retrait par nom)
     setExtraNames((cur) => [...cur, n]);
     setExtraName('');
   };
+  const removeExtra = (n: string) => {
+    if (submitting) return;
+    setExtraNames((cur) => cur.filter((x) => x !== n));
+  };
   // Choix du format : passer en 1v1 ne laisse qu'un invité — on garde le premier (ami en
   // priorité) et on retire le surplus pour rester cohérent avec la capacité.
   const selectFormat = (f: 2 | 4) => {
+    if (submitting) return;
     setFormat(f);
     if (f === 2 && participantCount > 1) {
       if (friendIds.length > 0) {
@@ -764,7 +775,7 @@ export default function ReserverScreen() {
             />
           ))}
           {extraNames.map((n) => (
-            <Chip key={n} label={n} icon="checkmark" active onPress={() => setExtraNames((cur) => cur.filter((x) => x !== n))} />
+            <Chip key={n} label={n} icon="checkmark" active onPress={() => removeExtra(n)} />
           ))}
         </View>
         {/* Tout nouveau joueur (0 ami) : on l’amorce vers l’ajout d’amis au moment le plus
