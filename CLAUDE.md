@@ -651,9 +651,24 @@ Nouvel audit adversarial de TOUT (app/serveur/SQL/site/config/docs), Fable (sens
     une CAPACITÉ DÉFENSIVE (aucun bouton « Annuler l'absence » aujourd'hui — la transition no_show→booked
     n'est atteignable que par correction directe en base) ; l'auditeur l'a jugée non-défaut. Bouton
     d'annulation d'absence = amélioration OPTIONNELLE possible plus tard si le porteur le souhaite.
-- **Reste porteur (audit)** : coller `86` (corrigée) PUIS `87` (SQL Editor → Run, dans l'ordre) +
-  redéployer notify-club (**v45**) — Dashboard → Edge Functions → notify-club → Edit → Deploy.
-  Le tour 5 de l'audit (auditeurs frais sur les correctifs des tours 3-4) suit.
+- **Tour 5** (exécution réelle, pas seulement lecture) : l'auditeur SQL a EXÉCUTÉ 86/87 sur Postgres
+  16.13 local, à 2 sessions → 1 MEDIUM (course C2 delete_account : la table dérivée du nouvel UPDATE
+  écrasait un « Rejoindre » concurrent — EvalPlanQual ne re-évalue pas `f.arr` ; fix = `perform … for
+update` AVANT l'UPDATE, patron 73/M4, course rejouée → joiner préservé) + 1 LOW (follow_club au
+  plafond refusait un RE-follow d'un club déjà suivi → plafond limité aux NOUVEAUX clubs). Client :
+  1 MEDIUM voie rapide (puce TERRAIN non figée pendant le submit → badge/calendrier/WhatsApp pouvaient
+  montrer un terrain non réservé ; gardée comme équipe/format). notify-club : dédup favoris passée en
+  lecture UNIQUE partagée `favFanIds` (la double lecture non atomique pouvait dupliquer l'alerte).
+- **Tour 6** : notify-club = **TOUR BLANC** (hoisting favFanIds prouvé correct, balayage complet sans
+  défaut). SQL : course C2 REPRODUITE puis fermée en local à 2 vraies sessions (avec verrou : joiner
+  préservé `players=2` ; contre-épreuve sans verrou : écrasé `players=1`).
+- **✅ SERVEUR À JOUR (2026-08-16, PAT porteur)** : `86` (corrigée) et `87` **appliquées en base** via
+  l'API Management et **prouvées 8/8 en transaction annulée** (re-follow au plafond, plafond nouveau
+  club, mark ok/played/gone/unmark/forbidden, corps COMPLET de delete_account exécuté sans erreur) ;
+  ACL vérifiées (authenticated seul, anon fermé). **notify-club v45 déployée** (compteur plateforme :
+  version 44, `verify_jwt` préservé). Le porteur n'a RIEN à coller.
+  Le tour 6 client (auditeur interrompu par la limite de session) est relancé ; la boucle continue
+  jusqu'au tour blanc complet.
 
 ## 11. Où regarder
 
