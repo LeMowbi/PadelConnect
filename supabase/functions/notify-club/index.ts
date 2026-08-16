@@ -17,8 +17,10 @@
 //     send_friend_request fait un UPDATE on conflict, pas un INSERT).
 //   • friend_requests UPDATE (→ accepted) → notif à l'EXPÉDITEUR (demande acceptée).
 //   • lessons INSERT (pending) → notif au COACH (nouvelle demande de cours).
-//   • lessons UPDATE (→ accepted) → notif à l'ÉLÈVE (cours accepté, terrain réservé) — le club
-//     reçoit la notif « nouvelle réservation » via le webhook reservations, automatiquement.
+//   • lessons UPDATE (pending → accepted) → notif à l'ÉLÈVE (cours accepté, terrain réservé) — le
+//     club reçoit la notif « nouvelle réservation » via le webhook reservations, automatiquement.
+//   • lessons UPDATE (cancelled → accepted) → RÉTABLISSEMENT (85 C3, un « pas venu » dé-marqué) :
+//     texte « cours rétabli » dédié (jamais « accepté ») — élève, ou élèves inscrits si collectif.
 //   • lessons UPDATE (→ declined) → notif à l'ÉLÈVE (cours refusé, aucun terrain réservé).
 //   • lessons UPDATE (pending → cancelled) → notif au COACH (l'élève a retiré sa demande).
 //   • match_results INSERT / UPDATE (une SAISIE de score par joueur, 46) → selon l'état du
@@ -610,14 +612,44 @@ Deno.serve(async (req) => {
         data: { kind: 'lesson' },
       });
     } else if (table === 'lessons' && type === 'UPDATE' && record.status === 'accepted' && oldRecord.status !== 'accepted') {
-      // Le coach a ACCEPTÉ → prévenir l'ÉLÈVE (le terrain vient d'être réservé ; le club
-      // recevra la notif « nouvelle réservation » via le webhook reservations, comme d'habitude).
-      notifs.push({
-        targets: await userToken(record.student_id),
-        title: 'Cours accepté ✅',
-        body: `${await userName(record.coach_id)} a accepté ton cours du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} — terrain réservé.`,
-        data: { kind: 'reservation' },
-      });
+      if (oldRecord.status === 'cancelled') {
+        // RÉTABLISSEMENT (85 C3) : le club a DÉ-MARQUÉ un « pas venu » → le cours et sa réservation
+        // reprennent vie. Le coach n'a rien « accepté » ici → texte DÉDIÉ (dire « accepté » serait
+        // faux). Parité avec la branche d'annulation : collectif → élèves inscrits, sinon l'élève.
+        if (Number(record.capacity ?? 1) > 1) {
+          const { data: studs } = await supabase.from('lesson_students').select('user_id').eq('lesson_id', record.id);
+          const studIds = (studs ?? []).map((s: { user_id: string }) => s.user_id).filter(Boolean);
+          if (studIds.length) {
+            const { data: toks } = await supabase
+              .from('profiles')
+              .select('expo_push_token')
+              .in('id', studIds)
+              .not('expo_push_token', 'is', null);
+            notifs.push({
+              targets: (toks ?? []).map((t: { expo_push_token: string }) => t.expo_push_token).filter(Boolean),
+              title: 'Cours collectif rétabli',
+              body: `Le cours collectif du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} (${record.club_name ?? ''}) est de nouveau maintenu.`,
+              data: { kind: 'reservation' },
+            });
+          }
+        } else {
+          notifs.push({
+            targets: await userToken(record.student_id),
+            title: 'Cours rétabli ✅',
+            body: `Ton cours du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} est rétabli — le terrain est de nouveau réservé.`,
+            data: { kind: 'reservation' },
+          });
+        }
+      } else {
+        // Le coach a ACCEPTÉ (depuis 'pending') → prévenir l'ÉLÈVE (le terrain vient d'être réservé ;
+        // le club recevra la notif « nouvelle réservation » via le webhook reservations, comme d'habitude).
+        notifs.push({
+          targets: await userToken(record.student_id),
+          title: 'Cours accepté ✅',
+          body: `${await userName(record.coach_id)} a accepté ton cours du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} — terrain réservé.`,
+          data: { kind: 'reservation' },
+        });
+      }
     } else if (table === 'lessons' && type === 'UPDATE' && record.status === 'declined' && oldRecord.status === 'pending') {
       // Cours refusé → prévenir l'élève (aucun terrain n'a été réservé). Formulation NEUTRE :
       // le refus peut venir du coach comme d'un conflit de créneau (terrain pris entre-temps,
