@@ -34,9 +34,9 @@ import {
 } from '@/lib/americano';
 import { confirmAsync } from '@/lib/confirm';
 import { openWhatsApp } from '@/lib/contact';
-import { dayKey } from '@/lib/days';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { shareCompetition } from '@/lib/share';
+import { useTodayKey } from '@/lib/useTodayKey';
 import { useApp, type CompResult, type OfficialResult } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
@@ -91,6 +91,11 @@ export default function CompetitionDetail() {
     [],
   );
 
+  // `today` RÉACTIF (recalé au passage de minuit / retour au premier plan) — parité avec l'accueil
+  // et le tunnel de résa : `played`/`started` ne restent plus figés sur la veille au réveil de
+  // l'app. Hook appelé AVANT tout `return` anticipé (règle des hooks).
+  const today = useTodayKey();
+
   // Suppression / annulation du tournoi : on ATTEND le serveur avant de quitter l'écran —
   // un échec (hors-ligne, droits) était avant silencieux et le tournoi « réapparaissait ».
   const removeCompetition = async () => {
@@ -128,10 +133,10 @@ export default function CompetitionDetail() {
   // Cycle de vie : à venir → terminé (jour STRICTEMENT passé) → clôturé (vainqueur désigné).
   // Le jour même = en cours, pas encore « terminé » (on ne clôture pas avant que ça se joue).
   // Pour un tournoi multi-jours, c’est la date de FIN qui fait foi.
-  const played = isCompFinished(comp, dayKey(new Date()));
+  const played = isCompFinished(comp, today);
   // Dès le JOUR MÊME du tournoi, le serveur refuse la désinscription (53) : on ne montre plus
   // le bouton — un « réessaie » en boucle sur un refus définitif serait mensonger.
-  const started = dayKey(new Date()) >= comp.dateKey;
+  const started = today >= comp.dateKey;
   const result = state.compResults[comp.id];
   const mine = state.officialResults.find((o) => o.compId === comp.id);
   const myTeam = registered ? `${state.account?.firstName ?? 'Toi'} & ${reg.partner}` : '';

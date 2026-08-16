@@ -6,6 +6,11 @@
 
 import { supabase } from './supabase';
 
+// Fenêtre de rapatriement des cours (miroir de MIRROR_WINDOW_MS des réservations) : on garde
+// assez de passé pour l'historique affiché (« 10 derniers ») sans jamais tirer tout l'historique
+// d'un coach chevronné à chaque montage.
+const LESSON_WINDOW_MS = 180 * 86400000;
+
 // Coach visible sur une fiche club (compte réel promu par le gérant).
 export type ServerCoach = {
   userId: string;
@@ -203,14 +208,28 @@ export async function cancelLessonRequest(id: string): Promise<boolean> {
 
 // Mes cours côté ÉLÈVE (RLS : student_id = moi). Plus récents d’abord.
 export async function fetchMyLessons(userId: string): Promise<Lesson[] | null> {
-  const { data, error } = await supabase.from('lessons').select('*').eq('student_id', userId).order('starts_at', { ascending: false });
+  // Fenêtre 180 j + plafond (comme les réservations) : l'écran n'affiche que le récent.
+  const { data, error } = await supabase
+    .from('lessons')
+    .select('*')
+    .eq('student_id', userId)
+    .gte('starts_at', Date.now() - LESSON_WINDOW_MS)
+    .order('starts_at', { ascending: false })
+    .limit(200);
   if (error) return null;
   return ((data ?? []) as LessonRow[]).map(toLesson);
 }
 
 // Les cours côté COACH (RLS : coach_id = moi). Demandes en attente d’abord, puis par date.
 export async function fetchCoachLessons(userId: string): Promise<Lesson[] | null> {
-  const { data, error } = await supabase.from('lessons').select('*').eq('coach_id', userId).order('starts_at', { ascending: false });
+  // Fenêtre 180 j + plafond (comme les réservations) : l'écran n'affiche que le récent.
+  const { data, error } = await supabase
+    .from('lessons')
+    .select('*')
+    .eq('coach_id', userId)
+    .gte('starts_at', Date.now() - LESSON_WINDOW_MS)
+    .order('starts_at', { ascending: false })
+    .limit(200);
   if (error) return null;
   return ((data ?? []) as LessonRow[]).map(toLesson);
 }

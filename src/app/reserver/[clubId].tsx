@@ -322,8 +322,10 @@ export default function ReserverScreen() {
     }
     // Miroir de la borne serveur (SQL 81 : 20 alertes actives max). Sans lui, la demande de trop
     // revenait en 'error' affiché « Connexion impossible » (message trompeur) : on refuse ICI avec
-    // un message dédié, sans toucher au serveur.
-    if ((waitlist ?? []).length >= MAX_WAITLIST) {
+    // un message dédié, sans toucher au serveur. On ne compte QUE les alertes FUTURES : le serveur
+    // (join_slot_waitlist) purge les alertes passées avant de compter — comptabiliser des créneaux
+    // périmés (jamais retirables via l'UI) bloquerait durablement un joueur sous le plafond.
+    if ((waitlist ?? []).filter((w) => slotTimestamp(w.dateKey, w.time) > Date.now()).length >= MAX_WAITLIST) {
       setWaitBusy(false);
       hapticWarning();
       toast.show('Tu as déjà trop d’alertes en attente — retires-en une avant d’en ajouter.', { icon: 'alert-circle' });
@@ -528,9 +530,13 @@ export default function ReserverScreen() {
                 onPress={() => {
                   const invitedNames = [...state.friends.filter((f) => friendIds.includes(f.id)).map((f) => f.name), ...extraNames];
                   const who = invitedNames.length ? `\nÉquipe : ${invitedNames.join(', ')}` : '';
-                  // Part calculée sur l'effectif RÉEL (toi + invités) : « /4 » sur un match à 2
-                  // annoncerait la moitié de la vraie part à payer au club.
-                  const share = booked.price ? `\nPrévois ${perPlayerOf(booked.price, 1 + invitedNames.length)} chacun.` : '';
+                  // Part sur la CAPACITÉ (openCapacity = format) quand le match est ouvert — les
+                  // places libres seront prises → même base que « Mes réservations » ; sinon sur
+                  // l'effectif RÉEL (toi + invités), pour ne pas sous-annoncer un match privé à 2.
+                  const openBooked = openMatch && invitedNames.length < format - 1;
+                  const share = booked.price
+                    ? `\nPrévois ${perPlayerOf(booked.price, openBooked ? format : 1 + invitedNames.length)} chacun.`
+                    : '';
                   openWhatsApp(
                     '',
                     `On joue au padel ! 🎾\n${club.name} — ${booked.dayLabel} à ${booked.time} (session ${durationLabel(booked.durationMin)})\n${booked.court}${who}${share}\nRéservé via PadelConnect.`,

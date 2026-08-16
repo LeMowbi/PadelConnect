@@ -92,7 +92,14 @@ export async function fetchClubRatings(): Promise<Record<string, ClubRating> | n
 // Avis d’un club (les plus récents d’abord). Convention réseau (CLAUDE.md §8) : `null` en cas
 // d’échec réseau (≠ [] = aucun avis) pour que l’appelant NE VIDE PAS le miroir affiché sur un blip.
 export async function fetchClubReviews(clubId: string): Promise<ServerReview[] | null> {
-  const { data, error } = await supabase.from('reviews').select('*').eq('club_id', clubId).order('created_at', { ascending: false });
+  // Borne à 100 (l'UI garde sa pagination HUB_PREVIEW) : sans elle, un club très noté chargeait
+  // jusqu'à 1000 lignes à chaque ouverture de fiche.
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('*')
+    .eq('club_id', clubId)
+    .order('created_at', { ascending: false })
+    .limit(100);
   if (error) return null;
   return (data ?? []).map((r) => toReview(r as Row));
 }

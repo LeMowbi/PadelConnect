@@ -7,8 +7,8 @@ import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Button, EmptyState, SectionHeader } from '@/components/ui';
 import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
-import { dayKey } from '@/lib/days';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
+import { useTodayKey } from '@/lib/useTodayKey';
 import { useApp } from '@/store/AppContext';
 import { spacing } from '@/theme';
 
@@ -29,7 +29,9 @@ export default function CompetitionsScreen() {
       return true;
     });
   // À venir d’abord ; les tournois passés restent accessibles (déclaration du résultat).
-  const today = dayKey(new Date());
+  // `today` RÉACTIF (recalé au passage de minuit / retour au premier plan) — parité avec l'accueil
+  // et le tunnel de résa : sans lui la liste restait figée sur la veille au réveil de l'app.
+  const today = useTodayKey();
   // Un tournoi multi-jours reste « à venir » tant que sa date de FIN n’est pas passée.
   const upcoming = list.filter((c) => (c.endDateKey ?? c.dateKey) >= today);
   const past = list.filter((c) => (c.endDateKey ?? c.dateKey) < today);

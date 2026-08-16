@@ -2297,7 +2297,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return { ok: true };
       },
       fetchClubRequests: async () => {
-        const { data, error } = await supabase.from('club_requests').select('*').order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('club_requests').select('*').order('created_at', { ascending: false }).limit(500); // borne de convention (parité avec les autres lectures de listes)
         // On distingue « rien à traiter » d’un échec (réseau / RLS) : l’opérateur ne doit
         // pas croire qu’il n’y a aucune demande alors que le chargement a juste échoué.
         if (error) return { ok: false, requests: [] };
@@ -2410,7 +2410,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       fetchSupportMessages: async () => {
         // Nettoyage opportuniste : on purge les résolus de +7 jours à chaque ouverture (best-effort).
         void supabase.rpc('purge_old_resolved_support');
-        const { data, error } = await supabase.from('support_messages').select('*').order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('support_messages').select('*').order('created_at', { ascending: false }).limit(500); // borne de convention (parité avec les autres lectures de listes)
         if (error) return { ok: false, messages: [] };
         return { ok: true, messages: (data ?? []) as ServerSupportMessage[] };
       },

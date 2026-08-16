@@ -282,8 +282,12 @@ export default function HomeScreen() {
   const notifyPartners = () => {
     if (!upcoming) return;
     const who = upcoming.invited.length ? `\nÉquipe : ${upcoming.invited.map((i) => i.name).join(', ')}` : '';
-    // Part par joueur sur l'EFFECTIF RÉEL (toi + invités), pas un « ÷4 » forfaitaire (audit 7).
-    const share = upcoming.price ? `\nPrévois ${perPlayerOf(upcoming.price, 1 + upcoming.invited.length)} chacun.` : '';
+    // Part sur la CAPACITÉ (openCapacity) quand le match est ouvert — les places libres seront
+    // prises → même base que « Mes réservations » ; sinon sur l'EFFECTIF RÉEL (toi + invités),
+    // pas un « ÷4 » forfaitaire (audit 7).
+    const share = upcoming.price
+      ? `\nPrévois ${perPlayerOf(upcoming.price, upcoming.openMatch ? matchCap : 1 + upcoming.invited.length)} chacun.`
+      : '';
     openWhatsApp(
       '',
       `On joue au padel ! 🎾\n${upcoming.clubName} — ${dateKeyLabel(upcoming.dateKey)} à ${upcoming.time} (session ${durationLabel(upcoming.durationMin)})\n${upcoming.court}${who}${share}\nRéservé via PadelConnect.`,
