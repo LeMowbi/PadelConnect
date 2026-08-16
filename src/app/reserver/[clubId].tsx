@@ -306,10 +306,15 @@ export default function ReserverScreen() {
   // AUCUN couple (terrain, durée) n'y est libre. ⚠️ PAS `free.length === 0` : `free` est aussi
   // vide quand le créneau offre DEUX durées et que le joueur n'a pas encore choisi
   // (`effectiveDuration` null) — on afficherait « Complet » sur un créneau libre.
+  // ⚠️ `!submitting` : pendant l'envoi, le miroir contient DÉJÀ la résa en cours (addReservation
+  // pousse avant linkParticipants) — sur le dernier couple libre, l'écran basculerait en
+  // « Complet » + cloche PENDANT sa propre réservation (mensonger, et l'alerte posée là viserait
+  // le créneau qu'on est en train d'occuper).
   const slotFull =
     !!day &&
     !!slot &&
     !compToday &&
+    !submitting &&
     openSlots.includes(slot) &&
     slotTimestamp(day.key, slot) > Date.now() &&
     (slotsByTime?.get(slot)?.length ?? 0) === 0;
@@ -318,7 +323,8 @@ export default function ReserverScreen() {
 
   // Pose / retrait de l'alerte. Écriture HONNÊTE : le miroir local ne bouge qu'au retour serveur.
   const toggleWaitlist = async () => {
-    if (!day || !slot || waitBusy) return;
+    // `submitting` : ne jamais poser une alerte pendant l'envoi de SA propre résa (cf. slotFull).
+    if (!day || !slot || waitBusy || submitting) return;
     setWaitBusy(true);
     if (alerted) {
       const ok = await leaveSlotWaitlist(club.id, day.key, slot);
@@ -733,7 +739,7 @@ export default function ReserverScreen() {
                   label={waitBusy ? '…' : alerted ? 'Alerte posée ✓ (toucher pour retirer)' : '🔔 Me prévenir si ça se libère'}
                   variant={alerted ? 'secondary' : 'primary'}
                   onPress={() => void toggleWaitlist()}
-                  disabled={waitBusy}
+                  disabled={waitBusy || submitting}
                   accessibilityLabel={
                     alerted ? 'Retirer mon alerte sur ce créneau' : 'Me prévenir par notification si un terrain se libère à ce créneau'
                   }

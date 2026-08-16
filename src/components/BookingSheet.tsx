@@ -237,11 +237,24 @@ export function BookingSheet({
     );
   }
 
+  // Fermeture GARDÉE pendant le round-trip : fermer démonterait la feuille avant `setDone(true)`
+  // (le parent fait setSheet(null)) → la résa partirait SANS écran de succès et le joueur,
+  // croyant à un échec, pourrait re-réserver un second terrain. Tous les chemins de fermeture
+  // (retour Android, scrim, ✕, « Voir d'autres créneaux », lien amis) passent par ici.
+  const requestClose = () => {
+    if (submitting) return;
+    onClose();
+  };
+  // Pendant l'envoi, le miroir contient DÉJÀ la résa en cours (addReservation pousse avant
+  // linkParticipants) : sur le DERNIER terrain libre, `free` devient [] en plein submit et le
+  // formulaire serait remplacé par « Plus aucun terrain libre » — mensonger pour sa propre résa.
+  const noCourtLeft = free.length === 0 && !submitting;
+
   return (
-    <Modal transparent animationType="slide" visible onRequestClose={onClose} statusBarTranslucent>
+    <Modal transparent animationType="slide" visible onRequestClose={requestClose} statusBarTranslucent>
       {/* Scrim masqué des lecteurs d'écran (même règle que BottomSheet) : la fermeture
           accessible passe par le bouton « Fermer » libellé + onRequestClose. */}
-      <Pressable style={styles.backdrop} onPress={onClose} accessible={false} importantForAccessibility="no-hide-descendants" />
+      <Pressable style={styles.backdrop} onPress={requestClose} accessible={false} importantForAccessibility="no-hide-descendants" />
       <KeyboardAvoidingView style={styles.wrapper} pointerEvents="box-none" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={[styles.sheet, { paddingBottom: spacing.xxl + insets.bottom }]}>
           <View style={styles.handle} />
@@ -262,7 +275,13 @@ export function BookingSheet({
                       {sel.label} · {time} · {durationLabel(durationMin)} · {fcfa(price)} la session
                     </Txt>
                   </View>
-                  <Pressable onPress={onClose} hitSlop={8} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Fermer">
+                  <Pressable
+                    onPress={requestClose}
+                    hitSlop={8}
+                    style={styles.closeBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Fermer"
+                  >
                     <Ionicons name="close" size={20} color={colors.textMuted} />
                   </Pressable>
                 </View>
@@ -270,7 +289,7 @@ export function BookingSheet({
                 <Txt variant="label" style={{ marginTop: spacing.lg }}>
                   TERRAIN
                 </Txt>
-                {free.length === 0 ? (
+                {noCourtLeft ? (
                   <View style={styles.empty}>
                     <Ionicons name="time-outline" size={22} color={colors.textMuted} />
                     <Txt variant="muted" style={{ flex: 1 }}>
@@ -279,7 +298,9 @@ export function BookingSheet({
                   </View>
                 ) : (
                   <View style={styles.row}>
-                    {free.map((c) => (
+                    {/* free=[] ici ⇒ on est en plein submit sur le dernier terrain : on garde LA
+                        puce du terrain en cours de réservation visible (au lieu d'une ligne vide). */}
+                    {(free.length === 0 && court ? [court] : free).map((c) => (
                       <Chip
                         key={c}
                         label={c}
@@ -297,9 +318,9 @@ export function BookingSheet({
                   </View>
                 )}
 
-                {free.length === 0 ? (
+                {noCourtLeft ? (
                   <View style={{ marginTop: spacing.lg }}>
-                    <Button label="Voir d’autres créneaux" icon="calendar" variant="secondary" onPress={onClose} full />
+                    <Button label="Voir d’autres créneaux" icon="calendar" variant="secondary" onPress={requestClose} full />
                   </View>
                 ) : (
                   <>
@@ -334,6 +355,7 @@ export function BookingSheet({
                     {state.friends.length === 0 ? (
                       <Pressable
                         onPress={() => {
+                          if (submitting) return;
                           onClose();
                           router.push('/amis');
                         }}
