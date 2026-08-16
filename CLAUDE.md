@@ -613,6 +613,28 @@ créneaux récurrents — le nom de l'habitué n'est lisible que du gérant, rou
 en production quelques semaines). SQL 80→83 et les 11 webhooks : TOUT est déjà posé en base via
 l'API — le porteur n'a RIEN à coller.
 
+### Campagne d'audit COMPLET (2026-08-16) — « refait autant de fois qu'il le faut » (EN COURS)
+
+Nouvel audit adversarial de TOUT (app/serveur/SQL/site/config/docs), Fable (sensible) ↔ Opus
+(écrans/libs), tour après tour jusqu'au tour BLANC. Corrigés :
+- **Tour 1** (grand audit) + gates → correctifs client (11 pts), privilèges SQL `84`, notify-club v41.
+- **Tour 2** : SQL **`85`** (intégrité du cycle de vie : remboursement carnet à l'annulation, cours
+  ressuscité au dé-« pas venu », mark_no_show refuse un match noté, FK orphelines, delete_club purge
+  les tournois, delete_account purge fantômes + cours du coach) — **appliquée + prouvée 6/6 en base** ;
+  notify-club **v43** (consommation waitlist par MESSAGE) ; correctifs client (régression miroir
+  waitlist, useTodayKey, part match ouvert, fetchs bornés).
+- **Tour 3** : SQL **`86`** (régressions du tour 2 : delete_account recalcule `players` depuis
+  `invited` — plus de -1 aveugle ; delete_club purge aussi 'rejected' ; club_use_pass verrouille la
+  résa ; follow_club plafonné à 100) ⚠️ **ÉCRITE, PAS ENCORE appliquée en base** (à coller par le
+  porteur — le PAT Management n'était pas disponible dans cette session) ; notify-club **v44** (push
+  « cours rétabli » dédié quand le club dé-marque un « pas venu », ≠ « accepté ») ⚠️ **à REDÉPLOYER** ;
+  correctifs client (part WhatsApp du match ouvert sur la CAPACITÉ en voie rapide + récap tunnel
+  harmonisé, BlockRangeForm `useTodayKey`).
+- L1 « add_friend_by_phone mort » = DÉJÀ retiré par la 30 ; L2 « portée player_reliability » = DÉJÀ
+  club-scopée en base → aucun des deux ne nécessite d'action.
+- **Reste porteur (audit)** : coller `86` (SQL Editor → Run) + redéployer notify-club (v44) — voir
+  Dashboard → Edge Functions → notify-club → Edit → Deploy. Puis le tour 4 de l'audit continue.
+
 ## 11. Où regarder
 
 - `docs/PUSH-SETUP.md` — configuration des push & webhooks (étapes Dashboard).

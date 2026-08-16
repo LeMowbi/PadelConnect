@@ -219,6 +219,8 @@ export function BookingSheet({
         durationMin={durationMin}
         participantCount={participantCount}
         invitedNames={invitedNames}
+        openMatch={effectiveOpen}
+        openCapacity={format}
         onSeeReservations={() => {
           onClose();
           router.push('/reservations');

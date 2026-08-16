@@ -467,6 +467,10 @@ export default function ReserverScreen() {
   if (done && booked) {
     const ringScale = ring.interpolate({ inputRange: [0, 1], outputRange: [0.8, 2.2] });
     const ringOpacity = ring.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0, 0.45, 0] });
+    // Part par joueur AFFICHÉE = celle du récap WhatsApp (harmonisation) : sur la CAPACITÉ visée si
+    // le match est ouvert (les places libres seront prises), sinon sur l'effectif réel (toi + invités).
+    const recapOpen = openMatch && participantCount < format - 1;
+    const recapHeads = recapOpen ? format : 1 + participantCount;
     return (
       <Screen back title="Réservation">
         {/* En-tête de succès — dégradé signature pour un retour premium et clair. Parité avec
@@ -497,7 +501,7 @@ export default function ReserverScreen() {
             <Row label="Durée" value={durationLabel(booked.durationMin)} />
             <Row label="Participants" value={`Toi${participantCount > 0 ? ` + ${participantCount}` : ''}`} />
             <Row label={`Tarif (session ${durationLabel(booked.durationMin)})`} value={fcfa(booked.price)} />
-            <Row label={`≈ par joueur (à ${format})`} value={perPlayerOf(booked.price, format)} />
+            <Row label={`≈ par joueur (à ${recapHeads})`} value={perPlayerOf(booked.price, recapHeads)} />
           </View>
           <View style={{ alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.lg }}>
             <Button label="Voir mes réservations" icon="calendar" onPress={() => router.push('/reservations')} full />
@@ -530,13 +534,9 @@ export default function ReserverScreen() {
                 onPress={() => {
                   const invitedNames = [...state.friends.filter((f) => friendIds.includes(f.id)).map((f) => f.name), ...extraNames];
                   const who = invitedNames.length ? `\nÉquipe : ${invitedNames.join(', ')}` : '';
-                  // Part sur la CAPACITÉ (openCapacity = format) quand le match est ouvert — les
-                  // places libres seront prises → même base que « Mes réservations » ; sinon sur
-                  // l'effectif RÉEL (toi + invités), pour ne pas sous-annoncer un match privé à 2.
-                  const openBooked = openMatch && invitedNames.length < format - 1;
-                  const share = booked.price
-                    ? `\nPrévois ${perPlayerOf(booked.price, openBooked ? format : 1 + invitedNames.length)} chacun.`
-                    : '';
+                  // Même base que le récap à l'écran (recapHeads) : capacité visée si ouvert, sinon
+                  // l'effectif réel — pour ne pas sous-annoncer un match privé à 2 ni sur-annoncer un ouvert.
+                  const share = booked.price ? `\nPrévois ${perPlayerOf(booked.price, recapHeads)} chacun.` : '';
                   openWhatsApp(
                     '',
                     `On joue au padel ! 🎾\n${club.name} — ${booked.dayLabel} à ${booked.time} (session ${durationLabel(booked.durationMin)})\n${booked.court}${who}${share}\nRéservé via PadelConnect.`,

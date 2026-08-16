@@ -28,6 +28,8 @@ export function BookingConfirmation({
   durationMin,
   participantCount,
   invitedNames,
+  openMatch,
+  openCapacity,
   onSeeReservations,
   onClose,
 }: {
@@ -41,6 +43,8 @@ export function BookingConfirmation({
   durationMin: 60 | 90;
   participantCount: number;
   invitedNames: string[];
+  openMatch?: boolean;
+  openCapacity?: 2 | 4;
   onSeeReservations: () => void;
   onClose: () => void;
 }) {
@@ -59,8 +63,11 @@ export function BookingConfirmation({
 
   const notifyPartners = () => {
     const who = invitedNames.length ? `\nÉquipe : ${invitedNames.join(', ')}` : '';
-    // Part sur l'effectif RÉEL (toi + invités) : diviser par 4 un match à 2 fausserait la part.
-    const share = price ? `\nPrévois ${perPlayerOf(price, 1 + invitedNames.length)} chacun.` : '';
+    // Part par joueur : pour un MATCH OUVERT, le terrain se partage sur la CAPACITÉ visée (2 ou 4 —
+    // d'autres joueurs rejoindront), pas sur les seuls invités du moment ; sinon sur l'effectif RÉEL
+    // (toi + invités). Diviser par 4 un match FERMÉ à 2 — ou par 2 un match ouvert à 4 — fausse la part.
+    const heads = openMatch && openCapacity ? openCapacity : 1 + invitedNames.length;
+    const share = price ? `\nPrévois ${perPlayerOf(price, heads)} chacun.` : '';
     openWhatsApp(
       '',
       `On joue au padel ! 🎾\n${clubName} — ${dayLabel} à ${time} (session ${durationLabel(durationMin)})\n${court}${who}${share}\nRéservé via PadelConnect.`,

@@ -6,6 +6,7 @@ import { Button, Card, Txt } from '@/components/ui';
 import { openCourtSlots, type CourtSlot } from '@/lib/courtSchedule';
 import { DAY_MS, dateKeyLabel, dayKey } from '@/lib/days';
 import type { BlockRangeStatus } from '@/lib/reservations';
+import { useTodayKey } from '@/lib/useTodayKey';
 import { colors, radius, spacing } from '@/theme';
 
 // Mini-formulaire « Fermer sur une période » : terrain (ou tous) → Du/Au → heures (ou journée
@@ -27,7 +28,9 @@ export function BlockRangeForm({
     reason: string;
   }) => Promise<BlockRangeStatus>;
 }) {
-  const todayKey = dayKey(new Date());
+  // Recalé après minuit (hook) : un formulaire resté ouvert la veille ne doit pas laisser choisir
+  // « hier » comme borne basse (le serveur refuserait, mais l'UI serait trompeuse).
+  const todayKey = useTodayKey();
   // Fenêtre de sélection alignée sur la borne serveur (message 'invalid' = « 1 an maximum »).
   const maxKey = dayKey(new Date(Date.now() + 365 * DAY_MS));
 
