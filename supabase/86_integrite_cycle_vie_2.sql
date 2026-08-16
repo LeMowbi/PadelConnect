@@ -38,6 +38,16 @@ begin
   -- ⚠️ Un `UPDATE … FROM LATERAL (…)` ne peut PAS référencer la table CIBLE (`r`) → on passe par une
   -- table dérivée auto-jointe sur `id` (le LATERAL référence `r2`, qui est dans son propre FROM).
   -- Le `left join … on true` + `filter` rend `arr='[]'` même si `invited` est vide ou non-tableau.
+  -- ⚠️ VERROU DE LIGNE D'ABORD (patron 73/M4) : la table dérivée `f` de l'UPDATE serait matérialisée
+  -- sur le snapshot d'AVANT un « Rejoindre » concurrent, et EvalPlanQual ne re-évalue que la jointure
+  -- (`r.id=f.id`), PAS `f.arr` → l'ajout concurrent serait écrasé (place fantôme). Le `for update`
+  -- sérialise avec join_open_match/respond_invitation ; l'UPDATE suivant prend alors un snapshot
+  -- READ COMMITTED frais après les verrous → `f.arr` inclut bien l'entrée du joiner.
+  perform 1 from public.reservations r
+    where r.status = 'booked' and r.starts_at > now_ms and r.user_id <> uid
+      and exists (select 1 from public.reservation_participants rp
+                  where rp.reservation_id = r.id and rp.user_id = uid)
+    for update;
   update public.reservations r
     set invited = f.arr,
         players = greatest(1, 1 + jsonb_array_length(f.arr))
@@ -191,8 +201,12 @@ declare
 begin
   if v_uid is null or v_club is null or length(v_club) > 64 then return false; end if;
   if p_on then
-    if (select count(*) from public.club_followers where user_id = v_uid) >= 100 then
-      return false; -- plafond anti-gonflage (club_id non contraint par FK)
+    -- Plafond anti-gonflage (club_id non contraint par FK) MAIS seulement pour un NOUVEAU club :
+    -- re-suivre un club DÉJÀ suivi au plafond est un no-op légitime (insert on conflict) → jamais un
+    -- faux échec au resync best-effort du client.
+    if not exists (select 1 from public.club_followers f where f.user_id = v_uid and f.club_id = v_club)
+       and (select count(*) from public.club_followers where user_id = v_uid) >= 100 then
+      return false;
     end if;
     insert into public.club_followers (user_id, club_id) values (v_uid, v_club)
       on conflict do nothing;
