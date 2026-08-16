@@ -280,7 +280,19 @@ export function BookingSheet({
                 ) : (
                   <View style={styles.row}>
                     {free.map((c) => (
-                      <Chip key={c} label={c} active={c === court} onPress={() => setCourt(c)} size="lg" />
+                      <Chip
+                        key={c}
+                        label={c}
+                        active={c === court}
+                        onPress={() => {
+                          // Figé pendant le submit (comme équipe/format) : l'écran de succès lit le
+                          // `court` VIVANT → en changer après confirm() ferait diverger badge/calendrier/
+                          // WhatsApp de la résa réellement envoyée (le terrain est capturé dans confirm()).
+                          if (submitting) return;
+                          setCourt(c);
+                        }}
+                        size="lg"
+                      />
                     ))}
                   </View>
                 )}

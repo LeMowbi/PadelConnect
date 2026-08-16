@@ -286,20 +286,30 @@ Deno.serve(async (req) => {
         body: `${record.booked_by_name ?? 'Un joueur'} — ${record.club_name ?? ''} · ${record.date_label ?? ''} à ${record.time ?? ''} (${record.court ?? ''}).`,
         data: { kind: 'club_reservation', id: record.id },
       });
+      // Lecture UNIQUE des favoris du créateur, PARTAGÉE par les deux branches « match ouvert »
+      // ci-dessous (push favoris + alerte niveau) : deux lectures séparées de favorite_players
+      // n'étaient pas atomiques → si un favori changeait entre les deux (ou égalité de created_at à
+      // la frontière du 100ᵉ), la fenêtre glissait et un joueur déjà notifié « partenaire suivi »
+      // pouvait recevoir EN PLUS « match à ton niveau » (doublon). Les 100 plus récents servent de
+      // CIBLES au push favoris ET de dédup à l'alerte. null = lecture en échec (le push favoris ne
+      // part pas → l'alerte n'a alors RIEN à dédupliquer, donc aucun doublon possible non plus).
+      let favFanIds: string[] | null = null;
+      if (record.open_match === true && record.user_id) {
+        const { data: favData, error: favErr } = await supabase
+          .from('favorite_players')
+          .select('user_id')
+          .eq('fav_user_id', record.user_id)
+          .order('created_at', { ascending: false })
+          .limit(100);
+        favFanIds = favErr ? null : (favData ?? []).map((f: { user_id: string }) => f.user_id).filter(Boolean);
+      }
       // JOUEURS FAVORIS (80) : match OUVERT créé → prévenir ceux qui SUIVENT le créateur
       // (« ton partenaire habituel a créé un match »). Blocages exclus dans les deux sens.
-      // best-effort (try/catch, comme la branche alertes) : une panne ici ne doit pas empêcher
-      // la notif GÉRANT déjà empilée. Plafond À LA SOURCE (récence) comme les autres fan-out.
-      if (record.open_match === true && record.user_id) {
+      // best-effort (try/catch) : une panne ici ne doit pas empêcher la notif GÉRANT déjà empilée.
+      if (record.open_match === true && record.user_id && favFanIds && favFanIds.length) {
         try {
-          const { data: fans, error: fansErr } = await supabase
-            .from('favorite_players')
-            .select('user_id')
-            .eq('fav_user_id', record.user_id)
-            .order('created_at', { ascending: false })
-            .limit(100);
-          let fanIds = (fans ?? []).map((f: { user_id: string }) => f.user_id).filter(Boolean);
-          if (!fansErr && fanIds.length) {
+          let fanIds = favFanIds.slice();
+          if (fanIds.length) {
             // FAIL-CLOSED (§8) : si la lecture des blocages ÉCHOUE, on abandonne ce push facultatif
             // plutôt que de notifier peut-être un compte bloqué (harcèlement). null ≠ [] : un [] est
             // une absence réelle de blocage, un échec (error) ferme la branche.
@@ -339,19 +349,10 @@ Deno.serve(async (req) => {
       // ferait exploser l'URL du `in(...)` PostgREST → requête en échec → plus aucune alerte.
       if (record.open_match === true && record.user_id && record.club_id) {
         try {
-          const already = new Set<string>();
-          // Dédup MIROIR de la branche favoris (mêmes 100 plus récents) : sans order+limit, un joueur
-          // déjà notifié « partenaire suivi » pouvait recevoir EN PLUS « match à ton niveau » (PostgREST
-          // plafonne en plus à 1000 dans un ordre arbitraire). Échec de lecture → on abandonne cette
-          // alerte SECONDAIRE (le push favoris, plus important, est déjà parti) plutôt qu'un doublon.
-          const { data: favData, error: favErr } = await supabase
-            .from('favorite_players')
-            .select('user_id')
-            .eq('fav_user_id', record.user_id)
-            .order('created_at', { ascending: false })
-            .limit(100);
-          if (favErr) throw new Error('favorite_players read failed — fail closed (évite un doublon d’alerte)');
-          for (const f of favData ?? []) already.add(f.user_id as string);
+          // Dédup vs le push favoris via la lecture UNIQUE partagée `favFanIds` (plus de 2ᵉ lecture
+          // non atomique → plus de fenêtre de course qui dupliquait l'alerte). null = favoris non lu
+          // → le push favoris n'est pas parti, donc `already` vide et AUCUN doublon possible.
+          const already = new Set<string>(favFanIds ?? []);
           // FAIL-CLOSED (§8) : un ÉCHEC de lecture des blocages abandonne l'alerte (ne jamais
           // notifier un bloqué). null (error) ≠ [] (aucun blocage réel).
           const { data: blocks, error: blkErr } = await supabase
