@@ -924,16 +924,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Jetons ayant reçu un ticket Expo 'ok' (par jeton) — sert à la purge d'attente PAR CIBLE.
-    const okTokens = new Set<string>();
+    // Jetons dont le MESSAGE DE LISTE D'ATTENTE précis a reçu un ticket Expo 'ok'. On cible le
+    // message par son `kind: 'waitlist'` (et non « n'importe quel message vers ce jeton ») : un
+    // même joueur peut recevoir DEUX push dans le même événement (participant du match annulé +
+    // inscrit en attente sur un créneau chevauchant) — consommer son alerte parce que l'AUTRE
+    // message a réussi la ferait disparaître sans qu'elle soit jamais partie.
+    const waitlistOkTokens = new Set<string>();
     // Jetons d'appareils désinstallés (DeviceNotRegistered) → purgés en base (on cesse d'envoyer
     // dans le vide et on n'accumule pas de jetons morts).
     const dead: string[] = [];
     tickets.forEach((t, i) => {
-      const to = messages[i]?.to;
-      if (!to) return;
-      if (t?.status === 'ok') okTokens.add(to);
-      if (t?.status === 'error' && t?.details?.error === 'DeviceNotRegistered') dead.push(to);
+      const m = messages[i];
+      if (!m?.to) return;
+      if (t?.status === 'ok' && m.data?.kind === 'waitlist') waitlistOkTokens.add(m.to);
+      if (t?.status === 'error' && t?.details?.error === 'DeviceNotRegistered') dead.push(m.to);
     });
     // Purge des jetons morts PAR TRANCHES de 100 (un in() géant casserait l'URL après un broadcast).
     for (let i = 0; i < dead.length; i += 100) {
@@ -943,10 +947,10 @@ Deno.serve(async (req) => {
         .in('expo_push_token', dead.slice(i, i + 100));
     }
 
-    // LISTE D'ATTENTE : consommer UNIQUEMENT les entrées dont le jeton a été réellement notifié
-    // ('ok') — un joueur dont l'envoi a échoué (jeton mort, débit dépassé) garde son alerte pour
-    // la prochaine libération. Suppression par tranches de 100.
-    const toConsume = [...new Set(waitlistConsumed.filter((e) => okTokens.has(e.token)).map((e) => e.id))];
+    // LISTE D'ATTENTE : consommer UNIQUEMENT les entrées dont le message d'alerte a réellement
+    // abouti ('ok') — un joueur dont l'envoi a échoué (jeton mort, débit dépassé) garde son alerte
+    // pour la prochaine libération. Suppression par tranches de 100.
+    const toConsume = [...new Set(waitlistConsumed.filter((e) => waitlistOkTokens.has(e.token)).map((e) => e.id))];
     for (let i = 0; i < toConsume.length; i += 100) {
       await supabase
         .from('slot_waitlist')
