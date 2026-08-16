@@ -35,18 +35,25 @@ begin
   perform set_config('storage.allow_delete_query', 'false', true);
   -- C2 : retirer ce compte des matchs ouverts des AUTRES (avant la cascade des participations).
   -- `players` RECALCULÉ depuis le tableau `invited` filtré (R1) — jamais un -1 aveugle.
+  -- ⚠️ Un `UPDATE … FROM LATERAL (…)` ne peut PAS référencer la table CIBLE (`r`) → on passe par une
+  -- table dérivée auto-jointe sur `id` (le LATERAL référence `r2`, qui est dans son propre FROM).
+  -- Le `left join … on true` + `filter` rend `arr='[]'` même si `invited` est vide ou non-tableau.
   update public.reservations r
     set invited = f.arr,
         players = greatest(1, 1 + jsonb_array_length(f.arr))
-    from lateral (
-      select coalesce(jsonb_agg(e), '[]'::jsonb) as arr
-      from jsonb_array_elements(
-        case when jsonb_typeof(r.invited) = 'array' then r.invited else '[]'::jsonb end) e
-      where e ->> 'id' <> uid::text and e ->> 'id' <> 'open-' || uid::text
+    from (
+      select r2.id,
+             coalesce(jsonb_agg(e) filter (where e ->> 'id' <> uid::text
+                                             and e ->> 'id' <> 'open-' || uid::text), '[]'::jsonb) as arr
+      from public.reservations r2
+      left join lateral jsonb_array_elements(
+        case when jsonb_typeof(r2.invited) = 'array' then r2.invited else '[]'::jsonb end) e on true
+      where r2.status = 'booked' and r2.starts_at > now_ms and r2.user_id <> uid
+        and exists (select 1 from public.reservation_participants rp
+                    where rp.reservation_id = r2.id and rp.user_id = uid)
+      group by r2.id
     ) f
-    where r.status = 'booked' and r.starts_at > now_ms and r.user_id <> uid
-      and exists (select 1 from public.reservation_participants rp
-                  where rp.reservation_id = r.id and rp.user_id = uid);
+    where r.id = f.id;
   -- C8 : coach supprimé → libérer/annuler les résas de ses cours acceptés et refuser ses demandes
   -- en attente. La cohérence des données est préservée (résa annulée, terrain libéré, lesson passée
   -- à 'cancelled' par le trigger 76). NB honnête : sur cette voie le webhook `lessons` cible le
