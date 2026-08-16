@@ -20,7 +20,8 @@
 //   • lessons UPDATE (pending → accepted) → notif à l'ÉLÈVE (cours accepté, terrain réservé) — le
 //     club reçoit la notif « nouvelle réservation » via le webhook reservations, automatiquement.
 //   • lessons UPDATE (cancelled → accepted) → RÉTABLISSEMENT (85 C3, un « pas venu » dé-marqué) :
-//     texte « cours rétabli » dédié (jamais « accepté ») — élève, ou élèves inscrits si collectif.
+//     texte « cours rétabli » dédié (jamais « accepté ») — COACH (parité avec l'annulation) +
+//     l'élève, ou les élèves inscrits si cours collectif.
 //   • lessons UPDATE (→ declined) → notif à l'ÉLÈVE (cours refusé, aucun terrain réservé).
 //   • lessons UPDATE (pending → cancelled) → notif au COACH (l'élève a retiré sa demande).
 //   • match_results INSERT / UPDATE (une SAISIE de score par joueur, 46) → selon l'état du
@@ -339,8 +340,18 @@ Deno.serve(async (req) => {
       if (record.open_match === true && record.user_id && record.club_id) {
         try {
           const already = new Set<string>();
-          const favRows = await supabase.from('favorite_players').select('user_id').eq('fav_user_id', record.user_id);
-          for (const f of favRows.data ?? []) already.add(f.user_id as string);
+          // Dédup MIROIR de la branche favoris (mêmes 100 plus récents) : sans order+limit, un joueur
+          // déjà notifié « partenaire suivi » pouvait recevoir EN PLUS « match à ton niveau » (PostgREST
+          // plafonne en plus à 1000 dans un ordre arbitraire). Échec de lecture → on abandonne cette
+          // alerte SECONDAIRE (le push favoris, plus important, est déjà parti) plutôt qu'un doublon.
+          const { data: favData, error: favErr } = await supabase
+            .from('favorite_players')
+            .select('user_id')
+            .eq('fav_user_id', record.user_id)
+            .order('created_at', { ascending: false })
+            .limit(100);
+          if (favErr) throw new Error('favorite_players read failed — fail closed (évite un doublon d’alerte)');
+          for (const f of favData ?? []) already.add(f.user_id as string);
           // FAIL-CLOSED (§8) : un ÉCHEC de lecture des blocages abandonne l'alerte (ne jamais
           // notifier un bloqué). null (error) ≠ [] (aucun blocage réel).
           const { data: blocks, error: blkErr } = await supabase
@@ -615,7 +626,17 @@ Deno.serve(async (req) => {
       if (oldRecord.status === 'cancelled') {
         // RÉTABLISSEMENT (85 C3) : le club a DÉ-MARQUÉ un « pas venu » → le cours et sa réservation
         // reprennent vie. Le coach n'a rien « accepté » ici → texte DÉDIÉ (dire « accepté » serait
-        // faux). Parité avec la branche d'annulation : collectif → élèves inscrits, sinon l'élève.
+        // faux). Parité EXACTE avec la branche d'annulation : on prévient le COACH dans tous les cas
+        // (il avait reçu « Cours annulé » et pourrait ne pas se présenter), puis l'élève ou les élèves.
+        notifs.push({
+          targets: await userToken(record.coach_id),
+          title: 'Cours rétabli',
+          body:
+            Number(record.capacity ?? 1) > 1
+              ? `Ton cours collectif du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} est rétabli — le créneau est de nouveau réservé, les élèves inscrits sont prévenus.`
+              : `Le cours avec ${record.student_name ?? 'un joueur'} du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} est rétabli — le créneau est de nouveau réservé.`,
+          data: { kind: 'lesson' },
+        });
         if (Number(record.capacity ?? 1) > 1) {
           const { data: studs } = await supabase.from('lesson_students').select('user_id').eq('lesson_id', record.id);
           const studIds = (studs ?? []).map((s: { user_id: string }) => s.user_id).filter(Boolean);
@@ -870,11 +891,14 @@ Deno.serve(async (req) => {
         if ((fols ?? []).length === 500) console.log(`annonce club ${nw.club_id} : 500 suiveurs atteints, les plus anciens écrêtés`);
         let ids = [...new Set((fols ?? []).map((f: { user_id: string }) => f.user_id))].filter(Boolean);
         if (nw.created_by && ids.length) {
-          const { data: blocks } = await supabase
+          const { data: blocks, error: blkErr } = await supabase
             .from('blocked_users')
             .select('blocker_id, blocked_id')
             .or(`blocker_id.eq.${nw.created_by},blocked_id.eq.${nw.created_by}`);
-          const excluded = new Set((blocks ?? []).flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]));
+          // FAIL-CLOSED (invariant §8 / favoris+alertes) : si on ne peut PAS lire les blocages, on
+          // n'envoie PAS l'annonce (une lecture ratée ne doit jamais laisser passer un push à un bloqué).
+          if (blkErr || !blocks) throw new Error('blocked_users read failed — fail closed');
+          const excluded = new Set(blocks.flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]));
           ids = ids.filter((id: string) => id !== nw.created_by && !excluded.has(id));
         }
         if (ids.length) {
