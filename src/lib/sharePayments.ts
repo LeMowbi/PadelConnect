@@ -8,15 +8,17 @@ import { supabase } from './supabase';
 export type SharePayment = { userId: string; name: string; status: 'declared' | 'confirmed' };
 export type ShareState = { waveLink: string; shares: SharePayment[] };
 
-// Créateur : enregistre SON lien Wave sur SA résa à venir ('' = effacer). false = refus
-// (pas https, pas ma résa, déjà passée) ou échec réseau.
+// Créateur : enregistre SON lien Wave sur SA résa ('' = effacer). false = refus (pas https,
+// pas ma résa, ou match terminé depuis plus de 24 h — fenêtre serveur de la 88, la grâce
+// couvre le règlement d'après-match) ou échec réseau.
 export async function setReservationWaveLink(reservationId: string, link: string): Promise<boolean> {
   const { data, error } = await supabase.rpc('set_reservation_wave_link', { p_id: reservationId, p_link: link });
   return !error && data === true;
 }
 
 // Participant accepté : déclare sa part payée (idempotent — une part déjà confirmée ne
-// redescend jamais). true = pris en compte.
+// redescend jamais). Même fenêtre que le lien (jusqu'à 24 h après la fin du match, 88).
+// true = pris en compte.
 export async function declareSharePaid(reservationId: string): Promise<boolean> {
   const { data, error } = await supabase.rpc('declare_share_paid', { p_reservation_id: reservationId });
   return !error && data === true;

@@ -685,6 +685,17 @@ update` AVANT l'UPDATE, patron 73/M4, course rejouée → joiner préservé) + 1
   le code sur le contrat annoncé ; posée + prouvée 4/4 en base) et le §8 recalé (02→88).
   Résiduel assumé : bouton retour du tunnel pendant le submit = écran de succès perdu, jamais
   d'affichage faux (instantané `booked`).
+- **Tour 8 (vérification finale des correctifs du tour 7)** : AUCUN HIGH/MEDIUM — 3 LOW fermés :
+  la puce du terrain choisi reste visible en tête pendant le submit (elle disparaissait dès que le
+  miroir la retirait de `free`, dernier terrain ou pas) ; SQL **`89`** (trigger serveur : réserver un
+  créneau PURGE sa propre alerte de liste d'attente — le nettoyage ne vivait que dans le tunnel
+  client, la voie rapide et les cours coach laissaient l'alerte pousser « un créneau s'est libéré »
+  sur un créneau qu'on occupe) ; **`88` amendée** (grâce de 24 h après la fin du match : sans elle,
+  « J'ai payé ✓ » tapé juste après le coup de sifflet renvoyait « réessaie » à jamais — la classe
+  mark_no_show du tour 4 ; le but anti-forge reste tenu). 88 amendée + 89 **appliquées + prouvées
+  4/4 en base** (vieux match fermé, fini-2h ouvert, futur ouvert, alerte purgée par le trigger).
+  Le trigger `user` de `reservations` réactivé après preuve (transaction annulée = sans objet, mais
+  vérifié). Contrats client (`sharePayments.ts`) recalés sur la fenêtre réelle.
 
 ## 11. Où regarder
 

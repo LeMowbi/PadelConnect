@@ -298,9 +298,10 @@ export function BookingSheet({
                   </View>
                 ) : (
                   <View style={styles.row}>
-                    {/* free=[] ici ⇒ on est en plein submit sur le dernier terrain : on garde LA
-                        puce du terrain en cours de réservation visible (au lieu d'une ligne vide). */}
-                    {(free.length === 0 && court ? [court] : free).map((c) => (
+                    {/* Pendant le submit, le miroir contient DÉJÀ la résa en cours → le terrain
+                        choisi sort de `free` (dernier libre ou pas) : on garde SA puce visible et
+                        active en tête, au lieu qu'elle disparaisse le temps du round-trip. */}
+                    {(court && !free.includes(court) ? [court, ...free] : free).map((c) => (
                       <Chip
                         key={c}
                         label={c}
