@@ -842,7 +842,12 @@ export default function ReserverScreen() {
                     sub: 'Juste toi et tes invités',
                     show: true,
                     active: !effectiveOpen,
-                    set: () => setOpenMatch(false),
+                    // Figé pendant le submit (comme équipe/format) : le récap de succès lit
+                    // `openMatch` VIVANT (recapHeads) pour la part par joueur.
+                    set: () => {
+                      if (submitting) return;
+                      setOpenMatch(false);
+                    },
                   },
                   {
                     key: 'open',
@@ -854,7 +859,10 @@ export default function ReserverScreen() {
                         : `${maxGuests - participantCount} place${maxGuests - participantCount > 1 ? 's' : ''} à prendre — 4 au total`,
                     show: openable,
                     active: effectiveOpen,
-                    set: () => setOpenMatch(true),
+                    set: () => {
+                      if (submitting) return;
+                      setOpenMatch(true);
+                    },
                   },
                 ] as const
               )

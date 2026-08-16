@@ -402,7 +402,12 @@ export function BookingSheet({
                                 sub: 'Juste toi et tes invités',
                                 show: true,
                                 active: !effectiveOpen,
-                                set: () => setOpenMatch(false),
+                                // Figé pendant le submit (comme équipe/format/terrain) : l'écran de
+                                // succès lit `effectiveOpen` VIVANT pour la part par joueur.
+                                set: () => {
+                                  if (submitting) return;
+                                  setOpenMatch(false);
+                                },
                               },
                               {
                                 key: 'open',
@@ -414,7 +419,10 @@ export function BookingSheet({
                                     : `${maxGuests - participantCount} place${maxGuests - participantCount > 1 ? 's' : ''} à prendre — 4 au total`,
                                 show: openable,
                                 active: effectiveOpen,
-                                set: () => setOpenMatch(true),
+                                set: () => {
+                                  if (submitting) return;
+                                  setOpenMatch(true);
+                                },
                               },
                             ] as const
                           )
