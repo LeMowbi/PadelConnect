@@ -80,7 +80,7 @@ export function CommissionRates({
                     placeholder={`${current}`}
                     placeholderTextColor={colors.textMuted}
                     keyboardType="numeric"
-                    maxLength={3}
+                    maxLength={5} // « 12.5 » doit passer — save() accepte les décimales (0-100)
                     accessibilityLabel={`Commission pour ${c.name}, en pourcentage`}
                     style={[opStyles.clubInput, { width: 64, marginTop: 0, textAlign: 'center' }]}
                   />

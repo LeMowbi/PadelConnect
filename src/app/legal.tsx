@@ -43,8 +43,9 @@ export default function Legal() {
         </Txt>
         <Txt variant="body" style={{ marginTop: spacing.sm }}>
           Après un match, chaque joueur peut saisir le score : le match est validé quand un adversaire confirme (ou, pour une saisie restée
-          seule, après 48 h), et alimente le classement par points. Le niveau affiché est déclaratif et n’évolue que via les tournois
-          officiels. Le parrainage permet d’inviter des amis, sans contrepartie monétaire.
+          seule, après 48 h), et alimente le classement par points. Le niveau est initialisé par le quiz d’inscription puis ajusté
+          automatiquement côté serveur par les matchs validés et les tournois officiels. Le parrainage permet d’inviter des amis, sans
+          contrepartie monétaire.
         </Txt>
       </Card>
 
@@ -109,7 +110,7 @@ export default function Legal() {
       </Card>
 
       <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.lg, textAlign: 'center' }}>
-        Dernière mise à jour : juillet 2026. Pour toute question sur tes données, écris-nous à l’adresse ci-dessus.
+        Dernière mise à jour : août 2026. Pour toute question sur tes données, écris-nous à l’adresse ci-dessus.
       </Txt>
     </Screen>
   );

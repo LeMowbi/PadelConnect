@@ -274,15 +274,17 @@ export default function Operateur() {
   };
   const pendingClaims = claims.filter((c) => !c.served).length;
 
-  const { refreshControl, webRefreshButton } = usePullToRefresh(async () => {
-    await Promise.all([loadSupport(), loadReports(), loadClaims()]);
-  });
   const markSupport = async (id: string, status: ServerSupportMessage['status']) => {
     const prev = support.find((m) => m.id === id)?.status;
     setSupport((cur) => cur.map((m) => (m.id === id ? { ...m, status } : m)));
     const { ok } = await setSupportMessageStatus(id, status);
-    // Échec serveur : on annule l’affichage optimiste (sinon le statut affiché ment).
-    if (!ok && prev) setSupport((cur) => cur.map((m) => (m.id === id ? { ...m, status: prev } : m)));
+    // Échec serveur : on annule l’affichage optimiste (sinon le statut affiché ment) ET on le
+    // DIT (parité moderateReport/serveClaim — un badge qui revient tout seul sans message
+    // laissait croire à un enregistrement réussi).
+    if (!ok && prev) {
+      setSupport((cur) => cur.map((m) => (m.id === id ? { ...m, status: prev } : m)));
+      toast.show('Changement impossible — réessaie.', { icon: 'alert-circle' });
+    }
   };
   const newSupport = support.filter((m) => m.status === 'new').length;
   // Clubs démo LOCAUX seulement (les clubs serveur ont fromServer=true et sont gérés ailleurs).
@@ -303,6 +305,12 @@ export default function Operateur() {
     if (ok) setRequests(rows); // §8 : un échec réseau ne remplace pas la liste déjà chargée par []
     setLoadingReq(false);
   }, []);
+  // Placé APRÈS loadRequests (règle React Compiler : pas d'accès avant déclaration).
+  // `loadRequests` inclus : sans lui, « Demandes reçues » restait figé pendant que les trois
+  // autres blocs de l'onglet se rafraîchissaient (seule l'icône ↻ dédiée la rechargeait).
+  const { refreshControl, webRefreshButton } = usePullToRefresh(async () => {
+    await Promise.all([loadSupport(), loadReports(), loadClaims(), loadRequests()]);
+  });
   // Chargement initial : on n’appelle setState que DANS le callback async (après await),
   // jamais de façon synchrone dans le corps de l’effet (cf. react-hooks/set-state-in-effect).
   useEffect(() => {
@@ -326,7 +334,10 @@ export default function Operateur() {
     const prev = requests.find((r) => r.id === id)?.status;
     setRequests((cur) => cur.map((r) => (r.id === id ? { ...r, status } : r)));
     const { ok } = await setClubRequestStatus(id, status);
-    if (!ok && prev) setRequests((cur) => cur.map((r) => (r.id === id ? { ...r, status: prev } : r)));
+    if (!ok && prev) {
+      setRequests((cur) => cur.map((r) => (r.id === id ? { ...r, status: prev } : r)));
+      toast.show('Changement impossible — réessaie.', { icon: 'alert-circle' });
+    }
   };
   const pendingRequests = requests.filter((r) => r.status === 'new' || r.status === 'contacted').length;
   // Rappel inter-onglets : tout ce qui attend dans « Demandes ». Une liste de bouts + join
