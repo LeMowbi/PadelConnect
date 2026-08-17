@@ -88,16 +88,18 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   l'écrire dans le dépôt).
 - Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
 --auto-submit --non-interactive --no-wait`.
-- **`app.json` : version 1.0.2, `buildNumber` courant : 67** (EAS `autoIncrement` le bump à chaque
+- **`app.json` : version 1.0.2, `buildNumber` courant : 68** (EAS `autoIncrement` le bump à chaque
   build — ne PAS s'en remettre au suivi manuel ci-dessous, c'est `app.json` qui fait foi).
-  🆕 **Build #67 (v1.0.2)** lancé sur EAS le 2026-08-13 **AVEC auto-submit** (App Store) : contient
-  l'UI de l'annulation club (75) + les 8 correctifs de la campagne « relance-corrige » (tour blanc
-  atteint — crash minuit cours, tournoi clôturé qui sur-bloquait, gardes d'époque, etc.). Web
-  `club.padelconnectci.com` **redéployé le même jour** (déploiement MANUEL : les secrets GitHub
-  `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` sont VIDES dans le dépôt → le workflow
-  `deploy-web.yml` échoue à CHAQUE push depuis sa création ; le porteur doit les créer dans
-  GitHub → Settings → Secrets and variables → Actions pour que l'automatisation fonctionne).
-  Le build #64 du 2026-07-16 (sans auto-submit) est SUPPLANTÉ par le #67.
+  🆕 **Build #68 (v1.0.2)** lancé et TERMINÉ sur EAS le 2026-08-17 **AVEC auto-submit** (App
+  Store) : embarque TOUS les correctifs de la campagne d'audit « refait autant de fois qu'il le
+  faut » (tours 1→9 + post-lancement — classe « écran menteur pendant le submit » fermée, messages
+  no-show honnêtes, gardes d'époque). Web `club.padelconnectci.com` ET site `padelconnectci.com`
+  redéployés le même jour via l'API Cloudflare (privacy/CGU v3 + CGU honnêtes sur le niveau).
+  ⚠️ Le texte CGU in-app corrigé (`legal.tsx`) partira avec le PROCHAIN build (le #68 embarque
+  l'ancien) — le site, lui, est déjà à jour et fait foi publiquement. (Les secrets GitHub
+  `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` restent VIDES dans le dépôt → `deploy-web.yml`
+  échoue à chaque push ; le porteur peut les créer dans GitHub → Settings → Secrets pour
+  automatiser.) Le build #67 du 2026-08-13 est SUPPLANTÉ par le #68.
   🚀 **L'app est EN LIGNE (v1.0) depuis le 2026-07-10** sur les stores CI/SN/US ; l'UE attend la
   vérification « commerçant » DSA d'Apple (bloque UNIQUEMENT les stores européens, rien d'autre).
   La **v1.0.1** (build #63 = correctifs de l'audit complet) a été mise en revue par le porteur le
