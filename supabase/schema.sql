@@ -1,6 +1,8 @@
--- PadelConnect — schéma initial (à coller dans Supabase → SQL Editor → Run).
--- Crée les tables Profils + Réservations avec la sécurité (Row Level Security).
--- Idempotent : peut être relancé sans casser l'existant.
+-- PadelConnect — schéma initial. ⚠️ FICHIER HISTORIQUE : NE PAS RECOLLER en base — les
+-- migrations 02→89 ont durci ou remplacé plusieurs de ses objets (le recoller ressusciterait
+-- des versions périmées). Conservé pour référence ; les deux policies ci-dessous sont
+-- maintenues alignées sur leurs versions durcies (09/41) pour qu'un collage accidentel
+-- soit inoffensif, mais la règle reste : ne rien recoller d'ancien (cf. docs/AUDIT-SERVEUR.md).
 
 -- ─── PROFILS (1 par compte) ──────────────────────────────────────────────────
 create table if not exists public.profiles (
@@ -28,7 +30,7 @@ create policy "profiles_insert_own" on public.profiles
 
 drop policy if exists "profiles_update_own" on public.profiles;
 create policy "profiles_update_own" on public.profiles
-  for update using (auth.uid() = id);
+  for update using (auth.uid() = id) with check (auth.uid() = id); -- `with check` : durci par la 09
 
 -- ─── RÉSERVATIONS ────────────────────────────────────────────────────────────
 create table if not exists public.reservations (
@@ -62,9 +64,9 @@ drop policy if exists "reservations_insert_own" on public.reservations;
 create policy "reservations_insert_own" on public.reservations
   for insert with check (auth.uid() = user_id);
 
+-- `reservations_delete_own` SUPPRIMÉE par la 41 (plus de DELETE direct d'une résa — on annule
+-- par changement de statut). On ne la recrée PAS ; le drop reste pour l'idempotence historique.
 drop policy if exists "reservations_delete_own" on public.reservations;
-create policy "reservations_delete_own" on public.reservations
-  for delete using (auth.uid() = user_id);
 
 -- (Accès « côté club » — un gérant voit les réservations de SON club — sera ajouté
 --  avec les comptes clubs, une fois les rôles en place.)

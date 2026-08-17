@@ -65,6 +65,11 @@ order by element;
 -- demi-suppression). Le récapitulatif final confirme l'état après coup.
 begin;
 
+  -- ⚠️ GUC du moteur de niveau (34/80) : sans lui, le trigger protect_level ANNULE en silence la
+  -- remise à 3.0 des niveaux plus bas (new.level := old.level, même depuis SQL Editor) — le reset
+  -- semblerait réussi mais les niveaux de test amorceraient le moteur au lancement public.
+  select set_config('padel.level_write', 'on', true);
+
   -- 1) Activité des joueurs — on efface les « enfants » avant les « parents » (clés étrangères).
   delete from public.reservation_participants;
   delete from public.share_payments;             -- parts Wave (83) — cascade avec reservations, explicite quand même

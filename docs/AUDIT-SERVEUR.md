@@ -1,11 +1,18 @@
 # Audit — actions serveur (sans terminal)
 
-> ✅ **À JOUR au 2026-08-14 — plus rien à coller ici.** TOUT le SQL `02`→`79` est **appliqué en
-> base** (Management API ; `79` = `reservations.court` NOT NULL + non-blanc, posée et vérifiée le
-> 2026-08-14), `notify-club` est déployée (v32 — push gérant avec nom du club), et les 8 Database Webhooks écoutent
-> **INSERT + UPDATE**. Les sections datées ci-dessous (« ⏳ À FAIRE » d'avant le 2026-07-06) sont
-> un HISTORIQUE conservé pour la trace — elles ne sont plus des actions en attente. Reste au
-> porteur (hors SQL) : lien Wave, FCM Android + empreinte SHA-256 d'assetlinks.
+> ✅ **À JOUR au 2026-08-17 — plus rien à coller ici.** TOUT le SQL `02`→`89` est **appliqué en
+> base** (Management API), `notify-club` est déployée (v45) et les 11 Database Webhooks sont en
+> place. Les sections datées ci-dessous (« ⏳ À FAIRE ») sont un HISTORIQUE conservé pour la
+> trace — elles ne sont plus des actions en attente. Reste au porteur (hors SQL) : lien Wave,
+> FCM Android + empreinte SHA-256 d'assetlinks.
+>
+> 🔴 **NE JAMAIS recoller un vieux fichier SQL isolément** — même si une section historique
+> ci-dessous dit « le recoller est sans risque » : c'était vrai À SA DATE, plus aujourd'hui.
+> Recoller par exemple `49`→`53` seuls écraserait des fonctions redéfinies depuis
+> (`submit_match_score`, `fetch_leaderboard`, et surtout `delete_account`/`delete_club`, qui
+> retomberaient sur des versions qui ÉCHOUENT contre `storage.protect_delete` — la suppression
+> de compte, exigence App Store, casserait). S'il faut VRAIMENT recoller le fichier N, recoller
+> ENSUITE tous les fichiers N+1 → 89 dans l'ordre. Dans le doute : ne rien coller, demander.
 
 ## 0-OCTIES) MULTI-CLUBS (2026-07-03) — coller SQL `55` (1 min) — ⏳ À FAIRE
 
