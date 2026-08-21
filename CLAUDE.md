@@ -717,7 +717,15 @@ update` AVANT l'UPDATE, patron 73/M4, course rejouée → joiner préservé) + 1
   Le trigger `user` de `reservations` réactivé après preuve (transaction annulée = sans objet, mais
   vérifié). Contrats client (`sharePayments.ts`) recalés sur la fenêtre réelle.
 
-### Audit post-lancement n°2 (2026-08-21, « comme appris ») — CONVERGÉ ✅ (6 tours)
+### Audit post-lancement n°2 (2026-08-21, « comme appris ») — CONVERGÉ ✅ (8 tours, gate BLANC)
+
+Tours 7-8 (« autant qu'il le faut ») : t7 = micro-gates PASSANTS + 2 lens fraîches — flux SCORE
+(1 MEDIUM : une invitation jamais confirmée montrait « Mettre le score » → refus serveur affiché
+« réessaie » en boucle ; gaté !isPending + ligne honnête ; conflit reformulé pour couvrir le
+plafond de vainqueurs) et CŒUR AppContext tracé exhaustivement (zéro HIGH/MEDIUM ; 2 LOW fermés :
+garde d'époque manquante d'unregisterCompetition, double-tap même-frame de la voie démo — fix par
+REF, pas par drapeau d'updater : setState n'est pas synchrone en React 18+). t8 = GATE BLANC
+(6 preuves sur pièces, aucun constat). La campagne est close.
 
 Trajectoire : t1 = 9 constats (3 MEDIUM) → t2 = SQL 90 CONFORME + 1 MEDIUM (mon filtre pouvait
 escalader un blocage : vide = « tout le club » → REFUS au lieu de dégrader) → t3 = refus rendu
