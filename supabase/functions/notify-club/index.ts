@@ -480,8 +480,10 @@ Deno.serve(async (req) => {
       // ABSENCE ANNULÉE par le club (87, « Annuler l'absence ») : la résa revit. Pour un COURS,
       // la branche lessons (v45, cancelled→accepted) prévient déjà élève(s) + coach — on ne
       // double-notifie pas ; ce push ne couvre que la RÉSA SIMPLE (aucune lesson rattachée).
-      const { data: linked } = await supabase.from('lessons').select('id').eq('reservation_id', record.id).limit(1);
-      if (!(linked ?? []).length) {
+      const { data: linked, error: linkErr } = await supabase.from('lessons').select('id').eq('reservation_id', record.id).limit(1);
+      // FAIL-CLOSED (idiome §8) : si on ne peut PAS savoir si un cours est rattaché, on n'envoie
+      // PAS — sinon un cours rétabli recevait CE push EN DOUBLON du « Cours rétabli » (branche lessons).
+      if (!linkErr && !(linked ?? []).length) {
         notifs.push({
           targets: await userToken(record.user_id),
           title: 'Réservation rétablie ✅',

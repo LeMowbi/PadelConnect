@@ -180,12 +180,6 @@ export default function ReservationsScreen() {
     };
   }, [state.serverUserId]);
 
-  // Tirer pour rafraîchir : resynchronise MES réservations (refreshSession → « À venir » perd la
-  // résa annulée par le club, plus de double-affichage avec « Annulées »), mes cours, scores et annulées.
-  const { refreshControl, webRefreshButton } = usePullToRefresh(async () => {
-    await Promise.all([refreshSession(), refreshLessons(), loadScores(), loadCancelled(), loadGroupLessons()]);
-  });
-
   // Périmètre appliqué au RENDU (cf. loadCancelled) : toujours calé sur l'état courant.
   const cancelled = cancelledRows.filter(inMyPerimeter);
 
@@ -220,7 +214,9 @@ export default function ReservationsScreen() {
   // plus SHARE_MAX de chaque côté (un appel serveur chacune) — les passées sont en plus déjà
   // bornées par la pagination PAST_PREVIEW : jamais de balayage de l'historique.
   const upcomingShareTargets = upcoming.filter(isShared).slice(0, SHARE_MAX);
-  const pastShareTargets = pastShown.filter((r) => isShared(r) && inShareWindow(r)).slice(0, SHARE_MAX);
+  // `!isPending` (patron du bouton score, t7) : une invitation JAMAIS confirmée n'a ni part à
+  // régler ni fetch qui puisse aboutir (fetch_share_payments exige 'accepted') — pas de carte.
+  const pastShareTargets = pastShown.filter((r) => !isPending(r) && isShared(r) && inShareWindow(r)).slice(0, SHARE_MAX);
   // `upcoming` et `pastShown` sont disjoints (isPlayed) : pas de doublon à dédupliquer.
   const shareTargets = [...upcomingShareTargets, ...pastShareTargets];
   const shareKey = shareTargets.map((r) => r.id).join(',');
@@ -239,9 +235,13 @@ export default function ReservationsScreen() {
     const sub = RNAppState.addEventListener('change', (st) => {
       if (st === 'active') load();
     });
+    // Push reçu APP OUVERTE (« part déclarée payée — confirme la réception ») : sans cette
+    // écoute, la notification demandait une action que l'écran ne montrait pas encore.
+    const offPush = onPushReceivedInForeground(load);
     return () => {
       alive = false;
       sub.remove();
+      offPush();
     };
   }, [shareKey, state.serverUserId]);
 
@@ -251,6 +251,16 @@ export default function ReservationsScreen() {
     const st = await fetchSharePayments(id);
     if (st) setShares((cur) => ({ ...cur, [id]: st }));
   };
+
+  // Tirer pour rafraîchir (placé APRÈS shareTargets et reloadShare — règle compiler : pas d'accès avant
+  // déclaration) : resynchronise MES réservations (refreshSession → « À venir » perd la
+  // résa annulée par le club, plus de double-affichage avec « Annulées »), mes cours, scores et annulées.
+  const { refreshControl, webRefreshButton } = usePullToRefresh(async () => {
+    await Promise.all([refreshSession(), refreshLessons(), loadScores(), loadCancelled(), loadGroupLessons()]);
+    // Les parts Wave suivent le même geste — via le helper de relecture unitaire existant
+    // (fusion §8), sans ref : le compilateur gèle toute valeur capturée par un hook.
+    for (const t of shareTargets) void reloadShare(t.id);
+  });
 
   // Mes demandes de COURS (coach) encore vivantes : en attente de réponse du coach, ou refusées
   // à venir (pour que le refus laisse une trace ici, pas seulement une notification). Un cours
@@ -991,9 +1001,11 @@ export default function ReservationsScreen() {
                       </Pressable>
                     ) : null}
                     {/* Invitation jamais confirmée, match passé : dire POURQUOI il n'y a pas de
-                        bouton de score (le masquer en silence laisserait croire à un oubli). */}
+                        bouton de score (le masquer en silence laisserait croire à un oubli).
+                        `flex: 1` : dans une rangée RN, flexShrink vaut 0 par défaut — sans lui, la
+                        phrase débordait de la carte au lieu de passer à la ligne. */}
                     {state.serverUserId && isPending(r) ? (
-                      <Txt variant="small" color={colors.textMuted} style={{ marginTop: 4 }}>
+                      <Txt variant="small" color={colors.textMuted} style={{ flex: 1, marginTop: 4 }}>
                         Invitation jamais confirmée — ce match ne peut pas être noté.
                       </Txt>
                     ) : null}

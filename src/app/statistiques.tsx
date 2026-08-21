@@ -106,7 +106,10 @@ export default function Statistiques() {
   // Points et victoires de match viennent du classement serveur : inconnus (chargement ou échec
   // réseau, §8), on passe 0 → les deux badges concernés restent « à débloquer » et une ligne le
   // dit honnêtement, plutôt que de laisser croire que le joueur ne les a pas mérités.
-  const serverUnknown = typeof points !== 'number' || typeof matchWins !== 'number';
+  // Trois états (contrat de l'écran) : undefined = chargement, null = indisponible (hors-ligne OU
+  // hors du top 100 du classement), nombre = valeur. On ne montre la ligne d'honnêteté que sur le
+  // null PERSISTANT — au chargement comme pour un joueur à 0 en ligne, elle n'a rien à dire.
+  const serverUnknown = points === null || matchWins === null;
   const board = badgeBoard({
     playedCount: played,
     tournamentsPlayed,
@@ -213,7 +216,7 @@ export default function Statistiques() {
           </View>
           {serverUnknown ? (
             <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.md }}>
-              Points et victoires de match indisponibles : deux badges peuvent manquer tant que tu n’es pas en ligne.
+              Points et victoires de match non disponibles ici — deux badges peuvent manquer (hors-ligne ou hors du top 100).
             </Txt>
           ) : null}
         </Card>

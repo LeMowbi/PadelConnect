@@ -31,9 +31,21 @@
         // déjà utilisé — l'adresse est alors très probablement DÉJÀ confirmée (double clic).
         try {
           var h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
-          var err = h.get('error') || new URLSearchParams(location.search).get('error');
+          var q = new URLSearchParams(location.search);
+          var err = h.get('error') || q.get('error');
           var code = h.get('error_code') || '';
-          if (err) {
+          // Un VRAI passage par Supabase porte un jeton ou un code — une visite directe de l'URL
+          // n'a rien : on ne doit alors PAS affirmer « confirmée » (ce serait faux). Message neutre.
+          var hasToken = !!(h.get('access_token') || h.get('token_hash') || q.get('code') || q.get('token_hash'));
+          // Hygiène : les jetons du fragment ne doivent pas rester dans l'historique du navigateur
+          // (poste partagé = session récupérable). On nettoie l'URL après lecture.
+          if (location.hash || location.search) history.replaceState(null, '', location.pathname);
+          if (!err && !hasToken) {
+            document.getElementById('cb-badge').textContent = '🎾';
+            document.getElementById('cb-title').textContent = 'PadelConnect';
+            document.getElementById('cb-text').textContent =
+              'Ouvre l’application PadelConnect sur ton téléphone pour continuer.';
+          } else if (err) {
             document.getElementById('cb-badge').textContent = 'ℹ️';
             if (code === 'otp_expired' || /expired|invalid/i.test(h.get('error_description') || '')) {
               document.getElementById('cb-title').textContent = 'Lien déjà utilisé ou expiré';

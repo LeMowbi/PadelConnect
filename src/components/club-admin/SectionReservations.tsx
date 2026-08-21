@@ -294,6 +294,11 @@ export function SectionReservations({
         if (st === 'ok') {
           hapticSuccess();
           toast.show('Absence annulée — réservation rétablie');
+          // Retrait OPTIMISTE de la ligne (patron leaveLesson) : le miroir store vient de
+          // réintégrer la résa au même rendu — sans ce retrait, elle s'affichait EN DOUBLE
+          // (Absences + Historique) le temps de reloadTraces, et pour toujours si la relecture
+          // échouait (§8 : un null ne remplace pas la liste).
+          setNoShows((cur) => cur.filter((x) => x.id !== r.id));
           reloadTraces();
           // La fiabilité du joueur vient de perdre une absence : re-sync CIBLÉ (la clé de l’effet
           // ne bouge pas, le joueur restant présent par ses autres résas → badge sinon périmé).
