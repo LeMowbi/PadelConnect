@@ -188,6 +188,11 @@ export default function NouvelleCompetition() {
     const keptTimes = times.filter((t) => hostSlots.includes(t) && !timeDisabled(t));
     if ((courts.length > 0 && keptCourts.length === 0) || (times.length > 0 && keptTimes.length === 0)) {
       hapticWarning();
+      // Les entrées DISPARUES de la grille (terrain retiré par un autre gérant, refresh) n'ont
+      // plus de puce à décocher : on les purge pour que la correction reste possible à l'écran.
+      // Les entrées encore affichées (fermées sur ces dates) restent cochées ET décochables.
+      setCourts((cur) => cur.filter((c) => hostCourts.includes(c)));
+      setTimes((cur) => cur.filter((t) => hostSlots.includes(t)));
       toast.show('Les terrains ou créneaux choisis sont fermés sur ces dates — corrige ta sélection.', { icon: 'alert-circle' });
       return;
     }
@@ -379,7 +384,15 @@ export default function NouvelleCompetition() {
           </Txt>
           <View style={styles.wrap}>
             {hostCourts.map((c) => (
-              <Chip key={c} label={c} active={courts.includes(c)} disabled={courtDisabled(c)} onPress={() => toggleCourt(c)} />
+              <Chip
+                key={c}
+                label={c}
+                active={courts.includes(c)}
+                // Une puce COCHÉE reste toujours décochable, même devenue indisponible : sinon le
+                // refus « corrige ta sélection » demanderait un geste que l'UI interdit (boucle).
+                disabled={courtDisabled(c) && !courts.includes(c)}
+                onPress={() => toggleCourt(c)}
+              />
             ))}
           </View>
 
@@ -388,7 +401,13 @@ export default function NouvelleCompetition() {
           </Txt>
           <View style={styles.wrap}>
             {hostSlots.map((t) => (
-              <Chip key={t} label={t} active={times.includes(t)} disabled={timeDisabled(t)} onPress={() => toggleTime(t)} />
+              <Chip
+                key={t}
+                label={t}
+                active={times.includes(t)}
+                disabled={timeDisabled(t) && !times.includes(t)} // cochée ⇒ décochable (même règle)
+                onPress={() => toggleTime(t)}
+              />
             ))}
           </View>
           <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>

@@ -50,12 +50,14 @@ export function Chip({
         hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
         style={[styles.base, size === 'lg' && styles.lg, active && styles.active, disabled && styles.disabled]}
       >
-        {icon ? <Ionicons name={icon} size={13} color={active ? colors.onSignature : colors.textMuted} /> : null}
+        {icon ? <Ionicons name={icon} size={13} color={active && !disabled ? colors.onSignature : colors.textMuted} /> : null}
         {/* Tronque un libellé long (nom de club personnalisable) au lieu de casser le pill en 2
             lignes — même garde que Button/Tag. flexShrink borne la largeur dans la rangée wrap. */}
         <Txt
           variant="small"
-          color={active ? colors.onSignature : colors.text}
+          // `active && disabled` : le fond désactivé (clair) gagne sur le fond signature → un
+          // texte blanc y devenait illisible (ratio ~1). On repasse au texte sombre dans ce cas.
+          color={active && !disabled ? colors.onSignature : colors.text}
           style={{ fontWeight: '600', flexShrink: 1 }}
           numberOfLines={1}
         >
