@@ -25,11 +25,14 @@ export function CommissionRates({
   const [busy, setBusy] = useState<string | null>(null);
 
   const save = async (clubId: string) => {
+    // Garde in-flight SÉPARÉE de la validation : un enregistrement en cours sur un AUTRE club
+    // affichait « Entre un pourcentage entre 0 et 100 » pour une valeur parfaitement valide.
+    if (busy) return;
     const raw = draft[clubId];
     const pct = Number((raw ?? '').replace(',', '.'));
     // L’opérateur fixe le taux LIBREMENT (il prévient lui-même le club avant) : on valide
     // seulement que c’est un pourcentage plausible (0 à 100).
-    if (busy || !Number.isFinite(pct) || pct < 0 || pct > 100) {
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
       toast.show('Entre un pourcentage entre 0 et 100', { icon: 'alert-circle' });
       return;
     }

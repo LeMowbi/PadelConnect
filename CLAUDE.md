@@ -713,6 +713,30 @@ update` AVANT l'UPDATE, patron 73/M4, course rejouée → joiner préservé) + 1
   Le trigger `user` de `reservations` réactivé après preuve (transaction annulée = sans objet, mais
   vérifié). Contrats client (`sharePayments.ts`) recalés sur la fenêtre réelle.
 
+### Audit post-lancement n°2 (2026-08-21, « comme appris ») — tour 1 ✅ corrigé, tour 2 à venir
+
+Méthode rodée : tours adversariaux jusqu'au blanc, Fable=sensible/Opus=écrans, preuve en base.
+Tour 1 (3 agents + vérifs live PAT) — 9 constats, TOUS corrigés :
+- Live (moi) : 11 webhooks conformes, ACL saines (8 « anon » = fonctions trigger, non appelables),
+  notify-club déployée = v45 du dépôt. BLANC.
+- 🟠 MEDIUM tournoi : terrains/créneaux d'un club SURVIVAIENT au changement de club hôte et
+  partaient au serveur (le club validait un blocage qui ne protégeait rien) → sélection vidée au
+  changement d'hôte + filtre ceinture-bretelles à l'envoi + ligne durée filtrée ; garde « date
+  passée » au passage de minuit (LOW).
+- 🟠 MEDIUM carnets : le solde côté CLUB ne se resynchronisait jamais après un remboursement du
+  trigger 85 (« Épuisé » mensonger, bouton Décompter masqué) → rechargement au premier plan
+  (parité ClubPassCard joueur) + re-sync après annulation club (SectionReservations,
+  ClubPassesCard).
+- 🟠 MEDIUM doc : AUDIT-SERVEUR §3 disait « les 8 webhooks » (il y en a 11) — une rotation du
+  secret aurait coupé 3 familles de push en silence → §3 recalé (✅ FAIT, liste des 11).
+- SQL **`90`** (posée + prouvée 5/5 en base) : join_group_lesson purge l'alerte waitlist de
+  l'élève (résidu de la classe 89) ; confirm_share_paid renvoie un TEXTE 'ok'/'gone'/'none'
+  (patron 87) — client aligné (messages dédiés, plus de « réessaie » sur refus définitif).
+- LOW : leave_slot_waitlist tri-état ('absent' = succès idempotent, plus de puce fantôme) ;
+  CommissionRates (garde in-flight ≠ validation, message faux) ; squelette du pull-to-refresh
+  opérateur (liste affichée ne disparaît plus) ; RESET/schema/88/89 contre-lus BLANCS (RESET
+  re-prouvé en local avec/sans GUC).
+
 ## 11. Où regarder
 
 - `docs/PUSH-SETUP.md` — configuration des push & webhooks (étapes Dashboard).

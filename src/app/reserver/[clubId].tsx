@@ -327,14 +327,18 @@ export default function ReserverScreen() {
     if (!day || !slot || waitBusy || submitting) return;
     setWaitBusy(true);
     if (alerted) {
-      const ok = await leaveSlotWaitlist(club.id, day.key, slot);
+      const st = await leaveSlotWaitlist(club.id, day.key, slot);
       setWaitBusy(false);
-      if (!ok) {
+      if (st === 'error') {
         toast.show('Retrait impossible — vérifie ton réseau et réessaie', { icon: 'cloud-offline-outline' });
         return;
       }
+      // 'removed' OU 'absent' : dans les deux cas l'alerte n'existe plus côté serveur — 'absent'
+      // signifie qu'elle avait DÉJÀ disparu (consommée par un push one-shot, purgée par le trigger
+      // 89 ou la purge des passées). L'ancien booléen traitait 'absent' comme une panne réseau →
+      // puce « Alerte posée ✓ » mensongère et « réessaie » à l'infini sur un état définitif.
       setWaitlist((cur) => (cur ?? []).filter((w) => !(w.clubId === club.id && w.dateKey === day.key && w.time === slot)));
-      toast.show('Alerte retirée.');
+      toast.show(st === 'removed' ? 'Alerte retirée.' : 'Cette alerte avait déjà été utilisée ou retirée.');
       return;
     }
     // Miroir de la borne serveur (SQL 81 : 20 alertes actives max). Sans lui, la demande de trop

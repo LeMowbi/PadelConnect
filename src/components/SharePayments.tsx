@@ -78,15 +78,27 @@ export function SharePayments({
     openWhatsApp('', body);
   };
 
-  // Créateur : confirme la part d’UN joueur (le serveur fait foi, puis on relit).
+  // Créateur : confirme la part d’UN joueur (le serveur fait foi, puis on relit). Messages par
+  // CODE (90) : un refus définitif (« gone »/« none ») ne dit plus « réessaie » (classe 87).
   const confirmShare = async (userId: string, name: string) => {
     if (busy) return;
     setBusy(true);
-    const ok = await confirmSharePaid(r.id, userId);
+    const st = await confirmSharePaid(r.id, userId);
     setBusy(false);
-    if (ok) hapticSuccess();
-    toast.show(ok ? `Part de ${name} confirmée ✓` : 'Confirmation impossible — réessaie', ok ? undefined : { icon: 'alert-circle' });
-    if (ok) onReload();
+    if (st === 'ok') {
+      hapticSuccess();
+      toast.show(`Part de ${name} confirmée ✓`);
+      onReload();
+    } else if (st === 'gone') {
+      toast.show('Cette réservation n’est plus active — la part ne peut plus être confirmée.', { icon: 'alert-circle' });
+      onReload();
+    } else if (st === 'none') {
+      // Déjà confirmée (double-tap / autre appareil) ou plus déclarée : on relit, l'état vrai s'affiche.
+      toast.show('Cette part est déjà à jour.', { icon: 'information-circle' });
+      onReload();
+    } else {
+      toast.show('Connexion impossible — réessaie', { icon: 'cloud-offline-outline' });
+    }
   };
 
   // Participant : déclare sa part payée (le créateur reçoit une notification, webhook 83).

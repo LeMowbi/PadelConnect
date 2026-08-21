@@ -24,10 +24,16 @@ export async function declareSharePaid(reservationId: string): Promise<boolean> 
   return !error && data === true;
 }
 
-// Créateur : confirme la part déclarée d'UN joueur. true = confirmée.
-export async function confirmSharePaid(reservationId: string, userId: string): Promise<boolean> {
+// Créateur : confirme la part déclarée d'UN joueur. Codes (90, patron 87) : 'ok' = confirmée ;
+// 'gone' = la résa n'est plus active (annulée/no-show — refus DÉFINITIF, inutile de réessayer) ;
+// 'none' = aucune part 'declared' de ce joueur (déjà confirmée ou jamais déclarée) ;
+// 'error' = échec réseau/serveur, réessayer a du sens.
+export type ConfirmShareStatus = 'ok' | 'gone' | 'none' | 'error';
+export async function confirmSharePaid(reservationId: string, userId: string): Promise<ConfirmShareStatus> {
   const { data, error } = await supabase.rpc('confirm_share_paid', { p_reservation_id: reservationId, p_user: userId });
-  return !error && data === true;
+  if (error) return 'error';
+  const s = String(data);
+  return s === 'ok' || s === 'gone' || s === 'none' ? s : 'error';
 }
 
 // État des parts d'une résa (créateur OU participant accepté) : lien Wave + statut par joueur.

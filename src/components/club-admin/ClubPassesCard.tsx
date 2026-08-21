@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { AppState, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, Tag, Txt } from '@/components/ui';
@@ -31,9 +31,14 @@ export function ClubPassesCard({ clubId, clubName, connected }: { clubId: string
     if (!connected) return;
     let alive = true;
     // Échec réseau → on garde la liste déjà affichée (jamais de liste vidée à tort, §8).
-    void fetchClubPasses(clubId).then((rows) => alive && setPasses((cur) => rows ?? (cur === undefined ? null : cur)));
+    const load = () => void fetchClubPasses(clubId).then((rows) => alive && setPasses((cur) => rows ?? (cur === undefined ? null : cur)));
+    load();
+    // Retour au premier plan : le solde serveur bouge dans le dos du miroir (décompte d'un autre
+    // gérant, séance REMBOURSÉE par le trigger 85 à l'annulation d'une résa) — parité ClubPassCard.
+    const sub = AppState.addEventListener('change', (st) => st === 'active' && load());
     return () => {
       alive = false;
+      sub.remove();
     };
   }, [clubId, connected]);
 

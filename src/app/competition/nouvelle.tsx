@@ -169,6 +169,9 @@ export default function NouvelleCompetition() {
     const e: { title?: string; date?: string; host?: string } = {};
     if (title.trim().length < 3) e.title = 'Indique un titre (3 lettres minimum).';
     if (!day) e.date = 'Choisis une date.';
+    // Passage de minuit : `dates` est recalé par useTodayKey mais `day` est un état indépendant —
+    // un écran resté ouvert la veille garderait « hier » et créerait un tournoi déjà terminé.
+    else if (day.key < dates[0].key) e.date = 'Cette date est passée — choisis une date à venir.';
     if (!asClub && !hostId) e.host = 'Choisis le club hôte.';
     setErrors(e);
     if (e.title || e.date || e.host) {
@@ -196,10 +199,12 @@ export default function NouvelleCompetition() {
       registered: 0,
       official: asClub || asPadel,
       // Terrains/créneaux PRÉCIS réservés au tournoi (vides = tout le club ce jour-là).
-      courtNames: courts,
-      timeSlots: times,
-      // Durée de chaque créneau, alignée 1-pour-1 sur `times` (défaut 1h30 si non touchée).
-      slotDurations: times.map((t) => timeDurations[t] ?? 90),
+      // Ceinture-bretelles : filtrés sur la grille RÉELLE du club hôte et hors indisponibles —
+      // le serveur ne valide pas l'appartenance, un résidu d'un autre club partirait tel quel.
+      courtNames: courts.filter((c) => hostCourts.includes(c) && !courtDisabled(c)),
+      timeSlots: times.filter((t) => hostSlots.includes(t) && !timeDisabled(t)),
+      // Durée de chaque créneau, alignée 1-pour-1 sur la liste FILTRÉE (parité exigée par le RPC).
+      slotDurations: times.filter((t) => hostSlots.includes(t) && !timeDisabled(t)).map((t) => timeDurations[t] ?? 90),
       // Club → publié direct ; joueur → en attente de validation du club hôte.
       status: asClub ? 'approved' : 'pending',
     });
@@ -329,6 +334,15 @@ export default function NouvelleCompetition() {
                 active={h.id === hostId}
                 onPress={() => {
                   setHostId(h.id);
+                  // Changer de club hôte VIDE la sélection terrains/créneaux : les valeurs de
+                  // l'ancien club (« Terrain 3 », « 21:00 ») n'existent pas chez le nouveau mais
+                  // resteraient en état et PARTIRAIENT au serveur → le club validerait un blocage
+                  // qui ne protège aucun terrain réel (résas par-dessus le tournoi).
+                  if (h.id !== hostId) {
+                    setCourts([]);
+                    setTimes([]);
+                    setTimeDurations({});
+                  }
                   if (errors.host) setErrors((cur) => ({ ...cur, host: undefined }));
                 }}
               />
@@ -381,6 +395,9 @@ export default function NouvelleCompetition() {
                 Durée de chaque créneau
               </Txt>
               {times
+                // Même filtre que l'envoi : un créneau devenu indisponible (changement de dates)
+                // ne doit plus afficher sa ligne de durée — il ne partira pas au serveur.
+                .filter((t) => hostSlots.includes(t) && !timeDisabled(t))
                 .slice()
                 .sort()
                 .map((t) => {

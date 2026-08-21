@@ -888,7 +888,9 @@ export default function Operateur() {
                 <Ionicons name="refresh" size={18} color={colors.textMuted} />
               </Pressable>
             </View>
-            {loadingReq ? (
+            {loadingReq && requests.length === 0 ? (
+              // Squelette au PREMIER chargement seulement : depuis que le pull-to-refresh recharge
+              // aussi les demandes, une liste déjà affichée ne doit pas disparaître pendant le fetch.
               <Card>
                 <SkeletonLines lines={3} />
               </Card>

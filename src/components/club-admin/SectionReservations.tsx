@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { BarChart } from '@/components/BarChart';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, EmptyState, IconCircle, SectionHeader, StatTile, Tag, Txt } from '@/components/ui';
@@ -182,16 +182,33 @@ export function SectionReservations({
   const [usingPassId, setUsingPassId] = useState<string | null>(null); // garde anti double-tap
   useEffect(() => {
     let alive = true;
+    const load = () =>
+      void fetchClubPasses(club.id).then((rows) => {
+        if (!alive || !rows) return;
+        const byUser: Record<string, number> = {};
+        for (const p of rows) byUser[p.userId] = (byUser[p.userId] ?? 0) + p.remaining;
+        setPassBalance(byUser);
+      });
+    load();
+    // Retour au premier plan : le solde SERVEUR a pu bouger dans le dos du miroir local — le
+    // trigger 85 REND une séance quand une résa décomptée est annulée (joueur ou club). Sans ce
+    // rechargement (parité ClubPassCard joueur), le bouton « Décompter » restait masqué à tort
+    // et le carnet affichait « Épuisé » alors qu'une séance a été remboursée.
+    const sub = AppState.addEventListener('change', (st) => st === 'active' && load());
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+  }, [club.id]);
+  // Re-sync CIBLÉ après une annulation club traitée ICI même (le trigger 85 vient peut-être de
+  // rembourser une séance) : on recharge le solde sans attendre un aller-retour premier plan.
+  const reloadPassBalance = () =>
     void fetchClubPasses(club.id).then((rows) => {
-      if (!alive || !rows) return;
+      if (!rows) return;
       const byUser: Record<string, number> = {};
       for (const p of rows) byUser[p.userId] = (byUser[p.userId] ?? 0) + p.remaining;
       setPassBalance(byUser);
     });
-    return () => {
-      alive = false;
-    };
-  }, [club.id]);
 
   // Un tap = une séance décomptée (idempotent côté serveur : un double-tap rend 'already').
   // Messages HONNÊTES par motif — « plus de solde » et « déjà décomptée » ne sont pas des pannes.
@@ -925,6 +942,9 @@ export function SectionReservations({
                         toast.show('Créneau annulé — le joueur est prévenu');
                         setCancellingId(null);
                         reloadTraces();
+                        // Le trigger 85 a pu REMBOURSER une séance de carnet décomptée sur cette
+                        // résa : re-sync du solde tout de suite (sinon « Épuisé » mensonger).
+                        reloadPassBalance();
                       } else {
                         hapticWarning();
                       }

@@ -97,10 +97,14 @@ export async function joinSlotWaitlist(
   return data === 'ok' || data === 'past' ? data : 'error';
 }
 
-// Retirer mon alerte. true = retirée (false = absente ou échec réseau).
-export async function leaveSlotWaitlist(clubId: string, dateKey: string, time: string): Promise<boolean> {
+// Retirer mon alerte. Tri-état : 'removed' = retirée ; 'absent' = la ligne n'existait DÉJÀ plus
+// (consommée one-shot par un push, purgée par le trigger 89 ou par la purge des passées — refus
+// DÉFINITIF, à traiter comme un succès idempotent) ; 'error' = échec réseau, réessayer a du sens.
+export type LeaveWaitlistStatus = 'removed' | 'absent' | 'error';
+export async function leaveSlotWaitlist(clubId: string, dateKey: string, time: string): Promise<LeaveWaitlistStatus> {
   const { data, error } = await supabase.rpc('leave_slot_waitlist', { p_club_id: clubId, p_date_key: dateKey, p_time: time });
-  return !error && data === true;
+  if (error) return 'error';
+  return data === true ? 'removed' : 'absent';
 }
 
 // Mes alertes posées (pour afficher l'état « Alerte posée ✓ » dans le tunnel). null = échec réseau.
