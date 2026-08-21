@@ -6,6 +6,7 @@ import { CalendarPicker, keyToTs } from '@/components/CalendarPicker';
 import { Chip } from '@/components/Chip';
 import { Screen } from '@/components/Screen';
 import { useToast } from '@/components/Toast';
+import { hapticWarning } from '@/lib/haptics';
 import { Button, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { COMP_FORMATS } from '@/data/competitions';
@@ -179,6 +180,17 @@ export default function NouvelleCompetition() {
       scrollRef.current?.scrollTo({ y: e.title ? 0 : Math.max(0, datePos.current - 24), animated: true });
       return;
     }
+    // Sélection filtrée sur la grille RÉELLE du club hôte, hors indisponibles. ⚠️ On REFUSE si le
+    // filtre VIDE une sélection non vide : côté dispo, `[]` signifie « TOUT le club » — dégrader
+    // une sélection précise en liste vide ESCALADERAIT le blocage (club entier fermé) au lieu de
+    // le restreindre. L'organisateur corrige sa sélection, on n'envoie jamais un blocage élargi.
+    const keptCourts = courts.filter((c) => hostCourts.includes(c) && !courtDisabled(c));
+    const keptTimes = times.filter((t) => hostSlots.includes(t) && !timeDisabled(t));
+    if ((courts.length > 0 && keptCourts.length === 0) || (times.length > 0 && keptTimes.length === 0)) {
+      hapticWarning();
+      toast.show('Les terrains ou créneaux choisis sont fermés sur ces dates — corrige ta sélection.', { icon: 'alert-circle' });
+      return;
+    }
     setSubmitting(true);
     const res = await addCompetition({
       title: title.trim(),
@@ -198,13 +210,12 @@ export default function NouvelleCompetition() {
       slots,
       registered: 0,
       official: asClub || asPadel,
-      // Terrains/créneaux PRÉCIS réservés au tournoi (vides = tout le club ce jour-là).
-      // Ceinture-bretelles : filtrés sur la grille RÉELLE du club hôte et hors indisponibles —
-      // le serveur ne valide pas l'appartenance, un résidu d'un autre club partirait tel quel.
-      courtNames: courts.filter((c) => hostCourts.includes(c) && !courtDisabled(c)),
-      timeSlots: times.filter((t) => hostSlots.includes(t) && !timeDisabled(t)),
+      // Terrains/créneaux PRÉCIS réservés au tournoi (vides = tout le club ce jour-là — c'est
+      // POUR ÇA que le vidage par filtre est refusé plus haut, jamais envoyé tel quel).
+      courtNames: keptCourts,
+      timeSlots: keptTimes,
       // Durée de chaque créneau, alignée 1-pour-1 sur la liste FILTRÉE (parité exigée par le RPC).
-      slotDurations: times.filter((t) => hostSlots.includes(t) && !timeDisabled(t)).map((t) => timeDurations[t] ?? 90),
+      slotDurations: keptTimes.map((t) => timeDurations[t] ?? 90),
       // Club → publié direct ; joueur → en attente de validation du club hôte.
       status: asClub ? 'approved' : 'pending',
     });
@@ -389,7 +400,9 @@ export default function NouvelleCompetition() {
 
           {/* Durée de chaque créneau retenu (1h ou 1h30, défaut 1h30) — les tournois sont
               modulables comme les réservations (68). */}
-          {times.length > 0 ? (
+          {/* Gaté sur la liste FILTRÉE : sinon le titre s'affichait avec zéro ligne quand tous
+              les créneaux retenus sont devenus indisponibles (changement de dates). */}
+          {times.some((t) => hostSlots.includes(t) && !timeDisabled(t)) ? (
             <>
               <Txt variant="label" style={{ marginTop: spacing.lg }}>
                 Durée de chaque créneau

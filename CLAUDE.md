@@ -117,8 +117,11 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   Management le 2026-07-11, table `reservations` vide → risque nul). ⚠️ **NE JAMAIS recoller
   `68_creneaux_duree.sql` SEUL** : ses `create or replace` ÉCRASERAIENT les durcissements `69`→`72`
   (validation `d∈{60,90}`, gardes anti-orphelin, verrou commun, retrait de terrain) ; si on doit
-  recoller la 68, recoller ENSUITE `69`→`84` dans l'ordre (la 68 recrée `fetch_open_matches` et la
+  recoller la 68, recoller ENSUITE `69`→`90` dans l'ordre (la 68 recrée `fetch_open_matches` et la
   57 `join_open_match` : recollées seules, elles EFFACERAIENT la fourchette de niveau de la 81).
+  NB : depuis 87/90, recoller `21`/`68`/`83`/`85` s'ARRÊTE net sur `42P13 cannot change return
+type` (`mark_no_show`, `confirm_share_paid`) — échec BRUYANT, jamais silencieux ; il faudrait
+  d'abord `drop function` la fonction concernée, puis recoller la suite dans l'ordre jusqu'à 90.
   Reste au porteur : le lien Wave (Espace opérateur), FCM Android + empreinte assetlinks.
   (`notify-club` est déployée — v42 le 2026-08-15 : push gérant avec nom du club, favoris/alertes
   de niveau plafonnées à la source, liste d'attente one-shot honnête, agenda, annonces club
@@ -625,6 +628,7 @@ l'API — le porteur n'a RIEN à coller.
 
 Nouvel audit adversarial de TOUT (app/serveur/SQL/site/config/docs), Fable (sensible) ↔ Opus
 (écrans/libs), tour après tour jusqu'au tour BLANC. Corrigés :
+
 - **Tour 1** (grand audit) + gates → correctifs client (11 pts), privilèges SQL `84`, notify-club v41.
 - **Tour 2** : SQL **`85`** (intégrité du cycle de vie : remboursement carnet à l'annulation, cours
   ressuscité au dé-« pas venu », mark_no_show refuse un match noté, FK orphelines, delete_club purge
@@ -685,12 +689,12 @@ update` AVANT l'UPDATE, patron 73/M4, course rejouée → joiner préservé) + 1
   pousse le miroir PUIS attend linkParticipants) → 2 MEDIUM fermés : voie rapide qui basculait en
   « Plus aucun terrain libre » + fermetures actives pendant l'envoi (risque de double résa perçue
   comme un échec → `requestClose` gardé, bascule exclue du submit) ; tunnel qui affichait « Complet »
-  + cloche pendant sa propre résa (alerte jamais nettoyée → `slotFull` exclut `submitting`, toggle
-  gardé). Lens libre (SQL 80-84 froid, libs, amis/accueil/compétition/club, site.js, docs) : AUCUN
-  HIGH/MEDIUM ; 2 LOW fermés — SQL **`88`** (fenêtre des parts Wave close à la FIN du match, aligne
-  le code sur le contrat annoncé ; posée + prouvée 4/4 en base) et le §8 recalé (02→88).
-  Résiduel assumé : bouton retour du tunnel pendant le submit = écran de succès perdu, jamais
-  d'affichage faux (instantané `booked`).
+  - cloche pendant sa propre résa (alerte jamais nettoyée → `slotFull` exclut `submitting`, toggle
+    gardé). Lens libre (SQL 80-84 froid, libs, amis/accueil/compétition/club, site.js, docs) : AUCUN
+    HIGH/MEDIUM ; 2 LOW fermés — SQL **`88`** (fenêtre des parts Wave close à la FIN du match, aligne
+    le code sur le contrat annoncé ; posée + prouvée 4/4 en base) et le §8 recalé (02→88).
+    Résiduel assumé : bouton retour du tunnel pendant le submit = écran de succès perdu, jamais
+    d'affichage faux (instantané `booked`).
 - **Tour 9 (gate ultime) — CONVERGENCE ✅** : les 3 correctifs du tour 8 prouvés sains sur pièces
   (aucun doublon de clé, trigger 89 correct et NÉCESSAIREMENT security definer — RLS slot_waitlist
   n'a qu'une policy SELECT —, fenêtre 88 cohérente et STRICTEMENT plus large que ce que l'UI
@@ -717,6 +721,7 @@ update` AVANT l'UPDATE, patron 73/M4, course rejouée → joiner préservé) + 1
 
 Méthode rodée : tours adversariaux jusqu'au blanc, Fable=sensible/Opus=écrans, preuve en base.
 Tour 1 (3 agents + vérifs live PAT) — 9 constats, TOUS corrigés :
+
 - Live (moi) : 11 webhooks conformes, ACL saines (8 « anon » = fonctions trigger, non appelables),
   notify-club déployée = v45 du dépôt. BLANC.
 - 🟠 MEDIUM tournoi : terrains/créneaux d'un club SURVIVAIENT au changement de club hôte et

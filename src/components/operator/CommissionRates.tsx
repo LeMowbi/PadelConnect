@@ -91,7 +91,7 @@ export function CommissionRates({
                     size="sm"
                     label={busy === c.id ? '…' : 'OK'}
                     onPress={() => save(c.id)}
-                    disabled={busy === c.id || !(draft[c.id] ?? '').trim()}
+                    disabled={!!busy || !(draft[c.id] ?? '').trim()} // TOUTES les lignes pendant une écriture (pas de tap silencieux)
                   />
                 </View>
               </View>
