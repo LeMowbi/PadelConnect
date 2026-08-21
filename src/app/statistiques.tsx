@@ -6,6 +6,7 @@ import { Reveal } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
 import { SkeletonLines } from '@/components/Skeleton';
 import { Card, Divider, IconCircle, SectionHeader, StatTile, Txt } from '@/components/ui';
+import { badgeBoard } from '@/lib/badges';
 import { dateKeyLabel, dayKey } from '@/lib/days';
 import { levelLabel } from '@/lib/format';
 import { fetchLeaderboard, fetchMyRank } from '@/lib/leaderboard';
@@ -50,7 +51,7 @@ function monthlyPlayed(timestamps: number[], now: number): { label: string; valu
 }
 
 export default function Statistiques() {
-  const { state, myReservations } = useApp();
+  const { state, stats, myReservations } = useApp();
   // Rang + ligne de classement (points, victoires de match, tournois) : chargés au montage.
   // undefined = pas encore chargé, null = échec réseau, nombre/objet = valeur réelle.
   const [rank, setRank] = useState<number | null | undefined>(undefined);
@@ -100,6 +101,22 @@ export default function Statistiques() {
 
   // Affichage d'une valeur serveur : « — » si pas encore chargée ou échec réseau.
   const serverVal = (v: number | null | undefined) => (typeof v === 'number' ? v : '—');
+
+  // Badges : AUCUN nouveau fetch — tout se dérive de ce que l'écran (ou le store) a déjà.
+  // Points et victoires de match viennent du classement serveur : inconnus (chargement ou échec
+  // réseau, §8), on passe 0 → les deux badges concernés restent « à débloquer » et une ligne le
+  // dit honnêtement, plutôt que de laisser croire que le joueur ne les a pas mérités.
+  const serverUnknown = typeof points !== 'number' || typeof matchWins !== 'number';
+  const board = badgeBoard({
+    playedCount: played,
+    tournamentsPlayed,
+    tournamentsWon,
+    points: typeof points === 'number' ? points : 0,
+    validatedWins: typeof matchWins === 'number' ? matchWins : 0,
+    weekStreak: stats.streakWeeks, // série calculée sur MES parties (computeStats, store)
+    friendsCount: state.friends.length,
+  });
+  const earned = board.filter((b) => b.earned).length;
 
   return (
     <Screen back title="Mes statistiques" subtitle="Ta progression, en vrai">
@@ -160,6 +177,46 @@ export default function Statistiques() {
             bg={colors.greenSoft}
           />
         </View>
+      </View>
+
+      {/* Badges — gamification DOUCE : un simple miroir de ce que le joueur a fait (rien n'est
+          offert, rien n'est mémorisé). Les badges non gagnés restent visibles, grisés, pour
+          montrer l'objectif suivant. */}
+      <View style={{ marginTop: spacing.xl }}>
+        <SectionHeader title="Badges" />
+        <Card>
+          <Txt variant="muted">
+            {earned === 0
+              ? 'Aucun badge pour l’instant — joue une partie pour décrocher le premier.'
+              : `${earned} badge${earned > 1 ? 's' : ''} sur ${board.length} débloqué${earned > 1 ? 's' : ''}.`}
+          </Txt>
+          <View style={styles.badgeGrid}>
+            {board.map(({ badge, earned: got }) => (
+              <View
+                key={badge.id}
+                style={[styles.badge, got ? styles.badgeOn : styles.badgeOff]}
+                accessible
+                accessibilityLabel={got ? `${badge.title}, badge gagné : ${badge.desc}` : `${badge.title}, à débloquer : ${badge.desc}`}
+              >
+                {/* L'emoji d'un badge verrouillé est ATTÉNUÉ (on ne peut pas le désaturer en RN). */}
+                <Txt variant="h2" style={got ? undefined : styles.badgeIconOff}>
+                  {badge.icon}
+                </Txt>
+                <Txt variant="small" color={got ? colors.text : colors.textMuted} style={styles.badgeTitle}>
+                  {badge.title}
+                </Txt>
+                <Txt variant="small" color={colors.textMuted} style={{ textAlign: 'center' }}>
+                  {got ? badge.desc : `À débloquer — ${badge.desc}`}
+                </Txt>
+              </View>
+            ))}
+          </View>
+          {serverUnknown ? (
+            <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.md }}>
+              Points et victoires de match indisponibles : deux badges peuvent manquer tant que tu n’es pas en ligne.
+            </Txt>
+          ) : null}
+        </Card>
       </View>
 
       {/* Activité mensuelle (6 mois) */}
@@ -249,6 +306,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   grid: { flexDirection: 'row', gap: spacing.sm },
+  // Grille de badges : deux par ligne sur téléphone, les cartes s'étirent pour remplir la ligne.
+  badgeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  badge: { flexBasis: '47%', flexGrow: 1, borderRadius: radius.md, padding: spacing.md, alignItems: 'center', gap: 2 },
+  // Bordure TRANSPARENTE sur le badge gagné : même géométrie que le verrouillé (bordé), donc
+  // aucune carte plus haute que sa voisine sur une même ligne.
+  badgeOn: { backgroundColor: colors.signatureSoft, borderWidth: 1, borderColor: 'transparent' },
+  badgeOff: { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.hairline },
+  badgeTitle: { fontWeight: '700', textAlign: 'center' },
+  badgeIconOff: { opacity: 0.4 },
   levelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   levelEntry: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   note: {
