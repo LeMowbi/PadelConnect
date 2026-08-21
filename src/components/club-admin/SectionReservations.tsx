@@ -58,6 +58,7 @@ export function SectionReservations({
     unblockRange,
     confirmReservationByClub,
     markNoShow,
+    unmarkNoShow,
     clubCancelReservation,
     refreshSession,
   } = useApp();
@@ -272,6 +273,43 @@ export function SectionReservations({
       });
     });
   };
+
+  // Absence marquée par ERREUR : le gérant la retire (le joueur était bien là). Le serveur (87)
+  // repasse la résa en 'booked' et l’absence quitte la fiabilité du joueur ; le refus 'taken'
+  // (créneau repris entre-temps) est DÉFINITIF → message dédié, jamais « réessaie ».
+  const [unmarkingId, setUnmarkingId] = useState<string | null>(null); // garde anti double-tap
+  const onUnmarkNoShow = (r: Reservation) => {
+    if (unmarkingId) return;
+    void confirmAsync(
+      'Annuler l’absence ?',
+      'Ce joueur était bien présent ? La réservation sera rétablie et l’absence retirée de sa fiabilité.',
+      // Pas « Annuler l'absence » comme libellé de confirmation : le bouton d'à côté est « Annuler »
+      // (renoncer) — deux « Annuler » côte à côte, c'est un tap de travers assuré.
+      { confirmLabel: 'Rétablir la réservation' },
+    ).then((ok) => {
+      if (!ok) return;
+      setUnmarkingId(r.id);
+      void unmarkNoShow(r).then((st) => {
+        setUnmarkingId(null);
+        if (st === 'ok') {
+          hapticSuccess();
+          toast.show('Absence annulée — réservation rétablie');
+          reloadTraces();
+          // La fiabilité du joueur vient de perdre une absence : re-sync CIBLÉ (la clé de l’effet
+          // ne bouge pas, le joueur restant présent par ses autres résas → badge sinon périmé).
+          if (r.userId) void fetchReliability([r.userId]).then((rel) => rel && setReliability((cur) => ({ ...cur, ...rel })));
+          return;
+        }
+        hapticWarning();
+        if (st === 'taken') toast.show('Impossible : le créneau a été repris entre-temps.', { icon: 'alert-circle' });
+        else if (st === 'gone') toast.show('Cette réservation n’est plus dans un état modifiable.', { icon: 'alert-circle' });
+        else if (st === 'forbidden') toast.show('Tu n’as pas les droits sur cette réservation.', { icon: 'alert-circle' });
+        // 'error' (échec réseau/serveur) : là seulement, réessayer a du sens.
+        else toast.show('Connexion impossible — réessaie', { icon: 'cloud-offline-outline' });
+      });
+    });
+  };
+
   // « Jouée » = heure de fin passée (la même règle que côté joueur — base de la commission).
   const upcomingRes = clubRes.filter((r) => !isPlayed(r, now)).sort((a, b) => a.startsAt - b.startsAt);
   // Résas AFFICHÉES déjà décomptées d'un carnet : requête BORNÉE à la page visible (motif des
@@ -1030,6 +1068,20 @@ export function SectionReservations({
                     {reliabilityNote(r.userId)}
                   </View>
                   <Tag label="Absent" tone="coral" />
+                </View>
+                {/* Marquée par erreur ? Le gérant rétablit la réservation (l’absence quitte la
+                    fiabilité du joueur) — discret, aligné à droite sous la ligne. */}
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    label={unmarkingId === r.id ? 'Annulation…' : 'Annuler l’absence'}
+                    icon="arrow-undo-outline"
+                    disabled={unmarkingId === r.id}
+                    // Plusieurs boutons partagent ce label : on nomme la ligne pour les lecteurs d'écran.
+                    accessibilityLabel={`Annuler l’absence du ${dateKeyLabel(r.dateKey)} à ${r.time}${r.bookedBy ? ` — ${r.bookedBy.name}` : ''}`}
+                    onPress={() => onUnmarkNoShow(r)}
+                  />
                 </View>
               </View>
             ))}

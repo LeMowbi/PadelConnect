@@ -597,8 +597,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // /auth-callback) — sur téléphone il ouvre l'app directement, sur ORDINATEUR il affiche la
   // page https « Adresse confirmée » au lieu d'un lien padelco:// mort (résiduel UX documenté,
   // fermé). Sur le WEB, on garde l'URL du build web (club.padelconnectci.com/auth-callback).
-  const authCallbackUrl = () =>
-    Platform.OS === 'web' ? Linking.createURL('auth-callback') : 'https://padelconnectci.com/auth-callback';
+  const authCallbackUrl = () => (Platform.OS === 'web' ? Linking.createURL('auth-callback') : 'https://padelconnectci.com/auth-callback');
   // Clés (club|jour|heure|terrain) des ajouts LOCAUX en vol dans la frame courante — anti
   // double-tap même-frame de la voie démo d'addReservation (vidées à la microtâche suivante).
   const localAddKeysRef = useRef<Set<string>>(new Set());

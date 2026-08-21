@@ -23,6 +23,7 @@ import { fetchMyGroupLessons, leaveGroupLesson, type MyGroupLesson } from '@/lib
 import { hapticSuccess } from '@/lib/haptics';
 import { fetchMyMatchScores, leaveOpenMatch, setMatchOpen, submitMatchScore, type MatchScore, type MatchSet } from '@/lib/matchResults';
 import { CANCEL_DEADLINE_MS, fetchCancelledReservations } from '@/lib/reservations';
+import { SESSION_MIN } from '@/lib/slots';
 import { dateKeyLabel, dayKey, slotTimestamp } from '@/lib/days';
 import { fcfa, perPlayerOf } from '@/lib/format';
 import { APP_DOMAIN } from '@/lib/referrals';
@@ -33,9 +34,11 @@ import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { colors, radius, spacing } from '@/theme';
 
 const PAST_PREVIEW = 5; // passées : 5 dernières + « Voir tout »
-// Parts Wave (18) : nombre maximum de résas PARTAGÉES à venir dont on interroge l'état des
-// parts (un appel serveur chacune) — au-delà, la carte reste une carte de réservation normale.
+// Parts Wave (18) : nombre maximum de résas PARTAGÉES dont on interroge l'état des parts (un
+// appel serveur chacune) — au-delà, la carte reste une carte de réservation normale.
 const SHARE_MAX = 8;
+// Grâce d'après-match : le serveur (88) laisse régler les parts jusqu'à 24 h APRÈS la fin du match.
+const SHARE_GRACE_MS = 24 * 3600 * 1000;
 const MONTHS = ['JANV.', 'FÉVR.', 'MARS', 'AVR.', 'MAI', 'JUIN', 'JUIL.', 'AOÛT', 'SEPT.', 'OCT.', 'NOV.', 'DÉC.'];
 
 // Brouillon de saisie du score : 3 sets max, champs texte vides (jamais muté — les mises à
@@ -208,9 +211,18 @@ export default function ReservationsScreen() {
   // ou que c'est celle d'un autre où je suis accepté — seul cas où partager la note a un sens.
   const isShared = (r: Reservation) =>
     r.invited.length > 0 || !!r.openMatch || (!isOwner(r) && state.participantReservationIds.includes(r.id));
+  // La fenêtre de règlement ne se ferme pas au coup de sifflet : le serveur (88) l'ouvre jusqu'à
+  // 24 h APRÈS LA FIN du match (on se rembourse pendant ou juste après). Miroir EXACT de la garde
+  // serveur (`starts_at + duration_min*60000 + 86400000 > now`) — une résa déjà JOUÉE mais encore
+  // dans cette grâce garde donc sa carte de parts, dans « Passées ».
+  const inShareWindow = (r: Reservation) => r.startsAt + (r.durationMin || SESSION_MIN) * 60000 + SHARE_GRACE_MS > now;
   // On n'interroge l'état des parts que pour les résas partagées RÉELLEMENT affichées, et au
-  // plus SHARE_MAX (un appel serveur chacune).
-  const shareTargets = upcoming.filter(isShared).slice(0, SHARE_MAX);
+  // plus SHARE_MAX de chaque côté (un appel serveur chacune) — les passées sont en plus déjà
+  // bornées par la pagination PAST_PREVIEW : jamais de balayage de l'historique.
+  const upcomingShareTargets = upcoming.filter(isShared).slice(0, SHARE_MAX);
+  const pastShareTargets = pastShown.filter((r) => isShared(r) && inShareWindow(r)).slice(0, SHARE_MAX);
+  // `upcoming` et `pastShown` sont disjoints (isPlayed) : pas de doublon à dédupliquer.
+  const shareTargets = [...upcomingShareTargets, ...pastShareTargets];
   const shareKey = shareTargets.map((r) => r.id).join(',');
   useEffect(() => {
     if (!state.serverUserId || shareKey === '') return;
@@ -834,7 +846,7 @@ export default function ReservationsScreen() {
                   {/* Parts Wave (18) : sur une résa PARTAGÉE, le créateur colle son lien Wave et
                       confirme les parts reçues ; chaque partenaire paie la sienne et le déclare.
                       Affiché seulement pour les résas dont l'état des parts est chargé (SHARE_MAX). */}
-                  {state.serverUserId && shareTargets.some((x) => x.id === r.id) ? (
+                  {state.serverUserId && upcomingShareTargets.some((x) => x.id === r.id) ? (
                     <SharePayments
                       reservation={r}
                       owner={owner}
@@ -1004,6 +1016,25 @@ export default function ReservationsScreen() {
                       </Pressable>
                     ) : null}
                   </View>
+                  {/* Parts Wave (18) : le règlement d'après-match reste ouvert 24 h après la fin
+                      (fenêtre serveur 88) — la carte suit donc la résa dans « Passées » au lieu de
+                      disparaître au coup de sifflet, alors que le serveur accepte encore. */}
+                  {state.serverUserId && pastShareTargets.some((x) => x.id === r.id) ? (
+                    <>
+                      <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                        Règlement d’après-match (jusqu’à 24 h)
+                      </Txt>
+                      <SharePayments
+                        reservation={r}
+                        owner={isOwner(r)}
+                        // Même effectif RÉEL que la carte « À venir » (base de la part par joueur).
+                        players={r.openMatch ? (r.openCapacity ?? 4) : Math.max(1, 1 + r.invited.length)}
+                        meId={state.serverUserId}
+                        share={shares[r.id]}
+                        onReload={() => void reloadShare(r.id)}
+                      />
+                    </>
+                  ) : null}
                 </View>
               </Reveal>
             ))}
