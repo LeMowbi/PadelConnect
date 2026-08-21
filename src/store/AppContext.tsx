@@ -589,6 +589,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // départ et n’applique son résultat QUE si l’époque n’a pas changé entre-temps — sinon
   // une réponse tardive réécrirait les données d’un compte déjà déconnecté.
   const sessionEpochRef = useRef(0);
+  // Clés (club|jour|heure|terrain) des ajouts LOCAUX en vol dans la frame courante — anti
+  // double-tap même-frame de la voie démo d'addReservation (vidées à la microtâche suivante).
+  const localAddKeysRef = useRef<Set<string>>(new Set());
   // Compteur d'ÉCRITURES club_config : un rechargement (loadSession/refreshMirror) capturé AVANT
   // une écriture du gérant peut résoudre APRÈS elle et réappliquer un instantané périmé — la
   // sauvegarde suivante rematérialiserait alors l'ancienne grille en base (perte réelle, prouvée
@@ -1606,10 +1609,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       unregisterCompetition: async (id) => {
         const serverComp = state.myCompetitions.find((c) => c.id === id && c.server);
+        // Garde d'époque (miroir EXACT de registerCompetition) : une désinscription tardive ne doit
+        // pas effacer l'inscription du COMPTE SUIVANT au même tournoi après une bascule A→B.
+        const epoch = sessionEpochRef.current;
         if (serverComp) {
           const ok = await unregisterCompetitionRpc(id);
           if (!ok) return false;
         }
+        if (sessionEpochRef.current !== epoch) return false;
         setState((s) => {
           const next = { ...s.compRegistrations };
           delete next[id];
@@ -1752,6 +1759,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         // Mode LOCAL (démo, hors session) : comportement d’origine.
         const localId = uid();
+        // Anti double-tap MÊME-FRAME (voie locale/démo) : deux taps avant re-rendu voient le même
+        // `state` → le pré-check du haut (l.~1686) les laisse passer tous les deux, et l'updater
+        // défensif rejetait le doublon SANS empêcher le second rappel local (id orphelin, jamais
+        // annulable) ni le second « ok ». ⚠️ On ne lit PAS de drapeau posé par l'updater : en
+        // React 18+, il ne s'exécute pas de façon synchrone. Une ref, elle, est synchrone ; les
+        // doublons INTER-frames restent attrapés par le pré-check sur l'état frais.
+        const dupKey = `${r.clubId}|${r.dateKey}|${r.time}|${r.court}`;
+        if (localAddKeysRef.current.has(dupKey)) return { ok: false, reason: 'conflict' };
+        localAddKeysRef.current.add(dupKey);
+        queueMicrotask(() => localAddKeysRef.current.delete(dupKey));
         setState((s) => {
           if (s.reservations.some(overlapsBooked)) return s;
           return { ...s, reservations: [{ ...r, bookedBy, id: localId, createdAt: Date.now() }, ...s.reservations] };
