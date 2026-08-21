@@ -96,7 +96,11 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   no-show honnêtes, gardes d'époque). Web `club.padelconnectci.com` ET site `padelconnectci.com`
   redéployés le même jour via l'API Cloudflare (privacy/CGU v3 + CGU honnêtes sur le niveau).
   ⚠️ Le texte CGU in-app corrigé (`legal.tsx`) partira avec le PROCHAIN build (le #68 embarque
-  l'ancien) — le site, lui, est déjà à jour et fait foi publiquement. (Les secrets GitHub
+  l'ancien) — le site, lui, est déjà à jour et fait foi publiquement.
+  🚀 **v1.0.2 SOUMISE EN REVUE Apple le 2026-08-21** (build #68, notes de version FR, publication
+  AUTOMATIQUE à l'approbation) — fait via l'API App Store Connect avec une clé d'équipe fournie par
+  le porteur (la clé vit HORS dépôt, jamais commitée). État vérifiable : App Store Connect →
+  version 1.0.2 = « Waiting for Review ». (Les secrets GitHub
   `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` restent VIDES dans le dépôt → `deploy-web.yml`
   échoue à chaque push ; le porteur peut les créer dans GitHub → Settings → Secrets pour
   automatiser.) Le build #67 du 2026-08-13 est SUPPLANTÉ par le #68.
