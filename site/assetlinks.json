@@ -4,7 +4,9 @@
     "target": {
       "namespace": "android_app",
       "package_name": "ci.padelco.app",
-      "sha256_cert_fingerprints": ["REMPLACER_PAR_EMPREINTE_SHA256_DE_LA_CLE_DE_SIGNATURE_PLAY"]
+      "sha256_cert_fingerprints": [
+        "C0:ED:E8:D5:63:5F:F2:13:53:A9:64:A6:9F:5C:33:98:1B:2D:C2:73:C9:CB:8F:C4:8C:38:0D:D9:A6:DE:30:C0"
+      ]
     }
   }
 ]
