@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Adresse confirmée — PadelConnect</title>
+    <meta name="robots" content="noindex" />
+    <link rel="stylesheet" href="/assets/style.css" />
+    <style>
+      /* Page d'atterrissage des liens d'e-mail Supabase ouverts dans un NAVIGATEUR (ordinateur,
+         ou téléphone sans l'app). Sur iPhone avec l'app, le lien universel ouvre l'app directement
+         (AASA /auth-callback) et cette page ne s'affiche jamais. */
+      .cb-wrap { max-width: 520px; margin: 12vh auto; padding: 24px; text-align: center; }
+      .cb-badge { font-size: 56px; line-height: 1; }
+      .cb-title { font-size: 26px; font-weight: 800; margin: 16px 0 8px; }
+      .cb-text { color: #5f6b5f; font-size: 16px; line-height: 1.5; }
+      .cb-cta { display: inline-block; margin-top: 22px; padding: 14px 26px; border-radius: 999px; background: #0f5132; color: #fff; font-weight: 700; text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <main class="cb-wrap">
+      <div class="cb-badge" id="cb-badge">✅</div>
+      <h1 class="cb-title" id="cb-title">Adresse confirmée !</h1>
+      <p class="cb-text" id="cb-text">
+        Ton adresse e-mail est validée. Ouvre l’application <strong>PadelConnect</strong> sur ton téléphone : tout est prêt.
+      </p>
+      <a class="cb-cta" href="/get">Télécharger l’application</a>
+      <script>
+        // Supabase renvoie les erreurs dans le fragment (#error=…&error_description=…) : on rend
+        // le message HONNÊTE au lieu d'un faux « confirmé ». Cas le plus courant : lien expiré ou
+        // déjà utilisé — l'adresse est alors très probablement DÉJÀ confirmée (double clic).
+        try {
+          var h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+          var err = h.get('error') || new URLSearchParams(location.search).get('error');
+          var code = h.get('error_code') || '';
+          if (err) {
+            document.getElementById('cb-badge').textContent = 'ℹ️';
+            if (code === 'otp_expired' || /expired|invalid/i.test(h.get('error_description') || '')) {
+              document.getElementById('cb-title').textContent = 'Lien déjà utilisé ou expiré';
+              document.getElementById('cb-text').innerHTML =
+                'Si tu avais déjà cliqué ce lien, ton adresse est <strong>déjà confirmée</strong> — ouvre simplement l’application. Sinon, refais une demande depuis l’app.';
+            } else {
+              document.getElementById('cb-title').textContent = 'Lien invalide';
+              document.getElementById('cb-text').textContent =
+                'Ce lien n’a pas pu être vérifié. Réessaie depuis l’application, ou écris-nous : contact@padelconnectci.com.';
+            }
+          }
+        } catch (e) {
+          /* la page reste sur le message par défaut */
+        }
+      </script>
+    </main>
+  </body>
+</html>

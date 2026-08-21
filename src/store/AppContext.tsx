@@ -3,7 +3,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState as RNAppState } from 'react-native';
+import { AppState as RNAppState, Platform } from 'react-native';
 import { setClubStatusMap, type Club, type CustomClub, type PriceTier } from '@/data/clubs';
 import { type AmericanoState } from '@/lib/americano';
 import {
@@ -474,6 +474,10 @@ type AppContextType = {
   operatorSetClubCommission: (clubId: string, rate: number) => Promise<{ ok: boolean }>;
   // Club / opérateur : marque une réservation « pas venu » (absence comptée, créneau libéré).
   markNoShow: (id: string) => Promise<NoShowStatus>;
+  // Club / opérateur : ANNULE une absence marquée par erreur (le joueur était bien là). La résa
+  // repasse 'booked' et l'absence quitte sa fiabilité. On passe la résa ENTIÈRE : elle n'est plus
+  // dans le miroir (retirée au marquage), il faut donc la réintégrer au succès.
+  unmarkNoShow: (res: Reservation) => Promise<NoShowStatus>;
   // Club / opérateur : annule une résa qui CHEVAUCHE une réservation hors app (75). Motif + proposition
   // d'alternative optionnels → le joueur les voit dans « Mes réservations » (push via notify-club).
   clubCancelReservation: (
@@ -589,6 +593,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // départ et n’applique son résultat QUE si l’époque n’a pas changé entre-temps — sinon
   // une réponse tardive réécrirait les données d’un compte déjà déconnecté.
   const sessionEpochRef = useRef(0);
+  // Cible des liens de CONFIRMATION e-mail : en NATIF, le lien UNIVERSEL du site (AASA
+  // /auth-callback) — sur téléphone il ouvre l'app directement, sur ORDINATEUR il affiche la
+  // page https « Adresse confirmée » au lieu d'un lien padelco:// mort (résiduel UX documenté,
+  // fermé). Sur le WEB, on garde l'URL du build web (club.padelconnectci.com/auth-callback).
+  const authCallbackUrl = () =>
+    Platform.OS === 'web' ? Linking.createURL('auth-callback') : 'https://padelconnectci.com/auth-callback';
   // Clés (club|jour|heure|terrain) des ajouts LOCAUX en vol dans la frame courante — anti
   // double-tap même-frame de la voie démo d'addReservation (vidées à la microtâche suivante).
   const localAddKeysRef = useRef<Set<string>>(new Set());
@@ -1299,7 +1309,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           email: cleanEmail,
           password,
           options: {
-            emailRedirectTo: Linking.createURL('auth-callback'),
+            emailRedirectTo: authCallbackUrl(),
             data: {
               first_name: profile.firstName.trim(),
               last_name: profile.lastName.trim(),
@@ -1357,7 +1367,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateEmail: async (email) => {
         const clean = email.trim().toLowerCase();
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) return { ok: false, error: 'Adresse e-mail invalide.' };
-        const { error } = await supabase.auth.updateUser({ email: clean }, { emailRedirectTo: Linking.createURL('auth-callback') });
+        const { error } = await supabase.auth.updateUser({ email: clean }, { emailRedirectTo: authCallbackUrl() });
         if (error) return { ok: false, error: frAuthError(error.message) };
         return { ok: true };
       },
@@ -1415,7 +1425,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const { error } = await supabase.auth.resend({
           type: 'signup',
           email: email.trim().toLowerCase(),
-          options: { emailRedirectTo: Linking.createURL('auth-callback') },
+          options: { emailRedirectTo: authCallbackUrl() },
         });
         if (error) return { ok: false, error: frAuthError(error.message) };
         return { ok: true };
@@ -1821,6 +1831,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 (o) => !(o.clubId === res.clubId && o.dateKey === res.dateKey && o.time === res.time && o.court === res.court),
               )
             : s.occupancy,
+        }));
+        return 'ok';
+      },
+      // Le club (ou l’opérateur) ANNULE une absence marquée par erreur : le serveur (87) repasse la
+      // résa en 'booked' (le trigger 85 ressuscite le cours associé, notify-club prévient l’élève et
+      // le coach). On réintègre alors la résa + son occupation dans le miroir (l’inverse EXACT de
+      // markNoShow). 'taken' = le créneau a été repris entre-temps → refus DÉFINITIF, rien à muter.
+      unmarkNoShow: async (res) => {
+        // Garde d’époque (patron markNoShow) : une bascule de compte pendant l’aller-retour RPC ne
+        // doit pas injecter la résa d’un club dans le miroir du compte sorti.
+        const epoch = sessionEpochRef.current;
+        const st = await markNoShowRow(res.id, false);
+        // On ne mute le miroir QUE sur 'ok' (les refus 'taken'/'gone'/'forbidden' et 'error'
+        // laissent l’état intact — l’appelant affiche le message adéquat).
+        if (st !== 'ok' || sessionEpochRef.current !== epoch) return st;
+        setState((s) => ({
+          ...s,
+          // Dédup par id : si un rafraîchissement l’a déjà remise, on ne la duplique pas.
+          reservations: s.reservations.some((r) => r.id === res.id) ? s.reservations : [{ ...res }, ...s.reservations],
+          occupancy: s.occupancy.some(
+            (o) => o.clubId === res.clubId && o.dateKey === res.dateKey && o.time === res.time && o.court === res.court,
+          )
+            ? s.occupancy
+            : [
+                ...s.occupancy,
+                {
+                  clubId: res.clubId,
+                  dateKey: res.dateKey,
+                  time: res.time,
+                  court: res.court,
+                  durationMin: res.durationMin,
+                },
+              ],
         }));
         return 'ok';
       },

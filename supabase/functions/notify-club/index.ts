@@ -24,6 +24,8 @@
 //     l'élève, ou les élèves inscrits si cours collectif.
 //   • lessons UPDATE (→ declined) → notif à l'ÉLÈVE (cours refusé, aucun terrain réservé).
 //   • lessons UPDATE (pending → cancelled) → notif au COACH (l'élève a retiré sa demande).
+//   • reservations UPDATE (no_show → booked, 87 « Annuler l'absence ») → « Réservation rétablie »
+//     au JOUEUR — résa SIMPLE seulement (un cours passe par la branche lessons, pas de doublon).
 //   • match_results INSERT / UPDATE (une SAISIE de score par joueur, 46) → selon l'état du
 //     match : « Score à saisir » aux autres joueurs (1ʳᵉ saisie), « Match validé » (saisies
 //     concordantes) ou « Vos scores ne correspondent pas » (discordantes) aux autres saisisseurs.
@@ -471,6 +473,19 @@ Deno.serve(async (req) => {
           // Sans le MOTIF libre : il peut nommer un tiers (« M. X a réservé au téléphone ») et ne
           // regarde que l'auteur de la résa — un participant n'a pas à le recevoir (confidentialité).
           body: `${record.club_name ?? 'Le club'} a annulé le créneau du ${record.date_label ?? ''} à ${record.time ?? ''} (chevauchement avec une réservation hors application).`,
+          data: { kind: 'reservation', id: record.id },
+        });
+      }
+    } else if (table === 'reservations' && type === 'UPDATE' && record.status === 'booked' && oldRecord.status === 'no_show') {
+      // ABSENCE ANNULÉE par le club (87, « Annuler l'absence ») : la résa revit. Pour un COURS,
+      // la branche lessons (v45, cancelled→accepted) prévient déjà élève(s) + coach — on ne
+      // double-notifie pas ; ce push ne couvre que la RÉSA SIMPLE (aucune lesson rattachée).
+      const { data: linked } = await supabase.from('lessons').select('id').eq('reservation_id', record.id).limit(1);
+      if (!(linked ?? []).length) {
+        notifs.push({
+          targets: await userToken(record.user_id),
+          title: 'Réservation rétablie ✅',
+          body: `Ton créneau du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} (${record.club_name ?? ''}) est de nouveau réservé — l'absence a été annulée.`,
           data: { kind: 'reservation', id: record.id },
         });
       }
