@@ -370,7 +370,11 @@ export default function ReservationsScreen() {
           : 'Score enregistré — validé dès qu’un joueur du camp gagnant saisit le même score.',
       );
     } else if (res === 'conflict') {
-      toast.show('Ton score ne correspond pas à celui déjà saisi — vérifie ça avec l’autre joueur.', { icon: 'alert-circle' });
+      // Couvre les DEUX causes serveur (scores discordants OU plafond de « je gagne » atteint) :
+      // le RPC ne les distingue pas, le message ne doit accuser aucune des deux à tort.
+      toast.show('Ton score ne colle pas avec les saisies existantes (ou trop de vainqueurs déclarés) — vérifie avec les autres joueurs.', {
+        icon: 'alert-circle',
+      });
     } else if (res === 'no_players') {
       // On GARDE la feuille ouverte (pas de setScoreTarget(null)) : la saisie de sets reste
       // à l'écran, l'utilisateur ajoute un partenaire sans avoir à tout ressaisir.
@@ -499,7 +503,7 @@ export default function ReservationsScreen() {
                 </View>
                 <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
                   {s.conflict
-                    ? 'Les scores déjà saisis ne correspondent pas — demande à celui qui s’est trompé de corriger sa saisie.'
+                    ? 'Les scores saisis ne concordent pas (ou trop de joueurs se déclarent vainqueurs) — celui qui s’est trompé corrige sa saisie.'
                     : `${s.enteredNames || 'Un joueur'} a mis ${s.score}. Si tu as perdu, saisis ton score pour valider tout de suite.`}
                 </Txt>
                 <Divider style={{ marginVertical: spacing.md }} />
@@ -953,8 +957,12 @@ export default function ReservationsScreen() {
                       </Txt>
                     </Pressable>
                     {/* Saisie du score (46) : matchs récents (≤ 14 jours, fenêtre serveur) —
-                        je peux saisir mon score, ou le corriger tant que rien n'est validé. */}
+                        je peux saisir mon score, ou le corriger tant que rien n'est validé.
+                        `!isPending(r)` : une invitation JAMAIS acceptée n'est pas un participant
+                        'accepted' → submit_match_score refuserait à CHAQUE fois (le client
+                        montrait « réessaie » en boucle sur un refus définitif). */}
                     {state.serverUserId &&
+                    !isPending(r) &&
                     (r.startsAt > now - 14 * 86400000 || !!scores[r.id]) &&
                     (!scores[r.id]?.mine || !scores[r.id].validated) ? (
                       <Pressable
@@ -969,6 +977,13 @@ export default function ReservationsScreen() {
                           {scores[r.id]?.mine ? 'Corriger mon score' : 'Mettre le score'}
                         </Txt>
                       </Pressable>
+                    ) : null}
+                    {/* Invitation jamais confirmée, match passé : dire POURQUOI il n'y a pas de
+                        bouton de score (le masquer en silence laisserait croire à un oubli). */}
+                    {state.serverUserId && isPending(r) ? (
+                      <Txt variant="small" color={colors.textMuted} style={{ marginTop: 4 }}>
+                        Invitation jamais confirmée — ce match ne peut pas être noté.
+                      </Txt>
                     ) : null}
                     {/* Partage du résultat en image — quand MON score est validé (mine = j'ai saisi,
                         donc iWon est fiable pour orienter le vainqueur sur la carte). Masqué sur le
