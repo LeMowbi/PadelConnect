@@ -103,6 +103,10 @@ export default function NouvelleCompetition() {
   const [courts, setCourts] = useState<string[]>([]); // terrains réservés au tournoi (multi-sélection)
   const [times, setTimes] = useState<string[]>([]); // créneaux réservés au tournoi (multi-sélection)
   const [submitting, setSubmitting] = useState(false);
+  // Une purge (entrées disparues de la grille) peut VIDER la sélection ; or vide = « tout le
+  // club » côté dispo. Ce drapeau impose UN refus explicite de plus avant d'accepter cet envoi
+  // élargi — jamais d'escalade silencieuse en double-tap.
+  const [purgeWidened, setPurgeWidened] = useState(false);
   // Erreurs par champ — affichées au tap sur « Publier » (aucun tap silencieux).
   const [errors, setErrors] = useState<{ title?: string; date?: string; host?: string }>({});
   const scrollRef = useRef<ScrollView>(null);
@@ -193,7 +197,21 @@ export default function NouvelleCompetition() {
       // Les entrées encore affichées (fermées sur ces dates) restent cochées ET décochables.
       setCourts((cur) => cur.filter((c) => hostCourts.includes(c)));
       setTimes((cur) => cur.filter((t) => hostSlots.includes(t)));
+      // ⚠️ La purge peut vider un axe : au re-tap, la garde ci-dessus ne se déclencherait plus et
+      // `[]` partirait avec sa sémantique « TOUT » — on exige un refus explicite de plus.
+      setPurgeWidened(true);
       toast.show('Les terrains ou créneaux choisis sont fermés sur ces dates — corrige ta sélection.', { icon: 'alert-circle' });
+      return;
+    }
+    if (purgeWidened) {
+      // Un seul avertissement : l'organisateur DOIT savoir qu'une sélection vidée par la purge
+      // réserve TOUT (le club entier ou toute la journée) avant que l'envoi ne parte.
+      setPurgeWidened(false);
+      hapticWarning();
+      toast.show(
+        'Ta sélection a été allégée (terrain ou créneau disparu). Vide = TOUT le club sera réservé — vérifie, puis touche à nouveau pour confirmer.',
+        { icon: 'alert-circle' },
+      );
       return;
     }
     setSubmitting(true);
@@ -386,10 +404,11 @@ export default function NouvelleCompetition() {
             {hostCourts.map((c) => (
               <Chip
                 key={c}
-                label={c}
+                label={courtDisabled(c) && courts.includes(c) ? `${c} · fermé` : c}
                 active={courts.includes(c)}
                 // Une puce COCHÉE reste toujours décochable, même devenue indisponible : sinon le
                 // refus « corrige ta sélection » demanderait un geste que l'UI interdit (boucle).
+                // Son libellé porte alors « · fermé » (le grisé ne peut plus le signaler).
                 disabled={courtDisabled(c) && !courts.includes(c)}
                 onPress={() => toggleCourt(c)}
               />
@@ -403,7 +422,7 @@ export default function NouvelleCompetition() {
             {hostSlots.map((t) => (
               <Chip
                 key={t}
-                label={t}
+                label={timeDisabled(t) && times.includes(t) ? `${t} · fermé` : t}
                 active={times.includes(t)}
                 disabled={timeDisabled(t) && !times.includes(t)} // cochée ⇒ décochable (même règle)
                 onPress={() => toggleTime(t)}
@@ -413,7 +432,7 @@ export default function NouvelleCompetition() {
           <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
             Sélectionne les terrains et les heures à bloquer. Si tu ne choisis rien, tout le club est réservé ce(s) jour(s)-là.
             {chosenDayKeys.length > 0 && (hostCourts.some(courtDisabled) || hostSlots.some(timeDisabled))
-              ? ' Les choix grisés sont fermés par le club sur ces dates.'
+              ? ' Les choix grisés ou marqués « fermé » sont fermés par le club sur ces dates.'
               : ''}
           </Txt>
 

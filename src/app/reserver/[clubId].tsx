@@ -398,6 +398,9 @@ export default function ReserverScreen() {
       setDuration(null);
       return;
     }
+    // Épingle le choix AUTO dans l'état avant l'envoi : la puce du terrain réservé doit rester
+    // rendue « moi » pendant le submit (cf. rendu : le miroir mute et la sortirait de `free`).
+    setCourt(effectiveCourt);
     setSubmitting(true);
     const invited = [
       ...state.friends.filter((f) => friendIds.includes(f.id)).map((f) => ({ id: f.id, name: f.name, confirmed: false })),
@@ -757,14 +760,21 @@ export default function ReserverScreen() {
             <Label text="Terrain" />
             <View style={styles.wrap}>
               {allCourts.map((c) => {
-                const isFree = free.includes(c);
+                // Pendant le submit, le miroir contient DÉJÀ notre résa → NOTRE terrain sort de
+                // `free` et son libellé deviendrait « · pris » (désormais lisible) pendant qu'on
+                // le réserve. On le fige « libre + libellé nu » (parité BookingSheet).
+                const mine = submitting && c === court;
+                const isFree = free.includes(c) || mine;
                 return (
                   <Chip
                     key={c}
-                    label={courtChipLabel(c)}
+                    label={mine ? c : courtChipLabel(c)}
                     active={c === effectiveCourt}
                     disabled={!isFree}
-                    onPress={() => setCourt(c)}
+                    onPress={() => {
+                      if (submitting) return;
+                      setCourt(c);
+                    }}
                     size="lg"
                   />
                 );
