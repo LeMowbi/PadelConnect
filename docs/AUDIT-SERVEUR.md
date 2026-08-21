@@ -273,21 +273,23 @@ sur le terrain ne change pas).
 
 ---
 
-## 3) (Recommandé, quand tu veux) Sécuriser le webhook push (3 min)
+## 3) ✅ FAIT le 2026-07-06 — Sécuriser le webhook push (garde pour une éventuelle ROTATION)
 
-Tant qu'aucun secret n'est posé, **n'importe qui** connaissant l'URL de la fonction peut
-déclencher des notifications. Le code de la fonction gère déjà le secret : dès qu'il est posé,
-il devient **obligatoire** — rien à redéployer.
+Le secret `WEBHOOK_SECRET` est posé et l'en-tête `x-webhook-secret` est présent sur TOUS les
+webhooks depuis le 2026-07-06. Cette section ne sert plus que si tu dois un jour CHANGER le
+secret (rotation). ⚠️ Dans ce cas, il y a désormais **11 webhooks** (plus 8) — en oublier un =
+couper sa famille de push EN SILENCE (le secret est obligatoire dès qu'il est posé).
 
-**Étapes :**
+**Étapes (rotation) :**
 
-1. Choisis un secret (longue suite aléatoire, ex. générée par un gestionnaire de mots de passe).
-2. Dashboard → **Edge Functions** → **notify-club** → **Settings** (ou « Secrets ») → ajoute :
-   **Nom** `WEBHOOK_SECRET`, **Valeur** = ton secret → **Save**.
+1. Choisis un nouveau secret (longue suite aléatoire).
+2. Dashboard → **Edge Functions** → **notify-club** → **Settings** (ou « Secrets ») → remplace :
+   **Nom** `WEBHOOK_SECRET`, **Valeur** = le nouveau secret → **Save**.
 3. Dashboard → **Database → Webhooks** → pour **chaque** webhook qui appelle `notify-club`
-   — les **8** : `reservations`, `reservation_participants`, `competitions`, `friend_requests`,
-   `lessons`, `coaches`, `match_results`, `operator_news` (en oublier un = couper sa famille de
-   push) : **Edit** → **HTTP Headers** → ajoute **`x-webhook-secret`** = **le même secret** → **Save**.
+   — les **11** : `notify-club-reservations`, `notify-club-invitations` (participants),
+   `tournois` (competitions), `friend_requests`, `lessons`, `coaches`, `match_results`,
+   `operator_news`, `events`, `club_news`, `share_payments` :
+   **Edit** → **HTTP Headers** → **`x-webhook-secret`** = **le même secret** → **Save**.
 4. Vérifie : une action qui envoie un push (ex. réservation de test) → la notification arrive
    toujours. Si plus rien n'arrive, un webhook n'a pas le bon en-tête.
 
