@@ -103,10 +103,11 @@ export default function NouvelleCompetition() {
   const [courts, setCourts] = useState<string[]>([]); // terrains réservés au tournoi (multi-sélection)
   const [times, setTimes] = useState<string[]>([]); // créneaux réservés au tournoi (multi-sélection)
   const [submitting, setSubmitting] = useState(false);
-  // Une purge (entrées disparues de la grille) peut VIDER la sélection ; or vide = « tout le
-  // club » côté dispo. Ce drapeau impose UN refus explicite de plus avant d'accepter cet envoi
-  // élargi — jamais d'escalade silencieuse en double-tap.
-  const [purgeWidened, setPurgeWidened] = useState(false);
+  // Une purge (entrées DISPARUES de la grille) peut VIDER un axe de sélection ; or vide = « tout
+  // le club » côté dispo. On note QUEL axe a été vidé, et l'envoi n'exige un refus explicite de
+  // plus QUE si cet axe est encore vide au tap suivant — jamais d'escalade silencieuse, jamais
+  // d'avertissement à tort sur le chemin de correction normal.
+  const [purgeWidened, setPurgeWidened] = useState<{ courts: boolean; times: boolean } | null>(null);
   // Erreurs par champ — affichées au tap sur « Publier » (aucun tap silencieux).
   const [errors, setErrors] = useState<{ title?: string; date?: string; host?: string }>({});
   const scrollRef = useRef<ScrollView>(null);
@@ -195,25 +196,31 @@ export default function NouvelleCompetition() {
       // Les entrées DISPARUES de la grille (terrain retiré par un autre gérant, refresh) n'ont
       // plus de puce à décocher : on les purge pour que la correction reste possible à l'écran.
       // Les entrées encore affichées (fermées sur ces dates) restent cochées ET décochables.
-      setCourts((cur) => cur.filter((c) => hostCourts.includes(c)));
-      setTimes((cur) => cur.filter((t) => hostSlots.includes(t)));
-      // ⚠️ La purge peut vider un axe : au re-tap, la garde ci-dessus ne se déclencherait plus et
-      // `[]` partirait avec sa sémantique « TOUT » — on exige un refus explicite de plus.
-      setPurgeWidened(true);
+      const purgedCourts = courts.filter((c) => hostCourts.includes(c));
+      const purgedTimes = times.filter((t) => hostSlots.includes(t));
+      setCourts(purgedCourts);
+      setTimes(purgedTimes);
+      // ⚠️ On n'arme le drapeau QUE si la purge a réellement VIDÉ un axe (au re-tap, la garde
+      // ci-dessus ne se déclencherait plus et `[]` partirait avec sa sémantique « TOUT »). Une
+      // purge qui n'a rien retiré (entrées fermées mais encore affichées) n'arme rien.
+      const emptiedCourts = courts.length > 0 && purgedCourts.length === 0;
+      const emptiedTimes = times.length > 0 && purgedTimes.length === 0;
+      if (emptiedCourts || emptiedTimes) setPurgeWidened({ courts: emptiedCourts, times: emptiedTimes });
       toast.show('Les terrains ou créneaux choisis sont fermés sur ces dates — corrige ta sélection.', { icon: 'alert-circle' });
       return;
     }
-    if (purgeWidened) {
-      // Un seul avertissement : l'organisateur DOIT savoir qu'une sélection vidée par la purge
-      // réserve TOUT (le club entier ou toute la journée) avant que l'envoi ne parte.
-      setPurgeWidened(false);
+    if (purgeWidened && ((purgeWidened.courts && keptCourts.length === 0) || (purgeWidened.times && keptTimes.length === 0))) {
+      // L'axe vidé par la purge est ENCORE vide : l'organisateur doit savoir que « vide » réserve
+      // TOUT (le club entier ou toute la journée) avant que l'envoi ne parte. Un seul refus.
+      setPurgeWidened(null);
       hapticWarning();
       toast.show(
-        'Ta sélection a été allégée (terrain ou créneau disparu). Vide = TOUT le club sera réservé — vérifie, puis touche à nouveau pour confirmer.',
+        'Ton terrain ou créneau a disparu de la grille : sélection vidée. Vide = TOUT le club sera réservé — vérifie, puis touche à nouveau pour confirmer.',
         { icon: 'alert-circle' },
       );
       return;
     }
+    if (purgeWidened) setPurgeWidened(null); // resélection faite : plus rien d'élargi, aucun warn
     setSubmitting(true);
     const res = await addCompetition({
       title: title.trim(),
@@ -376,6 +383,7 @@ export default function NouvelleCompetition() {
                     setCourts([]);
                     setTimes([]);
                     setTimeDurations({});
+                    setPurgeWidened(null); // sélection neuve : l'avertissement de purge n'a plus d'objet
                   }
                   if (errors.host) setErrors((cur) => ({ ...cur, host: undefined }));
                 }}

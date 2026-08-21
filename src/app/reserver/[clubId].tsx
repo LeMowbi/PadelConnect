@@ -218,7 +218,10 @@ export default function ReserverScreen() {
   // « Rejouer ici ?durationMin=90 » alors que le club est passé ce créneau en 1h-seulement) :
   // sinon `free` serait vide sans qu'aucune puce de durée ne s'affiche (cul-de-sac). Dérivation
   // PURE (pas de setState en effet) : la durée invalide retombe sur l'auto-choix / le sélecteur.
-  const validDuration = duration && durationsAtSlot.includes(duration) ? duration : null;
+  // `|| submitting` : pendant l'envoi, le miroir contient DÉJÀ notre résa → la durée réservée
+  // peut sortir de `durationsAtSlot` (dernier couple pris) ; sans l'épingle, effectiveDuration
+  // basculait (section Terrain démontée, StickyBar au prix d'une AUTRE durée pendant l'envoi).
+  const validDuration = duration && (durationsAtSlot.includes(duration) || submitting) ? duration : null;
   const effectiveDuration = validDuration ?? (durationsAtSlot.length === 1 ? durationsAtSlot[0] : null);
   const free = day && slot && effectiveDuration ? freeCourts(club, day.key, slot, effectiveDuration, ctx) : [];
 
@@ -398,9 +401,11 @@ export default function ReserverScreen() {
       setDuration(null);
       return;
     }
-    // Épingle le choix AUTO dans l'état avant l'envoi : la puce du terrain réservé doit rester
-    // rendue « moi » pendant le submit (cf. rendu : le miroir mute et la sortirait de `free`).
+    // Épingle les choix AUTO dans l'état avant l'envoi : la puce du terrain réservé doit rester
+    // rendue « moi » pendant le submit, et la DURÉE réservée doit rester la durée affichée
+    // (cf. rendu : le miroir mute et les sortirait de `free`/`durationsAtSlot`).
     setCourt(effectiveCourt);
+    setDuration(effectiveDuration);
     setSubmitting(true);
     const invited = [
       ...state.friends.filter((f) => friendIds.includes(f.id)).map((f) => ({ id: f.id, name: f.name, confirmed: false })),
@@ -624,6 +629,7 @@ export default function ReserverScreen() {
               label={d.label}
               active={d.key === day?.key}
               onPress={() => {
+                if (submitting) return; // gel du submit : ne pas défaire l'épingle terrain/durée
                 setSelDayKey(d.key);
                 setSlot(null);
                 setDuration(null);
@@ -683,6 +689,7 @@ export default function ReserverScreen() {
                       active={s === slot}
                       disabled={blocked}
                       onPress={() => {
+                        if (submitting) return; // gel du submit
                         setSlot(s);
                         setDuration(null);
                         setCourt(null);
@@ -713,6 +720,7 @@ export default function ReserverScreen() {
                   label={`${durationLabel(d)} · ${fcfa(priceForSlot(club, slot, d))}`}
                   active={d === effectiveDuration}
                   onPress={() => {
+                    if (submitting) return; // gel du submit
                     setDuration(d);
                     setCourt(null);
                   }}
