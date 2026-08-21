@@ -205,7 +205,11 @@ export default function NouvelleCompetition() {
       // purge qui n'a rien retiré (entrées fermées mais encore affichées) n'arme rien.
       const emptiedCourts = courts.length > 0 && purgedCourts.length === 0;
       const emptiedTimes = times.length > 0 && purgedTimes.length === 0;
-      if (emptiedCourts || emptiedTimes) setPurgeWidened({ courts: emptiedCourts, times: emptiedTimes });
+      // FUSION avec un armement précédent (jamais d'écrasement) : deux purges successives sur des
+      // axes différents ne doivent pas faire perdre le warn du premier axe encore vide.
+      if (emptiedCourts || emptiedTimes) {
+        setPurgeWidened((cur) => ({ courts: (cur?.courts ?? false) || emptiedCourts, times: (cur?.times ?? false) || emptiedTimes }));
+      }
       toast.show('Les terrains ou créneaux choisis sont fermés sur ces dates — corrige ta sélection.', { icon: 'alert-circle' });
       return;
     }

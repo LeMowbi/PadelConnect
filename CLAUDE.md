@@ -717,7 +717,18 @@ update` AVANT l'UPDATE, patron 73/M4, course rejouée → joiner préservé) + 1
   Le trigger `user` de `reservations` réactivé après preuve (transaction annulée = sans objet, mais
   vérifié). Contrats client (`sharePayments.ts`) recalés sur la fenêtre réelle.
 
-### Audit post-lancement n°2 (2026-08-21, « comme appris ») — tour 1 ✅ corrigé, tour 2 à venir
+### Audit post-lancement n°2 (2026-08-21, « comme appris ») — CONVERGÉ ✅ (6 tours)
+
+Trajectoire : t1 = 9 constats (3 MEDIUM) → t2 = SQL 90 CONFORME + 1 MEDIUM (mon filtre pouvait
+escalader un blocage : vide = « tout le club » → REFUS au lieu de dégrader) → t3 = refus rendu
+corrigeable (puce cochée décochable, purge des entrées disparues, Chip lisible) → t4 = 2 MEDIUM
+(puce tunnel « · pris » sur son propre terrain pendant le submit — révélée par le fix Chip — ;
+double-tap après purge = envoi `[]`≡« tout » → drapeau anti-escalade) → t5 = gel étendu à la
+DURÉE/prix + drapeau PAR AXE (plus de warn à tort) + puces jour/créneau/durée gardées → t6 =
+0 HIGH/MEDIUM, 2 LOW à une ligne (libellé puce créneau figé `pinned` ; FUSION du drapeau sur
+double purge) → fermés. Invariants finals prouvés par traçage : pendant un submit, RIEN de ce
+que l'écran affiche ne peut mentir (terrain, durée, prix, créneau figés) ; un tournoi n'envoie
+JAMAIS un blocage plus large que l'intention sans un refus explicite.
 
 Méthode rodée : tours adversariaux jusqu'au blanc, Fable=sensible/Opus=écrans, preuve en base.
 Tour 1 (3 agents + vérifs live PAT) — 9 constats, TOUS corrigés :

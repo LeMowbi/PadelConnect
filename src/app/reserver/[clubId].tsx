@@ -673,15 +673,21 @@ export default function ReserverScreen() {
                   // d'attente (« me prévenir si ça se libère »). Seuls le passé et une journée de
                   // tournoi restent inaccessibles — eux n'ont rien à attendre.
                   const blocked = !day || compToday || isPast;
+                  // Libellé FIGÉ pendant le submit pour LE créneau qu'on réserve (parité puce
+                  // terrain `mine`) : le miroir contient déjà notre résa → `noCourt`/`dès …`
+                  // re-dériveraient « · complet » ou un prix d'une autre durée pendant l'envoi.
+                  const pinned = submitting && s === slot;
                   // Avec des plages tarifaires, on montre le prix MINIMUM réellement offert à ce
                   // créneau (une durée peut être moins chère qu'une autre sur le même horaire).
-                  const label = isPast
-                    ? `${s} · passé`
-                    : noCourt
-                      ? `${s} · complet`
-                      : hasTiers
-                        ? `${s} · dès ${fcfa(minPriceAtSlot(s))}`
-                        : s;
+                  const label = pinned
+                    ? s
+                    : isPast
+                      ? `${s} · passé`
+                      : noCourt
+                        ? `${s} · complet`
+                        : hasTiers
+                          ? `${s} · dès ${fcfa(minPriceAtSlot(s))}`
+                          : s;
                   return (
                     <Chip
                       key={s}
