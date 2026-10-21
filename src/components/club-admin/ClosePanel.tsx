@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Tag, Txt } from '@/components/ui';
@@ -6,8 +6,9 @@ import { teamsToShow, type Competition } from '@/data/competitions';
 import { colors, radius, spacing } from '@/theme';
 
 // Panneau de clôture (organisateur) : équipes inscrites → vainqueur → fin de parcours.
-// Tournoi à élimination : vainqueur (+0.50) puis (option) dernière place (−0.25).
-// Americano (par rotation) : on clôture par un PODIUM 1ᵉ/2ᵉ/3ᵉ (seul le 1ᵉ gagne du niveau).
+// Tournoi à élimination : vainqueur puis (option) dernière place (niveau +0,50 / −0,25 en officiel).
+// Americano (par rotation) : on clôture par un PODIUM 1ʳᵉ/2ᵉ/3ᵉ (niveau : seul le 1ᵉʳ, et seulement
+// en tournoi officiel).
 export function ClosePanel({
   comp,
   myTeam,
@@ -29,7 +30,7 @@ export function ClosePanel({
     podium?: { second?: string; third?: string },
   ) => void | Promise<boolean>;
   onCancel: () => void;
-  onDelete?: () => void;
+  onDelete?: () => Promise<boolean>; // true = tournoi supprimé (le parent ferme la sheet)
 }) {
   const teams = teamsToShow(comp, myTeam);
   const [selected, setSelected] = useState<string | null>(initialPodium?.first ?? null);
@@ -53,6 +54,22 @@ export function ClosePanel({
       () => setClosing(false),
     );
   };
+  // Même garde pour l'annulation : le REF bloque deux taps dans la même frame (l'état n'est relu
+  // qu'au rendu suivant), l'état gèle l'affichage. Dégel sur échec seulement (réessai possible).
+  const [deleting, setDeleting] = useState(false);
+  const deletingRef = useRef(false);
+  const runDelete = () => {
+    if (!onDelete || deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleting(true);
+    const release = () => {
+      deletingRef.current = false;
+      setDeleting(false);
+    };
+    void onDelete().then((ok) => {
+      if (!ok) release();
+    }, release);
+  };
 
   // Americano : tournoi par rotation → clôture par un podium (2ᵉ/3ᵉ place), pas une fin de tableau.
   const isAmericano = comp.format.toLowerCase().includes('americano');
@@ -70,8 +87,16 @@ export function ClosePanel({
               <Txt variant="small" color={colors.textMuted}>
                 Annuler définitivement ce tournoi ? Il disparaîtra des listes.
               </Txt>
-              <Button size="sm" label="Oui, annuler le tournoi" icon="trash-outline" variant="danger" onPress={onDelete} full />
-              <Button size="sm" label="Le garder" variant="secondary" onPress={() => setConfirmDelete(false)} full />
+              <Button
+                size="sm"
+                label={deleting ? 'Annulation…' : 'Oui, annuler le tournoi'}
+                icon="trash-outline"
+                variant="danger"
+                onPress={runDelete}
+                disabled={deleting}
+                full
+              />
+              <Button size="sm" label="Le garder" variant="secondary" onPress={() => setConfirmDelete(false)} disabled={deleting} full />
             </>
           ) : (
             <Button
@@ -90,13 +115,19 @@ export function ClosePanel({
     );
   }
 
+  // Places EFFECTIVES du podium : une 2ᵉ/3ᵉ place (pré-remplie ou cochée) devenue le vainqueur — ou
+  // doublant la 2ᵉ — n'est ni cochée ni envoyée. Dérivées au rendu : remettre le vainqueur
+  // d'origine fait revenir le pré-remplissage.
+  const effSecond = second && second !== selected ? second : null;
+  const effThird = third && third !== selected && third !== effSecond ? third : null;
+
   return (
     <View style={{ marginTop: spacing.sm }}>
       {comp.official ? (
         <Txt variant="small" color={colors.amberDark} style={{ fontWeight: '600' }}>
           {isAmericano
-            ? 'Tournoi officiel — l’équipe vainqueure gagne +0.50 de niveau.'
-            : 'Tournoi officiel — vainqueur +0.50, fin de tableau −0.25 de niveau.'}
+            ? 'Tournoi officiel — l’équipe vainqueure gagne +0,50 de niveau.'
+            : 'Tournoi officiel — vainqueur +0,50, fin de tableau −0,25 de niveau.'}
         </Txt>
       ) : null}
 
@@ -155,7 +186,7 @@ export function ClosePanel({
             {teams
               .filter((t) => t !== selected)
               .map((t) => {
-                const sel = second === t;
+                const sel = effSecond === t;
                 return (
                   <Pressable
                     key={t}
@@ -181,9 +212,9 @@ export function ClosePanel({
           </Txt>
           <View style={{ marginTop: 6, gap: 6 }} accessibilityRole="radiogroup">
             {teams
-              .filter((t) => t !== selected && t !== second)
+              .filter((t) => t !== selected && t !== effSecond)
               .map((t) => {
-                const sel = third === t;
+                const sel = effThird === t;
                 return (
                   <Pressable
                     key={t}
@@ -208,8 +239,8 @@ export function ClosePanel({
               icon="trophy"
               onPress={() =>
                 runClose(selected!, selected === myTeam, undefined, false, {
-                  second: second ?? undefined,
-                  third: third ?? undefined,
+                  second: effSecond ?? undefined,
+                  third: effThird ?? undefined,
                 })
               }
               disabled={!selected || closing}

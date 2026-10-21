@@ -134,12 +134,12 @@ export function hasEntryFee(fee: string | undefined): boolean {
 }
 
 // Frais / récompense saisis librement par l’organisateur : on formate les nombres
-// avec séparateurs de milliers (« 10000 FCFA » → « 10 000 FCFA ») et un champ vide
+// avec séparateurs de milliers (« 10000 FCFA » → « 10 000 FCFA », même espace que fcfa) et un champ vide
 // devient « Gratuit » — même règle partout (cartes, fiches, partage).
 export function formatFee(s: string | undefined): string {
   const v = (s ?? '').trim();
   if (!v) return 'Gratuit';
-  return v.replace(/\d{4,}/g, (n) => n.replace(/\B(?=(\d{3})+(?!\d))/g, ' '));
+  return v.replace(/\d{4,}/g, (n) => n.replace(/\B(?=(\d{3})+(?!\d))/g, ' '));
 }
 
 // Cycle de vie d’un tournoi : « terminé » = jour de fin STRICTEMENT passé (le jour même = en

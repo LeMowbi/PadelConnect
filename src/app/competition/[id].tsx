@@ -21,6 +21,7 @@ import {
   seedCompetitions,
   teamCount,
   teamsToShow,
+  type Competition,
 } from '@/data/competitions';
 import {
   buildRounds,
@@ -34,6 +35,7 @@ import {
 } from '@/lib/americano';
 import { confirmAsync } from '@/lib/confirm';
 import { openWhatsApp } from '@/lib/contact';
+import { fcfa, levelText } from '@/lib/format';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { shareCompetition } from '@/lib/share';
 import { useTodayKey } from '@/lib/useTodayKey';
@@ -142,13 +144,20 @@ export default function CompetitionDetail() {
   const myTeam = registered ? `${state.account?.firstName ?? 'Toi'} & ${reg.partner}` : '';
   // Un défi AMICAL créé par un joueur se clôture ici, par son créateur. Un tournoi OFFICIEL
   // ne se clôture JAMAIS depuis cette fiche (réservé à l’Espace Club) — sinon un joueur
-  // pourrait s’auto-attribuer des points de niveau.
-  const canClose = !!comp.createdByMe && !comp.official && played && !result;
+  // pourrait s’auto-attribuer des points de niveau. Seul un tournoi PUBLIÉ a pu se jouer : un
+  // tournoi en attente ou refusé dont la date est passée garde son propre bandeau (Supprimer).
+  const canClose = !!comp.createdByMe && !comp.official && played && !result && isTournamentPublic(comp);
+  // Frais d’organisation PadelConnect d’un tournoi joueur validé par le club. Tant qu’ils sont dus,
+  // le serveur refuse à l’organisateur la suppression du tournoi publié (73/M5) : la carte « sans
+  // inscrit » n’offre donc pas un « Annuler » voué au refus.
+  const orgFeeApplies = !!comp.createdByMe && comp.organizerType === 'joueur' && (comp.commission ?? 0) > 0 && comp.status === 'approved';
+  const feeDue = orgFeeApplies && comp.paymentStatus !== 'paid';
   const teams = teamCount(comp, registered);
   const teamList = teamsToShow(comp, registered ? myTeam : undefined);
   // Frais d’inscription à régler → contacter l’organisateur : le club (tournoi club) ou le
   // joueur organisateur (tournoi joueur). WhatsApp, canal n°1 en Côte d’Ivoire.
   const feeContactPhone = comp.organizerType === 'club' ? hostClub?.contactPhone : comp.organizerPhone;
+  const payee = feePayee(comp.organizerType);
   const contactForFee = () =>
     feeContactPhone
       ? openWhatsApp(
@@ -168,7 +177,7 @@ export default function CompetitionDetail() {
     setPartnerName('');
   };
 
-  // Americano : tournoi par rotation → on clôture par un PODIUM (1ᵉ/2ᵉ/3ᵉ) plutôt qu’un
+  // Americano : tournoi par rotation → on clôture par un PODIUM (1ʳᵉ/2ᵉ/3ᵉ) plutôt qu’un
   // unique vainqueur + dernier. La détection se fait sur le format choisi à la création.
   const isAmericano = comp.format.toLowerCase().includes('americano');
 
@@ -195,9 +204,13 @@ export default function CompetitionDetail() {
   // Podium suggéré par l’americano (traduit en noms d’ÉQUIPE) : pré-remplit la clôture tant
   // que l’organisateur n’a pas choisi lui-même. Il garde le dernier mot (tout reste modifiable).
   const amPodium = americanoPodiumTeams(comp, registered ? myTeam : undefined);
+  // Une place déjà prise (vainqueur, ou 2ᵉ pour la 3ᵉ) n’est ni cochée ni envoyée : choisir comme
+  // vainqueur l’équipe pré-remplie en 2ᵉ/3ᵉ ne la fait plus partir aussi sur le podium.
   const winnerName = winnerPick ?? amPodium.first ?? '';
-  const secondName = secondPick ?? amPodium.second ?? '';
-  const thirdName = thirdPick ?? amPodium.third ?? '';
+  const secondRaw = secondPick ?? amPodium.second ?? '';
+  const secondName = secondRaw !== winnerName ? secondRaw : '';
+  const thirdRaw = thirdPick ?? amPodium.third ?? '';
+  const thirdName = thirdRaw !== winnerName && thirdRaw !== secondName ? thirdRaw : '';
 
   // Enregistrement HONNÊTE de l’état americano : on attend le serveur, la section ne bascule
   // qu’au OK (le store ne met à jour son miroir que dans ce cas), sinon toast d’échec — un
@@ -319,7 +332,7 @@ export default function CompetitionDetail() {
     } else hapticWarning();
     showToast(ok ? 'Tournoi clôturé ✓' : 'Clôture impossible — réessaie.', ok ? 'success' : 'error');
   };
-  // Clôture americano : vainqueur + 2ᵉ/3ᵉ place (le niveau ne bouge que pour le 1ᵉ, comme ailleurs).
+  // Clôture americano (amical, non officiel) : vainqueur + 2ᵉ/3ᵉ place — aucun niveau en jeu.
   const doClosePodium = async () => {
     if (closing) return;
     setClosing(true);
@@ -343,7 +356,7 @@ export default function CompetitionDetail() {
         toast ? (
           // Toast léger (succès ex. « Lien copié ! » ou échec ex. « Inscription impossible »)
           <View
-            style={styles.toast}
+            style={[styles.toast, toast.tone === 'error' && styles.toastError]}
             pointerEvents="none"
             accessible
             accessibilityLiveRegion={toast.tone === 'error' ? 'assertive' : 'polite'}
@@ -410,7 +423,7 @@ export default function CompetitionDetail() {
           </View>
         ) : null}
         <View style={styles.infoChip}>
-          <Txt variant="label">{played ? 'Date' : 'Clôture'}</Txt>
+          <Txt variant="label">Date</Txt>
           <Txt variant="h3" style={{ marginTop: 2 }}>
             {compDateLabel(comp)}
           </Txt>
@@ -422,10 +435,25 @@ export default function CompetitionDetail() {
           <View style={styles.pendingBanner}>
             <Ionicons name="hourglass-outline" size={16} color={colors.coral} />
             <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
-              En attente de validation par {comp.clubName ?? 'le club hôte'}. Ton tournoi sera visible une fois accepté.
+              {played
+                ? `La date est passée sans validation par ${comp.clubName ?? 'le club hôte'}.`
+                : `En attente de validation par ${comp.clubName ?? 'le club hôte'}. Ton tournoi sera visible une fois accepté.`}
             </Txt>
           </View>
-          {comp.createdByMe && hostClub?.contactPhone ? (
+          {/* Date passée : faire valider n’a plus de sens — l’organisateur peut seulement le supprimer
+              (la carte « Tournoi terminé » est réservée aux tournois publiés). */}
+          {comp.createdByMe && played ? (
+            <View style={{ marginTop: spacing.sm }}>
+              <Button
+                label="Supprimer ce tournoi"
+                icon="trash-outline"
+                variant="danger"
+                onPress={() => void removeCompetition()}
+                disabled={deleting}
+                full
+              />
+            </View>
+          ) : comp.createdByMe && hostClub?.contactPhone ? (
             <View style={{ marginTop: spacing.sm }}>
               <Button label={`Contacter ${hostClub.name}`} icon="logo-whatsapp" variant="secondary" onPress={contactClub} full />
             </View>
@@ -469,8 +497,8 @@ export default function CompetitionDetail() {
       {/* Frais PadelConnect (Wave, v2) — visible par l’ORGANISATEUR d’un tournoi joueur, UNE FOIS
           le club validé (approved). Payé → confirmé ✓. Non payé → bouton Wave (lien de l’opérateur)
           + rappel d’envoyer la preuve, l’opérateur confirme la réception dans son espace. */}
-      {comp.createdByMe && comp.organizerType === 'joueur' && (comp.commission ?? 0) > 0 && comp.status === 'approved' ? (
-        comp.paymentStatus === 'paid' ? (
+      {orgFeeApplies ? (
+        !feeDue ? (
           <View style={[styles.pendingBanner, { backgroundColor: colors.greenSoft }]}>
             <Ionicons name="checkmark-circle" size={16} color={colors.green} />
             <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
@@ -482,7 +510,7 @@ export default function CompetitionDetail() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
               <Ionicons name="cash-outline" size={18} color={colors.amberDark} />
               <Txt variant="h3" style={{ flex: 1 }}>
-                Frais à régler : {formatFee(`${comp.commission} FCFA`)}
+                Frais à régler : {fcfa(comp.commission ?? 0)}
               </Txt>
             </View>
             <Txt variant="small" color={colors.textMuted}>
@@ -780,7 +808,11 @@ export default function CompetitionDetail() {
             Aucune équipe ne s’est inscrite : il n’y a pas de vainqueur à désigner.
           </Txt>
           <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
-            {confirmCancel ? (
+            {feeDue ? (
+              <Txt variant="small" color={colors.amberDark}>
+                Règle d’abord les frais d’organisation (ci-dessus) ou contacte PadelConnect pour annuler ce tournoi.
+              </Txt>
+            ) : confirmCancel ? (
               <>
                 <Txt variant="small" color={colors.textMuted}>
                   Annuler définitivement ce tournoi ? Il disparaîtra des listes.
@@ -851,11 +883,6 @@ export default function CompetitionDetail() {
                   full
                 />
               </View>
-              {comp.official ? (
-                <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-                  Tournoi officiel : l’équipe vainqueure gagne +0.50 de niveau.
-                </Txt>
-              ) : null}
             </>
           ) : isAmericano ? (
             <>
@@ -938,7 +965,7 @@ export default function CompetitionDetail() {
             <>
               <Txt variant="h3">Fin de tableau ?</Txt>
               <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
-                Facultatif. {comp.official ? 'L’équipe désignée perd −0.25 de niveau. ' : ''}Tu peux passer.
+                Facultatif. Tu peux passer.
               </Txt>
               <View style={{ marginTop: spacing.sm, gap: 6 }} accessibilityRole="radiogroup">
                 {teamList
@@ -1002,13 +1029,7 @@ export default function CompetitionDetail() {
               <View style={{ marginTop: spacing.sm }}>
                 <Button
                   size="sm"
-                  label={
-                    comp.organizerType === 'club'
-                      ? 'Contacter le club (règlement)'
-                      : comp.organizerType === 'operator'
-                        ? 'Contacter PadelConnect (règlement)'
-                        : 'Contacter l’organisateur (règlement)'
-                  }
+                  label={`Contacter ${payee.name} (règlement)`}
                   icon="logo-whatsapp"
                   variant="secondary"
                   onPress={contactForFee}
@@ -1069,10 +1090,9 @@ export default function CompetitionDetail() {
           </Card>
         ) : null
       ) : started ? (
-        // Inscription fermée dès le jour J côté UI (`started = today >= dateKey`) : la DÉSINSCRIPTION
-        // est déjà refusée dès le jour J côté serveur (53), mais register_competition (59) n'a PAS de
-        // garde jour J — sans ce masque, un joueur s'inscrivait le jour J sans pouvoir se désinscrire
-        // ensuite (et récoltait les +10 pts « officiel joué » sans jouer). Garde SERVEUR = future migration.
+        // Inscription fermée dès le jour J (`started = today >= dateKey`), miroir de la garde serveur
+        // de register_competition (91) : la DÉSINSCRIPTION est refusée dès le jour J (53), une
+        // inscription ce jour-là récolterait les +10 pts « officiel joué » sans pouvoir se retirer.
         <Card style={{ marginTop: spacing.lg }}>
           <Txt variant="small" color={colors.textFaint}>
             Le tournoi a commencé — les inscriptions sont fermées.
@@ -1127,20 +1147,28 @@ export default function CompetitionDetail() {
               onPress={async () => {
                 if (!canRegister || registering) return;
                 setRegistering(true);
-                const ok = await registerCompetition(comp.id, partner);
+                const res = await registerCompetition(comp.id, partner);
                 setRegistering(false);
-                if (ok) hapticSuccess();
+                if (res === 'ok') hapticSuccess();
                 else hapticWarning();
-                showToast(ok ? 'Inscription enregistrée ✓' : 'Inscription impossible — réessaie.', ok ? 'success' : 'error');
+                // Refus DÉFINITIF (complet, plus publié, jour J) : jamais « réessaie » — le store relit
+                // les tournois et la fiche bascule d’elle-même (« Complet »…).
+                showToast(
+                  res === 'ok'
+                    ? 'Inscription enregistrée ✓'
+                    : res === 'refused'
+                      ? 'Ce tournoi est complet ou n’accepte plus d’inscriptions.'
+                      : 'Inscription impossible — vérifie ta connexion et réessaie.',
+                  res === 'ok' ? 'success' : 'error',
+                );
               }}
               disabled={!canRegister || registering}
               full
             />
           </View>
           <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
-            {comp.server
-              ? 'Inscription enregistrée et visible par le club. Le règlement se fait au club.'
-              : 'Inscription enregistrée sur cet appareil. Le règlement se fait au club.'}
+            {comp.server ? 'Inscription enregistrée et visible par le club.' : 'Inscription enregistrée sur cet appareil.'}
+            {hasEntryFee(comp.fee) ? ` Le règlement se fait ${payee.near}.` : ''}
           </Txt>
         </View>
       )}
@@ -1153,6 +1181,9 @@ export default function CompetitionDetail() {
 // Card « Résultats » — extraite pour pouvoir l’envelopper d’un PopIn quand mine?.result === 'win'
 // (le moment le plus fort du produit : victoire d’un tournoi OFFICIEL) sans dupliquer le JSX.
 function ResultCard({ result, mine, official }: { result: CompResult; mine?: OfficialResult; official?: boolean }) {
+  // `won` couvre aussi un tournoi AMICAL gagné (`result` reste 'played' : aucun niveau en jeu) ;
+  // repli sur `result` pour un palmarès persisté avant ce champ.
+  const won = !!mine && (mine.won ?? mine.result === 'win');
   return (
     <Card style={{ marginTop: spacing.lg, borderColor: colors.amber }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
@@ -1165,9 +1196,9 @@ function ResultCard({ result, mine, official }: { result: CompResult; mine?: Off
         </View>
         {mine ? (
           <Tag
-            label={mine.result === 'win' ? 'Vainqueur !' : mine.result === 'last' ? 'Fin de tableau' : 'Participé'}
-            tone={mine.result === 'win' ? 'amber' : mine.result === 'last' ? 'coral' : 'signature'}
-            icon={mine.result === 'win' ? 'trophy' : mine.result === 'last' ? 'arrow-down' : 'checkmark'}
+            label={won ? 'Vainqueur !' : mine.result === 'last' ? 'Fin de tableau' : 'Participé'}
+            tone={won ? 'amber' : mine.result === 'last' ? 'coral' : 'signature'}
+            icon={won ? 'trophy' : mine.result === 'last' ? 'arrow-down' : 'checkmark'}
           />
         ) : null}
       </View>
@@ -1196,19 +1227,29 @@ function ResultCard({ result, mine, official }: { result: CompResult; mine?: Off
       {mine?.result === 'win' && official ? (
         <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
           {mine.levelAfter != null
-            ? `Tournoi officiel gagné : ton niveau passe à ${mine.levelAfter.toFixed(2)} (+0.50).`
-            : 'Tournoi officiel gagné : ton niveau gagne +0.50 🎉'}
+            ? `Tournoi officiel gagné : ton niveau passe à ${levelText(mine.levelAfter, 2)} (+0,50).`
+            : 'Tournoi officiel gagné : ton niveau gagne 0,50 🎉'}
         </Txt>
       ) : null}
       {mine?.result === 'last' && official ? (
         <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
           {mine.levelAfter != null
-            ? `Fin de tableau : ton niveau passe à ${mine.levelAfter.toFixed(2)} (−0.25).`
-            : 'Fin de tableau : ton niveau perd −0.25.'}
+            ? `Fin de tableau : ton niveau passe à ${levelText(mine.levelAfter, 2)} (−0,25).`
+            : 'Fin de tableau : ton niveau perd 0,25.'}
         </Txt>
       ) : null}
     </Card>
   );
+}
+
+// À qui se règlent les frais d’inscription : le club, PadelConnect (tournoi officiel PadelConnect)
+// ou le joueur organisateur — une seule règle pour le bouton de contact et le texte d’aide.
+function feePayee(type: Competition['organizerType']): { name: string; near: string } {
+  return type === 'club'
+    ? { name: 'le club', near: 'au club' }
+    : type === 'operator'
+      ? { name: 'PadelConnect', near: 'auprès de PadelConnect' }
+      : { name: 'l’organisateur', near: 'auprès de l’organisateur' };
 }
 
 function Info({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }) {
@@ -1330,4 +1371,5 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radius.pill,
   },
+  toastError: { backgroundColor: colors.danger },
 });

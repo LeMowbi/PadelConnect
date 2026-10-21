@@ -13,8 +13,8 @@ export type Badge = { id: string; icon: string; title: string; desc: string };
 // l'appelant, qui reste responsable de le dire honnêtement à l'écran.
 export type BadgeInput = {
   playedCount: number; // parties réellement jouées (réservations passées)
-  tournamentsPlayed: number; // tournois officiels joués
-  tournamentsWon: number; // tournois officiels gagnés
+  tournamentsPlayed: number; // tournois clôturés joués (officiels et amicaux)
+  tournamentsWon: number; // tournois clôturés gagnés (officiels et amicaux)
   points: number; // points de classement gagnés dans l'app
   validatedWins: number; // victoires de match CONFIRMÉES (un perdant a reconnu le score)
   weekStreak: number; // série en cours : semaines consécutives avec ≥ 1 partie

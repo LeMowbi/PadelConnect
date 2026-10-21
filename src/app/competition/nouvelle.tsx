@@ -44,6 +44,8 @@ function Field({
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={colors.textMuted}
+        accessibilityLabel={label}
+        accessibilityHint={error || undefined}
         style={[styles.input, error ? { borderColor: colors.danger } : null]}
       />
       {error ? (
@@ -84,7 +86,7 @@ export default function NouvelleCompetition() {
 
   // Tournois : planification jusqu’à ~6 semaines à l’avance (un tournoi s’organise bien plus
   // tôt qu’une simple réservation, limitée à la semaine).
-  // todayKey : la liste se recale après minuit (retour premier plan) — cf. reserver/index.tsx.
+  // todayKey : la liste se recale après minuit (retour premier plan) — cf. (tabs)/reserver.tsx.
   const todayKey = useTodayKey();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const dates = useMemo(() => nextDays(42), [todayKey]);
@@ -175,9 +177,10 @@ export default function NouvelleCompetition() {
     const e: { title?: string; date?: string; host?: string } = {};
     if (title.trim().length < 3) e.title = 'Indique un titre (3 lettres minimum).';
     if (!day) e.date = 'Choisis une date.';
-    // Passage de minuit : `dates` est recalé par useTodayKey mais `day` est un état indépendant —
-    // un écran resté ouvert la veille garderait « hier » et créerait un tournoi déjà terminé.
-    else if (day.key < dates[0].key) e.date = 'Cette date est passée — choisis une date à venir.';
+    // Les inscriptions ferment le JOUR du tournoi (fiche + garde serveur 91) : un tournoi du jour même
+    // n'aurait jamais d'inscrit. Garde doublée du calendrier (minKey = demain) car `day` est un état
+    // indépendant : un écran resté ouvert la veille garderait un jour devenu « aujourd'hui » (ou passé).
+    else if (day.key <= dates[0].key) e.date = 'Choisis une date à partir de demain : les inscriptions ferment le jour du tournoi.';
     if (!asClub && !hostId) e.host = 'Choisis le club hôte.';
     setErrors(e);
     if (e.title || e.date || e.host) {
@@ -299,7 +302,7 @@ export default function NouvelleCompetition() {
         {/* Vrai calendrier mensuel (demande porteur) — remplace les 42 pastilles de jours. */}
         <CalendarPicker
           value={day?.key ?? null}
-          minKey={dates[0].key}
+          minKey={dates[1].key}
           maxKey={dates[dates.length - 1].key}
           onSelect={(key) => {
             setDay({ key, label: dateKeyLabel(key), value: keyToTs(key) });

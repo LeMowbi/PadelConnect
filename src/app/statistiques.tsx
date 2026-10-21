@@ -8,29 +8,41 @@ import { SkeletonLines } from '@/components/Skeleton';
 import { Card, Divider, IconCircle, SectionHeader, StatTile, Txt } from '@/components/ui';
 import { badgeBoard } from '@/lib/badges';
 import { dateKeyLabel, dayKey } from '@/lib/days';
-import { levelLabel } from '@/lib/format';
+import { levelLabel, levelText } from '@/lib/format';
 import { fetchLeaderboard, fetchMyRank } from '@/lib/leaderboard';
 import { fetchMyLevelHistory, type LevelHistoryEntry } from '@/lib/social';
 import { isPlayed, useApp } from '@/store/AppContext';
 import { colors, radius, shadows, spacing } from '@/theme';
 
-// Écran STATISTIQUES JOUEUR (Chantier 6, v2). 100 % réel : parties dérivées des
-// réservations passées (miroir local, marche hors-ligne), tournois des résultats
-// officiels, points/rang/victoires de match lus du classement serveur (null = échec
-// réseau → on affiche « — » sans inventer de chiffre, convention §8).
+// Écran STATISTIQUES JOUEUR (Chantier 6, v2). 100 % réel : parties et tournois lus des
+// statistiques du store (computeStats, mêmes chiffres que le Profil), activité dérivée des
+// réservations passées (miroir local, marche hors-ligne), points/rang/victoires de match lus
+// du classement serveur (null = échec réseau → on affiche « — » sans inventer de chiffre, §8).
 
+// Forme COURTE et sans point, volontairement distincte de MONTHS (lib/days) : libellés sous les
+// barres du BarChart, à largeur contrainte.
 const MONTHS_FR = ['jan', 'fév', 'mar', 'avr', 'mai', 'juin', 'juil', 'aoû', 'sep', 'oct', 'nov', 'déc'];
 
 const LEVEL_HISTORY_LIMIT = 5; // les 5 derniers ajustements de niveau (carte « Évolution du niveau »)
 
-// Ajustement lisible : « +0,20 » / « −0,10 » (virgule décimale française, vrai signe moins).
+// Sens de l'ajustement, comparé sur la valeur ARRONDIE au centième (jamais de « −0,00 »). Un delta
+// nul (plancher 1, plafond 7 ou écrêtage hebdomadaire) est NEUTRE : la ligne d'historique ne porte
+// pas le camp, on ne peut pas en déduire une victoire ou une défaite.
+function deltaSign(delta: number): number {
+  return Math.sign(Math.round(delta * 100));
+}
+
+// Ajustement lisible : « +0,20 » / « −0,10 » / « ±0,00 » (virgule décimale française, vrai signe moins).
 function deltaLabel(delta: number): string {
-  return `${delta >= 0 ? '+' : '−'}${Math.abs(delta).toFixed(2).replace('.', ',')}`;
+  const sign = deltaSign(delta);
+  return `${sign > 0 ? '+' : sign < 0 ? '−' : '±'}${levelText(Math.abs(delta), 2)}`;
 }
 
 // Motif de l'ajustement : les tournois officiels (±0,50) restent distincts des matchs validés.
 function reasonLabel(entry: LevelHistoryEntry): string {
-  return entry.reason === 'tournament' ? 'tournoi' : entry.delta >= 0 ? 'victoire' : 'défaite';
+  if (entry.reason === 'tournament') return 'tournoi';
+  const sign = deltaSign(entry.delta);
+  return sign > 0 ? 'victoire' : sign < 0 ? 'défaite' : 'niveau inchangé';
 }
 
 // Activité des 6 derniers mois (UTC, comme tout le projet) : nombre de parties jouées par mois.
@@ -92,10 +104,9 @@ export default function Statistiques() {
   // MES parties seulement : `state.reservations` contient, pour un compte club/opérateur, TOUTES
   // les résas de son périmètre (RLS) → on part de `myReservations` (comme Profil) pour ne pas
   // gonfler « parties jouées » et le graphe d'activité avec les résas des autres joueurs.
-  const playedTs = myReservations.filter((r) => isPlayed(r, now)).map((r) => r.startsAt);
-  const played = playedTs.length;
-  const tournamentsPlayed = state.officialResults.length;
-  const tournamentsWon = state.officialResults.filter((o) => o.result === 'win').length;
+  // Les totaux (parties, tournois) viennent de `stats` (computeStats, store) : mêmes chiffres que
+  // le Profil. Le graphe reste sur le miroir (6 mois) sans les invitations jamais acceptées.
+  const playedTs = myReservations.filter((r) => isPlayed(r, now) && !state.pendingInvitationIds.includes(r.id)).map((r) => r.startsAt);
   const activity = monthlyPlayed(playedTs, now);
   const hasActivity = activity.some((a) => a.value > 0);
 
@@ -111,9 +122,9 @@ export default function Statistiques() {
   // null PERSISTANT — au chargement comme pour un joueur à 0 en ligne, elle n'a rien à dire.
   const serverUnknown = points === null || matchWins === null;
   const board = badgeBoard({
-    playedCount: played,
-    tournamentsPlayed,
-    tournamentsWon,
+    playedCount: stats.played,
+    tournamentsPlayed: stats.tournamentsPlayed,
+    tournamentsWon: stats.tournamentsWon,
     points: typeof points === 'number' ? points : 0,
     validatedWins: typeof matchWins === 'number' ? matchWins : 0,
     weekStreak: stats.streakWeeks, // série calculée sur MES parties (computeStats, store)
@@ -166,13 +177,13 @@ export default function Statistiques() {
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Mes chiffres" />
         <View style={styles.grid}>
-          <StatTile value={played} label="Parties jouées" color={colors.green} bg={colors.greenSoft} />
+          <StatTile value={stats.played} label="Parties jouées" color={colors.green} bg={colors.greenSoft} />
           <StatTile value={serverVal(matchWins)} label="Matchs gagnés" color={colors.signature} bg={colors.signatureSoft} />
           <StatTile value={serverVal(points)} label="Points" color={colors.amberDark} bg={colors.amberSoft} />
         </View>
         <View style={[styles.grid, { marginTop: spacing.sm }]}>
-          <StatTile value={tournamentsPlayed} label="Tournois joués" color={colors.purple} bg={colors.purpleSoft} />
-          <StatTile value={tournamentsWon} label="Tournois gagnés" color={colors.amberDark} bg={colors.amberSoft} />
+          <StatTile value={stats.tournamentsPlayed} label="Tournois joués" color={colors.purple} bg={colors.purpleSoft} />
+          <StatTile value={stats.tournamentsWon} label="Tournois gagnés" color={colors.amberDark} bg={colors.amberSoft} />
           <StatTile
             value={typeof rank === 'number' && rank > 0 ? (rank === 1 ? '1ᵉʳ' : `${rank}ᵉ`) : '—'}
             label="Classement"
@@ -252,7 +263,7 @@ export default function Statistiques() {
           <View style={styles.levelRow}>
             <IconCircle icon="trending-up" color={colors.signature} bg={colors.signatureSoft} size={46} />
             <View style={{ flex: 1 }}>
-              <Txt variant="h3">Niveau {state.level.toFixed(2)}</Txt>
+              <Txt variant="h3">Niveau {levelText(state.level, 2)}</Txt>
               <Txt variant="muted">{levelLabel(state.level)}</Txt>
             </View>
           </View>
@@ -266,11 +277,12 @@ export default function Statistiques() {
           ) : (
             <View style={{ gap: spacing.sm }}>
               {levelHistory.map((h) => {
-                const up = h.delta >= 0;
+                const sign = deltaSign(h.delta);
+                const tone = sign > 0 ? colors.green : sign < 0 ? colors.coral : colors.textMuted;
                 return (
                   <View key={h.id} style={styles.levelEntry}>
-                    <Ionicons name={up ? 'arrow-up' : 'arrow-down'} size={16} color={up ? colors.green : colors.coral} />
-                    <Txt variant="body" color={up ? colors.green : colors.coral} style={{ fontWeight: '700' }}>
+                    <Ionicons name={sign > 0 ? 'arrow-up' : sign < 0 ? 'arrow-down' : 'remove'} size={16} color={tone} />
+                    <Txt variant="body" color={tone} style={{ fontWeight: '700' }}>
                       {deltaLabel(h.delta)}
                     </Txt>
                     <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }} numberOfLines={1}>
@@ -289,8 +301,8 @@ export default function Statistiques() {
 
       <View style={styles.note}>
         <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
-          Tes points : 100 pour un tournoi officiel gagné, 10 pour un tournoi joué, 3 pour une victoire de match confirmée, 2 par partie
-          jouée. Rien n’est inventé — tout se gagne sur le terrain.
+          Tes points : 100 pour un tournoi officiel gagné, 10 pour un tournoi officiel joué, 3 pour une victoire de match confirmée, 2 par
+          partie jouée. Rien n’est inventé — tout se gagne sur le terrain.
         </Txt>
       </View>
     </Screen>
