@@ -1,0 +1,2 @@
+MIT License — Supabase plugin for Claude Code (supabase-community/supabase-plugin), licence déclarée MIT dans .claude-plugin/plugin.json du dépôt source.
+Source : https://github.com/supabase-community/supabase-plugin
