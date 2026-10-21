@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { AppState, Platform, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { Avatar } from '@/components/Avatar';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Chip } from '@/components/Chip';
@@ -15,18 +15,17 @@ import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt, type IconName } from '@/components/ui';
 import { isPlayed, useApp } from '@/store/AppContext';
 import { canAccessOperator, canSeeClubSpace } from '@/lib/access';
-import { levelLabel } from '@/lib/format';
+import { levelLabel, levelText } from '@/lib/format';
 import { hapticSuccess } from '@/lib/haptics';
+import { ensureNotificationPermission } from '@/lib/notifications';
 import { isValidPhone } from '@/lib/phone';
 import { pickImage } from '@/lib/pickImage';
 import {
   claimLoyalty,
   fetchLoyaltyReward,
   fetchMatchAlerts,
-  fetchMyLoyalty,
   fetchMyLoyaltyClaims,
   setMatchAlerts,
-  type Loyalty,
   type MyLoyaltyClaim,
 } from '@/lib/social';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
@@ -222,14 +221,14 @@ export default function ProfilScreen() {
         </>
       )}
 
-      {/* Mon niveau — n’évolue que par les tournois officiels */}
+      {/* Mon niveau — ajusté côté serveur : moteur de niveau (80, matchs validés) + tournois officiels */}
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Mon niveau" />
         <Card>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs }}>
             <Txt variant="label">Niveau de jeu</Txt>
             <Txt variant="display" color={colors.signature} style={{ fontSize: 28 }}>
-              {level.toFixed(2)}
+              {levelText(level, 2)}
             </Txt>
           </View>
           {/* Niveau calculé (80) : plus rien à déclarer, il suit les résultats réels. */}
@@ -241,16 +240,17 @@ export default function ProfilScreen() {
           </View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
             <Txt variant="small" color={colors.textFaint}>
-              {lvlLow.toFixed(1)}
+              {levelText(lvlLow, 1)}
             </Txt>
             <Txt variant="small" color={colors.textFaint}>
-              {lvlHigh.toFixed(1)}
+              {levelText(lvlHigh, 1)}
             </Txt>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm }}>
             <Ionicons name="swap-vertical" size={14} color={colors.textMuted} />
             <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
-              {levelLabel(level)} · monte ou descend selon tes résultats en tournoi officiel (+0.50 / −0.25).
+              {levelLabel(level)} · évolue avec tes matchs validés (au plus ±0,50 sur 7 jours) ; un tournoi officiel compte aussi (+0,50
+              victoire / −0,25 dernière place).
             </Txt>
           </View>
           {/* B-R6 : prochain trophée le plus proche (hors Vainqueur / Niveau 4+) */}
@@ -283,17 +283,18 @@ export default function ProfilScreen() {
               <View style={{ gap: 6 }}>
                 {officialResults.slice(0, 3).map((o) => (
                   <View key={o.id} style={styles.row}>
+                    {/* « Vainqueur » amical compris (`won`) ; le delta de niveau, lui, ne suit que `result` (officiels). */}
                     <Tag
-                      label={o.result === 'win' ? 'Vainqueur' : o.result === 'last' ? 'Fin de tableau' : 'Participant'}
-                      tone={o.result === 'win' ? 'amber' : o.result === 'last' ? 'coral' : 'signature'}
+                      label={(o.won ?? o.result === 'win') ? 'Vainqueur' : o.result === 'last' ? 'Fin de tableau' : 'Participant'}
+                      tone={(o.won ?? o.result === 'win') ? 'amber' : o.result === 'last' ? 'coral' : 'signature'}
                     />
                     <Txt variant="muted" style={{ flex: 1 }}>
                       {/* Tournoi serveur : delta seul (le « niveau après » serait périmé). Le serveur
                           borne le niveau à [1,7] (close_competition) → on annonce le delta « au plus »,
-                          sinon un joueur déjà à 7 (ou 1) verrait un +0.50/−0.25 qui n'a pas bougé. */}
+                          sinon un joueur déjà à 7 (ou 1) verrait un +0,50/−0,25 qui n'a pas bougé. */}
                       {o.levelAfter != null
-                        ? `${o.title} → Niveau ${o.levelAfter.toFixed(2)}`
-                        : `${o.title}${o.result === 'win' ? ' → +0.50 (plafond 7)' : o.result === 'last' ? ' → −0.25 (plancher 1)' : ''}`}
+                        ? `${o.title} → Niveau ${levelText(o.levelAfter, 2)}`
+                        : `${o.title}${o.result === 'win' ? ' → +0,50 (plafond 7)' : o.result === 'last' ? ' → −0,25 (plancher 1)' : ''}`}
                     </Txt>
                   </View>
                 ))}
@@ -301,7 +302,7 @@ export default function ProfilScreen() {
             </>
           ) : (
             <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-              Inscris-toi à un tournoi officiel : une victoire fait gagner +0.50.
+              Inscris-toi à un tournoi officiel : une victoire fait gagner +0,50.
             </Txt>
           )}
         </Card>
@@ -438,9 +439,20 @@ export default function ProfilScreen() {
           </View>
           <Switch
             value={state.remindersOn}
-            onValueChange={setRemindersOn}
+            onValueChange={(v) => {
+              setRemindersOn(v);
+              // Permission iOS/Android refusée : sans ce mot, l'interrupteur restait ON en promettant
+              // des rappels qui ne partiront jamais. Natif seulement (sur le web, la permission
+              // est toujours « refusée » et le message serait faux).
+              if (v && Platform.OS !== 'web')
+                void ensureNotificationPermission().then((ok) => {
+                  if (!ok) toast.show('Autorise les notifications dans les réglages pour recevoir tes rappels.', { icon: 'alert-circle' });
+                });
+            }}
             trackColor={{ true: colors.signature, false: colors.border }}
             thumbColor={colors.white}
+            accessibilityRole="switch"
+            accessibilityLabel="Rappels de match"
           />
         </Card>
         {/* Alerte « un match à ton niveau vient d’ouvrir » (81) — préférence serveur : visible
@@ -714,8 +726,10 @@ export default function ProfilScreen() {
 // ne se perd à la réinstallation et rien ne se triche.
 function LoyaltyCard() {
   const toast = useToast();
-  // null = pas encore chargé (ou échec réseau) : on n’affiche jamais un compteur inventé (§8).
-  const [loyalty, setLoyalty] = useState<Loyalty | null>(null);
+  // Compteur = tranche du STORE (chargée en session + premier plan) : même source que la tuile
+  // « Parties jouées » — null = pas encore chargé (ou échec réseau), jamais inventé (§8).
+  const { state, refreshLoyalty } = useApp();
+  const loyalty = state.loyalty;
   // null = texte inconnu (échec réseau) ; '' = récompense pas encore réglée par l’opérateur.
   const [reward, setReward] = useState<string | null>(null);
   const [claiming, setClaiming] = useState(false); // garde anti double-tap
@@ -723,12 +737,11 @@ function LoyaltyCard() {
   // SURVIVRE au démontage de l’onglet (le lendemain au club, il est encore là). null = inconnu.
   const [myClaims, setMyClaims] = useState<MyLoyaltyClaim[] | null>(null);
 
-  // Chargement au montage ET au retour au premier plan (une partie a pu se jouer entre-temps,
-  // ou l’opérateur a réglé la récompense / servi un cycle).
+  // Chargement au montage ET au retour au premier plan (l’opérateur a pu régler la récompense
+  // ou servir un cycle entre-temps).
   useEffect(() => {
     let alive = true;
     const load = () => {
-      void fetchMyLoyalty().then((l) => alive && l && setLoyalty(l));
       void fetchLoyaltyReward().then((t) => alive && t !== null && setReward(t));
       void fetchMyLoyaltyClaims().then((c) => alive && c && setMyClaims(c));
     };
@@ -753,10 +766,8 @@ function LoyaltyCard() {
     const res = await claimLoyalty();
     // Dans tous les cas on relit le compteur serveur : il fait foi (une partie a pu être
     // annulée entre-temps, ou la récompense déjà réclamée depuis un autre appareil).
-    const fresh = await fetchMyLoyalty();
-    const freshClaims = await fetchMyLoyaltyClaims();
+    const [, freshClaims] = await Promise.all([refreshLoyalty(), fetchMyLoyaltyClaims()]);
     setClaiming(false);
-    if (fresh) setLoyalty(fresh);
     if (freshClaims) setMyClaims(freshClaims);
     if (res === 'ok') {
       hapticSuccess();
@@ -871,6 +882,12 @@ function EditAccount({ onDone }: { onDone: () => void }) {
       setError('Numéro invalide — au moins 8 chiffres.');
       return;
     }
+    // Date facultative : vide = retrait ('' → null côté serveur) ; saisie invalide = refus avec le
+    // même message qu'à l'inscription (avant, elle était ignorée puis « Profil mis à jour ✓ »).
+    if (birth.trim() && !parseBirthDate(birth)) {
+      setError('Date invalide — vérifie le jour, le mois et l’année.');
+      return;
+    }
     setError(null);
     setSaving(true);
     const { photoSaved, profileSaved, phoneTaken } = await updateAccount({
@@ -878,7 +895,7 @@ function EditAccount({ onDone }: { onDone: () => void }) {
       lastName: lastName.trim(),
       phone: phone.trim(),
       photoUri,
-      birthDate: parseBirthDate(birth) ? birth.trim() : a.birthDate,
+      birthDate: birth.trim(),
       gender,
     });
     setSaving(false);

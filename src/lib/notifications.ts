@@ -1,6 +1,7 @@
-// Rappels de match LOCAUX (sans serveur) via expo-notifications : une notification
-// programmée ~2 h avant chaque réservation à venir. L’utilisateur active/désactive le tout
-// via l’interrupteur « Rappels de match » du profil. Web : tout est neutralisé (no-op).
+// Rappels de match LOCAUX (sans serveur) via expo-notifications : deux notifications
+// programmées par réservation à venir (fin de l’annulation gratuite, puis ~2 h avant).
+// L’utilisateur active/désactive le tout via l’interrupteur « Rappels de match » du profil.
+// Web : tout est neutralisé (no-op).
 //
 // Ce fichier porte aussi les rappels d’AGENDA (82, « Me rappeler » sur un événement : la veille
 // à 18 h) et le TAP sur une notification (locale OU push serveur) : on route vers l’écran
@@ -9,15 +10,15 @@
 import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
-import { DAY_MS, slotTimestamp } from './days';
+import { DAY_MS, HOUR_MS, MINUTE_MS, slotTimestamp } from './days';
 import { CANCEL_DEADLINE_MS } from './reservations';
 
 const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
-const REMINDER_LEAD_MS = 2 * 60 * 60 * 1000; // 1ᵉʳ rappel : 2 h avant le créneau
+const REMINDER_LEAD_MS = 2 * HOUR_MS; // 1ᵉʳ rappel : 2 h avant le créneau
 // 2ᵉ rappel : 15 min AVANT la limite d’annulation gratuite (5 h avant le match, CANCEL_DEADLINE_MS
 // partagé avec l’écran Réservations), pour laisser le temps d’annuler sans frais si on ne peut plus
 // venir → 5 h 15 min avant le créneau.
-const CANCEL_WARNING_LEAD_MS = CANCEL_DEADLINE_MS + 15 * 60 * 1000;
+const CANCEL_WARNING_LEAD_MS = CANCEL_DEADLINE_MS + 15 * MINUTE_MS;
 
 // Affichage en premier plan (app ouverte) : bannière + son, sans pastille.
 if (isNative) {

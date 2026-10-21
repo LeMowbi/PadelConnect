@@ -14,7 +14,8 @@
 //   1) « Je n’ai jamais joué » ⇒ NEVER_PLAYED_MAX (2.0) quoi qu’il coche ailleurs — le tennis
 //      donne des réflexes, il ne fait pas encore un joueur de padel ;
 //   2) le quiz ne rend JAMAIS plus de QUIZ_MAX (5.5) — les niveaux 6 et 7 se GAGNENT sur le
-//      terrain (tournois officiels : +LEVEL_STEP à la clôture, attribué côté serveur).
+//      terrain, côté serveur : matchs validés (moteur de niveau 80, delta écrêté ±0.5 / 7 j)
+//      et tournois officiels (+LEVEL_STEP à la clôture).
 // Le total brut peut monter à 6.5 : les plafonds sont donc bien ATTEINTS, pas décoratifs.
 
 export type QuizAnswers = {

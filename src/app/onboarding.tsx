@@ -10,9 +10,10 @@ import { Logo } from '@/components/Logo';
 import { Stepper } from '@/components/Stepper';
 import { Button, Card, IconCircle, Txt } from '@/components/ui';
 import { type Club } from '@/data/clubs';
+import { CLUB_TYPES } from '@/lib/clubConstants';
 import { levelLabel, levelText } from '@/lib/format';
 import { QUIZ_QUESTIONS, levelFromQuiz, type QuizAnswers } from '@/lib/levelQuiz';
-import { isValidPhone } from '@/lib/phone';
+import { DEFAULT_DIAL, isValidPhone } from '@/lib/phone';
 import { clearPendingReferral, getPendingReferral } from '@/lib/pendingReferral';
 import { pickImage } from '@/lib/pickImage';
 import { GENDERS, ageFrom, maskBirthDate, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
@@ -40,7 +41,7 @@ export default function Onboarding() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('+225 ');
+  const [phone, setPhone] = useState(DEFAULT_DIAL);
   const [password, setPassword] = useState('');
   const [birth, setBirth] = useState('');
   const [gender, setGender] = useState<Gender | null>(null);
@@ -86,7 +87,7 @@ export default function Onboarding() {
   const [signInOpen, setSignInOpen] = useState(false);
   const [siMode, setSiMode] = useState<'email' | 'phone'>('email');
   const [siEmail, setSiEmail] = useState('');
-  const [siPhone, setSiPhone] = useState('+225 ');
+  const [siPhone, setSiPhone] = useState(DEFAULT_DIAL);
   const [siPass, setSiPass] = useState('');
   const [siBusy, setSiBusy] = useState(false);
   const [siError, setSiError] = useState<string | null>(null);
@@ -589,7 +590,7 @@ export default function Onboarding() {
               Type de terrains
             </Txt>
             <View style={styles.genderRow}>
-              {(['Couvert', 'Extérieur', 'Mixte'] as Club['type'][]).map((t) => (
+              {CLUB_TYPES.map((t) => (
                 <Chip key={t} label={t} active={clubType === t} onPress={() => setClubType(t)} size="lg" />
               ))}
             </View>
@@ -619,7 +620,8 @@ export default function Onboarding() {
             {authError ? (
               <View style={styles.authError}>
                 <Ionicons name="alert-circle" size={16} color={colors.danger} />
-                <Txt variant="small" color={colors.danger} style={{ flex: 1 }}>
+                {/* coralDark sur dangerSoft : contraste AA (le corail « plein » n’y atteint que 4,15:1) */}
+                <Txt variant="small" color={colors.coralDark} style={{ flex: 1 }}>
                   {authError}
                 </Txt>
               </View>
@@ -972,7 +974,7 @@ export default function Onboarding() {
               {authError ? (
                 <View style={styles.authError}>
                   <Ionicons name="alert-circle" size={16} color={colors.danger} />
-                  <Txt variant="small" color={colors.danger} style={{ flex: 1 }}>
+                  <Txt variant="small" color={colors.coralDark} style={{ flex: 1 }}>
                     {authError}
                   </Txt>
                 </View>
@@ -1251,6 +1253,7 @@ function PasswordInput({
         onPress={() => setHidden((h) => !h)}
         hitSlop={12}
         style={styles.pwEye}
+        accessibilityRole="button"
         accessibilityLabel={hidden ? 'Afficher le mot de passe' : 'Masquer le mot de passe'}
       >
         <Ionicons name={hidden ? 'eye-outline' : 'eye-off-outline'} size={20} color={colors.textMuted} />

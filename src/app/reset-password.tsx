@@ -7,6 +7,7 @@ import { useToast } from '@/components/Toast';
 import { Button, Txt } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 import { useApp } from '@/store/AppContext';
+import { AUTH_ERROR_FALLBACK, frAuthError } from '@/store/helpers';
 import { colors, radius, spacing } from '@/theme';
 
 // Écran de RÉINITIALISATION du mot de passe (ouvert par le lien reçu par e-mail, deep link
@@ -68,11 +69,18 @@ export default function ResetPasswordScreen() {
       return;
     }
     setSubmitting(true);
-    const { error } = await supabase.auth.updateUser({ password: pwd });
-    setSubmitting(false);
-    if (error) {
-      toast.show('Changement impossible — le lien a peut-être expiré', { icon: 'alert-circle' });
-      return;
+    try {
+      const { error } = await supabase.auth.updateUser({ password: pwd });
+      if (error) {
+        // Message PAR CAS via frAuthError : « même mot de passe que l’ancien » (GoTrue 422
+        // same_password, refus DÉFINITIF — retaper le même ne changera rien), trop court, réseau ;
+        // « lien expiré » ne reste que le repli d’un message inconnu.
+        const text = frAuthError(error.message);
+        toast.show(text === AUTH_ERROR_FALLBACK ? 'Changement impossible — le lien a peut-être expiré' : text, { icon: 'alert-circle' });
+        return;
+      }
+    } finally {
+      setSubmitting(false); // même si updateUser REJETTE (exception) : le bouton ne reste pas figé
     }
     toast.show('Mot de passe mis à jour ✓');
     // La session Supabase est valide (exchangeCodeForSession + updateUser) mais state.account

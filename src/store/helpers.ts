@@ -6,7 +6,7 @@ import type { ClubConfig } from '@/lib/clubsServer';
 import type { ServerCompetitions } from '@/lib/competitionsServer';
 import { addWeeks, weekKeyOf } from '@/lib/days';
 import type { MyParticipation } from '@/lib/reservations';
-import type { AppState, CompResult, OfficialResult } from './AppContext';
+import type { AppState, CompResult, OfficialResult, Reservation } from './AppContext';
 
 export const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 export const clampLevel = (n: number) => Math.min(7, Math.max(1, Math.round(n * 100) / 100));
@@ -30,21 +30,35 @@ export function weeklyStreak(playedStartsAt: number[], now: number): number {
   return streak;
 }
 
+// Repli de frAuthError pour un message NON reconnu : l’appelant le compare pour tracer le brut
+// (diagnostics) — le texte serveur, en anglais, n’est plus jamais montré tel quel à l’écran.
+export const AUTH_ERROR_FALLBACK = 'Une erreur est survenue. Réessaie.';
+
 // Traduit les messages d’erreur Supabase en français clair pour l’utilisateur.
 export function frAuthError(msg: string): string {
   const m = (msg || '').toLowerCase();
   if (m.includes('email not confirmed')) return 'Confirme d’abord ton e-mail — vérifie ta boîte mail (et tes spams).';
-  if (m.includes('invalid login')) return 'Identifiant ou mot de passe incorrect.';
+  if (m.includes('invalid login')) return 'Identifiant ou mot de passe incorrect — vérifie-les ou touche « Mot de passe oublié ? ».';
   if (m.includes('already registered') || m.includes('already been registered')) return 'Cet e-mail a déjà un compte — connecte-toi.';
   if (m.includes('phone_taken')) return 'Ce numéro est déjà utilisé par un autre compte.';
+  // GoTrue MASQUE l’exception du trigger handle_new_user (PHONE_TAKEN, 67/74) derrière ce message
+  // générique : on ne peut affirmer que « peut-être » (inscription concurrente, purge ratée…).
+  if (m.includes('database error saving new user'))
+    return 'Inscription impossible — ce numéro est peut-être déjà utilisé par un autre compte. Réessaie ou connecte-toi.';
   if (m.includes('unable to validate email') || m.includes('invalid format')) return 'Adresse e-mail invalide — vérifie-la.';
-  if (m.includes('password should be') || m.includes('password')) return 'Mot de passe trop court (6 caractères minimum).';
+  // GoTrue 422 same_password (« New password should be different from the old password ») : refus
+  // DÉFINITIF — à tester AVANT « password should be », sinon il passerait pour « trop court ».
+  if (m.includes('different from the old')) return 'Choisis un mot de passe différent de l’ancien.';
+  if (m.includes('password should be') || m.includes('at least')) return 'Mot de passe trop court (6 caractères minimum).';
   if (m.includes('network') || m.includes('fetch') || m.includes('timeout')) return 'Connexion internet impossible — réessaie.';
   if (m.includes('security purposes') || m.includes('rate limit') || (m.includes('after') && m.includes('seconds')))
     return 'Trop de tentatives — patiente une minute avant de réessayer.';
   if (m.includes('email logins are disabled') || m.includes('signups not allowed'))
-    return 'Connexion désactivée côté serveur (vérifie la config Supabase).';
-  return msg || 'Une erreur est survenue. Réessaie.';
+    return 'Inscriptions momentanément fermées — réessaie plus tard ou écris-nous.';
+  // GoTrue 422 weak_password (« Password is known to be weak and easy to guess… », mots de passe
+  // ayant fuité) : refus DÉFINITIF pour ce mot de passe — « réessaie » ferait boucler l'utilisateur.
+  if (m.includes('weak') && m.includes('password')) return 'Mot de passe trop facile à deviner — choisis-en un autre.';
+  return AUTH_ERROR_FALLBACK;
 }
 
 export const initialState: AppState = {
@@ -52,7 +66,6 @@ export const initialState: AppState = {
   level: 3.0,
   remindersOn: true,
   reserverView: 'Par heure',
-  userReviews: [],
   myCompetitions: [],
   reservations: [],
   favoriteClubIds: [],
@@ -71,7 +84,8 @@ export const initialState: AppState = {
   clubCovers: {}, // photo « de profil » par club (carte des listes)
   clubCourtPhotos: {}, // une photo par terrain, par club
   clubInfo: {},
-  hiddenCoachIds: [],
+  // Compteur de fidélité SERVEUR (82) : null = pas encore lu (ou échec réseau) — jamais inventé.
+  loyalty: null,
   boostedClubIds: [],
   boostExpiry: {},
   operatorPayments: {},
@@ -166,11 +180,11 @@ export function loggedOutState(s: AppState): AppState {
     coachProfile: null, // fiche coach = liée au compte → purgée à la déconnexion
     myLessons: [],
     favoriteClubIds: [],
-    userReviews: [],
     myCompetitions: [],
     compRegistrations: {},
     compResults: {},
     officialResults: [],
+    loyalty: null, // compteur serveur lié au compte → purgé à la déconnexion
     blockedUserIds: [], // liste liée au compte → purgée à la déconnexion
     favoritePlayerIds: [], // idem : les joueurs suivis appartiennent au compte
     // Préférences liées au compte : sans reset, le compte SUIVANT sur le même appareil hérite des
@@ -224,9 +238,10 @@ export function competitionSlices(
     compRegistrations,
     level: s.level,
     officialResults: s.officialResults,
-    // Le lien Wave n'est porté que par les lignes de tournoi (fetch_competitions). Un fetch RÉUSSI
-    // mais VIDE (0 tournoi) renvoie waveLink=null : ce n'est pas un « lien effacé », on garde donc
-    // la valeur locale au lieu de l'écraser (un effacement volontaire renvoie '' quand un tournoi existe).
+    // Ici le lien Wave n'est vu qu'à travers les lignes de tournoi (fetch_competitions). Un fetch
+    // RÉUSSI mais VIDE (0 tournoi) renvoie waveLink=null : ce n'est pas un « lien effacé », on garde
+    // donc la valeur locale au lieu de l'écraser (un effacement volontaire renvoie '' quand un tournoi
+    // existe). Le store relit ensuite le lien à la SOURCE (fetchWaveLinkConfig), qui prime.
     waveLink: sc ? (sc.waveLink ?? s.waveLink) : s.waveLink,
   };
   if (!sc || !s.account) return base;
@@ -249,6 +264,8 @@ export function competitionSlices(
         : c.official && close.loser && myTeam === close.loser
           ? 'last'
           : 'played';
+    // Victoire TOUS tournois confondus (amical compris) — `result` reste réservé au niveau (officiels).
+    const won = !!close.winner && myTeam === close.winner;
     // id déterministe + `at` stable → aucune churn de re-render d’un fetch à l’autre.
     // PAS de `levelAfter` pour un tournoi serveur : au moment de la dérivation, s.level est
     // encore l’ANCIEN niveau (le +0.50 serveur n’est relu qu’après) → on afficherait un
@@ -259,6 +276,7 @@ export function competitionSlices(
       compId: c.id,
       title: c.title,
       result,
+      won,
       at: prev?.at ?? Date.now(),
     });
   }
@@ -267,6 +285,13 @@ export function competitionSlices(
   const keptLocal = s.officialResults.filter((o) => !o.compId || !serverIds.has(o.compId));
   const officialResults = [...serverResults, ...keptLocal];
   return { ...base, officialResults };
+}
+
+// Suis-je l’AUTEUR d’une réservation (celui qui peut l’annuler / compléter l’équipe) ? Connecté :
+// par id serveur (une résa sans `userId` est locale, donc à moi) ; sans session : une résa portant
+// `bookedBy` vient d’un autre compte. Règle UNIQUE partagée par les écrans et les rappels locaux.
+export function isReservationOwner(r: Reservation, serverUserId: string | null): boolean {
+  return serverUserId ? !r.userId || r.userId === serverUserId : !r.bookedBy;
 }
 
 // Invitations → deux listes : celles à inclure dans « mes réservations » (tout sauf refusées)

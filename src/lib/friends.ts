@@ -87,10 +87,13 @@ export async function fetchFriendRequests(): Promise<IncomingFriendRequest[] | n
     }));
 }
 
-// Répond à une demande reçue. true si le serveur a bien enregistré la réponse.
-export async function respondFriendRequest(requestId: string, accept: boolean): Promise<boolean> {
+// Répond à une demande reçue. 'ok' = réponse enregistrée ; 'gone' = refus DÉFINITIF (demande
+// inexistante, déjà traitée ailleurs, ou blocage entre-temps — le serveur renvoie false, 64) ;
+// null = échec réseau (convention §8 : seul cas où « réessaie » a un sens).
+export async function respondFriendRequest(requestId: string, accept: boolean): Promise<'ok' | 'gone' | null> {
   const { data, error } = await supabase.rpc('respond_friend_request', { p_request_id: requestId, p_accept: accept });
-  return !error && data === true;
+  if (error) return null;
+  return data === true ? 'ok' : 'gone';
 }
 
 // Retire un ami côté serveur. false si le réseau a refusé (on ne touche pas au miroir local).

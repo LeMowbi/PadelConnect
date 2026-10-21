@@ -9,8 +9,9 @@ import { Reveal, staggerDelay } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Divider, EmptyState, SectionHeader, Tag, Txt } from '@/components/ui';
 import { useToast } from '@/components/Toast';
+import { levelText } from '@/lib/format';
 import { findPlayerByPhone } from '@/lib/friends';
-import { isValidPhone } from '@/lib/phone';
+import { DEFAULT_DIAL, isValidPhone } from '@/lib/phone';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { openWhatsApp } from '@/lib/contact';
 import { contactsSupported, pickContact } from '@/lib/contactsPicker';
@@ -18,9 +19,6 @@ import { DOWNLOAD_URL } from '@/lib/referrals';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
-
-// Indicatif Côte d’Ivoire pré-rempli (modifiable) : la plupart des joueurs sont locaux.
-const DEFAULT_DIAL = '+225 ';
 
 export default function AmisScreen() {
   const router = useRouter();
@@ -84,7 +82,7 @@ export default function AmisScreen() {
     const name = res.friend?.name ?? found.name;
     if (res.status === 'sent') {
       hapticSuccess();
-      toast.show(`Demande envoyée à ${name} — il doit l’accepter ✓`);
+      toast.show(`Demande envoyée à ${name} — en attente de sa réponse ✓`);
     } else if (res.status === 'accepted') {
       hapticSuccess();
       toast.show(`${name} est maintenant ton ami 🎾`);
@@ -113,11 +111,13 @@ export default function AmisScreen() {
   const respond = async (requestId: string, accept: boolean, name: string) => {
     if (busyReq) return;
     setBusyReq(requestId);
-    const ok = await respondFriendRequest(requestId, accept);
+    const res = await respondFriendRequest(requestId, accept);
     setBusyReq(null);
-    if (!ok) {
+    if (res !== 'ok') {
       hapticWarning();
-      toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
+      // 'gone' = refus DÉFINITIF (déjà traitée ailleurs, ou blocage — jamais révélé) : la carte
+      // est déjà purgée par le store ; « réessaie » n'a de sens que pour l'échec réseau (null).
+      toast.show(res === 'gone' ? 'Cette demande n’est plus valable.' : 'Connexion impossible — réessaie', { icon: 'alert-circle' });
       return;
     }
     if (accept) {
@@ -169,7 +169,7 @@ export default function AmisScreen() {
                           {r.name}
                         </Txt>
                         <Txt variant="small" color={colors.textMuted}>
-                          {r.level !== undefined ? `Niveau ${r.level.toFixed(1)} · ` : ''}veut t’ajouter
+                          {r.level !== undefined ? `Niveau ${levelText(r.level, 1)} · ` : ''}veut t’ajouter
                         </Txt>
                       </View>
                     </View>
@@ -180,6 +180,7 @@ export default function AmisScreen() {
                         icon="checkmark"
                         onPress={() => respond(r.requestId, true, r.name)}
                         disabled={busyReq === r.requestId}
+                        accessibilityLabel={`Accepter la demande de ${r.name}`}
                       />
                       <Button
                         size="sm"
@@ -187,6 +188,7 @@ export default function AmisScreen() {
                         variant="ghost"
                         onPress={() => respond(r.requestId, false, r.name)}
                         disabled={busyReq === r.requestId}
+                        accessibilityLabel={`Refuser la demande de ${r.name}`}
                       />
                     </View>
                   </View>
@@ -232,7 +234,13 @@ export default function AmisScreen() {
                         </Txt>
                       </View>
                     </Pressable>
-                    <Button size="sm" label="Retirer" variant="ghost" onPress={() => setRemoveId(removeId === f.id ? null : f.id)} />
+                    <Button
+                      size="sm"
+                      label="Retirer"
+                      variant="ghost"
+                      onPress={() => setRemoveId(removeId === f.id ? null : f.id)}
+                      accessibilityLabel={`Retirer ${f.name} de tes amis`}
+                    />
                   </View>
                   {removeId === f.id ? (
                     // Confirmation légère, en place — pas de suppression au premier tap.
@@ -251,8 +259,15 @@ export default function AmisScreen() {
                             if (!ok) toast.show('Retrait impossible — réessaie', { icon: 'alert-circle' });
                           });
                         }}
+                        accessibilityLabel={`Oui, retirer ${f.name} de tes amis`}
                       />
-                      <Button size="sm" label="Non" variant="secondary" onPress={() => setRemoveId(null)} />
+                      <Button
+                        size="sm"
+                        label="Non"
+                        variant="secondary"
+                        onPress={() => setRemoveId(null)}
+                        accessibilityLabel={`Non, garder ${f.name} dans tes amis`}
+                      />
                     </View>
                   ) : null}
                 </View>
@@ -288,6 +303,7 @@ export default function AmisScreen() {
               placeholderTextColor={colors.textMuted}
               keyboardType="phone-pad"
               editable={!searching}
+              accessibilityLabel="Numéro de téléphone de ton ami"
               style={styles.input}
             />
             <View style={{ marginTop: spacing.sm }}>
@@ -311,7 +327,7 @@ export default function AmisScreen() {
                       {found.name}
                     </Txt>
                     <Txt variant="small" color={colors.textMuted}>
-                      {found.level !== undefined ? `Niveau ${found.level.toFixed(1)} · ` : ''}sur PadelConnect
+                      {found.level !== undefined ? `Niveau ${levelText(found.level, 1)} · ` : ''}sur PadelConnect
                     </Txt>
                   </View>
                   <Tag label="Vérifié" tone="green" icon="checkmark" />
@@ -348,7 +364,7 @@ export default function AmisScreen() {
 
 // Sous-titre « Niveau X », ou « Joueur PadelConnect » si le niveau n’est pas renseigné.
 function subtitleFor(level: number | undefined): string {
-  return level !== undefined ? `Niveau ${level.toFixed(1)}` : 'Joueur PadelConnect';
+  return level !== undefined ? `Niveau ${levelText(level, 1)}` : 'Joueur PadelConnect';
 }
 
 const styles = StyleSheet.create({
