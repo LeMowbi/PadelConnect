@@ -5,7 +5,7 @@ import { BottomSheet } from './BottomSheet';
 import { useToast } from './Toast';
 import { Button, Tag, Txt } from './ui';
 import { findClub } from '@/data/clubs';
-import { levelLabel } from '@/lib/format';
+import { firstName, levelLabel, levelText } from '@/lib/format';
 import { fetchPublicReliability, type PublicReliability } from '@/lib/social';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
@@ -24,12 +24,6 @@ export type PlayerLike = {
   favoriteClubId?: string;
   isTeam?: boolean;
 };
-
-// Prénom affiché dans les messages (« Tu suis maintenant Awa ») — les noms serveur peuvent
-// porter un nom de famille, on n’en garde que le premier mot.
-function firstNameOf(name: string): string {
-  return name.trim().split(' ')[0] || name;
-}
 
 // Mini-fiche joueur en bottom sheet : niveau, fiabilité, stats, club favori, joueur suivi.
 export function PlayerSheet({ player, onClose }: { player: PlayerLike | null; onClose: () => void }) {
@@ -62,7 +56,7 @@ export function PlayerSheet({ player, onClose }: { player: PlayerLike | null; on
     setFollowing(true);
     const res = await toggleFavoritePlayer(p.id);
     setFollowing(false);
-    const first = firstNameOf(p.name);
+    const first = firstName(p.name);
     toast.show(
       res === 'added'
         ? `Tu suis maintenant ${first}`
@@ -89,7 +83,7 @@ export function PlayerSheet({ player, onClose }: { player: PlayerLike | null; on
         player?.isTeam
           ? 'Équipe inscrite'
           : player?.level !== undefined
-            ? `${levelLabel(player.level)} · Niveau ${player.level.toFixed(2)}`
+            ? `${levelLabel(player.level)} · Niveau ${levelText(player.level, 2)}`
             : undefined
       }
       onClose={onClose}
@@ -100,7 +94,7 @@ export function PlayerSheet({ player, onClose }: { player: PlayerLike | null; on
             <Avatar name={player.name} size={48} />
             <View style={{ flex: 1 }}>
               <View style={styles.badges}>
-                {player.level !== undefined ? <Tag label={`Niveau ${player.level.toFixed(2)}`} tone="amber" icon="ribbon" /> : null}
+                {player.level !== undefined ? <Tag label={`Niveau ${levelText(player.level, 2)}`} tone="amber" icon="ribbon" /> : null}
                 {/* Fiabilité PUBLIQUE : uniquement l’agrégat de présence (le détail reste au club). */}
                 {reliable ? <Tag label={`Fiable · ${reliable.presencePct} %`} tone="green" icon="shield-checkmark-outline" /> : null}
               </View>
@@ -127,7 +121,7 @@ export function PlayerSheet({ player, onClose }: { player: PlayerLike | null; on
               variant="secondary"
               onPress={() => void toggleFollow(player)}
               disabled={following}
-              accessibilityLabel={followed ? `Ne plus suivre ${firstNameOf(player.name)}` : `Suivre ${firstNameOf(player.name)}`}
+              accessibilityLabel={followed ? `Ne plus suivre ${firstName(player.name)}` : `Suivre ${firstName(player.name)}`}
               full
             />
           ) : null}

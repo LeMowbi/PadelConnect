@@ -15,15 +15,18 @@ import { Card, Divider, SectionHeader, Tag, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { durationLabel } from '@/lib/courtSchedule';
-import { DAY_MS, dateKeyLabel, dayKey } from '@/lib/days';
+import { DAY_MS, MONTHS, dayKey } from '@/lib/days';
 import { hapticLight } from '@/lib/haptics';
-import { initials, perPlayerOf } from '@/lib/format';
+import { initials } from '@/lib/format';
 import { fetchLeaderboard, type LeaderboardRow } from '@/lib/leaderboard';
+import { matchTeam, matchTemplates } from '@/lib/matchMessages';
 import { openWhatsApp } from '@/lib/contact';
+import { APP_DOMAIN } from '@/lib/referrals';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useTodayKey } from '@/lib/useTodayKey';
 import { isBirthdayToday, parseBirthDate, zodiacFor } from '@/lib/zodiac';
 import { isPlayed, useApp } from '@/store/AppContext';
+import { isReservationOwner } from '@/store/helpers';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
 // Accès rapide — 4 raccourcis UTILES sans onglet dédié (demande porteur : ni Coachs-annuaire
@@ -37,7 +40,6 @@ const ACTIONS: Action[] = [
   { icon: 'business', label: 'Clubs', route: '/clubs', tint: colors.signature, bg: colors.signatureSoft },
 ];
 
-const MONTHS_SHORT = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 // 4 teintes DISTINCTES pour varier les avatars (l'ancien colors.blue faisait doublon avec
 // signature ; amber donne une vraie 4ᵉ couleur).
 const AVATAR_TONES = [colors.signature, colors.amber, colors.purple, colors.coral];
@@ -55,7 +57,7 @@ function countdownLabel(startsAt: number): string {
   const diffDays = Math.round((Date.UTC(y1, m1 - 1, d1) - Date.UTC(y2, m2 - 1, d2)) / DAY_MS);
   if (diffDays <= 0) return 'aujourd’hui';
   if (diffDays === 1) return 'demain';
-  return `dans ${diffDays} jour${diffDays > 1 ? 's' : ''}`;
+  return `dans ${diffDays} jours`;
 }
 
 export default function HomeScreen() {
@@ -165,8 +167,9 @@ export default function HomeScreen() {
 
   // Invitations partagées encore À CONFIRMER (résas à venir) : l’accueil est le hub — sans ce
   // bandeau, un invité qui n’ouvre pas « Mes réservations » peut rater une partie où on l’attend.
-  // MÊME règle (!isPlayed) que la section de « Mes réservations » : les deux comptent pareil.
-  const pendingInviteCount = state.reservations.filter((r) => state.pendingInvitationIds.includes(r.id) && !isPlayed(r, now)).length;
+  // MÊME règle que le compteur de « Mes réservations » : seules les invitations encore
+  // RÉPONDABLES comptent (le serveur refuse d'y répondre dès le coup d'envoi).
+  const pendingInviteCount = state.reservations.filter((r) => state.pendingInvitationIds.includes(r.id) && r.startsAt > now).length;
 
   // B-R5 : tournoi inscrit à venir (≤ 7 jours).
   // Tournois où je suis inscrit OU que j’ai créés (mes engagements personnels).
@@ -201,10 +204,14 @@ export default function HomeScreen() {
   const news = state.operatorNews;
   const showNews = !!news && state.dismissedNewsId !== news.id;
 
-  // Équipe du prochain match (toi + invités) pour la pile d’avatars. La capacité dépend du
+  // Équipe du prochain match pour la pile d’avatars. La capacité dépend du
   // format de la résa (1v1 = 2, 2v2 = 4) : un 1v1 ne doit pas s'afficher « incomplet (1/4) ».
   const matchCap = upcoming ? (upcoming.openCapacity ?? 4) : 4;
-  const matchPlayers = upcoming ? [fullName || 'Toi', ...upcoming.invited.map((i) => i.name)].slice(0, matchCap) : [];
+  // Match d'un AUTRE (rejoint ou invitation acceptée) : `invited` me contient déjà — l'organisateur
+  // vient en tête, et je ne m'ajoute pas une seconde fois.
+  const iOwn = !!upcoming && isReservationOwner(upcoming, state.serverUserId);
+  const teamNames = upcoming ? matchTeam(upcoming, iOwn) : [];
+  const matchPlayers = (iOwn ? [fullName || 'Toi', ...teamNames] : teamNames).slice(0, matchCap);
   const [, mm, dd] = upcoming ? upcoming.dateKey.split('-') : ['', '', ''];
 
   // ── Nudge unique (priorité décroissante) ─────────────────────────────────
@@ -281,21 +288,13 @@ export default function HomeScreen() {
   // B-R2 : notifier les partenaires depuis la carte prochain match.
   const notifyPartners = () => {
     if (!upcoming) return;
-    const who = upcoming.invited.length ? `\nÉquipe : ${upcoming.invited.map((i) => i.name).join(', ')}` : '';
-    // Part sur la CAPACITÉ (openCapacity) quand le match est ouvert — les places libres seront
-    // prises → même base que « Mes réservations » ; sinon sur l'EFFECTIF RÉEL (toi + invités),
-    // pas un « ÷4 » forfaitaire (audit 7).
-    const share = upcoming.price
-      ? `\nPrévois ${perPlayerOf(upcoming.price, upcoming.openMatch ? matchCap : 1 + upcoming.invited.length)} chacun.`
-      : '';
-    openWhatsApp(
-      '',
-      `On joue au padel ! 🎾\n${upcoming.clubName} — ${dateKeyLabel(upcoming.dateKey)} à ${upcoming.time} (session ${durationLabel(upcoming.durationMin)})\n${upcoming.court}${who}${share}\nRéservé via PadelConnect.`,
-    );
+    // Même message que le modèle « On joue ! » de « Mes réservations » (toujours en tête de liste).
+    openWhatsApp('', matchTemplates(upcoming, `${APP_DOMAIN}/club/${upcoming.clubId}`, iOwn)[0].body);
   };
 
-  // B-R2 : équipe incomplète si toi + invités < capacité (1v1 → dès 0 invité, 2v2 → < 3).
-  const teamIncomplete = upcoming ? upcoming.invited.length < matchCap - 1 : false;
+  // B-R2 : équipe incomplète si toi + invités < capacité (1v1 → dès 0 invité, 2v2 → < 3) —
+  // seulement pour MON match, jamais un cours (mêmes gardes que « Mes réservations »).
+  const teamIncomplete = !!upcoming && iOwn && !upcoming.coachName && upcoming.invited.length < matchCap - 1;
 
   return (
     <Screen refreshControl={refreshControl}>
@@ -659,7 +658,7 @@ export default function HomeScreen() {
                     {dd ? String(Number(dd)) : ''}
                   </Txt>
                   <Txt variant="small" color={colors.onPhoto} style={{ fontSize: 9, fontWeight: '700', letterSpacing: 0.5 }}>
-                    {(MONTHS_SHORT[Number(mm) - 1] ?? '').toUpperCase()}
+                    {(MONTHS[Number(mm) - 1] ?? '').toUpperCase()}
                   </Txt>
                 </View>
                 <View style={{ flex: 1 }}>
@@ -810,7 +809,7 @@ export default function HomeScreen() {
                       const diffDays = Math.ceil((compTs - now) / DAY_MS);
                       if (diffDays <= 0) return 'aujourd’hui !';
                       if (diffDays === 1) return 'demain !';
-                      return `dans ${diffDays} jour${diffDays > 1 ? 's' : ''}`;
+                      return `dans ${diffDays} jours`;
                     })()}
                   </Txt>
                 </View>

@@ -12,10 +12,11 @@ import { ResultCard } from '@/components/ResultCard';
 import { matchTemplates } from '@/lib/matchMessages';
 import { shareViewAsImage } from '@/lib/shareImage';
 import { findClub } from '@/data/clubs';
-import { seedCompetitions } from '@/data/competitions';
+import { isCompFinished, seedCompetitions } from '@/data/competitions';
 import { durationLabel } from '@/lib/courtSchedule';
 import { useToast } from '@/components/Toast';
 import { isPlayed, useApp, type Reservation } from '@/store/AppContext';
+import { isReservationOwner } from '@/store/helpers';
 import { addReservationToCalendar } from '@/lib/calendar';
 import { confirmAsync } from '@/lib/confirm';
 import { openWhatsApp } from '@/lib/contact';
@@ -24,7 +25,7 @@ import { hapticSuccess } from '@/lib/haptics';
 import { fetchMyMatchScores, leaveOpenMatch, setMatchOpen, submitMatchScore, type MatchScore, type MatchSet } from '@/lib/matchResults';
 import { CANCEL_DEADLINE_MS, fetchCancelledReservations } from '@/lib/reservations';
 import { SESSION_MIN } from '@/lib/slots';
-import { dateKeyLabel, dayKey, slotTimestamp } from '@/lib/days';
+import { DAY_MS, MINUTE_MS, MONTHS, dateKeyLabel, dayKey, slotTimestamp } from '@/lib/days';
 import { fcfa, perPlayerOf } from '@/lib/format';
 import { APP_DOMAIN } from '@/lib/referrals';
 import { openMaps } from '@/lib/maps';
@@ -38,8 +39,7 @@ const PAST_PREVIEW = 5; // passées : 5 dernières + « Voir tout »
 // appel serveur chacune) — au-delà, la carte reste une carte de réservation normale.
 const SHARE_MAX = 8;
 // Grâce d'après-match : le serveur (88) laisse régler les parts jusqu'à 24 h APRÈS la fin du match.
-const SHARE_GRACE_MS = 24 * 3600 * 1000;
-const MONTHS = ['JANV.', 'FÉVR.', 'MARS', 'AVR.', 'MAI', 'JUIN', 'JUIL.', 'AOÛT', 'SEPT.', 'OCT.', 'NOV.', 'DÉC.'];
+const SHARE_GRACE_MS = DAY_MS;
 
 // Brouillon de saisie du score : 3 sets max, champs texte vides (jamais muté — les mises à
 // jour recréent le tableau).
@@ -189,14 +189,17 @@ export default function ReservationsScreen() {
   // club/opérateur ne voit donc pas le périmètre RLS de son club sur cet écran joueur.
   const mine = myReservations;
   // Suis-je l’AUTEUR de la résa ? (sinon je suis invité → pas d’annulation, RLS = auteur).
-  // Une résa avec un bookedBy mais sans mon user_id = je suis invité, même hors session :
-  // on ne propose donc PAS « Annuler » à un invité.
-  const isOwner = (r: Reservation) => (state.serverUserId ? !r.userId || r.userId === state.serverUserId : !r.bookedBy);
+  // Règle partagée avec la carte « Ton prochain match » de l'accueil (store/helpers).
+  const isOwner = (r: Reservation) => isReservationOwner(r, state.serverUserId);
   // Invitations à confirmer (résa partagée) : on les sort de « À venir » tant qu’elles sont
   // en attente, pour les présenter à part avec Accepter / Refuser.
   const isPending = (r: Reservation) => state.pendingInvitationIds.includes(r.id);
   const upcomingAll = mine.filter((r) => !isPlayed(r, now)).sort((a, b) => a.startsAt - b.startsAt);
   const pendingInvites = upcomingAll.filter(isPending);
+  // Le serveur refuse d'y répondre dès le COUP D'ENVOI (73) : une invitation dont le match a
+  // commencé reste affichée (sinon elle disparaîtrait jusqu'à la fin du match) mais sans
+  // boutons, et ne compte plus parmi les invitations à confirmer.
+  const respondableInvites = pendingInvites.filter((r) => r.startsAt > now).length;
   const upcoming = upcomingAll.filter((r) => !isPending(r) && !leftIds.includes(r.id));
   const past = mine.filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt);
   const pastShown = past.slice(0, pastShownCount);
@@ -209,7 +212,7 @@ export default function ReservationsScreen() {
   // 24 h APRÈS LA FIN du match (on se rembourse pendant ou juste après). Miroir EXACT de la garde
   // serveur (`starts_at + duration_min*60000 + 86400000 > now`) — une résa déjà JOUÉE mais encore
   // dans cette grâce garde donc sa carte de parts, dans « Passées ».
-  const inShareWindow = (r: Reservation) => r.startsAt + (r.durationMin || SESSION_MIN) * 60000 + SHARE_GRACE_MS > now;
+  const inShareWindow = (r: Reservation) => r.startsAt + (r.durationMin || SESSION_MIN) * MINUTE_MS + SHARE_GRACE_MS > now;
   // On n'interroge l'état des parts que pour les résas partagées RÉELLEMENT affichées, et au
   // plus SHARE_MAX de chaque côté (un appel serveur chacune) — les passées sont en plus déjà
   // bornées par la pagination PAST_PREVIEW : jamais de balayage de l'historique.
@@ -293,6 +296,10 @@ export default function ReservationsScreen() {
     if (ok) setGroupLessons((cur) => cur.filter((x) => x.id !== l.id));
     toast.show(ok ? 'Désinscrit du cours' : 'Désinscription impossible — réessaie', ok ? undefined : { icon: 'alert-circle' });
   };
+  // Cours collectif pré-91 : `clubName` vaut l'id du club (cf. groupLessons.ts) → nom résolu ICI,
+  // avec l'état (surcharges du gérant et clubs inscrits compris) ; sinon le nom serveur tel quel.
+  const lessonClubName = (l: MyGroupLesson): string =>
+    l.clubName === l.clubId ? (findClub(l.clubId, state.customClubs, state.clubInfo)?.name ?? l.clubName) : l.clubName;
 
   // Mes tournois : ceux où mon équipe est inscrite ET ceux que J’AI créés (dédupliqués),
   // pour qu’un défi créé sans s’y inscrire reste retrouvable ici (et clôturable).
@@ -312,6 +319,12 @@ export default function ReservationsScreen() {
 
   const respond = async (r: Reservation, accept: boolean) => {
     if (respondingId) return;
+    // `now` du rendu peut être périmé (écran resté ouvert au coup d'envoi) : refus définitif
+    // côté serveur, jamais un « réessaie ».
+    if (r.startsAt <= Date.now()) {
+      toast.show('Le match a commencé — l’invitation est close.', { icon: 'alert-circle' });
+      return;
+    }
     setRespondingId(r.id);
     const ok = await respondInvitation(r.id, accept);
     setRespondingId(null);
@@ -378,8 +391,10 @@ export default function ReservationsScreen() {
     setScoreSending(false);
     if (res === 'validated') {
       hapticSuccess();
-      toast.show('Score validé ✓ — le match compte au classement et ajuste ton niveau');
-      // Le moteur de niveau (80) vient d'ajuster les niveaux côté serveur : on resynchronise
+      // Pas de promesse sur le niveau : le moteur (80) ne l'ajuste qu'une fois par match et dans
+      // la limite hebdomadaire — Statistiques montre l'ajustement réel.
+      toast.show('Score validé ✓ — le match compte au classement.');
+      // Le moteur de niveau (80) a pu ajuster les niveaux côté serveur : on resynchronise
       // (comme closeCompetition relit le niveau) — sinon Statistiques afficherait un niveau
       // périmé au-dessus d'un historique frais jusqu'au prochain retour au premier plan.
       void refreshSession();
@@ -398,16 +413,17 @@ export default function ReservationsScreen() {
         icon: 'alert-circle',
       });
     } else if (res === 'no_players') {
-      // On GARDE la feuille ouverte (pas de setScoreTarget(null)) : la saisie de sets reste
-      // à l'écran, l'utilisateur ajoute un partenaire sans avoir à tout ressaisir.
-      toast.show('Ajoute un partenaire (compte PadelConnect) à la réservation pour compter le score.', { icon: 'alert-circle' });
-      return;
+      // Refus DÉFINITIF (invités sans compte ou jamais confirmés — une invitation se ferme au
+      // coup d'envoi) : aucun partenaire ne peut être ajouté après coup.
+      toast.show('Aucun autre joueur n’a confirmé sa place avec un compte PadelConnect — le score ne peut pas être compté.', {
+        icon: 'alert-circle',
+      });
     } else {
       // Échec réseau : feuille laissée ouverte, la saisie est conservée pour un simple « réessaie ».
       toast.show('Enregistrement impossible — réessaie', { icon: 'alert-circle' });
       return;
     }
-    // Seuls les trois cas terminaux (validé / en attente / conflit) ferment la feuille.
+    // Les cas terminaux (validé / en attente / conflit / sans autre compte) ferment la feuille.
     setScoreTarget(null);
     void loadScores();
   };
@@ -439,6 +455,11 @@ export default function ReservationsScreen() {
     } else toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
   };
 
+  // Partie sans AUTRE compte PadelConnect (résa solo, cours de coach — respond_lesson n'inscrit
+  // aucun participant) : submit_match_score répondrait 'no_players' à coup sûr. Une saisie déjà
+  // existante prouve le contraire (bouton « Corriger » conservé).
+  const noOtherAccount = (r: Reservation) => !scores[r.id] && (!!r.coachName || (isOwner(r) && r.invited.length === 0));
+
   // Matchs où un AUTRE joueur a saisi son score et pas moi → invitation à saisir. Pas de coupe
   // à 14 jours ici : dès qu'une saisie existe (donc `s` défini), la contestation reste ouverte
   // côté serveur (48) — la fenêtre de 14 j ne borne que la toute PREMIÈRE saisie.
@@ -458,7 +479,7 @@ export default function ReservationsScreen() {
       {/* Invitations à confirmer — un ami t’a ajouté à sa réservation partagée. */}
       {pendingInvites.length > 0 ? (
         <View style={{ marginTop: spacing.sm }}>
-          <SectionHeader title={`Invitations · ${pendingInvites.length}`} />
+          <SectionHeader title={respondableInvites > 0 ? `Invitations · ${respondableInvites}` : 'Invitations'} />
           {pendingInvites.map((r) => (
             <Card key={r.id} style={{ marginBottom: spacing.sm }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
@@ -475,29 +496,41 @@ export default function ReservationsScreen() {
                     </Txt>
                   ) : null}
                 </View>
-                <Tag label="À confirmer" tone="purple" icon="mail-unread" />
+                {r.startsAt <= now ? (
+                  <Tag label="Commencé" tone="neutral" icon="time-outline" />
+                ) : (
+                  <Tag label="À confirmer" tone="purple" icon="mail-unread" />
+                )}
               </View>
-              <Divider style={{ marginVertical: spacing.md }} />
-              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                <View style={{ flex: 1 }}>
-                  <Button
-                    size="sm"
-                    label="J’accepte"
-                    icon="checkmark"
-                    onPress={() => respond(r, true)}
-                    disabled={respondingId !== null}
-                    full
-                  />
-                </View>
-                <Button
-                  size="sm"
-                  label="Refuser"
-                  icon="close"
-                  variant="ghost"
-                  onPress={() => respond(r, false)}
-                  disabled={respondingId !== null}
-                />
-              </View>
+              {r.startsAt <= now ? (
+                <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
+                  Le match a commencé — invitation close.
+                </Txt>
+              ) : (
+                <>
+                  <Divider style={{ marginVertical: spacing.md }} />
+                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                    <View style={{ flex: 1 }}>
+                      <Button
+                        size="sm"
+                        label="J’accepte"
+                        icon="checkmark"
+                        onPress={() => respond(r, true)}
+                        disabled={respondingId !== null}
+                        full
+                      />
+                    </View>
+                    <Button
+                      size="sm"
+                      label="Refuser"
+                      icon="close"
+                      variant="ghost"
+                      onPress={() => respond(r, false)}
+                      disabled={respondingId !== null}
+                    />
+                  </View>
+                </>
+              )}
             </Card>
           ))}
         </View>
@@ -603,7 +636,7 @@ export default function ReservationsScreen() {
                       Cours collectif avec {l.coachName}
                     </Txt>
                     <Txt variant="muted">
-                      {l.clubName} · {dateKeyLabel(l.dateKey)} à {l.time}
+                      {lessonClubName(l)} · {dateKeyLabel(l.dateKey)} à {l.time}
                     </Txt>
                     <Txt variant="small" color={colors.textMuted}>
                       {l.court} · {durationLabel(l.durationMin)}
@@ -656,7 +689,7 @@ export default function ReservationsScreen() {
             const [, mm, dd] = r.dateKey.split('-');
             // Sans zéro initial pour rester cohérent avec dateKeyLabel (« 1 juil. », pas « 01 »).
             const day = dd ? String(Number(dd)) : '';
-            const month = MONTHS[Number(mm) - 1] ?? '';
+            const month = MONTHS[Number(mm) - 1]?.toUpperCase() ?? '';
             return (
               <Reveal key={r.id} delay={staggerDelay(idx)}>
                 <Card style={{ marginBottom: spacing.md }}>
@@ -825,7 +858,7 @@ export default function ReservationsScreen() {
                         const clubPhone = findClub(r.clubId, state.customClubs, state.clubInfo)?.contactPhone;
                         const note = (
                           <Txt variant="small" color={colors.textFaint} style={{ flexShrink: 1, textAlign: 'center' }}>
-                            Annulation impossible (moins de 5h avant) — à voir directement avec le club.
+                            Annulation impossible (moins de 5 h avant) — à voir directement avec le club.
                           </Txt>
                         );
                         return clubPhone ? (
@@ -882,7 +915,7 @@ export default function ReservationsScreen() {
               const result = state.compResults[c.id];
               const myResult = state.officialResults.find((o) => o.compId === c.id);
               // Fin de plage incluse : un tournoi multi-jours EN COURS reste « À venir ».
-              const finished = (c.endDateKey ?? c.dateKey) < today;
+              const finished = isCompFinished(c, today);
               // Inscrit → « avec {partenaire} » ; créé sans s’y inscrire → « organisé par toi ».
               const reg = state.compRegistrations[c.id];
               const subtitle = reg ? `${c.date} · avec ${reg.partner}` : `${c.date} · organisé par toi`;
@@ -899,7 +932,14 @@ export default function ReservationsScreen() {
                           {subtitle}
                         </Txt>
                       </View>
-                      {result ? (
+                      {/* Statut AVANT le résultat : un tournoi refusé ou en attente n'aura jamais lieu
+                          tel quel (mêmes libellés que CompetitionCard). La ligne reste : c'est par elle
+                          que l'organisateur retrouve son tournoi refusé pour le supprimer. */}
+                      {c.status === 'rejected' ? (
+                        <Tag label="Refusé" tone="neutral" icon="close-circle-outline" />
+                      ) : c.status === 'pending' ? (
+                        <Tag label="En attente" tone="coral" icon="hourglass-outline" />
+                      ) : result ? (
                         myResult?.result === 'win' ? (
                           <Tag label="Vainqueur !" tone="amber" icon="trophy" />
                         ) : myResult?.result === 'last' ? (
@@ -985,7 +1025,8 @@ export default function ReservationsScreen() {
                         montrait « réessaie » en boucle sur un refus définitif). */}
                     {state.serverUserId &&
                     !isPending(r) &&
-                    (r.startsAt > now - 14 * 86400000 || !!scores[r.id]) &&
+                    !noOtherAccount(r) &&
+                    (r.startsAt > now - 14 * DAY_MS || !!scores[r.id]) &&
                     (!scores[r.id]?.mine || !scores[r.id].validated) ? (
                       <Pressable
                         onPress={() => openScore(r)}
@@ -1007,6 +1048,14 @@ export default function ReservationsScreen() {
                     {state.serverUserId && isPending(r) ? (
                       <Txt variant="small" color={colors.textMuted} style={{ flex: 1, marginTop: 4 }}>
                         Invitation jamais confirmée — ce match ne peut pas être noté.
+                      </Txt>
+                    ) : null}
+                    {/* Même patron pour une partie sans autre compte ou un cours (bouton de score masqué). */}
+                    {state.serverUserId && !isPending(r) && noOtherAccount(r) && r.startsAt > now - 14 * DAY_MS ? (
+                      <Txt variant="small" color={colors.textMuted} style={{ flex: 1, marginTop: 4 }}>
+                        {r.coachName
+                          ? 'Cours de coaching — pas de score à saisir.'
+                          : 'Partie sans autre compte PadelConnect — le score ne peut pas être compté.'}
                       </Txt>
                     ) : null}
                     {/* Partage du résultat en image — quand MON score est validé (mine = j'ai saisi,
@@ -1234,7 +1283,7 @@ export default function ReservationsScreen() {
           Choisis un message — il s’ouvre pré-rempli dans WhatsApp, tu choisis le destinataire.
         </Txt>
         <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
-          {(msgTarget ? matchTemplates(msgTarget, `${APP_DOMAIN}/club/${msgTarget.clubId}`) : []).map((t) => (
+          {(msgTarget ? matchTemplates(msgTarget, `${APP_DOMAIN}/club/${msgTarget.clubId}`, isOwner(msgTarget)) : []).map((t) => (
             <Pressable
               key={t.key}
               onPress={() => {

@@ -3,22 +3,35 @@
 // joueur envoie en un tap sur WhatsApp. Fonction PURE (aucune dépendance native) : la couche UI
 // ne fait que présenter la liste et ouvrir WhatsApp avec le `body` choisi.
 
-import { durationLabel } from './courtSchedule';
-import { dateKeyLabel } from './days';
-import { perPlayerOf } from './format';
+import { durationLabel } from './courtSchedule.ts';
+import { dateKeyLabel } from './days.ts';
+import { perPlayerOf } from './format.ts';
 import type { Reservation } from '@/store/AppContext';
 
 // icon = clé Ionicons (typée `string` ici pour garder ce module pur/testable — l'UI la caste).
 export type MatchTemplate = { key: string; label: string; icon: string; body: string };
 
+// Équipe d'un match HORS moi : l'organisateur en tête si ce n'est pas mon match (`iOwn` =
+// isReservationOwner chez l'appelant), puis les invités. Règle UNIQUE partagée par le modèle
+// « On joue ! » et la carte « Prochain match » de l'accueil (même équipe aux deux endroits).
+export function matchTeam(r: Reservation, iOwn: boolean): string[] {
+  return [...(iOwn ? [] : [r.bookedBy?.name ?? 'Organisateur']), ...r.invited.map((i) => i.name)];
+}
+
 // `clubUrl` = lien Universal du club (partage) fourni par l'appelant, pour rester découplé de
-// la config d'app (referrals) et donc testable sans dépendance native.
-export function matchTemplates(r: Reservation, clubUrl: string): MatchTemplate[] {
+// la config d'app (referrals) et donc testable sans dépendance native. `iOwn` = je suis
+// l'organisateur (isReservationOwner chez l'appelant) : sinon l'équipe commence par lui.
+export function matchTemplates(r: Reservation, clubUrl: string, iOwn: boolean): MatchTemplate[] {
   // Durée RÉELLE du créneau (1h/1h30, 68) — déjà portée par la réservation, pas de paramètre à ajouter.
   const when = `${r.clubName} — ${dateKeyLabel(r.dateKey)} à ${r.time} (session ${durationLabel(r.durationMin)})`;
-  const who = r.invited.length ? `\nÉquipe : ${r.invited.map((i) => i.name).join(', ')}` : '';
-  const share = r.price ? `\nPrévois ${perPlayerOf(r.price, 1 + r.invited.length)} chacun.` : '';
+  // Modèle « On joue ! » (en tête) réutilisé tel quel par la carte « Prochain match » de l'accueil.
+  const team = matchTeam(r, iOwn);
+  const who = r.coachName ? `\nCours avec ${r.coachName}` : team.length ? `\nÉquipe : ${team.join(', ')}` : '';
   const cap = r.openCapacity ?? 4;
+  // Part sur la CAPACITÉ pour un match OUVERT (les places libres seront prises), sinon sur
+  // l'effectif RÉEL — même base que la carte « Mes réservations » et l'accueil.
+  const heads = r.openMatch ? cap : Math.max(1, 1 + r.invited.length);
+  const share = r.price ? `\nPrévois ${perPlayerOf(r.price, heads)} chacun.` : '';
   const missing = Math.max(1, cap - 1 - r.invited.length);
 
   const templates: MatchTemplate[] = [
@@ -42,8 +55,9 @@ export function matchTemplates(r: Reservation, clubUrl: string): MatchTemplate[]
     },
   ];
 
-  // « Il manque des joueurs » : seulement si l'équipe n'est pas déjà complète (place à prendre).
-  if (r.invited.length < cap - 1) {
+  // « Il manque des joueurs » : seulement pour MON match (jamais un cours) dont l'équipe n'est
+  // pas complète — mêmes gardes que le bouton « Chercher des joueurs » et l'accueil.
+  if (iOwn && !r.coachName && r.invited.length < cap - 1) {
     templates.splice(1, 0, {
       key: 'find',
       label: 'Il manque des joueurs',
