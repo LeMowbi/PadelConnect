@@ -9,7 +9,7 @@ import { LevelRangePicker } from './LevelRangePicker';
 import { Reveal } from './Reveal';
 import { useToast } from './Toast';
 import { Button, IconCircle, Txt } from './ui';
-import { hapticWarning } from '@/lib/haptics';
+import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { activeClubs, type Club } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { freeCourts, type AvailCtx } from '@/lib/availability';
@@ -100,6 +100,13 @@ export function BookingSheet({
   const [format, setFormat] = useState<2 | 4>(4);
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false); // attente de la confirmation serveur
+  // Pendant le submit, le miroir contient DÉJÀ la résa en cours → le terrain choisi sort de `free`
+  // (dernier libre ou pas) : on garde SA puce visible et active en tête le temps du round-trip.
+  // HORS submit, un terrain choisi qui n'est plus libre (pris ou fermé entre-temps, resync au
+  // retour premier plan) est simplement désélectionné — jamais affiché actif comme s'il l'était.
+  const pinned = submitting && !!court && !free.includes(court);
+  const courtGone = !submitting && !!court && !free.includes(court);
+  const effCourt = courtGone ? null : court;
 
   const participantCount = friendIds.length + extraNames.length;
   // Invités possibles selon le format (1v1 = 1, 2v2 = 3) + places encore ouvrables.
@@ -139,7 +146,7 @@ export function BookingSheet({
   };
 
   const confirm = async () => {
-    if (!court || submitting) return;
+    if (!effCourt || submitting) return;
     // Garde-fou : un club « Bientôt » n’est pas réservable (en plus du filtrage des vues).
     if (club.comingSoon) {
       toast.show('Ce club n’est pas encore réservable (Bientôt).', { icon: 'alert-circle' });
@@ -153,7 +160,7 @@ export function BookingSheet({
     const res = await addReservation({
       clubId: club.id,
       clubName: club.name,
-      court,
+      court: effCourt,
       date: dateKeyLabel(sel.key), // libellé ABSOLU (« Lun 8 juin ») : ne devient jamais faux le lendemain
       dateKey: sel.key,
       time,
@@ -174,6 +181,7 @@ export function BookingSheet({
     });
     setSubmitting(false);
     if (res.ok) {
+      hapticSuccess();
       setDone(true);
       // Résa créée mais rattachement des amis invités échoué : sans ce toast, la carte
       // affiche « Avec X » alors que X n'a reçu ni push ni la résa chez lui.
@@ -297,14 +305,12 @@ export function BookingSheet({
                   </View>
                 ) : (
                   <View style={styles.row}>
-                    {/* Pendant le submit, le miroir contient DÉJÀ la résa en cours → le terrain
-                        choisi sort de `free` (dernier libre ou pas) : on garde SA puce visible et
-                        active en tête, au lieu qu'elle disparaisse le temps du round-trip. */}
-                    {(court && !free.includes(court) ? [court, ...free] : free).map((c) => (
+                    {/* Épingle de submit et terrain disparu : cf. `pinned`/`effCourt`. */}
+                    {(pinned && court ? [court, ...free] : free).map((c) => (
                       <Chip
                         key={c}
                         label={c}
-                        active={c === court}
+                        active={c === effCourt}
                         onPress={() => {
                           // Figé pendant le submit (comme équipe/format) : l'écran de succès lit le
                           // `court` VIVANT → en changer après confirm() ferait diverger badge/calendrier/
@@ -347,6 +353,7 @@ export function BookingSheet({
                             if (submitting) return;
                             setExtraNames((cur) => cur.filter((x) => x !== n));
                           }}
+                          accessibilityLabel={`Retirer ${n} des invités`}
                         />
                       ))}
                     </View>
@@ -400,7 +407,7 @@ export function BookingSheet({
                         <Txt variant="label" style={{ marginTop: spacing.lg }}>
                           FORMAT
                         </Txt>
-                        <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="Format du match">
+                        <View style={styles.row} accessibilityLabel="Format du match">
                           {(
                             [
                               { f: 2, label: '1v1 · 2 joueurs' },
@@ -511,11 +518,12 @@ export function BookingSheet({
                         label={submitting ? 'Réservation…' : 'Réserver le terrain'}
                         icon="checkmark"
                         onPress={confirm}
-                        disabled={!court || submitting}
+                        disabled={!effCourt || submitting}
                         full
                       />
                       <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
-                        Session de {durationLabel(durationMin)} · sans paiement en ligne — réglé au club. Annulation jusqu’à 5h avant.
+                        Session de {durationLabel(durationMin)} · sans paiement en ligne — réglé au club. Annulation jusqu’à 5{'\u00a0'}h
+                        avant.
                       </Txt>
                     </View>
                   </>

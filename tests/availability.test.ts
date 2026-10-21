@@ -6,7 +6,9 @@
 // prédicats, réutilisant les VRAIS helpers purs `overlaps`/`rangeBlocks`/`slotDurationAt`/
 // `resolveCourtSlots`). C'est la garde ANTI DOUBLE-VENTE côté app : un candidat [t,t+d) doit être
 // exclu d'un terrain dès qu'il chevauche une résa / occupation / fermeture / créneau de tournoi,
-// et rester libre s'il est seulement ADJACENT. La cohérence avec availability.ts est tenue par tsc.
+// et rester libre s'il est seulement ADJACENT.
+// ⚠️ Copie manuelle (aucun typage ne la relie à l'original) : toute modification de
+// competitionBlockedCourts / courtIntervalFree dans availability.ts DOIT être répercutée ici.
 
 import { type CourtSlot, overlaps, resolveCourtSlots, slotDurationAt } from '../src/lib/courtSchedule.ts';
 import { rangeBlocks, type BlockedRange } from '../src/lib/ranges.ts';

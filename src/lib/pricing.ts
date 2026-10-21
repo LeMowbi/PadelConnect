@@ -1,10 +1,11 @@
 // Tarification par plage horaire. Chaque gérant définit librement jusqu’à 3 plages
-// (heure de début, heure de fin, prix). Sans plage, le club garde son tarif unique
-// (priceFrom) — rétro-compatible. Le prix RÉEL d’un créneau est stocké sur la
+// (heure de début, heure de fin, prix 1h30 + prix 1h optionnel — dérivé à ⅔ si vide). Sans plage,
+// le club garde son tarif unique (priceFrom) — rétro-compatible. Le prix RÉEL d’un créneau est stocké sur la
 // réservation au moment de la création (cf. addReservation), pour que la commission
 // opérateur et la répartition « par joueur » soient exactes même si le tarif change.
 
 import type { Club, PriceTier } from '@/data/clubs';
+import { fcfa } from './format.ts';
 
 // Plages valides d’un club (prix 1h30 > 0 et bornes renseignées). On n’exige PAS `price60` :
 // il est OPTIONNEL (dérivé si absent), donc un club 100 % 1h30 reste valide.
@@ -135,16 +136,16 @@ export function validateTiers(
     if (p.e === null) return { ok: false, error: `Heure de fin invalide « ${p.t.end} » (format attendu HH:MM, ex. ${fmt(closeMin)}).` };
     if (p.s >= p.e) return { ok: false, error: `Plage incohérente : ${p.t.start} doit être avant ${p.t.end}.` };
     if (p.t.price < PRICE_MIN || p.t.price > PRICE_MAX) {
-      return { ok: false, error: `Tarif 1h30 invalide (${p.t.price} F) : entre 1 000 et 1 000 000 FCFA la session.` };
+      return { ok: false, error: `Tarif 1h30 invalide (${fcfa(p.t.price)}) : entre ${fcfa(PRICE_MIN)} et ${fcfa(PRICE_MAX)} la session.` };
     }
     // price60 est OPTIONNEL (dérivé si absent) ; s'il est saisi, il respecte les mêmes bornes.
     if (p.t.price60 != null && (p.t.price60 < PRICE_MIN || p.t.price60 > PRICE_MAX)) {
-      return { ok: false, error: `Tarif 1h invalide (${p.t.price60} F) : entre 1 000 et 1 000 000 FCFA la session.` };
+      return { ok: false, error: `Tarif 1h invalide (${fcfa(p.t.price60)}) : entre ${fcfa(PRICE_MIN)} et ${fcfa(PRICE_MAX)} la session.` };
     }
     // Cohérence économique : une session d'1h ne peut pas coûter PLUS cher qu'une d'1h30 (sinon
     // la fiche afficherait « 1h · 30 000 » au-dessus de « 1h30 · 20 000 » — absurde pour le joueur).
     if (p.t.price60 != null && p.t.price60 > p.t.price) {
-      return { ok: false, error: `Le prix 1h (${p.t.price60} F) ne peut pas dépasser le prix 1h30 (${p.t.price} F).` };
+      return { ok: false, error: `Le prix 1h (${fcfa(p.t.price60)}) ne peut pas dépasser le prix 1h30 (${fcfa(p.t.price)}).` };
     }
   }
 
@@ -159,7 +160,7 @@ export function validateTiers(
   if (first.s! > openMin) {
     return {
       ok: false,
-      error: `Tes plages doivent couvrir ${range}. La première commence à ${first.t.start}, après l'ouverture (${fmt(openMin)}).`,
+      error: `Tes plages doivent couvrir ${range}. La première commence à ${first.t.start}, après l’ouverture (${fmt(openMin)}).`,
     };
   }
   if (last.e! < closeMin) {

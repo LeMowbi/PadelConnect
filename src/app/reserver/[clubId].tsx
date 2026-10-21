@@ -12,7 +12,7 @@ import { Screen } from '@/components/Screen';
 import { StickyBar } from '@/components/StickyBar';
 import { Stepper } from '@/components/Stepper';
 import { useToast } from '@/components/Toast';
-import { Button, Card, EmptyState, IconCircle, Txt, type IconName } from '@/components/ui';
+import { Button, Card, EmptyState, IconCircle, RecapLabel, RecapRow, Txt, type IconName } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { addReservationToCalendar } from '@/lib/calendar';
@@ -53,10 +53,12 @@ export default function ReserverScreen() {
   // de l'occupation de tous les créneaux à chaque frappe pour ces clubs.
   const club = useMemo(
     () => findClub(params.clubId, state.customClubs, state.clubInfo),
-    [params.clubId, state.customClubs, state.clubInfo],
+    // state.clubStatus : dépendance indirecte (findClub → applyInfo lit clubStatusMap) — cf. clubs/index.tsx.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [params.clubId, state.customClubs, state.clubInfo, state.clubStatus],
   );
 
-  // todayKey : la liste se recale après minuit (retour premier plan) — cf. reserver/index.tsx.
+  // todayKey : la liste se recale après minuit (retour premier plan) — cf. (tabs)/reserver.tsx.
   const todayKey = useTodayKey();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const dates = useMemo(() => nextDays(7), [todayKey]);
@@ -73,16 +75,26 @@ export default function ReserverScreen() {
   // s'il est réellement libre au créneau résolu (sinon repli sur le 1er libre, jamais imposé aveuglément).
   const presetCourt = typeof params.court === 'string' && params.court ? params.court : undefined;
   // On ne stocke QUE la clé du jour choisi et on dérive l’objet à chaque rendu (motif
-  // SectionReservations.tsx / reserver/index.tsx) : sinon, après une nuit en arrière-plan,
+  // SectionReservations.tsx / (tabs)/reserver.tsx) : sinon, après une nuit en arrière-plan,
   // `dates` est recalé par useTodayKey mais `day` resterait figé sur l’ancien objet (veille).
+  // Un jour EXPLICITE (?dateKey=, push liste d'attente, proposition du club) n'est retenu que s'il
+  // est encore dans la fenêtre — jamais remplacé en silence par le repli « Rejouer » (on aurait
+  // présélectionné un AUTRE jour à la même heure, comme si c'était le créneau annoncé).
   const [selDayKey, setSelDayKey] = useState<string | null>(
-    (
-      dates.find((d) => d.key === params.dateKey) ??
-      (presetTime ? (dates.find((d) => slotTimestamp(d.key, presetTime) > Date.now()) ?? null) : null)
-    )?.key ?? null,
+    () =>
+      (params.dateKey
+        ? dates.find((d) => d.key === params.dateKey)
+        : presetTime
+          ? dates.find((d) => slotTimestamp(d.key, presetTime) > Date.now())
+          : undefined
+      )?.key ?? null,
   );
   const day = dates.find((d) => d.key === selDayKey) ?? null;
-  const [slot, setSlot] = useState<string | null>(presetTime ?? null);
+  // Heure présélectionnée seulement si elle est encore À VENIR le jour retenu (initialiseur : au
+  // 1ᵉʳ rendu, `selDayKey` vaut le jour initial) — une push périmée n'ouvre plus un créneau passé.
+  const [slot, setSlot] = useState<string | null>(() =>
+    selDayKey && presetTime && slotTimestamp(selDayKey, presetTime) > Date.now() ? presetTime : null,
+  );
   const [duration, setDuration] = useState<60 | 90 | null>(presetDuration);
   const [court, setCourt] = useState<string | null>(null);
   // Participants : toi + jusqu’à 3 invités (amis ou nom libre).
@@ -205,6 +217,12 @@ export default function ReserverScreen() {
   }
 
   const openSlots = openSlotsFor(club, ctx);
+  // Créneau RETENU : l'heure choisie n'est prise en compte que si elle existe dans la grille ouverte
+  // du club (une heure « Rejouer » peut avoir disparu : décalage de grille, fermeture) — sinon
+  // l'écran affichait un créneau fantôme (prix sans « dès », étape Terrain, rien de sélectionnable).
+  // `|| submitting` : un resync de la grille pendant l'envoi ne doit pas faire basculer l'écran.
+  // `slot` reste brut pour les puces, `slotFull` et l'alerte (qui filtrent déjà par la grille).
+  const pickedSlot = slot && (openSlots.includes(slot) || submitting) ? slot : null;
   const allCourts = courtsFor(club, state.clubCourts);
   // Bannière « journée fermée » seulement si un tournoi bloque TOUT le club ; un tournoi sur
   // des terrains/créneaux précis laisse les autres réservables (géré créneau par créneau).
@@ -213,7 +231,8 @@ export default function ReserverScreen() {
   // Durées offertes AU CRÉNEAU choisi (un même horaire peut offrir 1h sur un terrain et 1h30
   // sur un autre, 68) : si une seule durée est proposée, elle est retenue automatiquement ;
   // sinon le joueur choisit via les puces « Durée » (cf. rendu plus bas).
-  const durationsAtSlot = day && slot ? [...new Set((slotsByTime?.get(slot) ?? []).map((x) => x.durationMin))].sort((a, b) => a - b) : [];
+  const durationsAtSlot =
+    day && pickedSlot ? [...new Set((slotsByTime?.get(pickedSlot) ?? []).map((x) => x.durationMin))].sort((a, b) => a - b) : [];
   // On IGNORE une durée choisie/préréglée qui n'est plus offerte à ce créneau (ex. deep-link
   // « Rejouer ici ?durationMin=90 » alors que le club est passé ce créneau en 1h-seulement) :
   // sinon `free` serait vide sans qu'aucune puce de durée ne s'affiche (cul-de-sac). Dérivation
@@ -223,16 +242,26 @@ export default function ReserverScreen() {
   // basculait (section Terrain démontée, StickyBar au prix d'une AUTRE durée pendant l'envoi).
   const validDuration = duration && (durationsAtSlot.includes(duration) || submitting) ? duration : null;
   const effectiveDuration = validDuration ?? (durationsAtSlot.length === 1 ? durationsAtSlot[0] : null);
-  const free = day && slot && effectiveDuration ? freeCourts(club, day.key, slot, effectiveDuration, ctx) : [];
+  const free = day && pickedSlot && effectiveDuration ? freeCourts(club, day.key, pickedSlot, effectiveDuration, ctx) : [];
 
   // A-L2 : pré-sélectionner le 1er terrain libre dès que jour + créneau + durée sont choisis.
   // Valeur dérivée : si l’utilisateur n’a pas encore choisi manuellement (court === null)
   // ET qu’un terrain libre existe, on propose le premier. L’utilisateur peut toujours
   // cliquer sur un autre chip pour le remplacer (setCourt(c)). Pur UX, pas de setState
   // dans le rendu ni d’effet — la dispo ne change pas.
+  // Terrain choisi à la main RETENU seulement s'il est encore libre (parité voie rapide,
+  // BookingSheet `courtGone`) : hors submit, un terrain pris ou fermé entre-temps (resync au
+  // retour premier plan) n'est plus affiché actif ni réservable — repli sur la pré-sélection.
+  // `|| submitting` : pendant l'envoi, le miroir contient DÉJÀ notre résa → le terrain épinglé
+  // par confirm() sort de `free` mais doit rester le terrain affiché (gel du submit).
+  const courtOk = court && (free.includes(court) || submitting) ? court : null;
   const effectiveCourt =
-    court ??
-    (day && slot && effectiveDuration && free.length > 0 ? (presetCourt && free.includes(presetCourt) ? presetCourt : free[0]) : null);
+    courtOk ??
+    (day && pickedSlot && effectiveDuration && free.length > 0
+      ? presetCourt && free.includes(presetCourt)
+        ? presetCourt
+        : free[0]
+      : null);
   // Durée utilisée pour les AFFICHAGES DE PRIX avant confirmation complète (créneau choisi mais
   // pas encore de durée explicite) : la plus petite durée offerte à ce créneau, sinon la plus
   // petite durée offerte par le club (jamais une durée codée en dur).
@@ -244,6 +273,9 @@ export default function ReserverScreen() {
     const durs = (slotsByTime?.get(s) ?? []).map((x) => x.durationMin);
     return durs.length ? Math.min(...durs.map((d) => priceForSlot(club, s, d))) : priceForSlot(club, s, 90);
   };
+  // Créneau offrant DEUX durées sans choix encore fait : le prix montré est celui de la plus petite
+  // → « dès », et aucune mention ne doit annoncer une durée que le joueur n'a pas retenue.
+  const durationToChoose = durationsAtSlot.length > 1 && !effectiveDuration;
 
   const participantCount = friendIds.length + extraNames.length;
   // Nombre d'invités possible selon le format (1v1 = 1, 2v2 = 3) et places encore ouvrables.
@@ -291,13 +323,13 @@ export default function ReserverScreen() {
   // réservé au terrain réellement occupé — un terrain offert à une AUTRE durée (« · en 1h ») ou
   // fermé à cette heure (« · fermé ») n'est pas « pris » (le joueur croyait le club plus plein
   // qu'il ne l'est et renonçait à réserver).
-  const atSlot = slot ? (slotsByTime?.get(slot) ?? []) : [];
+  const atSlot = pickedSlot ? (slotsByTime?.get(pickedSlot) ?? []) : [];
   const courtChipLabel = (c: string): string => {
     if (free.includes(c)) return c;
     const alt = atSlot.find((x) => x.court === c); // libre à cette heure, mais à une autre durée
     if (alt) return `${c} · en ${durationLabel(alt.durationMin)}`;
     const grid = resolvedGridFor(club, ctx);
-    const hasSlot = slot ? slotDurationAt(grid, c, slot) !== null : false;
+    const hasSlot = pickedSlot ? slotDurationAt(grid, c, pickedSlot) !== null : false;
     if (hasSlot) return `${c} · pris`;
     // Pas de créneau à CETTE heure : « autre horaire » si le terrain ouvre ailleurs dans la
     // journée (grilles décalées), « fermé » s'il n'ouvre nulle part.
@@ -384,15 +416,15 @@ export default function ReserverScreen() {
     }
   };
 
-  const ready = !!day && !!slot && !!effectiveDuration && !!effectiveCourt && !compToday;
+  const ready = !!day && !!pickedSlot && !!effectiveDuration && !!effectiveCourt && !compToday;
   const hasTiers = priceTiersFor(club).length > 0;
-  const slotPrice = slot
-    ? priceForSlot(club, slot, priceDuration)
+  const slotPrice = pickedSlot
+    ? priceForSlot(club, pickedSlot, priceDuration)
     : minPrice(club, offeredDurations(resolvedGridFor(club, ctx), allCourts));
 
   const confirm = async () => {
-    if (!day || !slot || !effectiveDuration || !effectiveCourt || submitting) return;
-    const startsAt = slotTimestamp(day.key, slot);
+    if (!day || !pickedSlot || !effectiveDuration || !effectiveCourt || submitting) return;
+    const startsAt = slotTimestamp(day.key, pickedSlot);
     // Le créneau choisi est devenu passé pendant que l’écran restait ouvert : on prévient au lieu
     // d’un bouton silencieusement inopérant, et on désélectionne pour forcer un nouveau choix.
     if (startsAt <= Date.now()) {
@@ -411,14 +443,14 @@ export default function ReserverScreen() {
       ...state.friends.filter((f) => friendIds.includes(f.id)).map((f) => ({ id: f.id, name: f.name, confirmed: false })),
       ...extraNames.map((n, i) => ({ id: `x-${Date.now()}-${i}`, name: n, confirmed: false })),
     ];
-    const bookedPrice = priceForSlot(club, slot, effectiveDuration);
+    const bookedPrice = priceForSlot(club, pickedSlot, effectiveDuration);
     const res = await addReservation({
       clubId: club.id,
       clubName: club.name,
       court: effectiveCourt,
       date: dateKeyLabel(day.key), // libellé ABSOLU (« Lun 8 juin ») : ne devient jamais faux le lendemain
       dateKey: day.key,
-      time: slot,
+      time: pickedSlot,
       startsAt,
       price: bookedPrice,
       durationMin: effectiveDuration,
@@ -437,12 +469,10 @@ export default function ReserverScreen() {
     setSubmitting(false);
     if (res.ok) {
       hapticSuccess();
-      // J'avais une ALERTE de liste d'attente sur ce créneau et je viens de le réserver : on la
-      // retire (best-effort) — sinon la prochaine annulation d'un voisin me pousserait « un
-      // créneau s'est libéré » pour un créneau que j'occupe déjà.
+      // J'avais une ALERTE de liste d'attente sur ce créneau : le trigger serveur 89 l'a déjà purgée
+      // à l'INSERT de la résa — on aligne seulement le miroir local (plus de puce « Alerte posée »).
       if (alerted) {
-        void leaveSlotWaitlist(club.id, day.key, slot);
-        setWaitlist((cur) => (cur ?? []).filter((w) => !(w.clubId === club.id && w.dateKey === day.key && w.time === slot)));
+        setWaitlist((cur) => (cur ?? []).filter((w) => !(w.clubId === club.id && w.dateKey === day.key && w.time === pickedSlot)));
       }
       // Fige l'instantané AVANT le re-rendu de succès (la dispo va muter — cf. déclaration de `booked`).
       // On fige AUSSI le jour (libellé absolu), l'heure et startsAt : l'écran de succès ne doit plus
@@ -453,7 +483,7 @@ export default function ReserverScreen() {
         durationMin: effectiveDuration,
         price: bookedPrice,
         dayLabel: dateKeyLabel(day.key),
-        time: slot,
+        time: pickedSlot,
         startsAt,
       });
       setDone(true);
@@ -523,14 +553,14 @@ export default function ReserverScreen() {
         {celebrate ? <Confetti onDone={() => setCelebrate(false)} /> : null}
         <Card style={{ alignItems: 'center', paddingVertical: spacing.lg }}>
           <View style={styles.summary}>
-            <Row label="Club" value={club.name} />
-            <Row label="Terrain" value={booked.court} />
-            <Row label="Jour" value={booked.dayLabel} />
-            <Row label="Heure" value={booked.time} />
-            <Row label="Durée" value={durationLabel(booked.durationMin)} />
-            <Row label="Participants" value={`Toi${participantCount > 0 ? ` + ${participantCount}` : ''}`} />
-            <Row label={`Tarif (session ${durationLabel(booked.durationMin)})`} value={fcfa(booked.price)} />
-            <Row label={`≈ par joueur (à ${recapHeads})`} value={perPlayerOf(booked.price, recapHeads)} />
+            <RecapRow label="Club" value={club.name} />
+            <RecapRow label="Terrain" value={booked.court} />
+            <RecapRow label="Jour" value={booked.dayLabel} />
+            <RecapRow label="Heure" value={booked.time} />
+            <RecapRow label="Durée" value={durationLabel(booked.durationMin)} />
+            <RecapRow label="Participants" value={`Toi${participantCount > 0 ? ` + ${participantCount}` : ''}`} />
+            <RecapRow label={`Tarif (session ${durationLabel(booked.durationMin)})`} value={fcfa(booked.price)} />
+            <RecapRow label={`≈ par joueur (à ${recapHeads})`} value={perPlayerOf(booked.price, recapHeads)} />
           </View>
           <View style={{ alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.lg }}>
             <Button label="Voir mes réservations" icon="calendar" onPress={() => router.push('/reservations')} full />
@@ -601,7 +631,7 @@ export default function ReserverScreen() {
 
   // Progression du parcours guidé (après le choix Par heure/Par club, fait en amont).
   // A-L2 : le step 2 (terrain) est considéré complété dès qu’effectiveCourt est défini.
-  const step = !day ? 0 : !slot ? 1 : !effectiveCourt ? 2 : 3;
+  const step = !day ? 0 : !pickedSlot ? 1 : !effectiveCourt ? 2 : 3;
 
   return (
     <Screen
@@ -611,8 +641,8 @@ export default function ReserverScreen() {
       contentStyle={{ paddingBottom: 96 }}
       overlay={
         <StickyBar
-          label={slot ? fcfa(slotPrice) : `dès ${fcfa(slotPrice)}`}
-          hint={`session · ${durationLabel(priceDuration)}`}
+          label={pickedSlot && !durationToChoose ? fcfa(slotPrice) : `dès ${fcfa(slotPrice)}`}
+          hint={durationToChoose ? 'choisis la durée' : `session · ${durationLabel(priceDuration)}`}
           cta={submitting ? 'Réservation…' : 'Réserver le terrain'}
           onPress={confirm}
           disabled={!ready || submitting}
@@ -621,7 +651,7 @@ export default function ReserverScreen() {
     >
       <Reveal>
         <Stepper steps={['Jour', 'Créneau', 'Terrain', 'Confirmer']} current={step} />
-        <Label text="Jour" />
+        <RecapLabel text="Jour" />
         <View style={styles.wrap}>
           {dates.map((d) => (
             <Chip
@@ -645,13 +675,13 @@ export default function ReserverScreen() {
             <View style={styles.banner}>
               <Ionicons name="trophy" size={16} color={colors.coral} />
               <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
-                Un tournoi a lieu ce jour à {club.name} — le terrain n’est pas réservable.
+                Un tournoi a lieu ce jour à {club.name} — aucun terrain n’est réservable.
               </Txt>
             </View>
           </Reveal>
         ) : null}
 
-        <Label text={day ? 'Créneau' : 'Créneau (choisis d’abord un jour)'} />
+        <RecapLabel text={day ? 'Créneau' : 'Créneau (choisis d’abord un jour)'} />
         {SLOT_PERIODS.map((period) => {
           const periodSlots = openSlots.filter((s) => periodOf(s) === period.id);
           if (periodSlots.length === 0) return null;
@@ -716,14 +746,14 @@ export default function ReserverScreen() {
 
         {/* Durée — n'apparaît que si CE créneau offre plusieurs durées selon le terrain (68) ;
             sinon la durée unique est retenue automatiquement (effectiveDuration). */}
-        {day && slot && durationsAtSlot.length > 1 ? (
+        {day && pickedSlot && durationsAtSlot.length > 1 ? (
           <Reveal>
-            <Label text="Durée" />
+            <RecapLabel text="Durée" />
             <View style={styles.wrap}>
               {durationsAtSlot.map((d) => (
                 <Chip
                   key={d}
-                  label={`${durationLabel(d)} · ${fcfa(priceForSlot(club, slot, d))}`}
+                  label={`${durationLabel(d)} · ${fcfa(priceForSlot(club, pickedSlot, d))}`}
                   active={d === effectiveDuration}
                   onPress={() => {
                     if (submitting) return; // gel du submit
@@ -741,7 +771,7 @@ export default function ReserverScreen() {
             (l'alerte est une écriture serveur : réservée aux comptes connectés). */}
         {slotFull ? (
           <Reveal>
-            <Label text="Terrain" />
+            <RecapLabel text="Terrain" />
             <View style={styles.fullBox}>
               <Ionicons name="people" size={18} color={colors.coral} />
               <View style={{ flex: 1 }}>
@@ -769,9 +799,9 @@ export default function ReserverScreen() {
               </View>
             ) : null}
           </Reveal>
-        ) : day && slot && effectiveDuration ? (
+        ) : day && pickedSlot && effectiveDuration ? (
           <Reveal>
-            <Label text="Terrain" />
+            <RecapLabel text="Terrain" />
             <View style={styles.wrap}>
               {allCourts.map((c) => {
                 // Pendant le submit, le miroir contient DÉJÀ notre résa → NOTRE terrain sort de
@@ -797,7 +827,7 @@ export default function ReserverScreen() {
           </Reveal>
         ) : null}
 
-        <Label text={`Avec qui ? (toi + ${participantCount}/${maxGuests} — optionnel)`} />
+        <RecapLabel text={`Avec qui ? (toi + ${participantCount}/${maxGuests} — optionnel)`} />
         <View style={styles.wrap}>
           {state.friends.map((f) => (
             <Chip
@@ -809,7 +839,14 @@ export default function ReserverScreen() {
             />
           ))}
           {extraNames.map((n) => (
-            <Chip key={n} label={n} icon="checkmark" active onPress={() => removeExtra(n)} />
+            <Chip
+              key={n}
+              label={n}
+              icon="checkmark"
+              active
+              onPress={() => removeExtra(n)}
+              accessibilityLabel={`Retirer ${n} des invités`}
+            />
           ))}
         </View>
         {/* Tout nouveau joueur (0 ami) : on l’amorce vers l’ajout d’amis au moment le plus
@@ -852,7 +889,7 @@ export default function ReserverScreen() {
             <Txt variant="label" style={{ marginTop: spacing.md }}>
               Format
             </Txt>
-            <View style={[styles.wrap, { marginTop: spacing.sm }]} accessibilityRole="radiogroup" accessibilityLabel="Format du match">
+            <View style={[styles.wrap, { marginTop: spacing.sm }]} accessibilityLabel="Format du match">
               {(
                 [
                   { f: 2, label: '1v1 · 2 joueurs' },
@@ -949,18 +986,18 @@ export default function ReserverScreen() {
 
         <Card style={styles.priceRow}>
           <View>
-            <Txt variant="muted">Tarif (session {durationLabel(priceDuration)})</Txt>
+            <Txt variant="muted">Tarif ({durationToChoose ? 'choisis la durée' : `session ${durationLabel(priceDuration)}`})</Txt>
             <Txt variant="small" color={colors.textMuted}>
-              soit ~{perPlayerOf(slotPrice, format)} / joueur à {format}
+              soit {durationToChoose ? 'dès ' : ''}~{perPlayerOf(slotPrice, format)}/joueur à {format}
             </Txt>
           </View>
-          <Txt variant="price">{slot ? fcfa(slotPrice) : `dès ${fcfa(slotPrice)}`}</Txt>
+          <Txt variant="price">{pickedSlot && !durationToChoose ? fcfa(slotPrice) : `dès ${fcfa(slotPrice)}`}</Txt>
         </Card>
 
         <View style={{ marginTop: spacing.lg }}>
           <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
-            Session de {durationLabel(priceDuration)}, sans paiement en ligne. Le tarif se règle directement au club. Annulation jusqu’à 5h
-            avant.
+            {durationToChoose ? 'Sans' : `Session de ${durationLabel(priceDuration)}, sans`} paiement en ligne. Le tarif se règle
+            directement au club. Annulation jusqu’à 5{'\u00a0'}h avant.
           </Txt>
         </View>
       </Reveal>
@@ -980,25 +1017,6 @@ function periodOf(slot: string): 'morning' | 'afternoon' | 'evening' {
   if (hour < 12) return 'morning';
   if (hour < 17) return 'afternoon';
   return 'evening';
-}
-
-function Label({ text }: { text: string }) {
-  return (
-    <Txt variant="label" style={{ marginTop: spacing.lg }}>
-      {text}
-    </Txt>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.row}>
-      <Txt variant="muted">{label}</Txt>
-      <Txt variant="h3" style={{ fontSize: 15 }}>
-        {value}
-      </Txt>
-    </View>
-  );
 }
 
 const styles = StyleSheet.create({
@@ -1073,5 +1091,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 });

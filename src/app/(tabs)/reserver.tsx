@@ -348,10 +348,18 @@ export default function ReserverScreen() {
           )
         ) : noSlotsByClub ? (
           <View>
+            {/* « Journée terminée » seulement s'il ne reste AUCUN créneau à venir (todayOver) ;
+                sinon il en reste, mais tous complets ou fermés. */}
             <EmptyState
               icon="time-outline"
-              title={isToday ? 'Plus de créneaux aujourd’hui' : 'Aucun créneau libre'}
-              text={isToday ? 'La journée est terminée.' : 'Choisis un autre jour.'}
+              title={isToday && todayOver ? 'Plus de créneaux aujourd’hui' : 'Aucun créneau libre'}
+              text={
+                isToday && todayOver
+                  ? 'La journée est terminée.'
+                  : isToday
+                    ? 'Tout est complet pour le reste de la journée.'
+                    : 'Choisis un autre jour.'
+              }
             />
             {isToday ? <Button label="Voir demain" icon="arrow-forward" onPress={goTomorrow} /> : null}
           </View>

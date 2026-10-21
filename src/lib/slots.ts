@@ -1,4 +1,5 @@
-// Génération des créneaux de réservation d’un club à partir de ses heures d’ouverture.
+// Génération des créneaux de réservation d’un club à partir de ses heures d’ouverture (ANCIENNE
+// grille club `slots`, @90 — les créneaux réels sont désormais par terrain, cf. courtSchedule.ts).
 // Le gérant choisit UNE heure d’ouverture et UNE heure de fermeture ; l’app découpe la plage
 // en sessions de 1h30 (SESSION_MIN), sans chevauchement. Un créneau n’est gardé que s’il TIENT
 // ENTIÈREMENT avant la fermeture (début + durée ≤ fermeture). Fonctions PURES et testables
@@ -10,7 +11,9 @@
 // créneau fermé reste rouvrable. Côté serveur, '!12:30' ne matche jamais un vrai horaire
 // ('12:30'), donc les gardes `= any(slots)` refusent d’office les créneaux fermés.
 
-export const SESSION_MIN = 90; // durée d’une session (1h30), comme partout dans l’app
+// Durée de session de l’ANCIENNE grille club (slots, @90) et repli quand une résa n’a pas de durée —
+// les créneaux réels durent 1h ou 1h30 par terrain (courtSchedule.ts, 68).
+export const SESSION_MIN = 90;
 
 const CLOSED_PREFIX = '!';
 
