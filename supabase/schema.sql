@@ -1,5 +1,5 @@
 -- PadelConnect — schéma initial. ⚠️ FICHIER HISTORIQUE : NE PAS RECOLLER en base — les
--- migrations 02→89 ont durci ou remplacé plusieurs de ses objets (le recoller ressusciterait
+-- migrations 02→91 ont durci ou remplacé plusieurs de ses objets (le recoller ressusciterait
 -- des versions périmées). Conservé pour référence ; les deux policies ci-dessous sont
 -- maintenues alignées sur leurs versions durcies (09/41) pour qu'un collage accidentel
 -- soit inoffensif, mais la règle reste : ne rien recoller d'ancien (cf. docs/AUDIT-SERVEUR.md).

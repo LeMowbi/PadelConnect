@@ -52,6 +52,21 @@ union all select 'Commissions de club à effacer',              count(*) from pu
 union all select 'Boosts de club à effacer',                   count(*) from public.club_boost
 union all select 'Accès multi-clubs à effacer',                count(*) from public.manager_clubs
 union all select 'Décomptes opérateur à effacer',              count(*) from public.operator_payments
+-- Chantier v3 (80→83) : TOUT ce que la section 2 efface doit apparaître ici, sinon l'aperçu ment.
+union all select 'Historique de niveau à effacer',             count(*) from public.level_history
+union all select 'Joueurs favoris à effacer',                  count(*) from public.favorite_players
+union all select 'Suivis de club à effacer',                   count(*) from public.club_followers
+union all select 'Alertes de liste d''attente à effacer',      count(*) from public.slot_waitlist
+union all select 'Réclamations fidélité à effacer',            count(*) from public.loyalty_claims
+union all select 'Agenda (événements) à effacer',              count(*) from public.events
+union all select 'Décomptes de carnet à effacer',              count(*) from public.pass_uses
+union all select 'Carnets club à effacer',                     count(*) from public.club_passes
+union all select 'Annonces club à effacer',                    count(*) from public.club_news
+union all select 'Parts Wave à effacer',                       count(*) from public.share_payments
+union all select 'Élèves de cours collectifs à effacer',       count(*) from public.lesson_students
+union all select 'Notes privées de créneaux à effacer',        count(*) from public.blocked_slot_notes
+union all select 'Réglages tournoi (lien Wave, frais) à effacer', count(*) from public.tournament_config
+union all select 'Réglages app (fidélité) à effacer',          count(*) from public.app_config
 order by element;
 -- (Facultatif — journaux de diagnostic anonymes, si tu veux aussi les nettoyer :)
 --   select 'Erreurs app', count(*) from public.app_errors
@@ -145,4 +160,11 @@ union all select 'Réservations',       count(*) from public.reservations
 union all select 'Tournois',           count(*) from public.competitions
 union all select 'Scores',             count(*) from public.match_results
 union all select 'Clubs (base)',       count(*) from public.clubs
+union all select 'Carnets club',       count(*) from public.club_passes
+union all select 'Réclamations fidélité', count(*) from public.loyalty_claims
+union all select 'Listes d''attente',  count(*) from public.slot_waitlist
+union all select 'Annonces club',      count(*) from public.club_news
+union all select 'Parts Wave',         count(*) from public.share_payments
+union all select 'Réglages tournoi',   count(*) from public.tournament_config
+union all select 'Réglages app',       count(*) from public.app_config
 order by element;

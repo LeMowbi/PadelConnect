@@ -20,6 +20,8 @@ alter table public.reservations add column if not exists open_level_max numeric;
 -- Fourchette bornée [1,7], min ≤ max, et UNIQUEMENT sur un match ouvert (une résa privée forgée
 -- ne peut pas porter de fourchette — parité stricte avec la spec). Drop + add : idempotent ET
 -- remplaçable si la règle évolue.
+-- ⚠️ Clause `open_match and` RELÂCHÉE par la 91 (elle rendait set_match_open(false) impossible
+-- sur un match à fourchette) : la version LIVE est celle de la 91 — ne jamais recoller la 81 seule.
 alter table public.reservations drop constraint if exists reservations_open_level_range_chk;
 alter table public.reservations add constraint reservations_open_level_range_chk check (
   (open_level_min is null and open_level_max is null)

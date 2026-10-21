@@ -11,7 +11,7 @@
 --    Seuls les COMPTES AYANT SAISI un score bougent. Idempotence DURE :
 --    unique(reservation_id, user_id) — un match n'ajuste jamais deux fois. Les ±0.5 des tournois
 --    officiels (close_competition, trigger protect_level 34) restent INCHANGÉS ; leur
---    journalisation dans level_history viendra avec la ligue (SQL 84).
+--    journalisation dans level_history viendra avec la ligue (lot E, migration à venir).
 -- 2) reconcile_my_levels : rattrape les matchs à MIROIR COMPLET dont l'application a été manquée
 --    (app fermée au moment de la validation) — appelé à l'ouverture de session.
 -- 3) public_reliability : taux de présence AGRÉGÉ (jamais le détail — il reste réservé au club
@@ -344,7 +344,8 @@ alter table public.favorite_players enable row level security;
 drop policy if exists favorite_players_select_own on public.favorite_players;
 create policy favorite_players_select_own on public.favorite_players
   for select using (user_id = auth.uid());
--- Écritures via la RPC uniquement (masquage des blocages).
+-- Écritures via la RPC uniquement (masquage des blocages) ; bloquer un joueur (block_user, 91)
+-- purge le suivi dans les deux sens — la RPC refuse ensuite tout toggle avec ce compte.
 
 create or replace function public.toggle_favorite_player(p_user_id uuid)
 returns text

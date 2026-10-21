@@ -3,12 +3,13 @@
 //   • reservations INSERT  → notif au(x) GÉRANT(s) du club (nouvelle réservation).
 //   • reservations UPDATE (club_confirmed passe à true) → notif au JOUEUR (résa confirmée).
 //   • reservations UPDATE (status → cancelled, depuis 'booked') → notif au(x) GÉRANT(s) du club
-//     (le joueur a annulé — terrain à libérer côté préparation).
+//     (terrain à libérer côté préparation) et aux participants — textes NEUTRES : la même
+//     transition vient d'une annulation joueur, de delete_club ou de la disparition d'un coach.
 //   • reservation_participants INSERT → notif à l'AMI INVITÉ (nouvelle invitation à jouer).
 //   • reservation_participants UPDATE (accepted) → notif à l'AUTEUR (un invité a accepté).
 //   • reservation_participants UPDATE (accepted → declined) → notif à l'AUTEUR d'un MATCH OUVERT
 //     (un joueur a quitté ton match — une place se relibère).
-//   • competitions INSERT (tournoi JOUEUR en attente) → notif au(x) gérant(s) du club hôte (à valider).
+//   • competitions INSERT (tournoi JOUEUR ou PadelConnect/opérateur, en attente) → notif au(x) gérant(s) du club hôte (à valider).
 //   • competitions UPDATE (pending → published) → notif à l'ORGANISATEUR (tournoi validé) ET, si
 //     frais > 0, à l'OPÉRATEUR (« frais à encaisser ») — donc seulement après validation du club.
 //   • competitions UPDATE (pending → rejected) → notif à l'ORGANISATEUR (tournoi refusé).
@@ -34,9 +35,10 @@
 //   • reservations INSERT d'un match OUVERT (80/81) → deux branches best-effort en plus de la
 //     notif gérant : « partenaire suivi » aux joueurs qui ont mis le créateur en FAVORI, puis
 //     « un match à ton niveau vient d'ouvrir » aux SUIVEURS du club (match_alerts + fourchette).
-//   • reservations UPDATE (status → cancelled JOUEUR uniquement) → alerte LISTE D'ATTENTE (81)
-//     aux inscrits dont l'attente chevauche le créneau libéré (one-shot). PAS sur club_cancelled :
-//     l'annulation club re-bloque le créneau (75), il n'est jamais réellement libéré.
+//   • reservations UPDATE (TOUTE transition booked → cancelled : joueur, delete_club, coach
+//     disparu — le créneau est réellement libéré) → alerte LISTE D'ATTENTE (81) aux inscrits dont
+//     l'attente chevauche le créneau libéré (one-shot). JAMAIS sur club_cancelled : l'annulation
+//     club re-bloque le créneau (75), il n'est jamais réellement libéré.
 //   • events INSERT — ou UPDATE qui vient d'ACTIVER le push — (82, agenda du padel) →
 //     broadcast à tous les comptes (anti-doublon : un événement déjà poussé ne repart pas).
 //   • club_news INSERT (83, si « push » coché) → annonce du club à ses SUIVEURS (club_followers).
@@ -54,15 +56,17 @@
 //
 // Aucune clé secrète ici — on lit les jetons en base via la SERVICE ROLE (injectée par
 // Supabase dans les variables d'environnement de la fonction).
+// Version dépôt : v48 (audit pré-lancement 2026-10-21) — le compteur de la plateforme suit (§7).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const EXPO_PUSH = 'https://exp.host/--/api/v2/push/send';
 
 // `data` (optionnel) : payload lu par le CLIENT au tap sur la notif (src/lib/notifications.ts,
-// useNotificationTapRouter) pour amener directement à l'écran concerné. Seulement posé sur les
-// notifs reçues par un JOUEUR — les écrans /amis, /reservations, /competition/[id] existent pour
-// tous les comptes joueur, contrairement aux écrans gérant/opérateur (hors périmètre de ce routage).
+// useNotificationTapRouter) pour amener directement à l'écran concerné. Posé sur tous les push
+// joueur, gérant (club_reservation / club_tournament → Espace Club) et coach (lesson → Espace
+// Coach) ; seul le push OPÉRATEUR « frais à encaisser » n'en porte pas — les écrans opérateur
+// sont hors routage tap.
 type Notif = {
   targets: string[];
   title: string;
@@ -197,12 +201,46 @@ Deno.serve(async (req) => {
       padelta: 'Padelta',
       padelhouse: 'PadelHouse',
     };
+    // Ordre IDENTIQUE à applyInfo côté app : le nom SURCHARGÉ par le gérant (club_overrides, 66 —
+    // un nom effacé y est stocké NULL) prime sur le nom de base (table clubs, puis fondateurs).
     const clubName = async (clubId: string): Promise<string> => {
+      const { data: ov } = await supabase.from('club_overrides').select('name').eq('club_id', clubId).maybeSingle();
+      if (ov?.name) return ov.name;
       const { data } = await supabase.from('clubs').select('name').eq('id', clubId).maybeSingle();
       return data?.name ?? FOUNDER_NAMES[clubId] ?? 'Ton club';
     };
-    // LISTE D'ATTENTE (81) : un créneau vient de se LIBÉRER (annulation JOUEUR uniquement —
-    // une annulation CLUB re-bloque le créneau, cf. branche club_cancelled) → notifier les
+    // Nom de club FIGÉ sur une ligne (lessons/reservations.club_name). Avant la 91,
+    // create_group_lesson y écrivait l'IDENTIFIANT (« padelta ») pour un club fondateur : une
+    // valeur vide OU égale à l'identifiant retombe sur clubName() (même repli que le client).
+    const recordClubName = async (rec: Record<string, unknown>): Promise<string> => {
+      const stored = String(rec.club_name ?? '');
+      return stored && stored !== rec.club_id ? stored : await clubName(String(rec.club_id ?? ''));
+    };
+    // Libellé ABSOLU d'une clé AAAA-MM-JJ (« Lun 8 juin ») — miroir de src/lib/days.ts
+    // (dateKeyLabel ; Deno ne peut pas l'importer). Repli sur la clé brute si le format est
+    // inattendu : `proposed_date_key` n'est pas contraint côté SQL, un appel forgé ne doit pas
+    // faire planter la fonction.
+    const MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+    const DAYS_SHORT = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+    const dateKeyLabel = (key: unknown): string => {
+      const k = String(key ?? '');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(k)) return k;
+      const [y, m, d] = k.split('-').map(Number);
+      const date = new Date(Date.UTC(y, m - 1, d, 12));
+      return `${DAYS_SHORT[date.getUTCDay()]} ${d} ${MONTHS[m - 1]}`;
+    };
+    // Fourchette de niveau — miroir de src/lib/levelRange.ts (levelRangeText + levelText) :
+    // « 3 », « 2,5 – 4 », « 3 et plus », « 4 maximum » ('' = ouverte à tous).
+    const levelText = (n: number): string => (Number.isInteger(n) ? `${n}` : n.toFixed(1).replace('.', ','));
+    const levelRangeText = (min: number | null, max: number | null): string => {
+      if (min !== null && max !== null) return min === max ? levelText(min) : `${levelText(min)} – ${levelText(max)}`;
+      if (min !== null) return `${levelText(min)} et plus`;
+      if (max !== null) return `${levelText(max)} maximum`;
+      return '';
+    };
+    // LISTE D'ATTENTE (81) : un créneau vient de se LIBÉRER (toute transition booked→cancelled :
+    // joueur, delete_club, coach disparu — jamais club_cancelled, qui re-bloque le créneau, cf.
+    // sa branche) → notifier les
     // inscrits dont l'attente CHEVAUCHE l'intervalle libéré (même arithmétique demi-ouverte
     // [t, t+d) que la dispo). One-shot HONNÊTE : seules les entrées des joueurs qui ONT un
     // jeton push sont consommées — et seulement APRÈS l'envoi Expo (via waitlistConsumed) ;
@@ -310,33 +348,30 @@ Deno.serve(async (req) => {
       // best-effort (try/catch) : une panne ici ne doit pas empêcher la notif GÉRANT déjà empilée.
       if (record.open_match === true && record.user_id && favFanIds && favFanIds.length) {
         try {
-          let fanIds = favFanIds.slice();
-          if (fanIds.length) {
-            // FAIL-CLOSED (§8) : si la lecture des blocages ÉCHOUE, on abandonne ce push facultatif
-            // plutôt que de notifier peut-être un compte bloqué (harcèlement). null ≠ [] : un [] est
-            // une absence réelle de blocage, un échec (error) ferme la branche.
-            const { data: blocks, error: blkErr } = await supabase
-              .from('blocked_users')
-              .select('blocker_id, blocked_id')
-              .or(`blocker_id.eq.${record.user_id},blocked_id.eq.${record.user_id}`);
-            if (!blkErr && blocks) {
-              const excluded = new Set(blocks.flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]));
-              fanIds = fanIds.filter((id: string) => !excluded.has(id));
-              if (fanIds.length) {
-                const { data: profs } = await supabase
-                  .from('profiles')
-                  .select('expo_push_token')
-                  .in('id', fanIds.slice(0, 100))
-                  .not('expo_push_token', 'is', null);
-                const targets = (profs ?? []).map((p: { expo_push_token: string }) => p.expo_push_token).filter(Boolean);
-                if (targets.length) {
-                  notifs.push({
-                    targets,
-                    title: 'Ton partenaire habituel a créé un match 🎾',
-                    body: `${record.booked_by_name ?? 'Un joueur'} — ${record.club_name ?? ''} · ${record.date_label ?? ''} à ${record.time ?? ''}.`,
-                    data: { kind: 'open_match', id: record.id },
-                  });
-                }
+          // FAIL-CLOSED (§8) : si la lecture des blocages ÉCHOUE, on abandonne ce push facultatif
+          // plutôt que de notifier peut-être un compte bloqué (harcèlement). null ≠ [] : un [] est
+          // une absence réelle de blocage, un échec (error) ferme la branche.
+          const { data: blocks, error: blkErr } = await supabase
+            .from('blocked_users')
+            .select('blocker_id, blocked_id')
+            .or(`blocker_id.eq.${record.user_id},blocked_id.eq.${record.user_id}`);
+          if (!blkErr && blocks) {
+            const excluded = new Set(blocks.flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]));
+            const fanIds = favFanIds.filter((id: string) => !excluded.has(id));
+            if (fanIds.length) {
+              const { data: profs } = await supabase
+                .from('profiles')
+                .select('expo_push_token')
+                .in('id', fanIds.slice(0, 100))
+                .not('expo_push_token', 'is', null);
+              const targets = (profs ?? []).map((p: { expo_push_token: string }) => p.expo_push_token).filter(Boolean);
+              if (targets.length) {
+                notifs.push({
+                  targets,
+                  title: 'Ton partenaire habituel a créé un match 🎾',
+                  body: `${record.booked_by_name ?? 'Un joueur'} — ${record.club_name ?? ''} · ${record.date_label ?? ''} à ${record.time ?? ''}.`,
+                  data: { kind: 'open_match', id: record.id },
+                });
               }
             }
           }
@@ -390,7 +425,8 @@ Deno.serve(async (req) => {
               .map((p: { expo_push_token: string }) => p.expo_push_token)
               .filter(Boolean);
             if (targets.length) {
-              const range = lo != null || hi != null ? ` · niveau ${lo ?? '≤'}${lo != null && hi != null ? '–' : ''}${hi ?? '+'}` : '';
+              const rangeText = levelRangeText(lo, hi);
+              const range = rangeText ? ` · niveau ${rangeText}` : '';
               notifs.push({
                 targets,
                 title: 'Un match à ton niveau vient d’ouvrir 🎾',
@@ -419,12 +455,14 @@ Deno.serve(async (req) => {
         data: { kind: 'reservation', id: record.id },
       });
     } else if (table === 'reservations' && type === 'UPDATE' && record.status === 'cancelled' && oldRecord.status === 'booked') {
-      // Le joueur vient d'ANNULER une réservation qu'il avait faite (peut-être déjà confirmée) →
+      // La réservation n'a plus lieu : annulation JOUEUR, OU suppression du club (delete_club),
+      // OU disparition d'un coach (delete_account annule les résas de ses cours) — la transition
+      // booked→cancelled est la même et rien ici ne dit laquelle. Textes NEUTRES (toujours vrais) :
       // prévenir le(s) gérant(s) du club (terrain à libérer côté préparation).
       notifs.push({
         targets: await clubManagerTokens(record.club_id),
         title: 'Réservation annulée',
-        body: `${record.booked_by_name ?? 'Un joueur'} a annulé son créneau du ${record.date_label ?? ''} à ${record.time ?? ''} (${record.court ?? ''} · ${record.club_name ?? ''}).`,
+        body: `Le créneau de ${record.booked_by_name ?? 'un joueur'} du ${record.date_label ?? ''} à ${record.time ?? ''} (${record.court ?? ''} · ${record.club_name ?? ''}) a été annulé.`,
         data: { kind: 'club_reservation', id: record.id },
       });
       notifs.push(...(await waitlistAlerts(record)));
@@ -437,20 +475,20 @@ Deno.serve(async (req) => {
         notifs.push({
           targets: (toks ?? []).map((t) => t.expo_push_token as string).filter(Boolean),
           title: 'Match annulé',
-          body: `Le match du ${record.date_label ?? ''} à ${record.time ?? ''} (${record.club_name ?? ''}) a été annulé par son créateur.`,
+          body: `Le match du ${record.date_label ?? ''} à ${record.time ?? ''} (${record.club_name ?? ''}) a été annulé.`,
           data: { kind: 'reservation', id: record.id },
         });
       }
     } else if (table === 'reservations' && type === 'UPDATE' && record.status === 'club_cancelled' && oldRecord.status === 'booked') {
       // ⚠️ PAS d'alerte liste d'attente ici : une annulation CLUB (75) re-bloque immédiatement le
       // créneau d'origine (occupé hors app) — il ne redevient PAS réservable, pousser « fonce »
-      // serait un mensonge. Seule l'annulation JOUEUR (ci-dessus) libère réellement le créneau.
+      // serait un mensonge. Seule la transition booked→cancelled (ci-dessus) libère réellement le créneau.
       // Le CLUB vient d'annuler la réservation (75) car le créneau chevauche une réservation prise
       // HORS APP → prévenir le joueur (auteur) + les participants, avec le motif et, si le club en a
       // proposé une, l'alternative (jour/heure/terrain). Tap sur la notif → « Mes réservations ».
       const reasonPart = record.cancel_reason ? ` Motif : ${record.cancel_reason}.` : '';
       const proposalPart = record.proposed_time
-        ? ` Le club te propose le ${record.proposed_date_key ?? record.date_label ?? ''} à ${record.proposed_time}${record.proposed_court ? ` (${record.proposed_court})` : ''}.`
+        ? ` Le club te propose le ${record.proposed_date_key ? dateKeyLabel(record.proposed_date_key) : (record.date_label ?? '')} à ${record.proposed_time}${record.proposed_court ? ` (${record.proposed_court})` : ''}.`
         : ' Ouvre l’app pour choisir un autre créneau.';
       const cancelBody = `${record.club_name ?? 'Le club'} a annulé ton créneau du ${record.date_label ?? ''} à ${record.time ?? ''} (chevauchement avec une réservation hors app).${reasonPart}${proposalPart}`;
       notifs.push({
@@ -487,7 +525,7 @@ Deno.serve(async (req) => {
         notifs.push({
           targets: await userToken(record.user_id),
           title: 'Réservation rétablie ✅',
-          body: `Ton créneau du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} (${record.club_name ?? ''}) est de nouveau réservé — l'absence a été annulée.`,
+          body: `Ton créneau du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} (${record.club_name ?? ''}) est de nouveau réservé — l’absence a été annulée.`,
           data: { kind: 'reservation', id: record.id },
         });
       }
@@ -515,7 +553,7 @@ Deno.serve(async (req) => {
       notifs.push({
         targets: await userToken(record.user_id),
         title: 'Invitation à jouer 🎾',
-        body: `${await userName(resa?.user_id ?? '')} t'invite à jouer le ${resa?.date_label ?? ''} à ${resa?.time ?? ''} (${resa?.club_name ?? ''}).`,
+        body: `${await userName(resa?.user_id ?? '')} t’invite à jouer le ${resa?.date_label ?? ''} à ${resa?.time ?? ''} (${resa?.club_name ?? ''}).`,
         data: { kind: 'reservation', id: record.reservation_id },
       });
     } else if (
@@ -604,7 +642,7 @@ Deno.serve(async (req) => {
       notifs.push({
         targets: await userToken(record.organizer_id),
         title: 'Tournoi non retenu',
-        body: `${record.club_name ?? 'Le club'} n'a pas retenu ton tournoi « ${record.title ?? ''} ».${reason}`,
+        body: `${record.club_name ?? 'Le club'} n’a pas retenu ton tournoi « ${record.title ?? ''} ».${reason}`,
         data: { kind: 'tournament', id: record.id },
       });
     } else if (table === 'friend_requests' && type === 'INSERT' && record.status === 'pending') {
@@ -667,7 +705,7 @@ Deno.serve(async (req) => {
             notifs.push({
               targets: (toks ?? []).map((t: { expo_push_token: string }) => t.expo_push_token).filter(Boolean),
               title: 'Cours collectif rétabli',
-              body: `Le cours collectif du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} (${record.club_name ?? ''}) est de nouveau maintenu.`,
+              body: `Le cours collectif du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} (${await recordClubName(record)}) est de nouveau maintenu.`,
               data: { kind: 'reservation' },
             });
           }
@@ -732,7 +770,7 @@ Deno.serve(async (req) => {
           notifs.push({
             targets: (toks ?? []).map((t: { expo_push_token: string }) => t.expo_push_token).filter(Boolean),
             title: 'Cours collectif annulé',
-            body: `Le cours collectif du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} (${record.club_name ?? ''}) n’aura pas lieu.`,
+            body: `Le cours collectif du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} (${await recordClubName(record)}) n’aura pas lieu.`,
             data: { kind: 'reservation' },
           });
         }
@@ -779,9 +817,7 @@ Deno.serve(async (req) => {
           .select('user_id, canon, i_won')
           .eq('reservation_id', record.reservation_id);
         const all = (entries ?? []) as { user_id: string; canon: string; i_won: boolean }[];
-        // Joueurs identifiés (créateur + participants 'accepted') → vainqueurs légitimes max =
-        // least(2, joueurs-1), STRICTEMENT comme la SQL 49 (le commentaire « floor(joueurs/2) »
-        // était une règle d'avant l'audit 7). Chargé une fois, réutilisé plus bas.
+        // Joueurs identifiés (créateur + participants 'accepted'), chargés une fois, réutilisés plus bas.
         const { data: parts } = await supabase
           .from('reservation_participants')
           .select('user_id, status')
@@ -827,7 +863,7 @@ Deno.serve(async (req) => {
           notifs.push({
             targets: await tokensFor(otherEntrants),
             title: 'Vos scores ne correspondent pas 🤔',
-            body: `Le score saisi pour votre match ${when} diffère du tien — vérifiez ensemble dans Mes réservations.`,
+            body: `Les saisies de ton match ${when} ne concordent pas (score différent ou plusieurs vainqueurs déclarés) — vérifiez ensemble dans Mes réservations.`,
             data: { kind: 'reservation', id: record.reservation_id },
           });
         } else if (after.n === 1 && prev.n === 0) {
@@ -881,7 +917,7 @@ Deno.serve(async (req) => {
         notifs.push({
           targets: await allPlayerTokens(), // paginé : pas de cap silencieux à 1000 comptes
           title: '📅 Agenda padel — ' + (ev.title ?? ''),
-          body: `${ev.date_key ?? ''}${ev.place ? ' · ' + ev.place : ''} — ouvre l’app pour les détails.`,
+          body: `${dateKeyLabel(ev.date_key)}${ev.place ? ' · ' + ev.place : ''} — ouvre l’app pour les détails.`,
           data: { kind: 'event' },
         });
       }
