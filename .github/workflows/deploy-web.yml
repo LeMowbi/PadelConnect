@@ -24,6 +24,10 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig.json'
+      # public/ (_headers, _redirects) est copié dans dist/ par l'export ; le correctif de polices
+      # est exécuté par ce job. Les autres scripts/ ne changent pas le web publié.
+      - 'public/**'
+      - 'scripts/fix-web-assets.sh'
       - '.github/workflows/deploy-web.yml'
   workflow_dispatch: {} # bouton « Run workflow » dans l'onglet Actions (déclenchement manuel)
 
@@ -42,7 +46,7 @@ jobs:
       - name: Installer Node
         uses: actions/setup-node@v4
         with:
-          # wrangler@latest exige Node >= 22 (sinon « Wrangler requires at least Node.js
+          # wrangler 4 exige Node >= 22 (sinon « Wrangler requires at least Node.js
           # v22.0.0 » → déploiement en échec). On aligne le runner sur 22.
           node-version: 22
           cache: npm
@@ -62,8 +66,9 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        # Version EXACTE : une nouvelle version de wrangler ne change pas le déploiement à notre insu.
         run: >-
-          npx wrangler@latest pages deploy dist
+          npx wrangler@4.148.0 pages deploy dist
           --project-name=padelconnect-club
           --branch=main
           --commit-dirty=true

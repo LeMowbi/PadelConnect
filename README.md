@@ -11,15 +11,17 @@ s'inscrire à des tournois, jouer entre amis et trouver un coach**. Design « lu
 > **Universal Links** (padelconnectci.com). Matchs ouverts 1v1/2v2, classement par points, coachs
 > & cours, comptes club à l'inscription, paiement Wave manuel des frais de tournoi. **Sans paiement
 > en ligne pour les réservations** : le tarif du terrain se règle au club. Sécurité par rôle
-> (joueur / club / opérateur) via Row Level Security ; migrations SQL numérotées `02` → `64` dans
-> `supabase/` (à appliquer dans l'ordre — voir CLAUDE.md).
+> (joueur / club / opérateur) via Row Level Security ; migrations SQL numérotées à partir de `02`
+> dans `supabase/` (à appliquer dans l'ordre — état en base : CLAUDE.md §8).
 
 ## Fonctionnalités
 
 **Joueur**
-- **Réservation** de sessions 1h30 : par créneau (jour → heure → club → terrain) ou depuis la
-  fiche d'un club, avec anti double-réservation côté serveur, limite anti-accaparement
-  (6 résas à venir), annulation jusqu'à 5 h avant, rappels locaux et ajout au calendrier.
+
+- **Réservation** de sessions de 1h ou 1h30 selon la grille de chaque terrain : par créneau
+  (jour → heure → club → terrain) ou depuis la fiche d'un club, avec anti double-réservation
+  côté serveur, limite anti-accaparement (6 résas à venir), annulation jusqu'à 5 h avant,
+  rappels locaux et ajout au calendrier.
 - **Réservations partagées** : invite jusqu'à 3 amis — ils voient la résa chez eux et
   acceptent/refusent.
 - **Tournois** réels créés par les clubs ou les joueurs (validés par le club hôte) ; le vainqueur
@@ -27,17 +29,21 @@ s'inscrire à des tournois, jouer entre amis et trouver un coach**. Design « lu
 - **Amis** par demande (accepter/refuser), recherche par numéro, sélecteur de contacts.
 - **Avis vérifiés** : seuls ceux qui ont vraiment joué au club (réservataire ou invité) notent.
 - **Parrainage** : lien `padelconnectci.com/invite/CODE` qui ouvre l'app, code pré-rempli.
-- **Profil** : niveau (1–7, choisi à l'inscription puis fait vivre par les tournois), trophées
-  évolutifs (Bronze → Platine), palmarès.
-- **Coachs** partenaires (contact direct), règles du padel (Découvrir), favoris, notifications push.
+- **Profil** : niveau (1–7, initialisé par un quiz à l'inscription puis ajusté côté serveur par
+  les matchs validés et les tournois officiels), trophées évolutifs (Bronze → Platine), palmarès.
+- **Coachs & cours** réservables (coachs promus par leur club : le terrain n'est réservé que si
+  le coach accepte, puis le club confirme), règles du padel (Découvrir), favoris, notifications push.
 
 **Gérant de club (Espace Club)**
+
 - Planning terrains × créneaux, confirmation des réservations, blocage des créneaux pris hors
   app, marquage des absences (no-show), fiabilité des joueurs.
-- Fiche du club éditable : infos, tarifs (plages horaires nommées), photos réelles, offres/actus,
-  coachs ; stats (revenu, taux d'occupation, créneaux creux) ; validation des tournois joueurs.
+- Grille de créneaux par terrain (1h / 1h30). Fiche du club éditable : infos, tarifs (plages
+  horaires nommées, prix 1h et 1h30), photos réelles, offres/actus, coachs (comptes promus) ; stats
+  (revenu, taux d'occupation, créneaux creux) ; validation des tournois joueurs.
 
 **Opérateur**
+
 - Décomptes de commission hebdomadaires par club (envoi WhatsApp, marquer payé), demandes
   d'inscription de nouveaux clubs, statuts (actif / bientôt / masqué), boosts sponsorisés,
   signalements des joueurs, actu de l'accueil, frais des tournois joueurs, diagnostics anonymes.
@@ -46,7 +52,7 @@ s'inscrire à des tournois, jouer entre amis et trouver un coach**. Design « lu
 
 ```bash
 npm install
-npx expo start        # QR code avec Expo Go, ou 'w' pour un aperçu web
+npx expo start        # 'w' pour l'aperçu web ; sur téléphone : build TestFlight / APK (CHECKLIST-STORES §7)
 ```
 
 Vérifications (obligatoires avant tout commit — voir CLAUDE.md §6) :

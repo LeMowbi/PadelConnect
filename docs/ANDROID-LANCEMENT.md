@@ -49,6 +49,13 @@ Signing ») : il faudra AJOUTER l'empreinte de Google au fichier (Play Console �
 Signature d'application → copier l'empreinte SHA-256 → la donner à l'assistant, qui l'ajoutera
 au tableau à côté de celle d'EAS — les deux coexistent).
 
+Chemins déclarés côté app (`app.json` → `android.intentFilters`) : `/invite`, `/club` et, depuis
+octobre 2026, `/auth-callback` (lien de confirmation d'e-mail, comme sur iPhone). Ce dernier ne
+prend effet qu'au **prochain build Android** (l'APK de test actuel ouvre encore la page web
+« Adresse confirmée », le joueur se connecte alors à la main). À tester sur un vrai téléphone au
+lancement Play : le lien de l'e-mail passe d'abord par Supabase (`/verify`) puis redirige vers
+`padelconnectci.com/auth-callback` — si Chrome garde la main, la page web reste un repli honnête.
+
 ## 5) Fiche Play Store — textes prêts à coller
 
 - **Nom** : PadelConnect CI

@@ -1,11 +1,11 @@
 # Checklist — Publier PadelConnect sur l'App Store (iPhone) et Google Play (Android)
 
-> ✅ **État au 2026-07-17 :** `app.json` fait foi = **version 1.0.2, buildNumber 66+** (EAS
-> `autoIncrement`). L'app est **EN LIGNE (v1.0/1.0.1)** sur les stores CI/SN/US. Tout le SQL
-> `02`→`78` est **appliqué en base**, `notify-club` v30+, et **`WEBHOOK_SECRET` EST POSÉ** (secret
-> Edge Functions + en-tête `x-webhook-secret` sur les 8 webhooks, fait le 2026-07-06) — les cases
-> « WEBHOOK_SECRET à faire » plus bas sont **périmées**. Les numéros « version 1.0.0 / build 55 »
-> plus bas sont aussi **périmés** — se fier à `app.json`.
+> ✅ **État au 2026-10-21 :** `app.json` fait foi = **version 1.0.2**, `buildNumber` incrémenté par
+> EAS à chaque build (`autoIncrement`). L'app est **EN LIGNE** sur les stores CI/SN/US. Le SQL
+> `02`→`90` est **appliqué en base** (migrations plus récentes : voir `CLAUDE.md` §8), les
+> **11 webhooks** sont créés et **`WEBHOOK_SECRET` EST POSÉ** (secret Edge Functions + en-tête
+> `x-webhook-secret` sur chaque webhook, depuis le 2026-07-06) — les cases « WEBHOOK_SECRET à faire »
+> plus bas sont **périmées**. Builds en cours et version déployée de `notify-club` : **`CLAUDE.md` §7**.
 
 > Document pratique pour le porteur. Le projet est **déjà lié à Expo** (compte `padelconnect-ci`,
 > projet `padelconnect`) et **`eas.json` est prêt** (profils `development` / `preview` / `production`).
@@ -45,7 +45,7 @@
 
 - [ ] iOS `bundleIdentifier` = `ci.padelco.app` (IMMUABLE après publication — confirmer avant le 1er envoi).
 - [ ] Android `package` = `ci.padelco.app`.
-- [ ] `version` = 1.0.0 ; `ios.buildNumber` s'auto-incrémente à chaque build (profil `production` d'eas.json — actuellement 55) ; `android.versionCode` = 1 au premier envoi Android.
+- [ ] `version` = 1.0.2 ; `ios.buildNumber` s'auto-incrémente à chaque build (profil `production` d'eas.json — valeur courante : voir `app.json`) ; `android.versionCode` = 1 au premier envoi Android.
 
 ## 5. Fabriquer et envoyer (commandes EAS, depuis un ordinateur)
 
@@ -119,10 +119,13 @@ créé côté serveur (e-mail déjà validé) — **ses identifiants te sont com
 
 - [ ] Récupérer l'**empreinte SHA-256** de la clé de signature de l'app dans **Play Console → Test
       et publication → Intégrité de l'application → Signature de l'app** (clé de signature d'app).
-- [ ] La coller dans **`site/assetlinks.json`** (remplacer `REMPLACER_PAR_EMPREINTE_SHA256_…`).
-- [ ] **Redéployer le dossier `site/`** sur Cloudflare Pages (il contient maintenant `get.html`,
-      `assetlinks.json` et un `_redirects` mis à jour — un ami **Android** est enfin envoyé vers
-      **Google Play**, plus vers l'App Store iPhone). ⚠️ Redéployer `site/` **en entier**.
+- [ ] L'**AJOUTER** au tableau `sha256_cert_fingerprints` de **`site/assetlinks.json`**, À CÔTÉ de
+      l'empreinte EAS déjà présente (ne pas l'écraser : les APK signés EAS perdraient leurs App Links
+      — voir `docs/ANDROID-LANCEMENT.md` §4).
+- [ ] Au lancement Play, remettre dans **`site/get.html`** le bouton `<a class="btn android" id="android">`
+      et la branche `isAndroid` du script (voir le commentaire de la page) : aujourd'hui la page
+      n'envoie volontairement que vers l'App Store, tant que la fiche Play n'existe pas.
+- [ ] **Redéployer le dossier `site/`** sur Cloudflare Pages. ⚠️ Redéployer `site/` **en entier**.
 
 ### c-bis. Clé de notifications Apple (APNs)
 

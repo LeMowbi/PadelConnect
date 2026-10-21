@@ -2,10 +2,22 @@
   "applinks": {
     "details": [
       {
-        "appIDs": ["R77YWZ9487.ci.padelco.app"],
+        "appIDs": [
+          "R77YWZ9487.ci.padelco.app"
+        ],
         "components": [
-          { "/": "/invite/*", "comment": "Liens de parrainage" },
-          { "/": "/club/*", "comment": "Fiche club partagée" }
+          {
+            "/": "/invite/*",
+            "comment": "Liens de parrainage"
+          },
+          {
+            "/": "/club/*",
+            "comment": "Fiche club partagée"
+          },
+          {
+            "/": "/auth-callback",
+            "comment": "Lien de confirmation e-mail — ouvre l'app directement sur iPhone"
+          }
         ]
       }
     ]

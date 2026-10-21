@@ -14,8 +14,9 @@ export default function Legal() {
         <Txt variant="body" style={{ marginTop: spacing.sm }}>
           PadelConnect met en relation des joueurs et des clubs de padel à Abidjan : réservation de créneaux, matchs ouverts, recherche de
           partenaires, cours avec des coachs, classement et compétitions. Aucun paiement n’est effectué dans l’application — le règlement de
-          la session se fait directement au club (et celui d’un cours, directement au coach). Les tarifs et disponibilités affichés sont
-          indicatifs et relèvent de la responsabilité de chaque club.
+          la session se fait directement au club (et celui d’un cours, directement au coach). Pour un match partagé, le partage de la note
+          passe par un lien Wave (application tierce) : PadelConnect n’encaisse ni ne traite aucun paiement. Les tarifs et disponibilités
+          affichés sont indicatifs et relèvent de la responsabilité de chaque club.
         </Txt>
         <Txt variant="body" style={{ marginTop: spacing.sm }}>
           L’utilisation de PadelConnect est réservée aux personnes de <Txt style={{ fontWeight: '700' }}>13 ans ou plus</Txt> ; les mineurs
@@ -42,6 +43,10 @@ export default function Legal() {
           dans l’application (contacte le club). Une annulation libère le créneau et reste visible du club concerné, avec ton nom.
         </Txt>
         <Txt variant="body" style={{ marginTop: spacing.sm }}>
+          Un club peut exceptionnellement annuler ton créneau s’il a déjà été pris hors application (téléphone, sur place) : tu es prévenu
+          avec le motif et, si possible, une proposition de report — sans aucun impact sur ta fiabilité.
+        </Txt>
+        <Txt variant="body" style={{ marginTop: spacing.sm }}>
           Après un match, chaque joueur peut saisir le score : le match est validé quand un adversaire confirme (ou, pour une saisie restée
           seule, après 48 h), et alimente le classement par points. Le niveau est initialisé par le quiz d’inscription puis ajusté
           automatiquement côté serveur par les matchs validés et les tournois officiels. Le parrainage permet d’inviter des amis, sans
@@ -53,11 +58,9 @@ export default function Legal() {
         <Txt variant="h3">Tournois & frais d’organisation</Txt>
         <Txt variant="body" style={{ marginTop: spacing.sm }}>
           Un joueur peut proposer un tournoi ; il n’est publié qu’après validation du club hôte, qui peut refuser en indiquant un motif. Des{' '}
-          <Txt style={{ fontWeight: '700' }}>frais d’organisation PadelConnect</Txt> (montant affiché AVANT la création) s’appliquent aux
-          tournois créés par les joueurs : ils ne sont dus que si le club valide le tournoi et se règlent à PadelConnect par Wave — rien
-          n’est dû si le tournoi est refusé. Les éventuels frais d’inscription des participants sont fixés et encaissés par l’organisateur,
-          sous sa responsabilité. Les clubs versent à PadelConnect une commission sur les réservations effectuées via l’application, réglée
-          hors app.
+          <Txt style={{ fontWeight: '700' }}>frais d’organisation PadelConnect</Txt> (montant affiché AVANT la création) peuvent s’appliquer
+          aux tournois créés par les joueurs : ils ne sont dus que si le club valide le tournoi — rien n’est dû si le tournoi est refusé.
+          Les éventuels frais d’inscription des participants sont fixés et encaissés par l’organisateur, sous sa responsabilité.
         </Txt>
       </Card>
 
@@ -81,9 +84,10 @@ export default function Legal() {
           (un jeton technique d’appareil, sans donnée personnelle). Tes <Txt style={{ fontWeight: '700' }}>coordonnées</Txt> (e-mail,
           téléphone) ne sont jamais montrées aux autres joueurs. En revanche, certaines informations sont{' '}
           <Txt style={{ fontWeight: '700' }}>visibles par la communauté</Txt> : ton nom sur les avis que tu publies, ton prénom (et
-          l’initiale de ton nom) au classement avec tes points, ton prénom sur les matchs ouverts que tu crées ou rejoins, et ta fiche coach
-          si un club t’a promu. Un club ne voit que les réservations le concernant, et l’opérateur de PadelConnect le strict nécessaire au
-          suivi du service.
+          l’initiale de ton nom) au classement avec tes points, ton prénom sur les matchs ouverts que tu crées ou rejoins, ton niveau, ton
+          club favori, ta fiche coach si un club t’a promu et, à partir de 5 parties jouées, ton taux de présence (badge « Fiable · N % »,
+          jamais le détail de tes absences). Un club ne voit que les réservations le concernant, et l’opérateur de PadelConnect le strict
+          nécessaire au suivi du service.
         </Txt>
         <Txt variant="body" style={{ marginTop: spacing.sm }}>
           Avec ton accord uniquement : ta <Txt style={{ fontWeight: '700' }}>photo</Txt> de profil ou de club est stockée pour l’affichage ;
@@ -110,7 +114,7 @@ export default function Legal() {
       </Card>
 
       <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.lg, textAlign: 'center' }}>
-        Dernière mise à jour : août 2026. Pour toute question sur tes données, écris-nous à l’adresse ci-dessus.
+        Dernière mise à jour : octobre 2026. Pour toute question sur tes données, écris-nous à l’adresse ci-dessus.
       </Txt>
     </Screen>
   );

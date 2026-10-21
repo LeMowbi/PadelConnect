@@ -2,7 +2,8 @@ import { ScrollViewStyleReset } from 'expo-router/html';
 import { type PropsWithChildren } from 'react';
 import { colors } from '@/theme';
 
-// Document HTML racine de la version web (démo). Définit le titre, la description et le viewport.
+// Document HTML racine de la version web (export Expo déployé sur club.padelconnectci.com). Définit le
+// titre, la description et le viewport.
 export default function Root({ children }: PropsWithChildren) {
   return (
     <html lang="fr">

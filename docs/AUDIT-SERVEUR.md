@@ -1,8 +1,14 @@
 # Audit — actions serveur (sans terminal)
 
-> ✅ **À JOUR au 2026-08-17 — plus rien à coller ici.** TOUT le SQL `02`→`89` est **appliqué en
-> base** (Management API), `notify-club` est déployée (v45) et les 11 Database Webhooks sont en
-> place. Les sections datées ci-dessous (« ⏳ À FAIRE ») sont un HISTORIQUE conservé pour la
+> ✅ **À JOUR au 2026-10-21.** Le SQL `02`→`90` est **appliqué en base** (Management API ; la `90`
+> depuis le 2026-08-21 — état des migrations plus récentes : `CLAUDE.md` §8), `notify-club` est
+> déployée (version en ligne : `CLAUDE.md` §7 ; le dépôt porte la **v48** — à redéployer par le
+> coordinateur) et les 11 Database Webhooks sont en place, protégés par un secret partagé
+> (`x-webhook-secret`, comparé à temps constant — §3).
+> **`91`** (pré-lancement 2026-10) : ÉCRITE + prouvée en local 29/29 (contre-épreuve 6/6 sur
+> les anciennes définitions), **À APPLIQUER en prod** (coordinateur) — ne pas la noter « appliquée »
+> avant la preuve en base.
+> Les sections datées ci-dessous (« ⏳ À FAIRE ») sont un HISTORIQUE conservé pour la
 > trace — elles ne sont plus des actions en attente. Reste au porteur (hors SQL) : lien Wave,
 > FCM Android + empreinte SHA-256 d'assetlinks.
 >

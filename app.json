@@ -13,9 +13,11 @@
       "supportsTablet": true,
       "bundleIdentifier": "ci.padelco.app",
       "buildNumber": "68",
-      "associatedDomains": [
-        "applinks:padelconnectci.com"
-      ],
+      "associatedDomains": ["applinks:padelconnectci.com"],
+      "infoPlist": {
+        "CFBundleDevelopmentRegion": "fr",
+        "CFBundleLocalizations": ["fr"]
+      },
       "config": {
         "usesNonExemptEncryption": false
       }
@@ -43,18 +45,27 @@
               "scheme": "https",
               "host": "padelconnectci.com",
               "pathPrefix": "/club"
+            },
+            {
+              "scheme": "https",
+              "host": "padelconnectci.com",
+              "path": "/auth-callback"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ]
     },
     "web": {
       "output": "single",
       "favicon": "./assets/images/favicon.png"
+    },
+    "locales": {
+      "fr": {
+        "ios": {
+          "CFBundleDisplayName": "PadelConnect"
+        }
+      }
     },
     "plugins": [
       "expo-router",
@@ -69,7 +80,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "PadelConnect accède à vos photos pour votre photo de profil et, côté gérant, les photos de votre club.",
+          "photosPermission": "PadelConnect accède à tes photos pour ta photo de profil et, côté gérant, les photos de ton club.",
           "cameraPermission": false
         }
       ],
@@ -78,13 +89,14 @@
       [
         "expo-calendar",
         {
-          "calendarPermission": "PadelConnect ajoute tes réservations de padel à ton calendrier, avec ton accord."
+          "calendarPermission": "PadelConnect ajoute tes réservations de padel à ton calendrier, avec ton accord.",
+          "remindersPermission": "PadelConnect n’accède à tes rappels qu’avec ton accord, uniquement pour tes réservations de padel."
         }
       ],
       [
         "expo-contacts",
         {
-          "contactsPermission": "PadelConnect accède à tes contacts, avec ton accord, uniquement pour t'aider à retrouver et inviter tes amis par leur numéro."
+          "contactsPermission": "PadelConnect accède à tes contacts, avec ton accord, uniquement pour t’aider à retrouver et inviter tes amis par leur numéro."
         }
       ],
       "expo-sharing"

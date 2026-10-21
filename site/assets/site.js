@@ -1,7 +1,7 @@
 // ==========================================================================
 // PadelConnect — script commun du site vitrine (vanilla JS, aucune dépendance
 // de build). Gère : bascule de langue FR/EN, menu mobile, animation « reveal »
-// au défilement, et le rendu de la grille des 9 clubs fondateurs.
+// au défilement, et le rendu de la grille des clubs (fondateurs + clubs de la base).
 // ==========================================================================
 
 (function () {
@@ -233,6 +233,12 @@
       type: 'couvert',
       courts: 5,
       priceFrom: 10000,
+      // Mêmes plages que le seed de l'app (src/data/clubs.ts) : elles entrent dans le prix « dès ».
+      priceTiers: [
+        { start: '07:00', end: '16:00', price: 10000 },
+        { start: '16:00', end: '20:30', price: 30000 },
+        { start: '20:30', end: '24:00', price: 15000 },
+      ],
       mapsQuery: 'Padelta Cocody Danga Abidjan',
       icon: '🏟️',
       blurb: {
@@ -262,9 +268,10 @@
     c.partner = true;
   });
 
-  // Liste RÉELLEMENT affichée : d'abord les fondateurs (statiques), puis complétée
-  // EN DIRECT depuis la base par loadServerClubs(). Un échec réseau garde les fondateurs.
-  var liveClubs = CLUBS.slice();
+  // Liste RÉELLEMENT affichée, construite EN DIRECT depuis la base par loadServerClubs().
+  // null tant qu'elle n'est pas connue : rien n'est rendu (sinon les fondateurs retirés par
+  // l'opérateur s'afficheraient un instant). Un échec réseau total retombe sur les fondateurs.
+  var liveClubs = null;
   var currentLang = getLang();
 
   // Même comparateur que compareClubs (data/clubs.ts) : le club mis en avant
@@ -312,6 +319,7 @@
     if (!conteneur) return;
     var l = lang === 'en' ? 'en' : 'fr';
     currentLang = l;
+    if (!liveClubs) return; // liste pas encore chargée (bascule de langue comprise)
     var texteTerrains = l === 'fr' ? 'terrains' : 'courts';
     var texteTerrain = l === 'fr' ? 'terrain' : 'court';
     var texteDes = l === 'fr' ? 'dès' : 'from';
@@ -385,11 +393,12 @@
   }
 
   // ------------------------------------------------------------------------
-  // 5) Clubs EN DIRECT depuis la base (Supabase). Le site affiche les 9 fondateurs
-  //    + tout club ajouté/validé dans l'app, et applique les modifications faites
-  //    dans l'Espace opérateur (renommage, quartier, tarif). Lecture publique
-  //    (RLS), clé « publishable » PUBLIQUE par conception. Un échec réseau garde
-  //    simplement les 9 fondateurs — la page ne casse jamais.
+  // 5) Clubs EN DIRECT depuis la base (Supabase). Le site affiche les fondateurs non
+  //    retirés par l'opérateur + tout club ajouté/validé dans l'app (« Bientôt »
+  //    compris), et applique les modifications faites dans l'app (renommage,
+  //    quartier, tarifs). Lecture publique (RLS), clé « publishable » PUBLIQUE par
+  //    conception. Un échec réseau total retombe sur les 9 fondateurs — la page ne
+  //    casse jamais.
   // ------------------------------------------------------------------------
 
   var SUPA_URL = 'https://bqeoqcqvqrqcrvkccxij.supabase.co';
@@ -407,107 +416,199 @@
       });
   }
 
+  // Prix « dès » : MIROIR de l'app (pricing.minPrice + courtSchedule.resolveCourtSlots /
+  // offeredDurations). Le site n'a pas de bundler, d'où cette copie : toute évolution de ces
+  // règles côté app doit être reportée ici, sinon le site et l'app annoncent des prix différents.
+  var PRICE_MIN = 1000;
+
+  // « HH:MM » → minutes depuis minuit, ou null si invalide (toMin de courtSchedule).
+  function enMinutes(t) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec((t == null ? '' : String(t)).trim());
+    if (!m) return null;
+    var h = Number(m[1]);
+    var min = Number(m[2]);
+    if (h > 24 || min > 59 || (h === 24 && min !== 0)) return null;
+    return h * 60 + min;
+  }
+
+  // Prix 1h dérivé (⅔, borné au plancher) — price60Of / flat60.
+  function prix60Derive(prix) {
+    return Math.max(PRICE_MIN, Math.round((prix * 2) / 3));
+  }
+
+  // Durées (60|90) RÉELLEMENT ouvertes sur les terrains du club. Sans grille par terrain
+  // (court_slots absent ou {}), l'app dérive tout à 1h30 ; un terrain absent de la grille
+  // aussi. Rien d'ouvert → {90}, comme minPrice.
+  function dureesProposees(cf, terrains) {
+    var cs = cf && cf.court_slots && typeof cf.court_slots === 'object' && Object.keys(cf.court_slots).length ? cf.court_slots : null;
+    var out = {};
+    if (!cs) return { 90: true };
+    terrains.forEach(function (terrain) {
+      if (!Array.isArray(cs[terrain])) {
+        out[90] = true;
+        return;
+      }
+      var vues = {};
+      cs[terrain].forEach(function (s) {
+        var cle = s ? enMinutes(s.t) : null;
+        if (cle === null || vues[cle]) return; // heure invalide, ou doublon : le premier gagne (normalize)
+        vues[cle] = true;
+        if (!s.x) out[s.d === 60 ? 60 : 90] = true;
+      });
+    });
+    return out[60] || out[90] ? out : { 90: true };
+  }
+
+  // minPrice : minimum sur (plages valides × durées proposées), sinon tarif unique (1h30) et son
+  // prix 1h dérivé si le club propose du 1h.
+  function prixDes(prixUnique, plages, durees) {
+    var ds = [];
+    if (durees[60]) ds.push(60);
+    if (durees[90]) ds.push(90);
+    var valides = (plages || []).filter(function (t) {
+      return t && t.price > 0 && t.start && t.end;
+    });
+    var cands = [];
+    if (valides.length) {
+      valides.forEach(function (t) {
+        ds.forEach(function (d) {
+          cands.push(d === 60 ? (t.price60 && t.price60 > 0 ? t.price60 : prix60Derive(t.price)) : t.price);
+        });
+      });
+    } else {
+      ds.forEach(function (d) {
+        cands.push(d === 60 ? prix60Derive(prixUnique) : prixUnique);
+      });
+    }
+    return Math.min.apply(null, cands);
+  }
+
   function loadServerClubs() {
     // Seule la page d'accueil a la grille de clubs. Sur cgu.html (qui charge aussi site.js), on
-    // sort tôt pour ne pas lancer 3 requêtes Supabase inutiles qui ne rendraient rien.
+    // sort tôt pour ne pas lancer les requêtes Supabase inutiles qui ne rendraient rien.
     if (!document.getElementById('grille-clubs')) return;
     Promise.all([
-      // Clubs AJOUTÉS via l'app (actifs). Les 9 fondateurs, eux, sont embarqués ci-dessus.
-      supaGet('clubs?select=id,name,area,type,courts,price_from&status=eq.active'),
-      // Surcharges de fiche (renommage, quartier, tarif, DESCRIPTION, Maps) — fondateurs ET nouveaux.
-      supaGet('club_overrides?select=club_id,name,area,type,price_from,blurb,maps_query'),
+      // Clubs AJOUTÉS via l'app (actifs + « Bientôt », comme l'app). Les 9 fondateurs, eux, sont
+      // embarqués ci-dessus.
+      supaGet('clubs?select=id,name,area,type,courts,price_from,status&status=in.(active,coming_soon)'),
+      // Surcharges de fiche (renommage, quartier, tarif, plages, DESCRIPTION, Maps) — fondateurs ET nouveaux.
+      supaGet('club_overrides?select=club_id,name,area,type,price_from,price_tiers,blurb,maps_query'),
       // Statut piloté par l'opérateur (masqué / bientôt / actif) — vaut aussi pour les fondateurs.
       supaGet('club_status?select=club_id,status'),
       // Config du gérant : `courts` = tableau des terrains → le NOMBRE réel de terrains (édité
-      // dans l'app) vit ici, pas dans le chiffre figé. Sans ce fetch, le site montrait l'ancien nb.
-      supaGet('club_config?select=club_id,courts'),
-    ]).then(function (res) {
-      var serverClubs = res[0];
-      var overrides = res[1];
-      var statuses = res[2];
-      var configs = res[3];
-      if (!serverClubs && !overrides && !statuses && !configs) return; // échec total → on garde les fondateurs
-      var ovById = {};
-      (overrides || []).forEach(function (o) {
-        ovById[o.club_id] = o;
-      });
-      var statusById = {};
-      (statuses || []).forEach(function (s) {
-        statusById[s.club_id] = s.status;
-      });
-      var cfgById = {};
-      (configs || []).forEach(function (cf) {
-        cfgById[cf.club_id] = cf;
-      });
-      // Nb de terrains RÉEL : longueur du tableau club_config.courts (édité par le gérant), sinon
-      // la valeur fondateur embarquée. Description : texte gérant (une langue) s'il existe, sinon
-      // le blurb bilingue seed.
-      function liveCourts(id, seed) {
-        var cf = cfgById[id];
-        return cf && Array.isArray(cf.courts) && cf.courts.length ? cf.courts.length : seed;
-      }
-      function liveBlurb(o, seed) {
-        return o && o.blurb && String(o.blurb).trim() ? { fr: o.blurb, en: o.blurb } : seed;
-      }
+      // dans l'app) vit ici, pas dans le chiffre figé. `court_slots` = durées proposées (prix « dès »).
+      supaGet('club_config?select=club_id,courts,court_slots'),
+    ])
+      .then(function (res) {
+        var serverClubs = res[0];
+        var overrides = res[1];
+        var statuses = res[2];
+        var configs = res[3];
+        if (!serverClubs && !overrides && !statuses && !configs) {
+          // Échec total → repli sur les fondateurs embarqués : la page ne reste jamais vide.
+          liveClubs = CLUBS.slice();
+          renderClubs(currentLang);
+          return;
+        }
+        var ovById = {};
+        (overrides || []).forEach(function (o) {
+          ovById[o.club_id] = o;
+        });
+        var statusById = {};
+        (statuses || []).forEach(function (s) {
+          statusById[s.club_id] = s.status;
+        });
+        var cfgById = {};
+        (configs || []).forEach(function (cf) {
+          cfgById[cf.club_id] = cf;
+        });
+        // Nb de terrains RÉEL : longueur du tableau club_config.courts (édité par le gérant), sinon
+        // la valeur fondateur embarquée. Description : texte gérant (une langue) s'il existe, sinon
+        // le blurb bilingue seed.
+        function liveCourts(id, seed) {
+          var cf = cfgById[id];
+          return cf && Array.isArray(cf.courts) && cf.courts.length ? cf.courts.length : seed;
+        }
+        function liveBlurb(o, seed) {
+          return o && o.blurb && String(o.blurb).trim() ? { fr: o.blurb, en: o.blurb } : seed;
+        }
+        // Prix « dès » comme l'app : terrains du gérant (sinon « Terrain 1…N »), plages de la
+        // surcharge (null = garde celles du seed, [] = aucune plage), tarif unique fusionné.
+        function livePrice(id, prixUnique, plagesSeed, nbSeed, o) {
+          var cf = cfgById[id];
+          var terrains = [];
+          if (cf && Array.isArray(cf.courts)) terrains = cf.courts;
+          else for (var i = 1; i <= Math.max(1, nbSeed); i++) terrains.push('Terrain ' + i);
+          var plages = o && Array.isArray(o.price_tiers) ? o.price_tiers : plagesSeed;
+          return prixDes(prixUnique, plages, dureesProposees(cf, terrains));
+        }
 
-      // 1) Fondateurs : on RETIRE ceux masqués par l'opérateur (statut 'hidden'), on marque
-      //    « Bientôt » ceux en 'coming_soon', et on applique les modifications de fiche.
-      var founders = CLUBS.filter(function (c) {
-        return statusById[c.id] !== 'hidden';
-      }).map(function (c) {
-        var o = ovById[c.id];
-        return {
-          id: c.id,
-          name: (o && o.name) || c.name,
-          area: (o && o.area) || c.area,
-          type: o && o.type ? normType(o.type) : c.type,
-          courts: liveCourts(c.id, c.courts),
-          priceFrom: (o && o.price_from) || c.priceFrom,
-          mapsQuery: (o && o.maps_query) || c.mapsQuery,
-          icon: c.icon,
-          blurb: liveBlurb(o, c.blurb),
-          partner: true,
-          comingSoon: statusById[c.id] === 'coming_soon',
-        };
-      });
-
-      // 2) Nouveaux clubs (rejoints via l'app), surcharges appliquées, sans badge Partenaire.
-      //    Déjà filtrés « actifs » par la requête ; on retire aussi tout 'hidden' par sécurité,
-      //    ET tout id déjà présent chez les fondateurs (garde anti-doublon défensive : si un
-      //    fondateur se retrouvait un jour dans la table `clubs`, sa carte n'apparaîtrait pas deux fois).
-      var founderIds = {};
-      founders.forEach(function (c) {
-        founderIds[c.id] = true;
-      });
-      var extra = (serverClubs || [])
-        .filter(function (r) {
-          return statusById[r.id] !== 'hidden' && !founderIds[r.id];
-        })
-        .map(function (r) {
-          var o = ovById[r.id] || {};
-          var name = o.name || r.name || 'Club';
-          var area = o.area || r.area || 'Abidjan';
+        // 1) Fondateurs : on RETIRE ceux masqués par l'opérateur (statut 'hidden'), on marque
+        //    « Bientôt » ceux en 'coming_soon', et on applique les modifications de fiche.
+        var founders = CLUBS.filter(function (c) {
+          return statusById[c.id] !== 'hidden';
+        }).map(function (c) {
+          var o = ovById[c.id];
           return {
-            id: r.id,
-            name: name,
-            area: area,
-            type: normType(o.type || r.type),
-            courts: liveCourts(r.id, r.courts || 1),
-            priceFrom: o.price_from || r.price_from || 10000,
-            mapsQuery: o.maps_query || name + ' ' + area + ' Abidjan',
-            icon: '🎾',
-            blurb: liveBlurb(o, {
-              fr: 'Club de padel à ' + area + ', réservable sur PadelConnect.',
-              en: 'Padel club in ' + area + ', bookable on PadelConnect.',
-            }),
-            partner: false,
-            comingSoon: statusById[r.id] === 'coming_soon',
+            id: c.id,
+            name: (o && o.name) || c.name,
+            area: (o && o.area) || c.area,
+            type: o && o.type ? normType(o.type) : c.type,
+            courts: liveCourts(c.id, c.courts),
+            priceFrom: livePrice(c.id, (o && o.price_from) || c.priceFrom, c.priceTiers, c.courts, o),
+            mapsQuery: (o && o.maps_query) || c.mapsQuery,
+            icon: c.icon,
+            blurb: liveBlurb(o, c.blurb),
+            partner: true,
+            comingSoon: statusById[c.id] === 'coming_soon',
           };
         });
 
-      liveClubs = founders.concat(extra);
-      renderClubs(currentLang);
-    });
+        // 2) Nouveaux clubs (rejoints via l'app), surcharges appliquées, sans badge Partenaire.
+        //    Déjà filtrés « actifs / Bientôt » par la requête ; on retire aussi tout 'hidden' par sécurité,
+        //    ET tout id déjà présent chez les fondateurs (garde anti-doublon défensive : si un
+        //    fondateur se retrouvait un jour dans la table `clubs`, sa carte n'apparaîtrait pas deux fois).
+        var founderIds = {};
+        founders.forEach(function (c) {
+          founderIds[c.id] = true;
+        });
+        var extra = (serverClubs || [])
+          .filter(function (r) {
+            return statusById[r.id] !== 'hidden' && !founderIds[r.id];
+          })
+          .map(function (r) {
+            var o = ovById[r.id] || {};
+            var name = o.name || r.name || 'Club';
+            var area = o.area || r.area || 'Abidjan';
+            return {
+              id: r.id,
+              name: name,
+              area: area,
+              type: normType(o.type || r.type),
+              courts: liveCourts(r.id, r.courts || 1),
+              priceFrom: livePrice(r.id, o.price_from || r.price_from || 10000, null, r.courts || 1, o),
+              mapsQuery: o.maps_query || name + ' ' + area + ' Abidjan',
+              icon: '🎾',
+              blurb: liveBlurb(o, {
+                fr: 'Club de padel à ' + area + ', réservable sur PadelConnect.',
+                en: 'Padel club in ' + area + ', bookable on PadelConnect.',
+              }),
+              partner: false,
+              // Priorité du statut opérateur (club_status) sur clubs.status, comme applyInfo dans l'app.
+              comingSoon: statusById[r.id] === 'coming_soon' || (r.status === 'coming_soon' && statusById[r.id] !== 'active'),
+            };
+          });
+
+        liveClubs = founders.concat(extra);
+        renderClubs(currentLang);
+      })
+      .catch(function () {
+        // Donnée inattendue pendant la fusion : on ne laisse pas la grille vide.
+        if (!liveClubs) {
+          liveClubs = CLUBS.slice();
+          renderClubs(currentLang);
+        }
+      });
   }
 
   // ------------------------------------------------------------------------

@@ -61,9 +61,12 @@ sans identifiant utilisateur :
 
 Les textes demandés à l'utilisateur sont déjà rédigés (Réglages → app) :
 
-- **Photos** : « …pour votre photo de profil et les photos de votre club ».
-- **Contacts** : « …uniquement pour t'aider à retrouver et inviter tes amis par leur numéro ».
-- **Calendrier** : « …ajoute tes réservations à ton calendrier, avec ton accord ».
+- **Photos** : « …accède à tes photos pour ta photo de profil et, côté gérant, les photos de ton club ».
+- **Contacts** : « …uniquement pour t’aider à retrouver et inviter tes amis par leur numéro ».
+- **Calendrier** : « …ajoute tes réservations de padel à ton calendrier, avec ton accord » (et un texte
+  « Rappels » en français, exigé par le module calendrier même si l'app ne lit jamais tes rappels).
+- **Langue** : l'app se déclare en **français** (`CFBundleDevelopmentRegion` + `fr.lproj`) : les
+  fenêtres système (calendrier, copier/coller) s'affichent en français. Effet au prochain build.
 - **Notifications** : demandées au bon moment.
 
 ## 4. Suppression de compte (obligatoire Apple ✅)
