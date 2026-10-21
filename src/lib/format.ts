@@ -29,10 +29,11 @@ export function pctLabel(rate: number): string {
   return Number.isInteger(p) ? `${p}` : p.toFixed(1).replace('.', ',');
 }
 
-// Niveau CHIFFRÉ en toutes lettres, sans zéro inutile : 3 → « 3 », 3.5 → « 3,5 » (virgule
-// française, comme pctLabel). Sert partout où un niveau est montré au demi-point : quiz
-// d'inscription, fourchettes des matchs ouverts (81).
-export function levelText(n: number): string {
+// Niveau CHIFFRÉ à la virgule française (comme pctLabel). Sans `decimals` : sans zéro inutile,
+// 3 → « 3 », 3.5 → « 3,5 » (quiz d'inscription, fourchettes des matchs ouverts — 81). Avec
+// `decimals` : précision FIXE de l'écran appelant, 3.5 → « 3,50 » (profil, statistiques…).
+export function levelText(n: number, decimals?: number): string {
+  if (decimals !== undefined) return n.toFixed(decimals).replace('.', ',');
   return Number.isInteger(n) ? `${n}` : n.toFixed(1).replace('.', ',');
 }
 
@@ -42,6 +43,12 @@ export function levelLabel(n: number): string {
   if (n < 4) return 'Intermédiaire';
   if (n < 5.5) return 'Avancé';
   return 'Confirmé';
+}
+
+// Prénom seul d'un nom complet (« Awa Koné » → « Awa ») : coupe sur TOUT blanc (tabulation,
+// espace insécable d'un contact collé), le nom entier si rien à couper.
+export function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] || name;
 }
 
 export function initials(name: string): string {

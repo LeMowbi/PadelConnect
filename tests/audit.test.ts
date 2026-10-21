@@ -113,7 +113,8 @@ check(teamCount(8, 9, true) === 8, 'Compteur d’équipes plafonné à la capaci
 
 // ——— Modération de tournoi (v4.16) : joueur → en attente → validé par le club ———
 // Réplique inline de isTournamentPublic (src/data/competitions.ts), car ce module
-// importe l'alias @/ que node ne résout pas ; la cohérence est vérifiée par tsc.
+// importe l'alias @/ que node ne résout pas. ⚠️ Copie manuelle (aucun typage ne la relie à
+// l'original) : toute modification de isTournamentPublic DOIT être répercutée ici.
 type Comp = { status?: 'pending' | 'approved'; createdByMe?: boolean; organizerType?: 'club' | 'joueur'; clubId?: string; id?: string };
 const isPublic = (c: Comp) => c.status !== 'pending';
 check(isPublic({}) === true, 'Seed/club (sans statut) → public');

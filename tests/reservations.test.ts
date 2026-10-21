@@ -33,6 +33,8 @@ const base = (over: Partial<Row> = {}): Row => ({
   club_confirmed: false,
   open_match: false,
   open_level: null,
+  open_level_min: null,
+  open_level_max: null,
   open_capacity: null,
   status: 'booked',
   cancel_reason: null,
@@ -104,6 +106,18 @@ const base = (over: Partial<Row> = {}): Row => ({
 {
   const r = rowToReservation(base({ duration_min: null }));
   check(r.durationMin === 90, 'duration_min null → 90 (rétrocompat 1h30)');
+}
+
+// 8) Fourchette de niveau d'un match ouvert (81) : remappée telle quelle, null = borne absente
+// (jamais 0, piège de Number(null)), et le numeric que PostgREST peut renvoyer en CHAÎNE est casté.
+{
+  const r = rowToReservation(base({ open_match: true, open_level_min: 2.5, open_level_max: null }));
+  check(r.openLevelMin === 2.5, 'fourchette → min 2.5 mappé');
+  check(r.openLevelMax === null, 'fourchette → max absent = null');
+  const n = rowToReservation(base({ open_match: true }));
+  check(n.openLevelMin === null && n.openLevelMax === null, 'sans fourchette → null / null (pas 0)');
+  const str = rowToReservation(base({ open_match: true, open_level_min: '3' as unknown as number }));
+  check(str.openLevelMin === 3, 'numeric en chaîne « 3 » → 3');
 }
 
 console.log(failed === 0 ? '\nTOUS LES TESTS reservationsMap PASSENT.' : `\n${failed} test(s) en échec.`);

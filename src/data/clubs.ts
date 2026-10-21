@@ -313,8 +313,8 @@ export function findClub(
   return base ? applyInfo(base, overrides) : undefined;
 }
 
-// Créneaux types proposés (démo) — sessions de 1h30, non chevauchantes.
-// Une vraie version lirait les disponibilités du club.
+// Grille de REPLI (sessions 1h30) d’un club qui n’a encore réglé ni club_config.slots ni
+// court_slots — cf. resolveCourtSlots.
 export const SAMPLE_SLOTS = ['07:30', '09:00', '10:30', '12:00', '16:30', '18:00', '19:30', '21:00'];
 
 // Terrains (courts) par défaut d’un club : « Terrain 1 … N » selon son nombre de courts.

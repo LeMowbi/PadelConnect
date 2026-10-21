@@ -308,6 +308,31 @@ const sh = StyleSheet.create({
   action: { color: colors.signature, fontSize: font.size.sm, fontWeight: font.weight.semibold },
 });
 
+// Récapitulatifs des tunnels (réservation de terrain, demande de cours) : libellé d’étape et
+// ligne « libellé · valeur » — un seul rendu pour que les deux tunnels ne divergent pas.
+export function RecapLabel({ text }: { text: string }) {
+  return (
+    <Txt variant="label" style={{ marginTop: spacing.lg }}>
+      {text}
+    </Txt>
+  );
+}
+
+export function RecapRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={recap.row}>
+      <Txt variant="muted">{label}</Txt>
+      <Txt variant="h3" style={{ fontSize: 15 }}>
+        {value}
+      </Txt>
+    </View>
+  );
+}
+
+const recap = StyleSheet.create({
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+});
+
 export function Divider({ style }: { style?: ViewStyle }) {
   // Séparateur INTERNE (lignes de listes/tarifs) — plus discret que le contour de carte.
   return <View style={[{ height: 1, backgroundColor: colors.hairline }, style]} />;

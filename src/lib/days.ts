@@ -5,7 +5,7 @@
 
 const DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
-// Durées en millisecondes — nommées pour la lisibilité (plus de « 86400000 » en dur).
+// Durées en millisecondes — à importer plutôt que d’écrire « 86400000 » ou « 60000 » en dur.
 export const MINUTE_MS = 60_000;
 export const HOUR_MS = 60 * MINUTE_MS;
 export const DAY_MS = 24 * HOUR_MS;
@@ -47,7 +47,7 @@ export function slotTimestamp(dateKey: string, slot: string): number {
   return Date.UTC(y, m - 1, d, h, min);
 }
 
-const MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+export const MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 const DAYS_SHORT = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 
 // Libellé ABSOLU d’un jour à partir de sa clé AAAA-MM-JJ : « Lun 8 juin ».

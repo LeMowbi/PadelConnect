@@ -110,9 +110,3 @@ export const shadows = {
   e2: { shadowColor: '#1A2A20', shadowOpacity: 0.1, shadowRadius: 24, shadowOffset: { width: 0, height: 10 }, elevation: 5 },
   e3: { shadowColor: '#0C1A16', shadowOpacity: 0.18, shadowRadius: 40, shadowOffset: { width: 0, height: 20 }, elevation: 12 },
 } as const;
-
-// Conservé pour compatibilité (= e1).
-export const shadowCard = shadows.e1;
-
-export const theme = { colors, gradients, spacing, radius, font, shadows, shadowCard };
-export default theme;
