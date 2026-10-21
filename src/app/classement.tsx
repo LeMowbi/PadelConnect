@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { SkeletonLines } from '@/components/Skeleton';
 import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
+import { levelText } from '@/lib/format';
 import { fetchLeaderboard, fetchMyRank, type LeaderboardRow } from '@/lib/leaderboard';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useApp } from '@/store/AppContext';
@@ -110,7 +111,7 @@ export default function ClassementScreen() {
                       {r.wins > 0 ? `🏆 ${r.wins} tournoi${r.wins > 1 ? 's' : ''} gagné${r.wins > 1 ? 's' : ''} · ` : ''}
                       {r.offPlayed > 0 ? `${r.offPlayed} officiel${r.offPlayed > 1 ? 's' : ''} joué${r.offPlayed > 1 ? 's' : ''} · ` : ''}
                       {r.matchWins > 0 ? `${r.matchWins} victoire${r.matchWins > 1 ? 's' : ''} · ` : ''}
-                      {r.played} partie{r.played > 1 ? 's' : ''} · niv. {r.level.toFixed(1)}
+                      {r.played} partie{r.played > 1 ? 's' : ''} · niv. {levelText(r.level, 1)}
                     </Txt>
                   </View>
                   <Tag label={`${r.points} pts`} tone={i < 3 ? 'amber' : 'neutral'} />

@@ -6,7 +6,7 @@ import { Reveal, staggerDelay } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Button, EmptyState, SectionHeader } from '@/components/ui';
-import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
+import { isCompFinished, isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useTodayKey } from '@/lib/useTodayKey';
 import { useApp } from '@/store/AppContext';
@@ -33,8 +33,8 @@ export default function CompetitionsScreen() {
   // et le tunnel de résa : sans lui la liste restait figée sur la veille au réveil de l'app.
   const today = useTodayKey();
   // Un tournoi multi-jours reste « à venir » tant que sa date de FIN n’est pas passée.
-  const upcoming = list.filter((c) => (c.endDateKey ?? c.dateKey) >= today);
-  const past = list.filter((c) => (c.endDateKey ?? c.dateKey) < today);
+  const upcoming = list.filter((c) => !isCompFinished(c, today));
+  const past = list.filter((c) => isCompFinished(c, today));
 
   return (
     <Screen title="Tournois" subtitle="Défis avec récompenses — par les clubs ou les joueurs" refreshControl={refreshControl}>

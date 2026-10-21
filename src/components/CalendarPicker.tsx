@@ -101,7 +101,7 @@ export function CalendarPicker({
             (() => {
               const disabled = key < minKey || key > maxKey;
               const selected = key === value;
-              const today = key === minKey && minKey === dayKey(new Date());
+              const today = key === dayKey(new Date());
               return (
                 <View key={key} style={styles.cell}>
                   <Pressable

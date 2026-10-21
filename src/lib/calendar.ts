@@ -6,6 +6,7 @@
 
 import * as Calendar from 'expo-calendar';
 import { Platform } from 'react-native';
+import { MINUTE_MS } from './days';
 import { SESSION_MIN } from './slots';
 
 const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
@@ -26,7 +27,7 @@ export async function addReservationToCalendar(input: {
     const res = await Calendar.createEventInCalendarAsync({
       title: `Padel · ${input.clubName}`,
       startDate: new Date(input.startsAt),
-      endDate: new Date(input.startsAt + (input.durationMin ?? SESSION_MIN) * 60000),
+      endDate: new Date(input.startsAt + (input.durationMin ?? SESSION_MIN) * MINUTE_MS),
       // Les créneaux sont exprimés à l’heure d’Abidjan (Côte d’Ivoire = UTC+0). On ancre
       // l’événement sur ce fuseau pour qu’il s’affiche à la bonne heure même sur un appareil
       // réglé sur un autre fuseau (voyage / testeur hors Abidjan).

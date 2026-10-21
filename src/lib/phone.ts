@@ -30,3 +30,7 @@ export function samePhone(a: string | undefined, b: string | undefined): boolean
   const db = (b ?? '').replace(/\D/g, '').slice(-10);
   return da.length >= 8 && da === db;
 }
+
+// Indicatif Côte d’Ivoire pré-rempli (modifiable) : la plupart des joueurs sont locaux.
+// Une seule source pour les champs « numéro » (onboarding, amis, carnets club).
+export const DEFAULT_DIAL = '+225 ';

@@ -8,6 +8,7 @@ import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Card, Divider, EmptyState, IconCircle, Tag, Txt } from '@/components/ui';
 import { coachClubName, coaches, type Coach } from '@/data/coaches';
+import { levelText } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
@@ -38,7 +39,7 @@ function CoachRow({ coach }: { coach: Coach }) {
             </Txt>
           </View>
           <View style={{ marginTop: spacing.sm }}>
-            <Tag label={`Niveau ${coach.levelValue.toFixed(1)}`} tone="amber" icon="ribbon" />
+            <Tag label={`Niveau ${levelText(coach.levelValue, 1)}`} tone="amber" icon="ribbon" />
           </View>
         </View>
       </View>
@@ -57,13 +58,9 @@ function CoachRow({ coach }: { coach: Coach }) {
 }
 
 export default function CoachsScreen() {
-  const { state } = useApp();
   const [tab, setTab] = useState<(typeof TABS)[number]>('Tous');
 
-  const list = [...coaches]
-    .filter((c) => !state.hiddenCoachIds.includes(c.id)) // coachs retirés par leur club
-    .sort((a, b) => b.levelValue - a.levelValue)
-    .filter((c) => inRange(c.levelValue, tab));
+  const list = [...coaches].sort((a, b) => b.levelValue - a.levelValue).filter((c) => inRange(c.levelValue, tab));
 
   return (
     <Screen back title="Coachs" subtitle="Classés par niveau — contacte-les directement">

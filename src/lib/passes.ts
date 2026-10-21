@@ -17,16 +17,17 @@ export type ClubPass = {
 export type MyPass = { id: string; clubId: string; label: string; total: number; remaining: number };
 
 // Gérant : crédite un carnet (appariement téléphone 10 derniers chiffres, refus d'ambiguïté —
-// motif grant_club_access_by_phone). Renvoie le NOM du joueur crédité, null = refus/échec
-// (introuvable, ambigu, bornes 1..100, réseau).
-export async function clubGrantPass(clubId: string, phone: string, total: number, label: string): Promise<string | null> {
+// motif grant_club_access_by_phone). Renvoie le NOM du joueur crédité ; 'refused' = introuvable,
+// ambigu ou bornes 1..100 (la RPC renvoie null) ; 'error' = échec réseau (réessayer a du sens).
+export async function clubGrantPass(clubId: string, phone: string, total: number, label: string): Promise<string | 'refused' | 'error'> {
   const { data, error } = await supabase.rpc('club_grant_pass', {
     p_club_id: clubId,
     p_phone: phone,
     p_total: total,
     p_label: label,
   });
-  if (error || !data) return null;
+  if (error) return 'error';
+  if (!data) return 'refused';
   return data as string;
 }
 

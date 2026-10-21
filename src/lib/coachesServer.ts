@@ -4,12 +4,13 @@
 // (respond_lesson crée la réservation, que le club confirme ensuite comme d’habitude).
 // Convention réseau (CLAUDE.md §8) : `null` en cas d’échec (≠ []/{} = succès vide).
 
+import { DAY_MS } from './days';
 import { supabase } from './supabase';
 
 // Fenêtre de rapatriement des cours (miroir de MIRROR_WINDOW_MS des réservations) : on garde
 // assez de passé pour l'historique affiché (« 10 derniers ») sans jamais tirer tout l'historique
 // d'un coach chevronné à chaque montage.
-const LESSON_WINDOW_MS = 180 * 86400000;
+const LESSON_WINDOW_MS = 180 * DAY_MS;
 
 // Coach visible sur une fiche club (compte réel promu par le gérant).
 export type ServerCoach = {

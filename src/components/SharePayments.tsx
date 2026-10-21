@@ -5,9 +5,10 @@ import { useToast } from '@/components/Toast';
 import { Button, Divider, Tag, Txt } from '@/components/ui';
 import { openWhatsApp } from '@/lib/contact';
 import { dateKeyLabel } from '@/lib/days';
-import { perPlayerOf } from '@/lib/format';
+import { firstName, perPlayerOf } from '@/lib/format';
 import { hapticSuccess } from '@/lib/haptics';
 import { confirmSharePaid, declareSharePaid, setReservationWaveLink, type ShareState } from '@/lib/sharePayments';
+import { normalizeWaveLink } from '@/lib/waveLink';
 import type { Reservation } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
@@ -16,33 +17,6 @@ import { colors, radius, spacing } from '@/theme';
 // joueurs. Le créateur colle SON lien Wave, chaque partenaire paie sa part puis déclare
 // « j’ai payé », le créateur confirme la réception. Écritures HONNÊTES : l’affichage ne bouge
 // qu’après la réponse du serveur (relecture `fetch_share_payments` par l’écran appelant, §8).
-
-// Prénom seul : les listes de parts se lisent d’un coup d’œil (et le nom complet déborde).
-function firstName(name: string): string {
-  return name.trim().split(/\s+/)[0] || name;
-}
-
-// Normalise le lien collé par le créateur AVANT l’appel serveur : '' = effacement, `http://`
-// promu en `https://`, schéma forcé en minuscules. ALLOW-LIST de domaine — miroir EXACT de la
-// garde serveur (83 : `^https://(pay\.)?wave\.com/`) : ce lien est présenté à des INCONNUS
-// (match ouvert) derrière « Payer ma part », une URL quelconque serait du phishing tout cuit.
-// Refus ICI avec un message clair — sinon le serveur répondait un simple `false`.
-function normalizeWaveLink(raw: string): { link: string } | { error: string } {
-  const v = raw.trim();
-  if (v === '') return { link: '' }; // effacement volontaire (le serveur accepte '')
-  const m = /^(https?):\/\/(.+)$/i.exec(v);
-  if (!m) return { error: 'Colle un lien Wave complet (ex. https://pay.wave.com/…).' };
-  // Schéma ET host forcés en minuscules : la garde serveur `^https://(pay\.)?wave\.com/` (83) est
-  // SENSIBLE à la casse — sans ça un `https://Pay.Wave.com/x` passait ce miroir client (champ « vert »)
-  // puis se faisait refuser au serveur (le host, contrairement au chemin, est insensible à la casse
-  // côté DNS : le minusculer ne change pas la cible du lien).
-  const link = `https://${m[2]}`.replace(/^https:\/\/[^/]+/, (h) => h.toLowerCase());
-  if (!/^https:\/\/(pay\.)?wave\.com\//i.test(link)) {
-    return { error: 'Seuls les liens Wave (pay.wave.com) sont acceptés — les autres joueurs doivent pouvoir payer en confiance.' };
-  }
-  if (link.length > 300) return { error: 'Lien trop long (300 caractères maximum).' };
-  return { link };
-}
 
 export function SharePayments({
   reservation: r,

@@ -7,7 +7,7 @@ import { Button, Card, EmptyState, Tag, Txt } from '@/components/ui';
 import { getClub } from '@/data/clubs';
 import { coachClubName, getCoach } from '@/data/coaches';
 import { callNumber, openWhatsApp } from '@/lib/contact';
-import { initials } from '@/lib/format';
+import { initials, levelText } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, font, radius, shadows, spacing } from '@/theme';
 
@@ -73,7 +73,7 @@ export default function CoachDetail() {
           <View style={styles.infoChip}>
             <View style={styles.chipTop}>
               <Ionicons name="star" size={15} color={colors.amber} />
-              <Txt variant="h3">{coach.levelValue.toFixed(1)}</Txt>
+              <Txt variant="h3">{levelText(coach.levelValue, 1)}</Txt>
             </View>
             <Txt variant="small" color={colors.textFaint}>
               niveau

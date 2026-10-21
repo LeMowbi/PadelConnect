@@ -24,7 +24,7 @@ echo "→ Correction des chemins de polices (wrangler exclut node_modules)…"
 ./scripts/fix-web-assets.sh dist
 
 echo "→ Déploiement sur Cloudflare Pages (padelconnect-club)…"
-npx wrangler@latest pages deploy dist \
+npx wrangler@4.148.0 pages deploy dist \
   --project-name=padelconnect-club \
   --branch=main \
   --commit-dirty=true
