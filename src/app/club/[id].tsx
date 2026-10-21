@@ -37,6 +37,7 @@ import { courtsFor, resolvedGridFor, type ScheduleCtx } from '@/lib/availability
 import { fetchClubCoaches, type ServerCoach } from '@/lib/coachesServer';
 import { deleteMyReview, fetchClubReviews, replyToReview, submitReview, type ServerReview } from '@/lib/reviewsServer';
 import { reportReview } from '@/lib/moderation';
+import { confirmAsync } from '@/lib/confirm';
 import { openWhatsApp } from '@/lib/contact';
 import { durationLabel, offeredDurations } from '@/lib/courtSchedule';
 import { hapticSuccess } from '@/lib/haptics';
@@ -63,15 +64,17 @@ function reviewDate(iso: string): string {
   return Number.isFinite(t) ? dateKeyLabel(dayKey(new Date(t))) : '';
 }
 
-// Barre de répartition des notes (5→1 étoiles) : se remplit de 0 % à `pct` au premier montage
-// du bloc « Avis vérifiés » (pas à chaque re-render de `reviews` — effet à dépendances vides,
-// volontairement, pour ne pas rejouer l’anim à chaque nouvel avis publié).
+// Barre de répartition des notes (5→1 étoiles) : se remplit de 0 % à `pct` au montage, puis
+// glisse vers la nouvelle valeur quand la répartition change (avis publié, modifié ou supprimé,
+// auteur bloqué) — jamais de rejeu depuis 0. L’anim en cours est stoppée si `pct` change encore,
+// pour ne jamais finir sur une ancienne cible.
 function RatingBar({ pct, delay }: { pct: number; delay: number }) {
   const width = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(width, { toValue: pct, duration: 500, delay, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const anim = Animated.timing(width, { toValue: pct, duration: 500, delay, easing: Easing.out(Easing.cubic), useNativeDriver: false });
+    anim.start();
+    return () => anim.stop();
+  }, [pct, delay, width]);
   return (
     <Animated.View style={[styles.summaryFill, { width: width.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }) }]} />
   );
@@ -86,6 +89,9 @@ export default function ClubDetail() {
   const [rating, setRating] = useState(0);
   const [text, setText] = useState('');
   const [sent, setSent] = useState(false);
+  // Formulaire ouvert en ÉDITION de mon avis publié : sans ce geste explicite, la fiche montre
+  // « Ton avis est publié » (un formulaire vide écraserait texte et critères — upsert ligne entière).
+  const [editing, setEditing] = useState(false);
   const [noteError, setNoteError] = useState(false);
   // tone distingue succès (coche verte) et échec (icône d’alerte rouge) — même overlay pour les deux.
   const [toast, setToast] = useState<{ text: string; tone: 'success' | 'error' } | null>(null);
@@ -238,6 +244,10 @@ export default function ClubDetail() {
   const courtPhotoMap = state.clubCourtPhotos[club.id] ?? {};
   const courtsWithPhoto = (state.clubCourts[club.id] ?? defaultCourts(club)).filter((c) => courtPhotoMap[c]);
   const viewerPhotos = [...gallery, ...courtsWithPhoto.map((c) => courtPhotoMap[c])];
+  const canView = viewerPhotos.length > 0; // sinon la visionneuse s’ouvrirait sur un écran noir « 0 photo »
+  // Photos disparues visionneuse ouverte (tirer-pour-rafraîchir) : on la FERME pendant le rendu
+  // (pas d’effet), sinon elle se rouvrirait d’elle-même au retour des photos.
+  if (viewer !== null && !canView) setViewer(null);
   const posts = state.clubOffers[club.id] ?? [];
   const offers = offersForClub(
     club,
@@ -255,9 +265,7 @@ export default function ClubDetail() {
   const courtCount = (state.clubCourts[club.id] ?? defaultCourts(club)).length;
   // Coachs de l'annuaire (fiches réelles gérées par le porteur) — les coachs déclarés par les
   // clubs ont TOUS un compte (Espace Coach) et arrivent via serverCoaches, réservables dans l'app.
-  const clubCoaches = coaches
-    .filter((c) => c.clubId === club.id && !state.hiddenCoachIds.includes(c.id))
-    .map((c) => ({ id: c.id, name: c.name, sub: c.level, phone: c.phone }));
+  const clubCoaches = coaches.filter((c) => c.clubId === club.id).map((c) => ({ id: c.id, name: c.name, sub: c.level, phone: c.phone }));
   // « Ses coachs » (22) : liste repliée à 3 lignes AU TOTAL — les coachs réservables d’abord,
   // l’annuaire ensuite (il complète les places restantes de l’aperçu).
   const coachTotal = serverCoaches.length + clubCoaches.length;
@@ -292,6 +300,9 @@ export default function ClubDetail() {
       : [];
   // Mon avis (modifiable / supprimable) et mon rôle de gérant de CE club (pour répondre).
   const myReview = state.serverUserId ? reviews.find((r) => r.userId === state.serverUserId) : undefined;
+  // Avis pas encore chargés (ou 1er chargement en échec) : on ne sait pas si j’ai déjà un avis →
+  // pas de formulaire, sinon un « Publier » à l’aveugle écraserait l’avis existant (upsert).
+  const reviewsUnknown = (reviewsLoading || reviewsError) && reviews.length === 0;
   const isManager = canAccessClub(state.role, state.serverManagedClubId, club.id);
   // Plages tarifaires définies par le gérant (vide → tarif unique).
   const tiers = priceTiersFor(club);
@@ -330,7 +341,9 @@ export default function ClubDetail() {
 
   // Avis VÉRIFIÉ : on ne peut noter un club qu’après Y AVOIR SOI-MÊME joué (une de MES
   // résas passées à ce club). Sinon, le formulaire laisse place à une invitation à jouer.
-  const hasPlayedHere = myReservations.some((r) => r.clubId === club.id && isPlayed(r));
+  // Un avis déjà publié vaut preuve (le serveur l’a vérifiée), au-delà de la fenêtre de 180 j
+  // du miroir des résas ; un refus serveur 'not_played' reste géré dans submit().
+  const hasPlayedHere = !!myReview || myReservations.some((r) => r.clubId === club.id && isPlayed(r));
 
   // Rangées d’étoiles de la SAISIE (21), dans le même ordre que l’affichage des moyennes.
   const criteriaInputs = [
@@ -356,11 +369,8 @@ export default function ClubDetail() {
       showToast(res.reason === 'not_played' ? 'Avis réservé à ceux qui ont joué ici.' : 'Envoi impossible — réessaie.', 'error');
       return;
     }
-    setRating(0);
-    setText('');
-    setRCourts(null);
-    setRService(null);
-    setRFacilities(null);
+    // Champs CONSERVÉS : « Modifier mon avis » rouvre exactement ce qui vient d’être publié
+    // (`submit_review` réécrit la ligne entière — un formulaire vidé effacerait texte et critères).
     setSent(true);
     hapticSuccess();
     loadReviews();
@@ -369,9 +379,10 @@ export default function ClubDetail() {
     void refreshClubRatings();
   };
 
-  // Modifier mon avis : on repré-remplit le formulaire avec ma note/mon texte, hors champ de vision
-  // (le formulaire est en haut de la section, le bouton « Modifier » en bas) → toast d’orientation.
-  const editMyReview = () => {
+  // Modifier mon avis : on repré-remplit le formulaire avec ma note/mon texte. Depuis le bouton
+  // « Modifier » de la liste, le formulaire est hors champ de vision (en haut de la section) →
+  // toast d’orientation ; depuis la carte « Ton avis est publié », il prend sa place (pas de toast).
+  const editMyReview = (orient: boolean) => {
     if (!myReview) return;
     setRating(myReview.rating);
     setText(myReview.text);
@@ -381,7 +392,8 @@ export default function ClubDetail() {
     setRService(myReview.ratingService ?? null);
     setRFacilities(myReview.ratingFacilities ?? null);
     setSent(false);
-    showToast('Modifie ton avis ci-dessus ↑');
+    setEditing(true);
+    if (orient) showToast('Modifie ton avis ci-dessus ↑');
   };
   const removeMyReview = async () => {
     if (removing || !state.serverUserId) return; // garde anti double-tap
@@ -389,6 +401,17 @@ export default function ClubDetail() {
     const ok = await deleteMyReview(club.id, state.serverUserId);
     setRemoving(false);
     if (ok) {
+      // Avis supprimé : le formulaire (gardé tel que publié, cf. submit) repart de zéro.
+      setRating(0);
+      setText('');
+      setRCourts(null);
+      setRService(null);
+      setRFacilities(null);
+      setSent(false);
+      setEditing(false);
+      // Suppression CONFIRMÉE par le serveur : retirée tout de suite de la liste (sinon, jusqu’au
+      // rechargement — ou à jamais s’il échoue —, la fiche afficherait « Ton avis est publié »).
+      setServerReviews((rs) => rs.filter((r) => r.userId !== state.serverUserId));
       loadReviews();
       void refreshClubRatings(); // même raison qu'au dépôt : moyenne des cartes à jour
       showToast('Avis supprimé');
@@ -396,7 +419,7 @@ export default function ClubDetail() {
       showToast('Suppression impossible — réessaie.', 'error');
     }
   };
-  // Gérant : publier / retirer une réponse à un avis.
+  // Gérant : publier / modifier une réponse à un avis.
   const sendReply = async (reviewId: string) => {
     if (replying || !replyDraft.trim()) return; // garde anti double-tap + pas d’envoi d’une réponse vide
     setReplying(true);
@@ -409,6 +432,27 @@ export default function ClubDetail() {
       showToast('Réponse publiée');
     } else {
       showToast('Réponse impossible — réessaie.', 'error');
+    }
+  };
+  // Gérant : retirer sa réponse (geste DÉDIÉ et confirmé — `sendReply` refuse toujours le vide,
+  // sinon un champ vidé par erreur effacerait la réponse en silence). Réponse '' = retrait (15).
+  const removeReply = async (reviewId: string) => {
+    if (replying) return; // même garde anti double-tap que la publication
+    const sure = await confirmAsync('Retirer la réponse ?', 'Ta réponse ne sera plus visible sous cet avis.', {
+      confirmLabel: 'Retirer',
+      destructive: true,
+    });
+    if (!sure) return;
+    setReplying(true);
+    const ok = await replyToReview(reviewId, '');
+    setReplying(false);
+    if (ok) {
+      setReplyTarget(null);
+      setReplyDraft('');
+      loadReviews();
+      showToast('Réponse retirée');
+    } else {
+      showToast('Retrait impossible — réessaie.', 'error');
     }
   };
 
@@ -445,9 +489,16 @@ export default function ClubDetail() {
         </>
       }
     >
-      {/* Photo héros — touche pour ouvrir en plein écran */}
+      {/* Photo héros — touche pour ouvrir en plein écran (seulement s’il y a une photo à montrer :
+          un club sans couverture mais avec des photos de terrain ouvre la visionneuse sur celles-ci). */}
       <View>
-        <Pressable onPress={() => setViewer(0)} accessibilityRole="button" accessibilityLabel="Voir la photo en plein écran">
+        <Pressable
+          onPress={canView ? () => setViewer(0) : undefined}
+          disabled={!canView}
+          accessible={canView}
+          accessibilityRole={canView ? 'button' : undefined}
+          accessibilityLabel={canView ? 'Voir la photo en plein écran' : undefined}
+        >
           <ClubPhoto
             uri={gallery[0]}
             accent={club.accent}
@@ -745,7 +796,10 @@ export default function ClubDetail() {
                     {c.price ? ` · cours ${fcfa(c.price)}` : ''}
                   </Txt>
                 </View>
-                {c.slots.length === 0 ? (
+                {/* Ma propre fiche de coach : pas de cours avec soi-même (le serveur le refuse). */}
+                {c.userId === state.serverUserId ? (
+                  <Tag label="Toi" tone="signature" />
+                ) : c.slots.length === 0 ? (
                   <Tag label="Bientôt dispo" tone="neutral" />
                 ) : (
                   <Button
@@ -878,13 +932,26 @@ export default function ClubDetail() {
         ) : null}
 
         <Card style={{ marginTop: spacing.md }}>
-          {sent ? (
+          {sent || (myReview && !editing) ? (
             <View style={{ alignItems: 'center', paddingVertical: spacing.sm }}>
               <Ionicons name="checkmark-circle" size={30} color={colors.green} />
               <Txt variant="h3" style={{ marginTop: spacing.sm }}>
-                Merci pour ton avis !
+                {sent ? 'Merci pour ton avis !' : 'Ton avis est publié'}
               </Txt>
-              <Button label="Modifier mon avis" variant="ghost" onPress={() => setSent(false)} />
+              {/* Juste après l’envoi, le formulaire a gardé ce qui vient d’être publié (cf. submit) ;
+                  sinon on le repré-remplit depuis l’avis publié. */}
+              <Button
+                label="Modifier mon avis"
+                variant="ghost"
+                onPress={
+                  sent
+                    ? () => {
+                        setSent(false);
+                        setEditing(true);
+                      }
+                    : () => editMyReview(false)
+                }
+              />
             </View>
           ) : !hasPlayedHere ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
@@ -896,6 +963,14 @@ export default function ClubDetail() {
                 <Txt variant="muted">Joue une première fois ici pour pouvoir laisser ton avis.</Txt>
               </View>
             </View>
+          ) : reviewsUnknown ? (
+            reviewsLoading ? (
+              <SkeletonLines lines={2} />
+            ) : (
+              <Txt variant="muted" style={{ textAlign: 'center' }}>
+                Tu pourras donner ton avis une fois les avis chargés.
+              </Txt>
+            )
           ) : (
             <>
               <Txt variant="h3">Donner ton avis</Txt>
@@ -1006,7 +1081,7 @@ export default function ClubDetail() {
                 {/* Mon avis : le modifier / le supprimer (#85) */}
                 {state.serverUserId === r.userId ? (
                   <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-                    <Button size="sm" label="Modifier" variant="ghost" icon="create-outline" onPress={editMyReview} />
+                    <Button size="sm" label="Modifier" variant="ghost" icon="create-outline" onPress={() => editMyReview(true)} />
                     <Button
                       size="sm"
                       label={removing ? 'Suppression…' : 'Supprimer'}
@@ -1032,7 +1107,7 @@ export default function ClubDetail() {
                         accessibilityLabel="Réponse du club à cet avis"
                         style={styles.input}
                       />
-                      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
                         <Button
                           size="sm"
                           label={replying ? 'Envoi…' : 'Publier la réponse'}
@@ -1049,6 +1124,16 @@ export default function ClubDetail() {
                             setReplyDraft('');
                           }}
                         />
+                        {r.reply ? (
+                          <Button
+                            size="sm"
+                            label="Retirer la réponse"
+                            variant="ghost"
+                            icon="trash-outline"
+                            onPress={() => void removeReply(r.id)}
+                            disabled={replying}
+                          />
+                        ) : null}
                       </View>
                     </View>
                   ) : (

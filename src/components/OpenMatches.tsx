@@ -198,8 +198,8 @@ export function OpenMatches({ refreshToken, full = false, clubId }: { refreshTok
             <Ionicons name="people-outline" size={20} color={colors.signature} />
           </View>
           <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
-            Aucun match ouvert pour l’instant. Réserve un terrain et coche « Ouvrir ce match aux autres joueurs » : ta partie s’affichera
-            ici et n’importe quel joueur pourra rejoindre les places restantes.
+            Aucun match ouvert pour l’instant. Réserve un terrain et choisis « Match ouvert » dans « Type de match » : ta partie s’affichera
+            ici et d’autres joueurs pourront rejoindre les places restantes.
           </Txt>
         </Card>
       </View>
