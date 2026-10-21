@@ -85,7 +85,7 @@ Attrape ce que tsc ne voit pas : module introuvable au runtime, dépendance nati
    fin `if (failed) { console.error(…); process.exit(1); }` + `console.log('\nTous les tests <lib>.ts passent.')`.
 3. Import : `import { … } from '../src/lib/<lib>.ts';` (extension obligatoire).
 4. `package.json` → `test:logic` : insérer `&& TZ=UTC node --experimental-strip-types tests/<lib>.test.ts`
-   AVANT les deux `.mjs` de fin.
+   AVANT les `.mjs` de fin.
 5. `npm run typecheck:tests` puis `TZ=UTC npm run test:logic`.
 6. Faire échouer le test une fois (assertion inversée) pour prouver qu'il teste quelque chose
    (`test-driven-development`), puis remettre.

@@ -70,15 +70,19 @@ shipper sur TestFlight.
 ```bash
 npx tsc --noEmit
 npm run lint
+npm run typecheck:tests          # le tsc principal EXCLUT tests/ (tsconfig.tests.json)
 TZ=UTC npm run test:logic
 # bundle « eager » pour détecter un souci d'empaquetage runtime :
 npx expo export:embed --eager --platform ios --dev false \
   --entry-file node_modules/expo-router/entry.js \
   --bundle-output <scratchpad>/ios.jsbundle
 npx prettier --write <fichiers modifiés>
+# notify-club touchée → contrôle de syntaxe (pas de Deno ici) :
+npx esbuild supabase/functions/notify-club/index.ts --log-level=warning > /dev/null
 ```
 
-Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
+Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser. Détail, lecture des
+échecs et pièges : compétence `padel-cadence-verification` (`.claude/skills/`).
 
 ## 7. Build & déploiement (EAS)
 
@@ -97,10 +101,13 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   redéployés le même jour via l'API Cloudflare (privacy/CGU v3 + CGU honnêtes sur le niveau).
   ⚠️ Le texte CGU in-app corrigé (`legal.tsx`) partira avec le PROCHAIN build (le #68 embarque
   l'ancien) — le site, lui, est déjà à jour et fait foi publiquement.
-  🚀 **v1.0.2 SOUMISE EN REVUE Apple le 2026-08-21** (build #68, notes de version FR, publication
-  AUTOMATIQUE à l'approbation) — fait via l'API App Store Connect avec une clé d'équipe fournie par
-  le porteur (la clé vit HORS dépôt, jamais commitée). État vérifiable : App Store Connect →
-  version 1.0.2 = « Waiting for Review ». (Les secrets GitHub
+  ✅ **v1.0.2 PUBLIÉE sur l'App Store le 2026-08-22** (soumise le 21/08 via l'API App Store Connect
+  avec une clé d'équipe fournie par le porteur — la clé vit HORS dépôt, jamais commitée ; vérifié
+  le 2026-10-21 par le lookup iTunes, pays CI). **Build #69 à lancer** : il embarquera la campagne
+  d'audit n°2, les nouveautés (badges, finitions, Android/assetlinks, CGU in-app, auth-callback) ET
+  l'audit pré-lancement du 2026-10-21 (179 correctifs, §10). Web `club.padelconnectci.com`
+  **redéployé le 2026-10-21** (la police d'icônes était servie en HTML → toutes les icônes vides ;
+  réparé + bundle à jour ; wrangler avec `CLOUDFLARE_ACCOUNT_ID` lu via l'API zones). (Les secrets GitHub
   `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` restent VIDES dans le dépôt → `deploy-web.yml`
   échoue à chaque push ; le porteur peut les créer dans GitHub → Settings → Secrets pour
   automatiser.) Le build #67 du 2026-08-13 est SUPPLANTÉ par le #68.
@@ -122,11 +129,14 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser.
   NB : depuis 87/90, recoller `21`/`68`/`83`/`85` s'ARRÊTE net sur `42P13 cannot change return
 type` (`mark_no_show`, `confirm_share_paid`) — échec BRUYANT, jamais silencieux ; il faudrait
   d'abord `drop function` la fonction concernée, puis recoller la suite dans l'ordre jusqu'à 90.
-  Reste au porteur : le lien Wave (Espace opérateur), FCM Android + empreinte assetlinks.
-  (`notify-club` est déployée — v42 le 2026-08-15 : push gérant avec nom du club, favoris/alertes
-  de niveau plafonnées à la source, liste d'attente one-shot honnête, agenda, annonces club
-  jusqu'à 500 suiveurs, parts Wave, cours collectifs ; exclusion des bloqués FAIL-CLOSED, fan-out
-  paginés ; HMAC temps constant.)
+  Reste au porteur : FCM Android (compte Google Play à créer, guide `docs/ANDROID-LANCEMENT.md`) —
+  le lien Wave des frais de tournoi EST configuré en base (vérifié 2026-10-21) et l'empreinte EAS
+  d'assetlinks est posée (celle de Play App Signing s'ajoutera au lancement Play).
+  (`notify-club` est déployée — **v48** du dépôt le 2026-10-21, compteur plateforme 47 : push gérant
+  avec nom du club, favoris/alertes de niveau plafonnées à la source, liste d'attente one-shot
+  honnête, agenda, annonces club jusqu'à 500 suiveurs, parts Wave, cours collectifs ; exclusion
+  des bloqués FAIL-CLOSED, fan-out paginés ; secret partagé `x-webhook-secret` comparé en temps
+  constant — ce n'est PAS un HMAC.)
 - Un module natif nouveau (ex. `expo-contacts`) ⇒ **nouveau build requis** + config plugin dans
   `app.json` avec la chaîne de permission.
 
@@ -139,8 +149,12 @@ type` (`mark_no_show`, `confirm_share_paid`) — échec BRUYANT, jamais silencie
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `88` (voir dossier `supabase/`) — **toutes
-  appliquées en base** (`85`→`88` posées + prouvées via l'API Management le 2026-08-16 — intégrité
+  **SQL Editor → Run**. Migrations actuelles : `02` → `91` (voir dossier `supabase/`) — **toutes
+  appliquées en base** (`91` durcissements pré-lancement posée + **prouvée 8/8 en transaction
+  annulée** le 2026-10-21 : contrainte de fourchette relâchée hors `open_match`, garde jour J de
+  `register_competition`, `block_user` rompt amitié/demandes/suivi, `create_group_lesson` à 10
+  paramètres — ⚠️ ne jamais recoller la 81 ni la 83 seules —, purge waitlist par chevauchement ;
+  `89`/`90` posées 2026-08-21 ; `85`→`88` posées + prouvées via l'API Management le 2026-08-16 — intégrité
   du cycle de vie, régressions tours 3-5, mark_no_show texte, fenêtre des parts Wave ;
   `65`→`84` vérifiées via l'API Management ; `84` durcissement privilèges —
   anon fermé sur toutes les RPC SECURITY DEFINER sauf `phone_available`, prouvé en base ; `83` club & monétisation
@@ -760,6 +774,41 @@ Tour 1 (3 agents + vérifs live PAT) — 9 constats, TOUS corrigés :
   CommissionRates (garde in-flight ≠ validation, message faux) ; squelette du pull-to-refresh
   opérateur (liste affichée ne disparaît plus) ; RESET/schema/88/89 contre-lus BLANCS (RESET
   re-prouvé en local avec/sans GUC).
+
+### Audit PRÉ-LANCEMENT (2026-10-21, 419 + 60 agents) — vagues 1 et 2 ✅, vague 3 EN COURS
+
+Demande porteur : « 0 problème jusqu'à la petite lettre invisible », meilleure interface et
+fonctionnalités (benchmark IN2 / Playtomic / Anybuddy / Matchi), équipe d'agents, audits jusqu'au
+blanc. Méthode et outillage gravés dans le dépôt : `.claude/skills/` (5 compétences `padel-*` +
+Expo, Supabase, Anthropic, superpowers vendorisées, Markdown seul) et `.claude/agents/` rafraîchis.
+
+- **Vague 1** (6 cartes de l'existant, 13 auditeurs, 184 constats → réfutation à 3 lentilles →
+  **179 confirmés : 0 HIGH, 10 MEDIUM, 99 LOW, 70 COSMETIC** ; 8 spécialistes benchmark +
+  16 sceptiques → 52 propositions). Livrable : **`docs/PLAN-PRE-LANCEMENT-2026-10.md`** (inventaire
+  par rôle, défauts en 10 lots K1→K10, améliorations en 8 lots A→H, décisions).
+- **Vague 2** (10 codeurs par lots de fichiers DISJOINTS, intégrateur, relecteur frais par lot,
+  3 tours de reprise) : **10/10 lots GO**, cadence verte (tsc · lint · typecheck:tests · test:logic
+  · bundle), 101 fichiers, 6 nouveaux tests câblés (matchMessages, waveLink, sitePricing, resetSql,
+  helpers, initialState). SQL **91** appliquée + prouvée ; notify-club **v48** (textes, nom de club
+  surchargé, conflit de score, formats de date) ; site : prix « dès » calqué sur `pricing.minPrice`,
+  404, CGU/privacy (visibilité du taux de présence/niveau/club favori), app.json en FRANÇAIS
+  (`CFBundleDevelopmentRegion`, permissions tutoyées), App Link `/auth-callback`.
+- **Décisions porteur (2026-10-21)** : tournoi jamais le jour même ; contrainte matchs ouverts
+  relâchée (variante B) ; garde serveur jour J ; bloquer rompt l'amitié ; bouton « Retirer la
+  réponse » ; précision du niveau inchangée (formateur partagé). Lots d'amélioration **A, C, D, E,
+  F, H validés** ; **B** : B1 (réduire les animations) NON, B2/B3/B4 OUI ; **G** : G1 OUI, G2 NON,
+  G3 OUI, G4 NON, G5 OUI. **Fidélité** : « 10 réservations CRÉÉES et jouées = −50 % sur le prochain
+  match, plafond 5 000 FCFA, offert par PadelConnect » — comptage créateur seul, remise marquée
+  « servie » par le CLUB et déduite de son décompte, plafond réglable par l'opérateur (à faire).
+  **Vérification du numéro par WhatsApp** : OUI, via Twilio Verify dans Supabase Auth, inscription
+  « téléphone d'abord » (code WhatsApp au lieu du lien e-mail, e-mail facultatif) — compte Twilio à
+  créer par le porteur. **Parts Wave** : strictement optionnelles. Gardés de côté inchangés.
+- **Vague 3 (à lancer)** : audit des RÈGLES MÉTIER par scénarios (7 lentilles validées : résa &
+  invitations, score/niveau/classement, tournois, clubs avec leur propre système, comptes & rôles,
+  argent, temps & concurrence) + trous de la critique de complétude (2 appareils, fuseau,
+  multi-clubs, web runtime, transitions de rôle, RLS, dérive live < 80, Android, supply-chain,
+  conformité, notify-club sous charge) + chantiers décidés (fidélité, WhatsApp, B2-B4, G1/G3/G5,
+  lots A/C/D/E/F/H « avant le #69 »), puis build #69.
 
 ## 11. Où regarder
 
