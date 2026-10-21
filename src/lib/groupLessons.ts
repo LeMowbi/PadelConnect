@@ -32,12 +32,16 @@ export type MyGroupLesson = {
   startsAt: number;
 };
 
-// Coach actif du club : crée le cours (réservation + lesson, atomique serveur). Renvoie l'id
-// de la lesson, null = refus (pas coach, créneau fermé/pris, chevauchement, bornes) ou réseau.
+// Coach actif du club : crée le cours (réservation + lesson, atomique serveur). Renvoie l'id de
+// la lesson ; 'refused' = refus MÉTIER (pas coach, créneau fermé/pris/passé, chevauchement,
+// bornes — le serveur renvoie null sans exception) ; 'error' = échec réseau.
 // `price` = prix du TERRAIN (priceForSlot — motif request_lesson) : reservations.price porte
 // partout le prix du terrain (revenu club, commission) — jamais le tarif du coach.
+// `clubName` (91) : les 9 fondateurs n'existent pas dans la table `clubs` — sans lui, le serveur
+// écrivait l'identifiant (« padelta ») comme nom du club.
 export async function createGroupLesson(input: {
   clubId: string;
+  clubName: string;
   court: string;
   dateKey: string;
   dateLabel: string;
@@ -46,7 +50,7 @@ export async function createGroupLesson(input: {
   capacity: number;
   price: number;
   note: string;
-}): Promise<string | null> {
+}): Promise<{ id: string } | 'refused' | 'error'> {
   const { data, error } = await supabase.rpc('create_group_lesson', {
     p_club_id: input.clubId,
     p_court: input.court,
@@ -57,9 +61,11 @@ export async function createGroupLesson(input: {
     p_price: input.price,
     p_note: input.note,
     p_date_label: input.dateLabel,
+    p_club_name: input.clubName,
   });
-  if (error || !data) return null;
-  return data as string;
+  if (error) return 'error';
+  if (!data) return 'refused';
+  return { id: data as string };
 }
 
 // Élève : rejoint un cours. 'gone' couvre aussi le blocage coach↔élève (jamais révélé, 53).
@@ -129,6 +135,9 @@ export async function fetchMyGroupLessons(): Promise<MyGroupLesson[] | null> {
   ).map((r) => ({
     id: r.id,
     clubId: r.club_id,
+    // Cours créés avant la 91 : le serveur y a écrit l'identifiant d'un fondateur (« padelta »)
+    // à la place de son nom — on garde alors l'id (`clubName === clubId`), résolu À L'AFFICHAGE
+    // avec l'état (findClub : surcharges du gérant et clubs inscrits compris, cf. reservations.tsx).
     clubName: r.club_name || r.club_id,
     coachName: r.coach_name || 'Coach',
     dateKey: r.date_key,

@@ -133,6 +133,8 @@ export function NewsEditor({
           onValueChange={setSendPush}
           trackColor={{ true: colors.signature, false: colors.border }}
           thumbColor={colors.white}
+          accessibilityRole="switch"
+          accessibilityLabel="Envoyer aussi l’actu en notification à tous les joueurs"
         />
       </View>
       <View style={{ marginTop: spacing.md, gap: spacing.sm }}>

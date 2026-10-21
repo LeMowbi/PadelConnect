@@ -50,8 +50,9 @@ export function CommissionRates({
   return (
     <Card>
       <Txt variant="small" color={colors.textMuted}>
-        Par défaut {pctLabel(defaultRate)} %. Tu peux fixer un taux différent pour chaque club selon ton accord (préviens le club avant) —
-        il s’applique aussitôt au décompte.
+        Par défaut {pctLabel(defaultRate)}
+        {'\u00a0'}%. Tu peux fixer un taux différent pour chaque club selon ton accord (préviens le club avant) — il s’applique aussitôt au
+        décompte.
       </Txt>
       <Button
         size="sm"
@@ -74,7 +75,8 @@ export function CommissionRates({
                       {c.name}
                     </Txt>
                     <Txt variant="muted">
-                      Actuel : {current}%{custom ? '' : ' (défaut)'}
+                      Actuel : {current}
+                      {'\u00a0'}%{custom ? '' : ' (défaut)'}
                     </Txt>
                   </View>
                   <TextInput

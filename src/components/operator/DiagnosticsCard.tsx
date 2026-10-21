@@ -10,14 +10,15 @@ import { colors, spacing } from '@/theme';
 // via les RPC réservés à l’opérateur (39) — le porteur, sans terminal, surveille l’état de
 // santé DANS l’app au lieu d’ouvrir le Dashboard Supabase. Lecture seule, anonyme.
 export function DiagnosticsCard() {
-  // undefined = chargement ; null = indisponible (hors-ligne / RPC 39 pas encore collé).
+  // undefined = chargement ; null = indisponible (hors-ligne). Même convention pour `errors` :
+  // un échec de la liste ne doit pas se lire « aucune erreur » sous une tuile rouge.
   const [summary, setSummary] = useState<DiagSummary | null | undefined>(undefined);
-  const [errors, setErrors] = useState<RecentError[]>([]);
+  const [errors, setErrors] = useState<RecentError[] | null | undefined>(undefined);
 
   useEffect(() => {
     let alive = true;
     void fetchDiagSummary().then((s) => alive && setSummary(s));
-    void fetchRecentErrors(5).then((e) => alive && e && setErrors(e));
+    void fetchRecentErrors(5).then((e) => alive && setErrors(e));
     return () => {
       alive = false;
     };
@@ -35,7 +36,7 @@ export function DiagnosticsCard() {
       <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
         <Ionicons name="cloud-offline-outline" size={18} color={colors.textFaint} />
         <Txt variant="muted" style={{ flex: 1 }}>
-          Diagnostics indisponibles — vérifie ta connexion (ou colle la migration 39 si ce n’est pas encore fait).
+          Diagnostics indisponibles — vérifie ta connexion.
         </Txt>
       </Card>
     );
@@ -61,7 +62,15 @@ export function DiagnosticsCard() {
           </Txt>
         </Txt>
       ) : null}
-      {errors.length > 0 ? (
+      {errors === undefined ? (
+        <View style={{ marginTop: spacing.md }}>
+          <SkeletonLines lines={1} />
+        </View>
+      ) : errors === null ? (
+        <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+          Dernières erreurs indisponibles — vérifie ta connexion.
+        </Txt>
+      ) : errors.length > 0 ? (
         <View style={{ marginTop: spacing.md, gap: spacing.xs }}>
           <Txt variant="label">Dernières erreurs (anonymes)</Txt>
           {errors.map((e, i) => (
@@ -78,11 +87,11 @@ export function DiagnosticsCard() {
             </View>
           ))}
         </View>
-      ) : (
+      ) : healthy ? (
         <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
           Aucune erreur enregistrée — tout roule 🎾
         </Txt>
-      )}
+      ) : null}
     </Card>
   );
 }

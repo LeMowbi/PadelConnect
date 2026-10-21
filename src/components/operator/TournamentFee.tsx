@@ -6,7 +6,7 @@ import { opStyles } from '@/components/operator/styles';
 import { fcfa } from '@/lib/format';
 import { colors, spacing } from '@/theme';
 
-// Frais fixe des tournois JOUEURS : l’opérateur fixe le montant (FCFA) figé à chaque nouvelle
+// Frais fixes des tournois JOUEURS : l’opérateur fixe le montant (FCFA) figé à chaque nouvelle
 // création de tournoi par un joueur. Les tournois des clubs n’en paient pas.
 export function TournamentFee({
   fee,
@@ -22,8 +22,8 @@ export function TournamentFee({
 
   const save = async () => {
     const amount = Number(draft.replace(/[^\d]/g, ''));
-    // Borne haute : un frais de tournoi au-delà de 200 000 F est forcément une faute de frappe
-    // (c'est un joueur qui le règle) — on refuse au lieu de figer un montant aberrant à la création.
+    // Borne haute : des frais de tournoi au-delà de 200 000 F sont forcément une faute de frappe
+    // (c'est un joueur qui les règle) — on refuse au lieu de figer un montant aberrant à la création.
     if (busy || !Number.isFinite(amount) || amount < 0 || amount > 200000) {
       toast.show('Entre un montant valide (0 à 200 000 FCFA)', { icon: 'alert-circle' });
       return;
@@ -48,7 +48,7 @@ export function TournamentFee({
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md }}>
         <View style={{ flex: 1 }}>
           <Txt variant="body" style={{ fontWeight: '600' }}>
-            Frais actuel
+            Frais actuels
           </Txt>
           <Txt variant="muted">{fee > 0 ? fcfa(fee) : 'Aucun (gratuit)'}</Txt>
         </View>

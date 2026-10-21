@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, IconCircle, Txt } from '@/components/ui';
+import { normalizeWaveLink } from '@/lib/waveLink';
 import { colors, font, radius, spacing } from '@/theme';
 
 // Lien de paiement Wave de l'opérateur (v2). Le créateur d'un tournoi validé l'ouvre pour
@@ -31,10 +32,22 @@ export function WaveLink({
 
   const save = async () => {
     if (saving) return;
+    // Même normalisation que les parts d'un match (aucune garde côté set_wave_link) : un lien
+    // sans « https:// » enregistré tel quel cassait « Payer par Wave » chez chaque organisateur.
+    const res = normalizeWaveLink(value);
+    if ('error' in res) {
+      toast.show(res.error, { icon: 'alert-circle' });
+      return;
+    }
     setSaving(true);
-    const { ok } = await onSet(value);
+    const { ok } = await onSet(res.link);
     setSaving(false);
-    toast.show(ok ? 'Lien Wave enregistré ✅' : 'Enregistrement impossible — réessaie', ok ? undefined : { icon: 'alert-circle' });
+    toast.show(
+      ok ? (res.link === '' ? 'Lien Wave retiré' : 'Lien Wave enregistré ✅') : 'Enregistrement impossible — réessaie',
+      ok ? undefined : { icon: 'alert-circle' },
+    );
+    // La saisie devient le miroir EXACT de ce qui est parti au serveur (sinon `dirty` restait vrai).
+    if (ok) setValue(res.link);
   };
 
   return (

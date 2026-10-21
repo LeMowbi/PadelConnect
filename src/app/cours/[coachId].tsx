@@ -12,7 +12,7 @@ import { SkeletonCard } from '@/components/Skeleton';
 import { StickyBar } from '@/components/StickyBar';
 import { Stepper } from '@/components/Stepper';
 import { useToast } from '@/components/Toast';
-import { Button, Card, EmptyState, IconCircle, Txt } from '@/components/ui';
+import { Button, Card, EmptyState, IconCircle, RecapLabel, RecapRow, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { freeCourtSlotsAt, hasFullDayCompetition, openSlotsFor, type AvailCtx } from '@/lib/availability';
@@ -73,12 +73,12 @@ export default function CoursScreen() {
     });
   };
 
-  // todayKey : la liste se recale après minuit (retour premier plan) — cf. reserver/index.tsx.
+  // todayKey : la liste se recale après minuit (retour premier plan) — cf. (tabs)/reserver.tsx.
   const todayKey = useTodayKey();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const dates = useMemo(() => nextDays(7), [todayKey]);
   // On ne stocke QUE la clé du jour choisi et on dérive l’objet à chaque rendu (motif
-  // SectionReservations.tsx / reserver/index.tsx) : sinon, après une nuit en arrière-plan,
+  // SectionReservations.tsx / (tabs)/reserver.tsx) : sinon, après une nuit en arrière-plan,
   // `dates` est recalé par useTodayKey mais `day` resterait figé sur l’ancien objet (veille).
   const [selDayKey, setSelDayKey] = useState<string | null>(null);
   const day = dates.find((d) => d.key === selDayKey) ?? null;
@@ -145,6 +145,11 @@ export default function CoursScreen() {
     );
   }
 
+  // Sa PROPRE fiche (le coach ouvre la liste de son club) : request_lesson refuse toujours
+  // (auth.uid() = p_coach) — on ne déroule pas un tunnel voué à l'échec. Les cours collectifs
+  // restent visibles (ClubGroupLessons y gère déjà « Ton cours »).
+  const isSelf = !!state.serverUserId && coach.userId === state.serverUserId;
+
   const ctx: AvailCtx = {
     clubs: activeClubs(state.customClubs, state.clubInfo),
     clubSlots: state.clubSlots,
@@ -184,6 +189,23 @@ export default function CoursScreen() {
       setSlot(null);
       return;
     }
+    // Doublon d'une demande encore en attente (même coach, jour, heure) : le serveur la refuse
+    // pour de bon — on le dit d'avance plutôt que d'inviter à réessayer. `myLessons` contient
+    // aussi les cours où je suis COACH, d'où le filtre élève.
+    const duplicate = state.myLessons.some(
+      (l) =>
+        l.status === 'pending' &&
+        l.studentId === state.serverUserId &&
+        l.coachId === coach.userId &&
+        l.dateKey === day.key &&
+        l.time === slot,
+    );
+    if (duplicate) {
+      toast.show('Tu as déjà une demande en attente pour ce créneau — retrouve-la dans « Mes réservations ».', {
+        icon: 'information-circle',
+      });
+      return;
+    }
     setSubmitting(true);
     const ok = await requestCoachLesson({
       coachId: coach.userId,
@@ -211,8 +233,9 @@ export default function CoursScreen() {
       });
       setDone(true);
     } else {
-      // Doublon de demande, coach retiré entre-temps ou échec réseau : le serveur refuse
-      // sans détailler — on invite à réessayer sans rien perdre du choix.
+      // Coach retiré entre-temps, grille changée, échec réseau (ou doublon fait sur un autre
+      // appareil, absent du miroir) : le serveur refuse sans détailler — on invite à réessayer
+      // sans rien perdre du choix.
       hapticWarning();
       toast.show('Demande impossible — vérifie ta connexion ou réessaie plus tard', { icon: 'alert-circle' });
     }
@@ -236,14 +259,14 @@ export default function CoursScreen() {
         </LinearGradient>
         <Card style={{ alignItems: 'center', paddingVertical: spacing.lg }}>
           <View style={styles.summary}>
-            <Row label="Coach" value={coach.name} />
-            <Row label="Club" value={club.name} />
-            <Row label="Jour" value={submitted.dayLabel} />
-            <Row label="Heure" value={submitted.time} />
-            <Row label="Terrain (si accepté)" value={submitted.court} />
-            <Row label="Durée" value={durationLabel(submitted.durationMin)} />
-            {submitted.price ? <Row label="Terrain (réglé au club)" value={fcfa(submitted.price)} /> : null}
-            {coach.price ? <Row label="Cours (réglé au coach)" value={fcfa(coach.price)} /> : null}
+            <RecapRow label="Coach" value={coach.name} />
+            <RecapRow label="Club" value={club.name} />
+            <RecapRow label="Jour" value={submitted.dayLabel} />
+            <RecapRow label="Heure" value={submitted.time} />
+            <RecapRow label="Terrain (si accepté)" value={submitted.court} />
+            <RecapRow label="Durée" value={durationLabel(submitted.durationMin)} />
+            {submitted.price ? <RecapRow label="Terrain (réglé au club)" value={fcfa(submitted.price)} /> : null}
+            {coach.price ? <RecapRow label="Cours (réglé au coach)" value={fcfa(coach.price)} /> : null}
           </View>
           <View style={{ alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.lg }}>
             <Button label="Voir mes cours" icon="calendar" onPress={() => router.push('/reservations')} full />
@@ -259,15 +282,17 @@ export default function CoursScreen() {
       back
       title="Réserver un cours"
       subtitle={`${coach.name} — ${club.name}`}
-      contentStyle={{ paddingBottom: 96 }}
+      contentStyle={isSelf ? undefined : { paddingBottom: 96 }}
       overlay={
-        <StickyBar
-          label={slotPrice ? fcfa(slotPrice) : 'Terrain'}
-          hint={durationMin ? `terrain · session ${durationLabel(durationMin)}` : 'Choisis un terrain'}
-          cta={submitting ? 'Envoi…' : 'Demander le cours'}
-          onPress={confirm}
-          disabled={!ready || submitting}
-        />
+        isSelf ? undefined : (
+          <StickyBar
+            label={slotPrice ? fcfa(slotPrice) : 'Terrain'}
+            hint={durationMin ? `terrain · session ${durationLabel(durationMin)}` : 'Choisis un terrain'}
+            cta={submitting ? 'Envoi…' : 'Demander le cours'}
+            onPress={confirm}
+            disabled={!ready || submitting}
+          />
+        )
       }
     >
       <Reveal>
@@ -282,121 +307,122 @@ export default function CoursScreen() {
             </Txt>
           </View>
         </Card>
-        <View style={styles.banner}>
-          <Ionicons name="shield-checkmark-outline" size={16} color={colors.signature} />
-          <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
-            Le terrain n’est réservé que si {coach.name} accepte ta demande — rien n’est engagé avant.
-          </Txt>
-        </View>
+        {isSelf ? (
+          <EmptyState
+            icon="school-outline"
+            title="C’est ta fiche"
+            text="Tu ne peux pas réserver un cours avec toi-même. Tes élèves te demandent un cours d’ici ; tu gères leurs demandes dans ton Espace Coach."
+            actionLabel="Mon Espace Coach"
+            onAction={() => router.push('/coach-admin')}
+          />
+        ) : (
+          <View style={styles.banner}>
+            <Ionicons name="shield-checkmark-outline" size={16} color={colors.signature} />
+            <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
+              Le terrain n’est réservé que si {coach.name} accepte ta demande — rien n’est engagé avant.
+            </Txt>
+          </View>
+        )}
 
         {/* Cours COLLECTIFS déjà ouverts par ce coach (19) : une place à prendre tout de suite,
             sans attendre une réponse — présenté avant le tunnel de demande individuelle. */}
         <ClubGroupLessons clubId={club.id} coachId={coach.userId} coachName={coach.name} />
 
-        <Stepper steps={['Jour', 'Créneau', 'Terrain', 'Envoyer']} current={step} />
-        <Label text="Jour" />
-        <View style={styles.wrap}>
-          {dates.map((d) => (
-            <Chip
-              key={d.key}
-              label={d.label}
-              active={d.key === day?.key}
-              onPress={() => {
-                setSelDayKey(d.key);
-                setSlot(null);
-                setCourt(null);
-              }}
-              size="lg"
-            />
-          ))}
-        </View>
-
-        {compToday ? (
-          <View style={styles.banner}>
-            <Ionicons name="trophy" size={16} color={colors.signature} />
-            <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
-              Un tournoi a lieu ce jour à {club.name} — aucun terrain n’est réservable.
-            </Txt>
-          </View>
-        ) : null}
-
-        <Label text={day ? `Créneau (disponibilités de ${coach.name})` : 'Créneau (choisis d’abord un jour)'} />
-        <View style={styles.wrap}>
-          {coachSlots.map((s) => {
-            const isPast = !!day && slotTimestamp(day.key, s) <= Date.now();
-            const noCourt = !!day && freeCourtSlotsAt(club, day.key, s, ctx).length === 0;
-            const blocked = !day || compToday || isPast || noCourt;
-            const label = isPast ? `${s} · passé` : noCourt ? `${s} · complet` : s;
-            return (
-              <Chip
-                key={s}
-                label={label}
-                active={s === slot}
-                disabled={blocked}
-                onPress={() => {
-                  setSlot(s);
-                  setCourt(null);
-                }}
-                size="lg"
-              />
-            );
-          })}
-        </View>
-        {coachSlots.length === 0 ? (
-          <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-            {coach.name} n’a pas encore publié ses disponibilités — repasse un peu plus tard.
-          </Txt>
-        ) : null}
-
-        {day && slot ? (
+        {isSelf ? null : (
           <>
-            <Label text="Terrain (réservé à l’acceptation)" />
+            <Stepper steps={['Jour', 'Créneau', 'Terrain', 'Envoyer']} current={step} />
+            <RecapLabel text="Jour" />
             <View style={styles.wrap}>
-              {freeSlots.map(({ court: c, durationMin: d }) => (
-                <Chip key={c} label={`${c} · ${durationLabel(d)}`} active={c === effectiveCourt} onPress={() => setCourt(c)} size="lg" />
+              {dates.map((d) => (
+                <Chip
+                  key={d.key}
+                  label={d.label}
+                  active={d.key === day?.key}
+                  onPress={() => {
+                    setSelDayKey(d.key);
+                    setSlot(null);
+                    setCourt(null);
+                  }}
+                  size="lg"
+                />
               ))}
             </View>
-          </>
-        ) : null}
 
-        <Card style={styles.priceRow}>
-          <View style={{ flex: 1 }}>
-            <Txt variant="muted">
-              {durationMin ? `Terrain (session ${durationLabel(durationMin)}, réglé au club)` : 'Terrain (réglé au club)'}
-            </Txt>
-            {coach.price ? (
-              <Txt variant="small" color={colors.textFaint}>
-                + cours {fcfa(coach.price)} réglé directement au coach
+            {compToday ? (
+              <View style={styles.banner}>
+                <Ionicons name="trophy" size={16} color={colors.signature} />
+                <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
+                  Un tournoi a lieu ce jour à {club.name} — aucun terrain n’est réservable.
+                </Txt>
+              </View>
+            ) : null}
+
+            <RecapLabel text={day ? `Créneau (disponibilités de ${coach.name})` : 'Créneau (choisis d’abord un jour)'} />
+            <View style={styles.wrap}>
+              {coachSlots.map((s) => {
+                const isPast = !!day && slotTimestamp(day.key, s) <= Date.now();
+                const noCourt = !!day && freeCourtSlotsAt(club, day.key, s, ctx).length === 0;
+                const blocked = !day || compToday || isPast || noCourt;
+                const label = isPast ? `${s} · passé` : noCourt ? `${s} · complet` : s;
+                return (
+                  <Chip
+                    key={s}
+                    label={label}
+                    active={s === slot}
+                    disabled={blocked}
+                    onPress={() => {
+                      setSlot(s);
+                      setCourt(null);
+                    }}
+                    size="lg"
+                  />
+                );
+              })}
+            </View>
+            {coachSlots.length === 0 ? (
+              <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                {coach.name} n’a pas encore publié ses disponibilités — repasse un peu plus tard.
               </Txt>
             ) : null}
-          </View>
-          <Txt variant="price">{slotPrice ? fcfa(slotPrice) : '—'}</Txt>
-        </Card>
 
-        <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.lg, textAlign: 'center' }}>
-          Double validation : le coach accepte ta demande, puis le club confirme la réservation du terrain.
-        </Txt>
+            {day && slot ? (
+              <>
+                <RecapLabel text="Terrain (réservé à l’acceptation)" />
+                <View style={styles.wrap}>
+                  {freeSlots.map(({ court: c, durationMin: d }) => (
+                    <Chip
+                      key={c}
+                      label={`${c} · ${durationLabel(d)}`}
+                      active={c === effectiveCourt}
+                      onPress={() => setCourt(c)}
+                      size="lg"
+                    />
+                  ))}
+                </View>
+              </>
+            ) : null}
+
+            <Card style={styles.priceRow}>
+              <View style={{ flex: 1 }}>
+                <Txt variant="muted">
+                  {durationMin ? `Terrain (session ${durationLabel(durationMin)}, réglé au club)` : 'Terrain (réglé au club)'}
+                </Txt>
+                {coach.price ? (
+                  <Txt variant="small" color={colors.textFaint}>
+                    + cours {fcfa(coach.price)} réglé directement au coach
+                  </Txt>
+                ) : null}
+              </View>
+              <Txt variant="price">{slotPrice ? fcfa(slotPrice) : '—'}</Txt>
+            </Card>
+
+            <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.lg, textAlign: 'center' }}>
+              Double validation : le coach accepte ta demande, puis le club confirme la réservation du terrain.
+            </Txt>
+          </>
+        )}
       </Reveal>
     </Screen>
-  );
-}
-
-function Label({ text }: { text: string }) {
-  return (
-    <Txt variant="label" style={{ marginTop: spacing.lg }}>
-      {text}
-    </Txt>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.row}>
-      <Txt variant="muted">{label}</Txt>
-      <Txt variant="h3" style={{ fontSize: 15 }}>
-        {value}
-      </Txt>
-    </View>
   );
 }
 
@@ -432,5 +458,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 });

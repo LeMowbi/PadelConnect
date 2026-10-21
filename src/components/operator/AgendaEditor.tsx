@@ -226,6 +226,8 @@ export function AgendaEditor() {
             onValueChange={setSendPush}
             trackColor={{ true: colors.signature, false: colors.border }}
             thumbColor={colors.white}
+            accessibilityRole="switch"
+            accessibilityLabel="Envoyer aussi l’événement en notification à tous les joueurs"
           />
         </View>
       ) : null}

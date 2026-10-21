@@ -5,6 +5,7 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { useToast } from '@/components/Toast';
 import { Button, Card, IconCircle, Txt } from '@/components/ui';
 import { opStyles } from '@/components/operator/styles';
+import { isValidPhone } from '@/lib/phone';
 import { colors } from '@/theme';
 
 // Accès gérant : l’opérateur saisit le numéro du joueur (qui a déjà créé un compte) et
@@ -27,10 +28,10 @@ export function ManagerAccess({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [busy, setBusy] = useState<'grant' | 'revoke' | null>(null);
   const selected = clubs.find((c) => c.id === clubId);
-  const digits = phone.replace(/\D/g, '');
+  const phoneOk = isValidPhone(phone);
 
   const grant = async () => {
-    if (busy || !clubId || digits.length < 8) return;
+    if (busy || !clubId || !phoneOk) return;
     setBusy('grant');
     const { ok, name, error } = await onGrant(phone, clubId);
     setBusy(null);
@@ -47,7 +48,7 @@ export function ManagerAccess({
   };
 
   const revoke = async () => {
-    if (busy || digits.length < 8) return;
+    if (busy || !phoneOk) return;
     setBusy('revoke');
     const { ok, name, error } = await onRevoke(phone);
     setBusy(null);
@@ -74,6 +75,7 @@ export function ManagerAccess({
         placeholder="Numéro du gérant"
         placeholderTextColor={colors.textMuted}
         keyboardType="phone-pad"
+        accessibilityLabel="Numéro de téléphone du gérant"
         style={opStyles.clubInput}
       />
       <Pressable
@@ -92,7 +94,7 @@ export function ManagerAccess({
         label={busy === 'grant' ? 'Attribution…' : 'Donner l’accès gérant'}
         icon="key"
         onPress={grant}
-        disabled={!!busy || !clubId || digits.length < 8}
+        disabled={!!busy || !clubId || !phoneOk}
         full
       />
       <Button
@@ -101,7 +103,7 @@ export function ManagerAccess({
         label={busy === 'revoke' ? 'Retrait…' : 'Retirer l’accès gérant'}
         icon="remove-circle-outline"
         onPress={revoke}
-        disabled={!!busy || digits.length < 8}
+        disabled={!!busy || !phoneOk}
         full
       />
 

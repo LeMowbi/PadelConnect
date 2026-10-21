@@ -90,7 +90,10 @@ export default function CoursScreen() {
                         {c.price ? ` · cours ${fcfa(c.price)}` : ''}
                       </Txt>
                     </View>
-                    {c.slots.length === 0 ? (
+                    {/* Ma propre fiche de coach : pas de cours avec soi-même (le serveur le refuse). */}
+                    {c.userId === state.serverUserId ? (
+                      <Tag label="Toi" tone="signature" />
+                    ) : c.slots.length === 0 ? (
                       <Tag label="Bientôt dispo" tone="neutral" />
                     ) : (
                       <Button

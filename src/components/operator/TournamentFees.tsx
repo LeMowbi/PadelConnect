@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View } from 'react-native';
 import { Button, Card, Divider, Tag, Txt } from '@/components/ui';
 import { type Competition } from '@/data/competitions';
@@ -10,6 +11,16 @@ import { colors, spacing } from '@/theme';
 // lien), puis confirme la réception. Le paiement est SERVEUR (payment_status, v2) : dès que
 // l’opérateur confirme, l’organisateur voit « frais réglés ✓ » dans sa fiche tournoi.
 export function TournamentFees({ comps, onConfirm }: { comps: Competition[]; onConfirm: (compId: string) => Promise<void> }) {
+  const [busy, setBusy] = useState<string | null>(null); // anti double-tap (déclaré avant le return anticipé)
+  const confirm = async (id: string) => {
+    if (busy) return;
+    setBusy(id);
+    try {
+      await onConfirm(id);
+    } finally {
+      setBusy(null);
+    }
+  };
   if (comps.length === 0) {
     return (
       <Card>
@@ -52,7 +63,15 @@ export function TournamentFees({ comps, onConfirm }: { comps: Competition[]; onC
                   <Button size="sm" label="Relancer (Wave)" icon="logo-whatsapp" variant="secondary" onPress={contact} />
                 ) : null}
                 <View style={{ flex: 1 }}>
-                  <Button size="sm" label="Paiement reçu" icon="checkmark" onPress={() => void onConfirm(c.id)} full />
+                  <Button
+                    size="sm"
+                    label="Paiement reçu"
+                    icon="checkmark"
+                    onPress={() => void confirm(c.id)}
+                    disabled={busy !== null}
+                    accessibilityLabel={`Paiement reçu — ${c.title}`}
+                    full
+                  />
                 </View>
               </View>
             ) : null}

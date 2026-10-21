@@ -181,9 +181,13 @@ export async function createCompetition(input: CreateCompetitionInput): Promise<
   return data as string;
 }
 
-export async function approveCompetition(id: string): Promise<boolean> {
+// Validation par le club hôte. 'refused' = refus MÉTIER (approve_competition renvoie false sans
+// exception : plage occupée, plus en attente, droits) ; 'error' = échec réseau — l'écran ne doit
+// pas annoncer un conflit qui n'existe pas.
+export async function approveCompetition(id: string): Promise<'ok' | 'refused' | 'error'> {
   const { data, error } = await supabase.rpc('approve_competition', { p_id: id });
-  return !error && data === true;
+  if (error) return 'error';
+  return data === true ? 'ok' : 'refused';
 }
 
 // Refus par le club hôte, avec un MOTIF optionnel (52) montré à l'organisateur pour qu'il
@@ -193,9 +197,12 @@ export async function rejectCompetition(id: string, reason = ''): Promise<boolea
   return !error && data === true;
 }
 
-export async function registerCompetition(id: string, partner: string): Promise<boolean> {
+// 'refused' = refus DÉFINITIF du serveur (complet, plus publié, jour J) ; 'network' = échec
+// réseau, le seul cas où « réessaie » a un sens.
+export async function registerCompetition(id: string, partner: string): Promise<'ok' | 'refused' | 'network'> {
   const { data, error } = await supabase.rpc('register_competition', { p_id: id, p_partner: partner });
-  return !error && data === true;
+  if (error) return 'network';
+  return data === true ? 'ok' : 'refused';
 }
 
 export async function unregisterCompetition(id: string): Promise<boolean> {
@@ -225,6 +232,15 @@ export async function fetchTournamentFee(): Promise<number | null> {
   const { data, error } = await supabase.from('tournament_config').select('player_fee').maybeSingle();
   if (error || !data) return null;
   return Number((data as { player_fee: number }).player_fee);
+}
+
+// Lien Wave de l'opérateur lu à la SOURCE (tournament_config), indépendamment du nombre de
+// tournois (fetchCompetitions ne le voit qu'à travers leurs lignes : 0 tournoi = champ vide).
+// undefined = échec réseau (on garde l'existant) ; '' = aucun lien ; sinon le lien.
+export async function fetchWaveLinkConfig(): Promise<string | undefined> {
+  const { data, error } = await supabase.from('tournament_config').select('wave_link').maybeSingle();
+  if (error) return undefined;
+  return (data as { wave_link: string | null } | null)?.wave_link ?? '';
 }
 
 export async function setTournamentFee(amount: number): Promise<boolean> {

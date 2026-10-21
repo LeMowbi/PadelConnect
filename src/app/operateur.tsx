@@ -26,7 +26,7 @@ import { fetchReviewReports, operatorDeleteReview, operatorDismissReport, type R
 import { fetchLoyaltyClaims, serveLoyaltyClaim, type LoyaltyClaim } from '@/lib/social';
 import { COMMISSION_RATE, isPlayed, useApp, type ServerClubRequest, type ServerSupportMessage } from '@/store/AppContext';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
-import { addWeeks, dateKeyLabel, dayKey, weekKeyOf, weekLabel } from '@/lib/days';
+import { DAY_MS, addWeeks, dateKeyLabel, dayKey, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa, pctLabel } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
 import { shareText } from '@/lib/share';
@@ -86,13 +86,21 @@ export default function Operateur() {
   const [creatingClub, setCreatingClub] = useState(false);
   const createComingSoon = async () => {
     if (creatingClub || ncName.trim().length < 2) return;
+    // Le champ ne garde que des chiffres (nettoyé à la saisie). create_club ne borne pas le prix
+    // côté serveur : on refuse ici une faute de frappe hors bornes au lieu de créer un club
+    // « dès 5 FCFA ». Champ vide = tarif par défaut de 10 000 FCFA (le gérant l'ajuste ensuite).
+    const price = Number(ncPrice);
+    if (ncPrice && (price < 1000 || price > 1000000)) {
+      toast.show('Tarif entre 1 000 et 1 000 000 FCFA (vide = 10 000 FCFA)', { icon: 'alert-circle' });
+      return;
+    }
     setCreatingClub(true);
     const res = await operatorCreateClub({
       name: ncName.trim(),
       area: ncArea.trim(),
       type: 'Mixte',
       courts: 1,
-      priceFrom: Number(ncPrice) > 0 ? Number(ncPrice) : 10000,
+      priceFrom: price > 0 ? price : 10000,
     });
     setCreatingClub(false);
     if (res.ok) {
@@ -174,6 +182,9 @@ export default function Operateur() {
   // Messages d’aide / signalements (table support_messages, RLS opérateur).
   const [support, setSupport] = useState<ServerSupportMessage[]>([]);
   const [supportError, setSupportError] = useState(false);
+  // Premier chargement terminé (succès OU échec) : avant, on montre un squelette — jamais
+  // « Aucun … · 0 » pendant le fetch. Jamais remis à false (le pull-to-refresh garde la liste).
+  const [supportLoaded, setSupportLoaded] = useState(false);
   // Refs vers les actions serveur : leur identité change à chaque rendu (objet de contexte
   // recréé), donc on les appelle via une ref stable pour NE PAS relancer les fetch en boucle
   // à chaque changement d’état (effets à dépendances vides).
@@ -185,6 +196,7 @@ export default function Operateur() {
     const { ok, messages } = await fetchSupportRef.current();
     setSupportError(!ok);
     if (ok) setSupport(messages);
+    setSupportLoaded(true);
   }, []);
   useEffect(() => {
     let alive = true;
@@ -194,6 +206,7 @@ export default function Operateur() {
       if (!alive) return;
       setSupportError(!ok);
       if (ok) setSupport(messages);
+      setSupportLoaded(true);
     });
     return () => {
       alive = false;
@@ -204,11 +217,13 @@ export default function Operateur() {
   // erreur réseau ≠ « rien à modérer », chargement au montage + pull-to-refresh.
   const [reports, setReports] = useState<ReviewReport[]>([]);
   const [reportsError, setReportsError] = useState(false);
+  const [reportsLoaded, setReportsLoaded] = useState(false); // même rôle que supportLoaded
   const [reportBusy, setReportBusy] = useState<string | null>(null); // anti double-tap
   const loadReports = useCallback(async () => {
     const rows = await fetchReviewReports();
     setReportsError(rows === null);
     if (rows) setReports(rows);
+    setReportsLoaded(true);
   }, []);
   useEffect(() => {
     let alive = true;
@@ -216,6 +231,7 @@ export default function Operateur() {
       if (!alive) return;
       setReportsError(rows === null);
       if (rows) setReports(rows);
+      setReportsLoaded(true);
     });
     return () => {
       alive = false;
@@ -240,11 +256,13 @@ export default function Operateur() {
   // montage + pull-to-refresh, action honnête (on attend le serveur avant de barrer la ligne).
   const [claims, setClaims] = useState<LoyaltyClaim[]>([]);
   const [claimsError, setClaimsError] = useState(false);
+  const [claimsLoaded, setClaimsLoaded] = useState(false); // même rôle que supportLoaded
   const [claimBusy, setClaimBusy] = useState<string | null>(null); // anti double-tap
   const loadClaims = useCallback(async () => {
     const rows = await fetchLoyaltyClaims();
     setClaimsError(rows === null);
     if (rows) setClaims(rows); // §8 : un échec réseau ne remplace pas la liste déjà chargée
+    setClaimsLoaded(true);
   }, []);
   useEffect(() => {
     let alive = true;
@@ -252,6 +270,7 @@ export default function Operateur() {
       if (!alive) return;
       setClaimsError(rows === null);
       if (rows) setClaims(rows);
+      setClaimsLoaded(true);
     });
     return () => {
       alive = false;
@@ -395,8 +414,8 @@ export default function Operateur() {
       g.items.push(r);
       groups.set(r.clubId, g);
     }
-    // Commission cumulée DEPUIS LE LANCEMENT (toutes semaines) — chiffre vitrine. Chaque résa
-    // est commissionnée au taux de SON club (pas un taux global), pour rester exact.
+    // Commission cumulée sur la fenêtre du miroir (~6 derniers mois, MIRROR_WINDOW_MS) — chiffre
+    // vitrine. Chaque résa est commissionnée au taux de SON club (pas un taux global), pour rester exact.
     const allPlayedRes = reservations.filter((r) => isPlayed(r));
     return {
       weekUpcoming: weekAll.length - played.length,
@@ -460,8 +479,8 @@ export default function Operateur() {
   // (tous clubs confondus) et ne doivent pas se rejouer à chaque frappe dans « Ajouter un club ».
   const { resThisWeek, resPrevWeek } = useMemo(() => {
     const now = Date.now();
-    const weekAgo = now - 7 * 86400000;
-    const twoWeeksAgo = now - 14 * 86400000;
+    const weekAgo = now - 7 * DAY_MS;
+    const twoWeeksAgo = now - 14 * DAY_MS;
     return {
       resThisWeek: state.reservations.filter((r) => r.createdAt >= weekAgo).length,
       resPrevWeek: state.reservations.filter((r) => r.createdAt >= twoWeeksAgo && r.createdAt < weekAgo).length,
@@ -484,10 +503,10 @@ export default function Operateur() {
       `*PadelConnect — Décompte semaine ${weekLabel(week)}*\n${row.clubName}\n\n` +
       `Parties jouées : ${row.count}\n` +
       `Volume estimé : ${fcfa(row.revenue)}\n` +
-      `Commission PadelConnect (${pctLabel(row.rate)}%) : *${fcfa(row.commission)}*\n` +
+      `Commission PadelConnect (${pctLabel(row.rate)}\u00a0%) : *${fcfa(row.commission)}*\n` +
       `À régler par Wave 🙏\n\n` +
       `Détail :\n${lines}`;
-    const phone = (findClub(row.clubId, state.customClubs, state.clubInfo) as { contactPhone?: string } | undefined)?.contactPhone ?? '';
+    const phone = findClub(row.clubId, state.customClubs, state.clubInfo)?.contactPhone ?? '';
     // Sans numéro connu, WhatsApp s’ouvre quand même (message prêt) mais SANS destinataire :
     // on le dit à l’opérateur pour qu’il choisisse le bon contact au lieu de croire à un envoi.
     if (!phone) toast.show('Numéro du club inconnu — choisis le contact dans WhatsApp', { icon: 'information-circle' });
@@ -742,7 +761,8 @@ export default function Operateur() {
                           {r.clubName}
                         </Txt>
                         <Txt variant="muted">
-                          {r.count} résa{r.count > 1 ? 's' : ''} · volume ≈ {fcfa(r.revenue)} · {pctLabel(r.rate)}%
+                          {r.count} résa{r.count > 1 ? 's' : ''} · volume ≈ {fcfa(r.revenue)} · {pctLabel(r.rate)}
+                          {'\u00a0'}%
                         </Txt>
                       </View>
                       <View style={{ alignItems: 'flex-end', gap: 4 }}>
@@ -967,7 +987,7 @@ export default function Operateur() {
                           onPress={() => {
                             openWhatsApp(
                               r.contact_phone ?? '',
-                              `Bonjour 👋 PadelConnect à propos de l’inscription de « ${r.name} ». Es-tu dispo pour en parler ?`,
+                              `Bonjour 👋 PadelConnect — à propos de l’inscription de « ${r.name} ». Es-tu dispo pour en parler ?`,
                             );
                             if (r.status === 'new') markRequest(r.id, 'contacted');
                           }}
@@ -976,7 +996,11 @@ export default function Operateur() {
                       </View>
                     ) : null}
                     {r.status === 'approved' ? (
-                      <Button size="sm" label="Rouvrir" icon="arrow-undo" variant="ghost" onPress={() => markRequest(r.id, 'contacted')} />
+                      // Approbation DÉFINITIVE : le club et l'accès gérant existent déjà — repasser la
+                      // demande à « Contacté » ne défaisait rien. Le retrait se fait dans l'onglet Clubs.
+                      <Txt variant="small" color={colors.textMuted} style={{ flex: 1, minWidth: 140, alignSelf: 'center' }}>
+                        Club créé — gère-le dans l’onglet Clubs.
+                      </Txt>
                     ) : (
                       <>
                         <Button size="sm" label="Approuver" icon="checkmark" onPress={() => setApproveTarget(r)} />
@@ -1028,10 +1052,10 @@ export default function Operateur() {
                 />
                 <TextInput
                   value={ncPrice}
-                  onChangeText={setNcPrice}
+                  onChangeText={(t) => setNcPrice(t.replace(/\D/g, ''))}
                   placeholder="Tarif dès (FCFA)"
                   placeholderTextColor={colors.textMuted}
-                  keyboardType="numeric"
+                  keyboardType="number-pad"
                   maxLength={7}
                   accessibilityLabel="Tarif à partir de, en FCFA"
                   style={[opStyles.clubInput, { flex: 1 }]}
@@ -1172,8 +1196,12 @@ export default function Operateur() {
         <>
           {/* AVIS SIGNALÉS (modération UGC, App Store 1.2) : retirer l'avis ou classer. */}
           <View style={{ marginTop: spacing.xl }}>
-            <SectionHeader title={`Avis signalés · ${reports.length}`} />
-            {reports.length === 0 ? (
+            <SectionHeader title={reportsLoaded ? `Avis signalés · ${reports.length}` : 'Avis signalés'} />
+            {!reportsLoaded ? (
+              <Card>
+                <SkeletonLines lines={2} />
+              </Card>
+            ) : reports.length === 0 ? (
               <Card>
                 <Txt variant="muted">
                   {reportsError
@@ -1234,8 +1262,12 @@ export default function Operateur() {
 
           {/* Signalements / messages d’aide envoyés par les joueurs (serveur). */}
           <View style={{ marginTop: spacing.xl }}>
-            <SectionHeader title={`Signalements · ${newSupport}`} />
-            {support.length === 0 ? (
+            <SectionHeader title={supportLoaded ? `Signalements · ${newSupport}` : 'Signalements'} />
+            {!supportLoaded ? (
+              <Card>
+                <SkeletonLines lines={2} />
+              </Card>
+            ) : support.length === 0 ? (
               <Card>
                 <Txt variant="muted">
                   {supportError
@@ -1294,8 +1326,12 @@ export default function Operateur() {
           {/* FIDÉLITÉ À SERVIR (82) : un joueur a atteint 10 parties jouées et réclamé sa
               récompense — elle se remet en main propre (club ou PadelConnect), puis « Servie ✓ ». */}
           <View style={{ marginTop: spacing.xl }}>
-            <SectionHeader title={`Fidélité à servir · ${pendingClaims}`} />
-            {claims.length === 0 ? (
+            <SectionHeader title={claimsLoaded ? `Fidélité à servir · ${pendingClaims}` : 'Fidélité à servir'} />
+            {!claimsLoaded ? (
+              <Card>
+                <SkeletonLines lines={2} />
+              </Card>
+            ) : claims.length === 0 ? (
               <Card>
                 <Txt variant="muted">
                   {claimsError
@@ -1350,7 +1386,7 @@ export default function Operateur() {
               <Card>
                 <Txt variant="muted">
                   Clubs créés en local depuis l’Espace Club (démo). Les vraies demandes d’inscription arrivent dans l’onglet « Demandes ».
-                  Ici, « Activer » rend un club démo visible des joueurs.
+                  Ici, « Activer » ne vaut que sur cet appareil (démo locale).
                 </Txt>
               </Card>
             ) : (

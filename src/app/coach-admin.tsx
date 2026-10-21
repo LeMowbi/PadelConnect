@@ -12,7 +12,7 @@ import { seedCompetitions } from '@/data/competitions';
 import { courtsFor, freeCourtSlotsAt, openSlotsFor, type AvailCtx } from '@/lib/availability';
 import { fetchCoachLessons, respondLesson, type CoachProfile, type Lesson } from '@/lib/coachesServer';
 import { durationLabel } from '@/lib/courtSchedule';
-import { dateKeyLabel, nextDays, slotTimestamp } from '@/lib/days';
+import { MINUTE_MS, dateKeyLabel, nextDays, slotTimestamp } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { createGroupLesson, fetchGroupLessons, type GroupLesson } from '@/lib/groupLessons';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
@@ -165,8 +165,9 @@ export default function CoachAdmin() {
     note: string;
   }): Promise<boolean> => {
     if (!clubId || !club) return false;
-    const id = await createGroupLesson({
+    const res = await createGroupLesson({
       clubId,
+      clubName: club.name,
       court: input.court,
       dateKey: input.dateKey,
       dateLabel: dateKeyLabel(input.dateKey), // libellé ABSOLU (« Lun 8 juin ») : jamais faux demain
@@ -178,9 +179,14 @@ export default function CoachAdmin() {
       price: priceForSlot(club, input.time, input.durationMin),
       note: input.note,
     });
-    if (!id) {
+    if (res === 'error') {
       hapticWarning();
-      toast.show('Créneau indisponible ou chevauchement avec un autre de tes cours', { icon: 'alert-circle' });
+      toast.show('Connexion impossible — vérifie ton réseau et réessaie', { icon: 'cloud-offline-outline' });
+      return false;
+    }
+    if (res === 'refused') {
+      hapticWarning();
+      toast.show('Créneau indisponible, passé ou en chevauchement avec un autre de tes cours', { icon: 'alert-circle' });
       return false;
     }
     hapticSuccess();
@@ -206,7 +212,10 @@ export default function CoachAdmin() {
       toast.show('Demande refusée — l’élève est prévenu');
     } else if (res === 'conflict') {
       hapticWarning();
-      toast.show('Le terrain a été pris entre-temps — impossible d’accepter ce créneau', { icon: 'alert-circle' });
+      toast.show(
+        'Ce créneau n’est plus disponible (terrain pris ou fermé) — la demande a été refusée automatiquement, l’élève est prévenu.',
+        { icon: 'alert-circle' },
+      );
     } else if (res === 'busy') {
       hapticWarning();
       toast.show('Tu avais déjà un cours accepté à ce créneau — cette demande a été refusée automatiquement, l’élève est prévenu.', {
@@ -237,7 +246,7 @@ export default function CoachAdmin() {
   // Durée RÉELLE du cours (créneaux modulables 1h/1h30, 68 — coachesServer replie déjà à 1h30
   // pour une donnée héritée), pas une durée de session fixe.
   const upcoming = all
-    .filter((l) => l.status === 'accepted' && l.startsAt + l.durationMin * 60000 > now)
+    .filter((l) => l.status === 'accepted' && l.startsAt + l.durationMin * MINUTE_MS > now)
     .sort((a, b) => a.startsAt - b.startsAt);
   // Historique compact : cours donnés, demandes passées/refusées ET cours annulés par l’élève
   // après acceptation (reservationId présent) — une demande retirée avant réponse n’y figure pas.
@@ -491,6 +500,11 @@ function CoachSettings({
     setTouched((c) => ({ ...c, slots: true }));
     setSlots((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t].sort()));
   };
+  // Dispos sorties de la grille du club (grille décalée, créneau fermé) : affichées pour que le
+  // coach les décoche LUI-MÊME — jamais élaguées à l'enregistrement : `clubSlots` vient du miroir
+  // local (peut être périmé) et un créneau fermé peut rouvrir, ce serait une perte silencieuse.
+  const orphanSlots = slots.filter((t) => !clubSlots.includes(t));
+  const bookableCount = slots.length - orphanSlots.length;
 
   const save = async () => {
     if (saving) return;
@@ -549,10 +563,15 @@ function CoachSettings({
         {clubSlots.map((t) => (
           <Chip key={t} label={t} active={slots.includes(t)} onPress={() => toggleSlot(t)} />
         ))}
+        {orphanSlots.map((t) => (
+          <Chip key={t} label={`${t} · hors horaires du club`} active onPress={() => toggleSlot(t)} />
+        ))}
       </View>
-      {slots.length === 0 ? (
+      {bookableCount === 0 ? (
         <Txt variant="small" color={colors.amberDark} style={{ marginTop: spacing.sm }}>
-          Sans créneau sélectionné, les joueurs ne peuvent pas te demander de cours.
+          {orphanSlots.length > 0
+            ? 'Tes créneaux ne sont plus ouverts par le club : les joueurs ne peuvent pas te demander de cours. Choisis-en parmi ses horaires.'
+            : 'Sans créneau sélectionné, les joueurs ne peuvent pas te demander de cours.'}
         </Txt>
       ) : null}
       <View style={{ marginTop: spacing.md }}>
