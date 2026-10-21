@@ -19,7 +19,7 @@ import {
   type ScheduleCtx,
 } from '@/lib/availability';
 import { durationLabel, overlaps, toMin, type CourtSlot } from '@/lib/courtSchedule';
-import { DAY_MS, dateKeyLabel, nextDays, weekKeyOf, weekLabel } from '@/lib/days';
+import { DAY_MS, HOUR_MS, dateKeyLabel, nextDays, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
 import { confirmAsync } from '@/lib/confirm';
@@ -28,7 +28,6 @@ import { useTodayKey } from '@/lib/useTodayKey';
 import { clubUsePass, fetchClubPasses, fetchPassUses } from '@/lib/passes';
 import {
   blockRecurringRows,
-  fetchBlockedSlotNotes,
   fetchCancelledReservations,
   fetchClubBlockedReasons,
   fetchNoShowReservations,
@@ -45,10 +44,16 @@ export function SectionReservations({
   club,
   comps,
   onSelectCell,
+  slotNotes,
+  onNotesChanged,
 }: {
   club: Club;
   comps: import('@/data/competitions').Competition[];
   onSelectCell: (cell: SelectedCell) => void;
+  // Notes privées des créneaux RÉCURRENTS (83) — source UNIQUE tenue par le parent (la fiche
+  // détail du planning les lit aussi) ; `onNotesChanged` la relit après une série posée.
+  slotNotes: Record<string, string>;
+  onNotesChanged: () => void;
 }) {
   const {
     state,
@@ -91,20 +96,6 @@ export function SectionReservations({
       alive = false;
     };
   }, [club.id, rangeCount]);
-  // Notes privées des créneaux RÉCURRENTS (83) : le miroir partagé ne porte que le générique
-  // « Récurrent » (lisible par tous) — le nom du client (RLS gérant) s'incruste ici. Rechargées
-  // quand le nombre de blocages bouge (une série vient d'être posée / un créneau rouvert).
-  const [slotNotes, setSlotNotes] = useState<Record<string, string>>({});
-  const blockedCount = state.blockedSlots.filter((b) => b.clubId === club.id).length;
-  useEffect(() => {
-    let alive = true;
-    void fetchBlockedSlotNotes(club.id).then((m) => {
-      if (alive && m) setSlotNotes(m);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [club.id, blockedCount]);
   // Historique paginé par SEMAINES : un club actif accumule vite des centaines de résas —
   // tout rendre d'un coup gèle l'ouverture de l'onglet (même esprit que PAST_PREVIEW joueur).
   const [weeksShown, setWeeksShown] = useState(4);
@@ -112,8 +103,8 @@ export function SectionReservations({
   // rend des centaines de cartes d'un coup fige l'ouverture de l'onglet.
   const [upcomingShown, setUpcomingShown] = useState(15);
 
-  // Annulations récentes du club (serveur) : un joueur a annulé → le créneau s’est libéré.
-  // On garde la trace (status='cancelled') pour prévenir le club (cf. fonction serveur 09).
+  // Annulations récentes du club (serveur) : un joueur a annulé → le créneau a été remis en vente
+  // à ce moment-là. On garde la trace (status='cancelled') pour prévenir le club (cf. fonction serveur 09).
   const [cancelled, setCancelled] = useState<Reservation[]>([]);
   // Absences (no-show) marquées par le club : trace conservée (status='no_show').
   const [noShows, setNoShows] = useState<Reservation[]>([]);
@@ -414,11 +405,13 @@ export function SectionReservations({
     const slot: CourtSlot = { t: time, d };
     const resa = clubRes.find((r) => r.dateKey === dKey && r.court === court && overlapsAny(slot, [r]));
     if (resa) return { state: 'reserved', label: resa.bookedBy?.name ?? 'Joueur' };
+    // Période AVANT blocage ponctuel : tant qu'une période couvre la case, débloquer le ponctuel
+    // ne la rouvrirait pas — QuickBlock renvoie alors vers « Périodes fermées ».
+    const rng = clubRanges.find((r) => rangeBlocks(r, dKey, time, court, d));
+    if (rng) return { state: 'blocked', label: rangeReasons[rng.id], source: 'range' };
     const blk = clubBlocked.find((b) => b.dateKey === dKey && b.court === court && overlapsAny(slot, [b]));
     // Note privée gérant (récurrent) prioritaire sur le motif public générique.
-    if (blk) return { state: 'blocked', label: slotNotes[`${blk.dateKey}|${blk.time}|${blk.court}`] || blk.reason };
-    const rng = clubRanges.find((r) => rangeBlocks(r, dKey, time, court, d));
-    if (rng) return { state: 'blocked', label: rangeReasons[rng.id] || 'Fermé sur période' };
+    if (blk) return { state: 'blocked', label: slotNotes[`${blk.dateKey}|${blk.time}|${blk.court}`] || blk.reason, source: 'slot' };
     return { state: 'free' };
   };
 
@@ -506,7 +499,13 @@ export function SectionReservations({
             // heure à elle) — envoyer l'heure de la cellule ne matchait aucune ligne en base.
             const cell: CourtSlot = { t: time, d: (durationMin === 60 ? 60 : 90) as 60 | 90 };
             const blk = clubBlocked.find((b) => b.dateKey === dKey && b.court === court && overlapsAny(cell, [b]));
-            const ok = await unblockSlot(club.id, dKey, blk?.time ?? time, court);
+            // Aucun blocage ponctuel au miroir : unblock_slot supprimerait 0 ligne mais répondrait
+            // true — un faux « débloqué ». On refuse plutôt (QuickBlock affiche l'erreur).
+            if (!blk) {
+              hapticWarning();
+              return false;
+            }
+            const ok = await unblockSlot(club.id, dKey, blk.time, court);
             if (ok)
               hapticSuccess(); // le créneau redevient réservable
             else hapticWarning();
@@ -556,7 +555,12 @@ export function SectionReservations({
               });
             } else if (status === 'invalid') {
               hapticWarning();
-              toast.show('Dates invalides — vérifie la période (1 an maximum)', { icon: 'alert-circle' });
+              // 'invalid' couvre AUSSI le plafond serveur de 100 périodes actives (74) : le message
+              // nomme les deux causes (un code dédié attendrait un client déjà livré).
+              toast.show(
+                'Période refusée — dates invalides (1 an maximum) ou trop de périodes de fermeture actives (100) : rouvre-en d’anciennes',
+                { icon: 'alert-circle' },
+              );
             } else if (status === 'error') {
               hapticWarning();
               toast.show('Enregistrement impossible — vérifie ta connexion', { icon: 'cloud-offline-outline' });
@@ -622,7 +626,7 @@ export function SectionReservations({
             await refreshSession();
             // Notes privées relues EXPLICITEMENT : re-poser la même série avec un autre nom ne
             // change pas le NOMBRE de blocages — l'effet indexé sur le compteur ne partirait pas.
-            void fetchBlockedSlotNotes(club.id).then((m) => m && setSlotNotes(m));
+            onNotesChanged();
             return res;
           }}
         />
@@ -665,11 +669,14 @@ export function SectionReservations({
                     onPress={() => {
                       if (unblockingRangeId) return; // garde anti double-tap
                       setUnblockingRangeId(r.id);
-                      void unblockRange(r.id).then((ok) => {
+                      void unblockRange(r.id).then((st) => {
                         setUnblockingRangeId(null);
-                        if (ok) {
+                        if (st === 'ok') {
                           hapticSuccess();
                           toast.show('Période rouverte ✓');
+                        } else if (st === 'gone') {
+                          // Rouverte entre-temps ailleurs (autre appareil, opérateur) : le but est atteint.
+                          toast.show('Période déjà rouverte ✓');
                         } else {
                           hapticWarning();
                           toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
@@ -800,7 +807,7 @@ export function SectionReservations({
 
         {/* Mini-stats de la semaine */}
         <View style={[styles.stats, { marginTop: spacing.md }]}>
-          <StatTile value={`${occupancy}%`} label="Occupation (7 j)" color={colors.green} bg={colors.greenSoft} />
+          <StatTile value={`${occupancy} %`} label="Occupation (7 j)" color={colors.green} bg={colors.greenSoft} />
           <StatTile value={weekRes.length} label="Résas (7 j)" color={colors.green} bg={colors.greenSoft} />
           <StatTile value={topHour} label="Heure phare" color={colors.amberDark} bg={colors.amberSoft} />
         </View>
@@ -1020,7 +1027,7 @@ export function SectionReservations({
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.sm }}>
               <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
               <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
-                Ces créneaux ont été annulés par le joueur et sont de nouveau libres à la réservation.
+                Ces créneaux ont été annulés par le joueur : ils ont été remis en vente au moment de l’annulation.
               </Txt>
             </View>
             {cancelled.slice(0, 8).map((r, i) => (
@@ -1131,7 +1138,7 @@ export function SectionReservations({
                     </View>
                     {/* Une absence se traite souvent APRÈS le créneau : on laisse 48 h au gérant
                         pour la signaler depuis l’historique (le serveur accepte une résa passée). */}
-                    {now - r.startsAt <= 48 * 3600 * 1000 ? (
+                    {now - r.startsAt <= 48 * HOUR_MS ? (
                       <Button size="sm" label="Pas venu" icon="person-remove-outline" variant="ghost" onPress={() => onMarkNoShow(r)} />
                     ) : null}
                   </View>

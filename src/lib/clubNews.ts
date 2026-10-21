@@ -21,7 +21,8 @@ export async function fetchClubNews(clubId: string): Promise<ClubNews[] | null> 
 }
 
 // Gérant : crée (id null) ou modifie une annonce de SON club. Renvoie l'id, null = refus
-// (titre < 3, lien non-https, 100 max) ou échec réseau. push : effet à la CRÉATION seulement.
+// (droits, titre < 3, lien non-https ou > 300, annonce introuvable en modification) ou échec
+// réseau — au-delà de 100, les plus anciennes partent par roulement. push : effet à la CRÉATION seulement.
 export async function upsertClubNews(n: {
   id: string | null;
   clubId: string;

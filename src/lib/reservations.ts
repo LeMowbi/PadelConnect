@@ -2,7 +2,7 @@
 // le store garde un MIROIR local (lectures synchrones rapides + résilience hors-ligne).
 // On écrit ici, puis on met à jour le miroir dans AppContext.
 
-import { dayKey } from './days';
+import { DAY_MS, HOUR_MS, dayKey } from './days';
 import { isValidPhone } from './phone';
 import type { BlockedRange } from './ranges';
 import { supabase } from './supabase';
@@ -14,12 +14,12 @@ import type { BlockedSlot, Reservation } from '@/store/AppContext';
 // premier plan (et, au-delà du plafond PostgREST de 1000 lignes, des créneaux futurs
 // tomberaient silencieusement → dispo faussée). L'agrégat « depuis le lancement » de l'Espace
 // opérateur devra devenir une RPC serveur si l'historique dépasse cette fenêtre.
-const MIRROR_WINDOW_MS = 180 * 86400000;
+const MIRROR_WINDOW_MS = 180 * DAY_MS;
 
 // Annulation gratuite jusqu'à 5 h avant le créneau — règle UNIQUE côté client (miroir de la garde
 // serveur 09_cancel_security). Consommée par l'écran « Mes réservations » (bouton Annuler) ET par
 // le rappel « dernière fenêtre » (notifications.ts) : un seul endroit à ajuster pour les deux.
-export const CANCEL_DEADLINE_MS = 5 * 60 * 60 * 1000;
+export const CANCEL_DEADLINE_MS = 5 * HOUR_MS;
 
 // Occupation d’un créneau (sans identité) — alimente la disponibilité cross-joueur.
 // `durationMin` (défaut 90) → chevauchement d'intervalle côté client (créneaux 1h/1h30).
@@ -70,7 +70,15 @@ export async function insertReservation(
   input: Omit<Reservation, 'id' | 'createdAt' | 'bookedBy' | 'userId'>,
   userId: string,
   bookedBy?: { name: string; phone: string },
-): Promise<{ ok: boolean; reservation?: Reservation; conflict?: boolean; past?: boolean; limit?: boolean; closed?: boolean }> {
+): Promise<{
+  ok: boolean;
+  reservation?: Reservation;
+  conflict?: boolean;
+  blocked?: boolean;
+  past?: boolean;
+  limit?: boolean;
+  closed?: boolean;
+}> {
   const { data, error } = await supabase
     .from('reservations')
     .insert(reservationToRow(input, userId, bookedBy))
@@ -92,9 +100,13 @@ export async function insertReservation(
     // « slot closed » (54) = le club vient de fermer ce créneau (période, terrain, grille) :
     // « choisis un autre terrain » serait faux — l'appelant resynchronise plutôt la grille.
     if (code === 'P0001' && msg.includes('slot closed')) return { ok: false, closed: true };
+    // 23514 = garde serveur « slot blocked » / « reserved for tournament » (27/68) : pris HORS app
+    // (QuickBlock du club) ou réservé à un tournoi — c'est un « terrain pris » (conflict) que la vue
+    // slot_occupancy ne voit PAS → `blocked` dit au store de relire aussi fermetures et tournois.
+    if (code === '23514') return { ok: false, conflict: true, blocked: true };
     // 23P01 = exclusion_violation : la contrainte anti-chevauchement d'intervalle (68) a rejeté
     // un créneau qui déborde sur une résa existante. Comme 23505, c'est « terrain pris ».
-    return { ok: false, conflict: code === '23505' || code === '23P01' || code === '23514' || code === 'P0001' };
+    return { ok: false, conflict: code === '23505' || code === '23P01' || code === 'P0001' };
   }
   return { ok: true, reservation: rowToReservation(data as Row) };
 }

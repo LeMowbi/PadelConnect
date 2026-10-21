@@ -29,7 +29,13 @@ import {
   slotToMinutes,
   SESSION_MIN,
 } from '@/lib/slots';
+import { isValidPhone } from '@/lib/phone';
 import { colors, radius, spacing } from '@/theme';
+
+// Refus « réservations à venir » : on oriente vers l'outil du gérant (75, « Annuler ce créneau »)
+// — le joueur, lui, ne peut plus annuler à moins de 5 h (parité SectionReservations).
+const upcomingMsg = (subject: string) =>
+  `${subject} — annule-les d’abord (« Annuler ce créneau » sur leur carte, onglet Réservations), puis réessaie.`;
 
 // ── Éditeur d'horaires PAR TERRAIN (1h/1h30 mélangeables) — une ligne par terrain, chacune
 // affichant SA grille effective. Remplace la grille club unique dès que `state.courtSlots[club.id]`
@@ -96,9 +102,7 @@ function CourtScheduleRow({
   // porte une réservation à venir (même garde que l'éditeur simple), jamais la réouverture.
   const toggleClosed = async (s: CourtSlot) => {
     if (!s.x && hasUpcoming(s)) {
-      toast.show('Ce créneau a des réservations à venir sur ce terrain — vois avec les joueurs pour qu’ils annulent depuis l’app.', {
-        icon: 'alert-circle',
-      });
+      toast.show(upcomingMsg('Des réservations à venir occupent ce créneau sur ce terrain'), { icon: 'alert-circle' });
       return;
     }
     const next = sorted.map((x) => (x.t === s.t ? (s.x ? { t: x.t, d: x.d } : { ...x, x: true as const }) : x));
@@ -108,9 +112,7 @@ function CourtScheduleRow({
   // Retirer DÉFINITIVEMENT un créneau de la grille de ce terrain (≠ le fermer).
   const removeSlot = async (s: CourtSlot) => {
     if (hasUpcoming(s)) {
-      toast.show('Ce créneau a des réservations à venir sur ce terrain — vois avec les joueurs pour qu’ils annulent depuis l’app.', {
-        icon: 'alert-circle',
-      });
+      toast.show(upcomingMsg('Des réservations à venir occupent ce créneau sur ce terrain'), { icon: 'alert-circle' });
       return;
     }
     if (sorted.length <= 1) {
@@ -143,10 +145,7 @@ function CourtScheduleRow({
       chainEnd = st + sorted[i].d;
     }
     if ([s, ...moved].some(hasUpcoming)) {
-      toast.show(
-        'Ce changement déplacerait des créneaux qui ont des réservations à venir — vois avec les joueurs pour qu’ils annulent depuis l’app.',
-        { icon: 'alert-circle' },
-      );
+      toast.show(upcomingMsg('Ce changement déplacerait des créneaux qui ont des réservations à venir'), { icon: 'alert-circle' });
       return;
     }
     if (delta > 0 && chainEnd + delta > 24 * 60) {
@@ -196,9 +195,7 @@ function CourtScheduleRow({
     if (!sorted.length) return;
     const now = Date.now();
     if (reservations.some((r) => r.clubId === clubId && r.court === court && !isPlayed(r, now))) {
-      toast.show('Ce terrain a des réservations à venir — vois avec les joueurs pour qu’ils annulent depuis l’app.', {
-        icon: 'alert-circle',
-      });
+      toast.show(upcomingMsg('Ce terrain a des réservations à venir'), { icon: 'alert-circle' });
       return;
     }
     const start = toMin(sorted[0].t) ?? 0;
@@ -384,7 +381,7 @@ const OPEN_STEP = 30;
 const MIN_OPEN = 5 * 60; // 05:00
 const MAX_CLOSE = 24 * 60; // 24:00 (minuit)
 // Bornes du sélecteur d'ajout d'horaire libre (grille libre) : mêmes 05:00 minimum que l'ouverture,
-// 22:30 maximum pour garder une session (1h30) qui finit avant minuit dans le cas courant.
+// 22:30 maximum : la dernière session de 1h30 finit à minuit pile (MAX_CLOSE).
 const FREE_ADD_MAX = 22 * 60 + 30; // 22:30
 
 // Sélecteur d'heure « − valeur + » (accessible, simple) — sert à l'ouverture et à la fermeture.
@@ -609,7 +606,7 @@ export function SectionMonClub({ club }: { club: Club }) {
   }, [clubId, connected]);
 
   const promoteCoach = async () => {
-    if (promoting || promotePhone.trim().length < 8) return;
+    if (promoting || !isValidPhone(promotePhone)) return;
     setPromoting(true);
     const res = await clubAddCoach(club.id, promotePhone, promoteSpec.trim());
     if (res.status === 'ok') {
@@ -687,13 +684,32 @@ export function SectionMonClub({ club }: { club: Club }) {
       ok ? undefined : { icon: 'alert-circle' },
     );
   };
+  // Écritures court_photos SÉRIALISÉES (envoi, × d'une vignette, retrait du terrain) : le store
+  // réécrit la carte ENTIÈRE capturée avant l'envoi — deux écritures croisées ressuscitaient une
+  // photo dont le fichier venait d'être supprimé (vignette cassée chez tous les joueurs). Ref =
+  // verrou synchrone (deux taps dans la même frame), état = affichage (`uploadingCourt`).
+  const courtPhotoRef = useRef(false);
   const [uploadingCourt, setUploadingCourt] = useState<string | null>(null);
+  const withCourtPhotoLock = async <T,>(court: string, fn: () => Promise<T>): Promise<T | 'busy'> => {
+    if (courtPhotoRef.current) return 'busy';
+    courtPhotoRef.current = true;
+    setUploadingCourt(court);
+    try {
+      return await fn();
+    } finally {
+      courtPhotoRef.current = false;
+      setUploadingCourt(null);
+    }
+  };
   const changeCourtPhoto = async (courtName: string) => {
+    if (courtPhotoRef.current) return;
     const uri = await pickImage();
     if (!uri) return;
-    setUploadingCourt(courtName);
-    const ok = await setClubCourtPhoto(club.id, courtName, uri);
-    setUploadingCourt(null);
+    const ok = await withCourtPhotoLock(courtName, () => setClubCourtPhoto(club.id, courtName, uri));
+    if (ok === 'busy') {
+      toast.show('Une photo est en cours d’enregistrement — réessaie dans un instant.', { icon: 'alert-circle' });
+      return;
+    }
     toast.show(
       ok ? `Photo du ${courtName} enregistrée ✓` : 'Photo non envoyée — vérifie ta connexion',
       ok ? undefined : { icon: 'alert-circle' },
@@ -722,9 +738,7 @@ export function SectionMonClub({ club }: { club: Club }) {
     const now = Date.now();
     const dropped = openSlots.filter((t) => !next.includes(t));
     if (dropped.some((t) => state.reservations.some((r) => r.clubId === club.id && r.time === t && !isPlayed(r, now)))) {
-      toast.show('Un créneau à retirer a des réservations à venir — vois avec les joueurs pour qu’ils annulent depuis l’app.', {
-        icon: 'alert-circle',
-      });
+      toast.show(upcomingMsg('Un créneau à retirer a des réservations à venir'), { icon: 'alert-circle' });
       return;
     }
     const ok = await saveSimpleSlots(next.map((t) => (closed.has(t) ? closedSlot(t) : t)));
@@ -747,9 +761,7 @@ export function SectionMonClub({ club }: { club: Club }) {
       // planning sans l'annuler → on refuse tant qu'elle n'est pas jouée (ou annule-la avant).
       const now = Date.now();
       if (state.reservations.some((r) => r.clubId === club.id && r.time === t && !isPlayed(r, now))) {
-        toast.show('Cet horaire a des réservations à venir — vois avec les joueurs pour qu’ils annulent depuis l’app.', {
-          icon: 'alert-circle',
-        });
+        toast.show(upcomingMsg('Cet horaire a des réservations à venir'), { icon: 'alert-circle' });
         return;
       }
     } else {
@@ -818,9 +830,7 @@ export function SectionMonClub({ club }: { club: Club }) {
     }
     const now = Date.now();
     if (state.reservations.some((r) => r.clubId === club.id && r.time === t && !isPlayed(r, now))) {
-      toast.show('Cet horaire a des réservations à venir — vois avec les joueurs pour qu’ils annulent depuis l’app.', {
-        icon: 'alert-circle',
-      });
+      toast.show(upcomingMsg('Cet horaire a des réservations à venir'), { icon: 'alert-circle' });
       return;
     }
     const next = grid.filter((x) => x !== t).map((x) => (openSlots.includes(x) ? x : closedSlot(x)));
@@ -838,9 +848,7 @@ export function SectionMonClub({ club }: { club: Club }) {
       // invisible du planning sans l'annuler → on refuse, comme pour une fermeture globale.
       const now = Date.now();
       if (state.reservations.some((r) => r.clubId === club.id && r.court === court && r.time === t && !isPlayed(r, now))) {
-        toast.show('Cet horaire a des réservations à venir sur ce terrain — vois avec les joueurs pour qu’ils annulent depuis l’app.', {
-          icon: 'alert-circle',
-        });
+        toast.show(upcomingMsg('Cet horaire a des réservations à venir sur ce terrain'), { icon: 'alert-circle' });
         return;
       }
     }
@@ -898,7 +906,7 @@ export function SectionMonClub({ club }: { club: Club }) {
     else toast.show('Terrain non ajouté (le serveur a refusé la grille) — réessaie plus tard.', { icon: 'alert-circle' });
   };
   const removeCourt = async (n: string) => {
-    if (courts.length <= 1) return; // garder au moins un terrain
+    if (courts.length <= 1 || courtPhotoRef.current) return; // garder au moins un terrain ; photo de terrain en vol
     // Retirer un terrain qui a des réservations À VENIR les rendrait invisibles du planning ET
     // rouvrirait le créneau à la réservation → double occupation physique. On refuse.
     const now = Date.now();
@@ -918,14 +926,18 @@ export function SectionMonClub({ club }: { club: Club }) {
     // croiser (le 2e repartait d'une liste périmée et RESSUSCITAIT le 1er terrain retiré), et la
     // purge de la grille ne peut plus être sautée en silence par un 'busy'.
     const res = await withGridLock(async () => {
-      const remaining = courtsRef.current.filter((c) => c !== n);
+      // Liste lue SOUS le verrou (après la confirmation) : elle sert aussi au rollback, pour ne
+      // jamais effacer un terrain ajouté pendant la boîte de dialogue.
+      const before = courtsRef.current;
+      if (before.length <= 1) return 'ok' as const;
+      const remaining = before.filter((c) => c !== n);
       const okCourts = await setClubCourts(club.id, remaining);
       // Le SERVEUR (72) refuse le retrait si une résa à venir vit sur ce terrain (miroir local
       // possiblement périmé : un joueur vient de réserver) → 'denied'. Pas de purge de grille dans
       // ce cas : le terrain est toujours déclaré, rien à nettoyer, pas de blocage résiduel.
       if (okCourts !== 'ok') return okCourts;
       // Sa photo ne sert plus à rien (et resterait orpheline en base/Storage) → on la retire aussi.
-      if (courtPhotos[n]) void setClubCourtPhoto(club.id, n, null);
+      if (courtPhotos[n]) void withCourtPhotoLock(n, () => setClubCourtPhoto(club.id, n, null));
       // Idem pour ses fermetures récurrentes : un terrain RE-CRÉÉ au même nom ne doit pas hériter
       // en silence d'anciens horaires fermés (best-effort, comme la photo).
       if (state.clubCourtClosed[club.id]?.[n]) {
@@ -938,7 +950,7 @@ export function SectionMonClub({ club }: { club: Club }) {
       const storedGrid = state.courtSlots[club.id];
       if (!storedGrid?.[n]) return 'ok' as const;
       const purged = await setCourtSlots(club.id, completeGrid(storedGrid, remaining));
-      if (purged !== 'ok') await setClubCourts(club.id, courts); // rollback : pas d'orphelin qui bloque le club
+      if (purged !== 'ok') await setClubCourts(club.id, before); // rollback : pas d'orphelin qui bloque le club
       return purged;
     });
     if (res === 'busy') toast.show('Une sauvegarde est en cours — réessaie dans un instant.', { icon: 'alert-circle' });
@@ -955,20 +967,43 @@ export function SectionMonClub({ club }: { club: Club }) {
     });
 
   const photosFull = photos.length >= MAX_CLUB_PHOTOS;
+  // Galerie : UNE écriture à la fois (ajout appareil, ajout par lien, retrait ×). Le store réécrit
+  // la liste ENTIÈRE capturée avant l'envoi — un retrait pendant un envoi (ou deux retraits
+  // rapides) ressuscitait une photo dont le fichier était déjà supprimé (image cassée pour tous).
+  // Ref = verrou synchrone (deux taps dans la même frame), état = boutons désactivés.
+  const galleryWriteRef = useRef(false);
+  const [galleryBusy, setGalleryBusy] = useState(false);
+  const withGalleryLock = async (fn: () => Promise<void>): Promise<boolean> => {
+    if (galleryWriteRef.current) return false;
+    galleryWriteRef.current = true;
+    setGalleryBusy(true);
+    try {
+      await fn();
+      return true;
+    } finally {
+      galleryWriteRef.current = false;
+      setGalleryBusy(false);
+    }
+  };
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const addPhotoFromDevice = async () => {
+    if (galleryWriteRef.current) return;
     if (photosFull) {
       toast.show(`Maximum ${MAX_CLUB_PHOTOS} photos par club`, { icon: 'alert-circle' });
       return;
     }
+    // Verrou posé APRÈS le sélecteur : un choix annulé (ou un sélecteur laissé ouvert) ne gèle rien.
     const uri = await pickImage();
     if (!uri) return;
-    // La photo est envoyée au serveur (visible par tous) : court délai → on signale l’envoi.
-    setUploadingPhoto(true);
-    const ok = await addClubPhoto(club.id, uri);
-    setUploadingPhoto(false);
-    // L'échec d'UPLOAD a déjà son alerte dans addClubPhoto ; ici on couvre l'échec d'ÉCRITURE.
-    if (!ok) toast.show('Photo non enregistrée — vérifie ta connexion', { icon: 'alert-circle' });
+    const ran = await withGalleryLock(async () => {
+      // La photo est envoyée au serveur (visible par tous) : court délai → on signale l’envoi.
+      setUploadingPhoto(true);
+      const ok = await addClubPhoto(club.id, uri);
+      setUploadingPhoto(false);
+      // L'échec d'UPLOAD a déjà son alerte dans addClubPhoto ; ici on couvre l'échec d'ÉCRITURE.
+      if (!ok) toast.show('Photo non enregistrée — vérifie ta connexion', { icon: 'alert-circle' });
+    });
+    if (!ran) toast.show('Une photo est en cours d’enregistrement — réessaie dans un instant.', { icon: 'alert-circle' });
   };
   const addPhotoFromUrl = async () => {
     if (photosFull) {
@@ -976,12 +1011,14 @@ export function SectionMonClub({ club }: { club: Club }) {
       return;
     }
     if (/^https?:\/\//.test(url.trim())) {
-      const ok = await addClubPhoto(club.id, url.trim());
-      if (!ok) {
-        toast.show('Photo non enregistrée — vérifie ta connexion', { icon: 'alert-circle' });
-        return;
-      }
-      setUrl('');
+      await withGalleryLock(async () => {
+        const ok = await addClubPhoto(club.id, url.trim());
+        if (!ok) {
+          toast.show('Photo non enregistrée — vérifie ta connexion', { icon: 'alert-circle' });
+          return;
+        }
+        setUrl('');
+      });
     }
   };
   const submitOffer = async () => {
@@ -1098,7 +1135,7 @@ export function SectionMonClub({ club }: { club: Club }) {
           {state.storageFull ? (
             <View style={styles.storageWarn}>
               <Ionicons name="warning-outline" size={16} color={colors.danger} />
-              <Txt variant="small" color={colors.danger} style={{ flex: 1 }}>
+              <Txt variant="small" color={colors.coralDark} style={{ flex: 1 }}>
                 Stockage plein — certaines photos n’ont pas pu être enregistrées. Retire-en quelques-unes.
               </Txt>
             </View>
@@ -1109,14 +1146,17 @@ export function SectionMonClub({ club }: { club: Club }) {
                 <ClubPhoto uri={uri} accent={club.accent} initials={initials(club.name)} height={90} width={120} rounded={radius.md} />
                 <Pressable
                   onPress={() =>
-                    void removeClubPhoto(club.id, uri).then((ok) => {
+                    void withGalleryLock(async () => {
+                      const ok = await removeClubPhoto(club.id, uri);
                       if (!ok) toast.show('Photo non retirée — vérifie ta connexion', { icon: 'alert-circle' });
                     })
                   }
+                  disabled={galleryBusy}
                   style={styles.removeBadge}
                   hitSlop={13}
                   accessibilityRole="button"
                   accessibilityLabel="Retirer cette photo"
+                  accessibilityState={{ disabled: galleryBusy }}
                 >
                   <Ionicons name="close" size={14} color={colors.white} />
                 </Pressable>
@@ -1126,10 +1166,10 @@ export function SectionMonClub({ club }: { club: Club }) {
               <Pressable
                 onPress={addPhotoFromDevice}
                 style={styles.addTile}
-                disabled={uploadingPhoto}
+                disabled={galleryBusy}
                 accessibilityRole="button"
                 accessibilityLabel="Ajouter une photo"
-                accessibilityState={{ disabled: uploadingPhoto }}
+                accessibilityState={{ disabled: galleryBusy }}
               >
                 <Ionicons name={uploadingPhoto ? 'cloud-upload-outline' : 'camera-outline'} size={22} color={colors.signature} />
                 <Txt variant="small" color={colors.signature} style={{ marginTop: 4 }}>
@@ -1149,7 +1189,7 @@ export function SectionMonClub({ club }: { club: Club }) {
               accessibilityLabel="Lien d’une image de terrain (https)"
               style={styles.input}
             />
-            <Button size="sm" label="Ajouter" icon="add" onPress={addPhotoFromUrl} />
+            <Button size="sm" label="Ajouter" icon="add" onPress={addPhotoFromUrl} disabled={galleryBusy} />
           </View>
         </Card>
       </View>
@@ -1170,7 +1210,7 @@ export function SectionMonClub({ club }: { club: Club }) {
           <TextInput
             value={offerTitle}
             onChangeText={setOfferTitle}
-            placeholder={offerKind === 'evenement' ? 'Titre (ex. Soirée Americano vendredi 20h)' : 'Titre (ex. -20% le mardi)'}
+            placeholder={offerKind === 'evenement' ? 'Titre (ex. Soirée Americano vendredi 20h)' : 'Titre (ex. -20 % le mardi)'}
             placeholderTextColor={colors.textMuted}
             maxLength={80}
             accessibilityLabel="Titre de l’offre, actu ou événement"
@@ -1191,7 +1231,7 @@ export function SectionMonClub({ club }: { club: Club }) {
           <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
             {offers.length === 0 ? (
               <Txt variant="small" color={colors.textFaint}>
-                Aucune publication — les offres par défaut sont affichées aux joueurs.
+                Aucune publication pour l’instant : les joueurs ne voient aucune offre tant que tu n’en publies pas.
               </Txt>
             ) : (
               offers.map((o) => (
@@ -1273,7 +1313,7 @@ export function SectionMonClub({ club }: { club: Club }) {
                   label={promoting ? 'Vérification…' : 'Déclarer ce coach'}
                   icon="person-add"
                   onPress={() => void promoteCoach()}
-                  disabled={promoting || promotePhone.trim().length < 8}
+                  disabled={promoting || !isValidPhone(promotePhone)}
                 />
               </View>
               <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
@@ -1386,16 +1426,20 @@ export function SectionMonClub({ club }: { club: Club }) {
                 {courtPhotos[c] ? (
                   <View>
                     <ClubPhoto uri={courtPhotos[c]} accent={club.accent} height={40} width={54} rounded={radius.sm} />
-                    {/* « × » sur la vignette = retirer la photo (même idiome que la galerie) */}
+                    {/* « × » sur la vignette = retirer la photo (même idiome que la galerie). Gelé aussi
+                        pendant une écriture de grille : un retrait de terrain en vol purge ENSUITE sa
+                        photo sous le verrou photo — un × pris entre-temps la laisserait orpheline. */}
                     <Pressable
                       onPress={async () => {
-                        const ok = await setClubCourtPhoto(club.id, c, null);
-                        if (!ok) toast.show('Retrait impossible — réessaie', { icon: 'alert-circle' });
+                        const ok = await withCourtPhotoLock(c, () => setClubCourtPhoto(club.id, c, null));
+                        if (ok === false) toast.show('Retrait impossible — réessaie', { icon: 'alert-circle' });
                       }}
+                      disabled={gridBusy || uploadingCourt !== null}
                       style={styles.courtPhotoRemove}
                       hitSlop={14}
                       accessibilityRole="button"
                       accessibilityLabel={`Retirer la photo du ${c}`}
+                      accessibilityState={{ disabled: gridBusy || uploadingCourt !== null }}
                     >
                       <Ionicons name="close" size={11} color={colors.white} />
                     </Pressable>
@@ -1409,7 +1453,7 @@ export function SectionMonClub({ club }: { club: Club }) {
                 <Pressable
                   onPress={() => void changeCourtPhoto(c)}
                   hitSlop={8}
-                  disabled={uploadingCourt !== null}
+                  disabled={gridBusy || uploadingCourt !== null}
                   accessibilityRole="button"
                   accessibilityLabel={`${courtPhotos[c] ? 'Changer' : 'Ajouter'} la photo du ${c}`}
                 >
@@ -1418,7 +1462,7 @@ export function SectionMonClub({ club }: { club: Club }) {
                 {courts.length > 1 ? (
                   <Pressable
                     onPress={() => void removeCourt(c)}
-                    disabled={gridBusy}
+                    disabled={gridBusy || uploadingCourt !== null}
                     hitSlop={13}
                     accessibilityRole="button"
                     accessibilityLabel={`Retirer ${c}`}
@@ -1585,7 +1629,7 @@ export function SectionMonClub({ club }: { club: Club }) {
                 </Txt>
               ) : (
                 <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-                  Les créneaux verts sont réservables par les joueurs ; les gris sont fermés.
+                  Les créneaux verts sont réservables par les joueurs ; les clairs sont fermés.
                 </Txt>
               )}
 

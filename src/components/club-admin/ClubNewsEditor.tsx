@@ -208,6 +208,8 @@ export function ClubNewsEditor({ clubId, clubName }: { clubId: string; clubName:
             onValueChange={setSendPush}
             trackColor={{ true: colors.signature, false: colors.border }}
             thumbColor={colors.white}
+            accessibilityRole="switch"
+            accessibilityLabel="Envoyer aussi en notification aux joueurs qui suivent ton club"
           />
         </View>
       ) : null}

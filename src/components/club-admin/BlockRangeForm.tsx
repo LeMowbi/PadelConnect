@@ -141,6 +141,7 @@ export function BlockRangeForm({
         onChangeText={setReason}
         placeholder="Motif (ex. travaux, tournoi privé) — visible dans ton Espace Club uniquement"
         placeholderTextColor={colors.textMuted}
+        maxLength={200}
         accessibilityLabel="Motif de la fermeture"
         style={styles.input}
       />

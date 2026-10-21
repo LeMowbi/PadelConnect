@@ -43,21 +43,22 @@ export function SectionTournois({ club, comps, onCloseComp }: { club: Club; comp
   const decide = async (id: string, approve: boolean, reason = '') => {
     if (busyId) return;
     setBusyId(id);
-    const ok = approve ? await approveCompetition(id) : await rejectCompetition(id, reason);
+    // approve : 'ok' | 'refused' (plage occupée — 37/53/54) | 'error' (réseau) ; reject reste booléen.
+    const res = approve ? await approveCompetition(id) : (await rejectCompetition(id, reason)) ? 'ok' : 'error';
     setBusyId(null);
-    if (ok) {
+    if (res === 'ok') {
       hapticSuccess();
       toast.show(approve ? 'Tournoi validé — il est maintenant visible ✓' : 'Demande refusée — l’organisateur est prévenu.');
       setRejectingId(null);
       setRejectReason('');
     } else {
       hapticWarning();
-      // Causes possibles côté serveur : réseau, ou la plage est déjà occupée — réservations,
-      // autre tournoi, créneau bloqué ou période fermée (37/53/54).
       toast.show(
-        approve
+        res === 'refused'
           ? 'Publication impossible — des réservations, un autre tournoi ou une période/créneau fermé occupent déjà cette plage.'
-          : 'Action impossible — réessaie.',
+          : approve
+            ? 'Publication impossible — vérifie ta connexion puis réessaie.'
+            : 'Action impossible — réessaie.',
         { icon: 'alert-circle' },
       );
     }
@@ -130,7 +131,7 @@ export function SectionTournois({ club, comps, onCloseComp }: { club: Club; comp
                     onPress={() =>
                       openWhatsApp(
                         c.organizerPhone ?? '',
-                        `Bonjour, c’est ${club.name} (PadelConnect) au sujet de ta demande de tournoi « ${c.title} ».`,
+                        `Bonjour, c’est ${club.name} (PadelConnect) au sujet de votre demande de tournoi « ${c.title} ».`,
                       )
                     }
                     full

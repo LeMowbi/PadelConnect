@@ -5,6 +5,7 @@ import { Chip } from '@/components/Chip';
 import { Button, Card, Txt } from '@/components/ui';
 import { type Club, type PriceTier } from '@/data/clubs';
 import { CLUB_TYPES } from '@/lib/clubConstants';
+import { fcfa } from '@/lib/format';
 import { PRICE_MAX, PRICE_MIN, validateTiers } from '@/lib/pricing';
 import { minutesToSlot } from '@/lib/slots';
 import { type ClubInfo } from '@/store/AppContext';
@@ -62,10 +63,12 @@ export function ClubInfoCard({
     [],
   );
 
-  // Instantané des valeurs au MONTAGE : « Enregistrer » n'envoie que les champs réellement
-  // modifiés. Un champ non touché n'écrase ainsi jamais une valeur serveur plus récente
-  // (réglée depuis un autre appareil pendant que ce formulaire était ouvert) — setClubInfo
-  // complète le patch avec le miroir local, lui, tenu à jour en arrière-plan.
+  // Instantané de la DERNIÈRE valeur enregistrée (montage, puis recalé à chaque succès) :
+  // « Enregistrer » n'envoie que les champs réellement modifiés. Un champ non touché n'écrase
+  // ainsi jamais une valeur serveur plus récente (réglée depuis un autre appareil pendant que ce
+  // formulaire était ouvert) — setClubInfo complète le patch avec le miroir local, lui, tenu à
+  // jour en arrière-plan. Sans le recalage, revenir à la valeur d'origine puis réenregistrer
+  // n'envoyait rien : le serveur gardait la valeur intermédiaire sous un « Enregistré ✓ ».
   const initial = useRef({
     name: club.name,
     area: club.area,
@@ -91,7 +94,7 @@ export function ClubInfoCard({
     // Tarif unique borné COMME LE SERVEUR (SQL 40) : hors bornes, il refuserait en silence
     // et la page divergerait entre ce téléphone et ceux des joueurs.
     if (Number(price) < PRICE_MIN || Number(price) > PRICE_MAX) {
-      setTierError(`Tarif unique invalide (${price} F) : entre 1 000 et 1 000 000 FCFA la session.`);
+      setTierError(`Tarif unique invalide (${fcfa(Number(price))}) : entre ${fcfa(PRICE_MIN)} et ${fcfa(PRICE_MAX)} la session.`);
       return;
     }
     // On ne garde que les plages complètes (début, fin, prix > 0). Aucune → tarif unique.
@@ -117,8 +120,8 @@ export function ClubInfoCard({
       }
     }
     setTierError(null);
-    // Patch limité aux champs MODIFIÉS depuis le montage (cf. `initial`) : un champ intact
-    // reprend la valeur du miroir local dans setClubInfo, jamais une valeur périmée d'ici.
+    // Patch limité aux champs MODIFIÉS depuis le dernier enregistrement (cf. `initial`) : un champ
+    // intact reprend la valeur du miroir local dans setClubInfo, jamais une valeur périmée d'ici.
     const patch: ClubInfo = {};
     if (name.trim() !== initial.name) patch.name = name.trim();
     if (area.trim() !== initial.area) patch.area = area.trim();
@@ -132,6 +135,18 @@ export function ClubInfoCard({
     if (tiersChanged) patch.priceTiers = built;
     if (phone.trim() !== initial.phone) patch.contactPhone = phone.trim();
     if (mapsQuery.trim() !== initial.mapsQuery) patch.mapsQuery = mapsQuery.trim();
+    // Valeurs CAPTURÉES au tap, sous la forme exacte des comparaisons ci-dessus (`price` brut,
+    // plages stringifiées) : une frappe pendant l'envoi reste « modifiée » au prochain tap.
+    const sent = {
+      name: name.trim(),
+      area: area.trim(),
+      blurb: blurb.trim(),
+      type,
+      price,
+      tiers: JSON.stringify(tiers),
+      phone: phone.trim(),
+      mapsQuery: mapsQuery.trim(),
+    };
     // On ATTEND le serveur : « Enregistré ✓ » ne s’affiche qu’au vrai succès (sinon, hors-ligne,
     // l’accusé mentait et la page se rétablissait silencieusement au prochain chargement).
     setSaving(true);
@@ -141,6 +156,7 @@ export function ClubInfoCard({
         setTierError('Enregistrement impossible — vérifie ta connexion et réessaie.');
         return;
       }
+      Object.assign(initial, sent);
       setSaved(true);
       if (savedTimer.current) clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setSaved(false), 2500);
@@ -262,7 +278,7 @@ export function ClubInfoCard({
       {tierError ? (
         <View style={styles.tierErrorBox}>
           <Ionicons name="alert-circle" size={15} color={colors.danger} />
-          <Txt variant="small" color={colors.danger} style={{ flex: 1 }}>
+          <Txt variant="small" color={colors.coralDark} style={{ flex: 1 }}>
             {tierError}
           </Txt>
         </View>

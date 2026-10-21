@@ -57,7 +57,9 @@ export function ClubCancelForm({
     void onCancel(reason, proposal).then((ok) => {
       if (!ok) {
         setBusy(false);
-        setError('Annulation impossible — réessaie.');
+        // false couvre AUSSI un refus définitif (résa déjà annulée par le joueur, marquée « pas
+        // venu » ou terminée — 75/78) : on ne promet pas qu'un nouvel essai passera.
+        setError('Annulation impossible — cette réservation n’est peut-être plus active : rafraîchis la liste.');
       }
       // Succès : le parent ferme le formulaire (la résa disparaît de la liste).
     });

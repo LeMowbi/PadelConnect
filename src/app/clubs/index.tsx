@@ -7,17 +7,17 @@ import { Reveal, staggerDelay } from '@/components/Reveal';
 import { Screen } from '@/components/Screen';
 import { EmptyState, Txt } from '@/components/ui';
 import { activeClubs } from '@/data/clubs';
-import type { Club } from '@/data/clubs';
+import { CLUB_TYPES } from '@/lib/clubConstants';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
-// Types de club (valeurs du modèle Club — jamais une liste inventée).
-const TYPES: Club['type'][] = ['Couvert', 'Extérieur', 'Mixte'];
-
 // Recherche tolérante : sans accents ni majuscules.
 function norm(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 }
 
 // Ajoute / retire une valeur d’une sélection multiple (filtres combinables).
@@ -144,7 +144,7 @@ export default function ClubsScreen() {
           size="lg"
           accessibilityLabel="Filtrer sur mes clubs favoris"
         />
-        {TYPES.map((t) => (
+        {CLUB_TYPES.map((t) => (
           <Chip key={t} label={t} active={types.includes(t)} onPress={() => setTypes((cur) => toggle(cur, t))} size="lg" />
         ))}
       </ScrollView>

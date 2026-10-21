@@ -18,7 +18,7 @@ import { BLOCK_REASONS, CLUB_TYPES } from '@/lib/clubConstants';
 import { fetchMyManagedClubs, switchManagedClub } from '@/lib/clubsServer';
 import { americanoPodiumTeams, seedCompetitions } from '@/data/competitions';
 import { competitionBlockedCourts, courtsFor, hasFullDayCompetition, rangeBlocks, resolvedGridFor } from '@/lib/availability';
-import { overlaps, slotDurationAt } from '@/lib/courtSchedule';
+import { durationLabel, overlaps, slotDurationAt, toMin } from '@/lib/courtSchedule';
 import { openWhatsApp } from '@/lib/contact';
 import { dateKeyLabel, slotTimestamp } from '@/lib/days';
 import { fetchBlockedSlotNotes } from '@/lib/reservations';
@@ -40,18 +40,8 @@ const GUIDE_STEPS: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
 ];
 
 export default function ClubAdmin() {
-  const {
-    state,
-    setManagedClub,
-    requestClub,
-    submitClubRequest,
-    cancelOwnClubRequest,
-    closeCompetition,
-    deleteCompetition,
-    blockSlot,
-    unblockSlot,
-    refreshSession,
-  } = useApp();
+  const { state, setManagedClub, submitClubRequest, closeCompetition, deleteCompetition, blockSlot, unblockSlot, refreshSession } =
+    useApp();
   const toast = useToast();
   const { refreshControl, webRefreshButton } = usePullToRefresh();
 
@@ -106,7 +96,6 @@ export default function ClubAdmin() {
   // arbitraire dans un formulaire éditable (trompeur) — on montre un état « indisponible » (plus bas).
   const resolvedClub = findClub(managedId, state.customClubs, state.clubInfo);
   const club = resolvedClub ?? clubsByName[0];
-  const pendingOwn = state.customClubs.find((c) => c.id === club.id)?.status === 'pending';
 
   const comps = [...state.myCompetitions.filter((c) => c.clubId === club.id), ...seedCompetitions.filter((c) => c.clubId === club.id)];
   const closingComp = comps.find((c) => c.id === closingId);
@@ -129,17 +118,28 @@ export default function ClubAdmin() {
   const pendingConfirm = clubRes.filter((r) => !r.clubConfirmed && !isPlayed(r, now)).length;
   const clubBlocked = state.blockedSlots.filter((b) => b.clubId === club.id);
   // Notes privées des créneaux RÉCURRENTS (83, RLS gérant) : le miroir partagé ne porte que le
-  // générique « Récurrent » — le nom du client s'incruste ici (clé dateKey|time|court).
-  const [slotNotes, setSlotNotes] = useState<Record<string, string>>({});
+  // générique « Récurrent » — le nom du client s'incruste ici (clé dateKey|time|court). Source
+  // UNIQUE (fiche détail + planning/QuickBlock de SectionReservations), rechargée quand le nombre
+  // de blocages bouge — et relue EXPLICITEMENT après une série re-posée sous un autre nom (même
+  // nombre de blocages : l'effet ne repartirait pas). null = échec réseau → on garde l'existant.
+  // Les clés ne portent pas le club (« Terrain 1 » est commun à tous) : les notes sont ATTACHÉES à
+  // leur club, et celles d'un autre club (bascule, relecture partie avant elle) ne s'affichent pas.
+  // La relecture explicite passe par l'effet (`notesTick`) : une seule voie de lecture, et seule la
+  // DERNIÈRE émise s'applique — une relecture de A revenue après la bascule vers B n'écrase rien.
+  const [notesOf, setNotesOf] = useState<{ clubId: string; map: Record<string, string> }>({ clubId: '', map: {} });
+  const [notesTick, setNotesTick] = useState(0);
+  const slotNotes = notesOf.clubId === club.id ? notesOf.map : {};
+  const reloadSlotNotes = () => setNotesTick((t) => t + 1);
   useEffect(() => {
     let alive = true;
-    void fetchBlockedSlotNotes(club.id).then((m) => {
-      if (alive && m) setSlotNotes(m);
+    const clubId = club.id;
+    void fetchBlockedSlotNotes(clubId).then((m) => {
+      if (alive && m) setNotesOf({ clubId, map: m });
     });
     return () => {
       alive = false;
     };
-  }, [club.id, clubBlocked.length]);
+  }, [club.id, clubBlocked.length, notesTick]);
   // Fermetures sur période + récurrentes par terrain (54) : le détail d'un créneau doit les
   // montrer — une case « Libre » avec un bouton « Bloquer » sur un créneau que le serveur
   // refuse serait un mensonge.
@@ -162,9 +162,8 @@ export default function ClubAdmin() {
   const submitSignup = async () => {
     if (!signupReady || sendingSignup) return;
     setSendingSignup(true);
-    // La demande part D’ABORD sur le SERVEUR (club_requests) : sans ça l’opérateur ne la
-    // voit jamais dans son espace. En cas de succès seulement, on crée aussi le club local
-    // « en attente » pour que le gérant prépare sa page tout de suite (activé après validation).
+    // La demande part sur le SERVEUR (club_requests) — seule voie : l’opérateur la voit dans son
+    // espace, et c’est l’activation (approve_club_request) qui crée le vrai club.
     const res = await submitClubRequest({
       name: ncName,
       area: ncArea,
@@ -178,7 +177,6 @@ export default function ClubAdmin() {
       toast.show(res.error ?? 'Envoi impossible — réessaie', { icon: 'alert-circle' });
       return;
     }
-    requestClub({ name: ncName, area: ncArea, type: ncType, courts: ncCourts, priceFrom: Number(ncPrice), contactPhone: ncPhone });
     setShowSignup(false);
     setNcName('');
     setNcArea('');
@@ -368,7 +366,7 @@ export default function ClubAdmin() {
           <Card style={{ marginTop: spacing.sm, borderColor: colors.signature }}>
             <Txt variant="h3">Inscrire mon club</Txt>
             <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
-              Ta demande passe par PadelConnect : tu prépares ta page tout de suite, elle devient visible des joueurs dès l’activation.
+              Ta demande part chez PadelConnect : dès l’activation, ton club apparaît ici et tu pourras préparer sa page.
             </Txt>
             <TextInput
               value={ncName}
@@ -423,32 +421,6 @@ export default function ClubAdmin() {
             </View>
           </Card>
         ) : null}
-
-        {pendingOwn ? (
-          <View style={styles.pendingBanner}>
-            <Ionicons name="hourglass-outline" size={16} color={colors.signature} />
-            <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
-              {club.name} est{' '}
-              <Txt variant="small" style={{ fontWeight: '700' }}>
-                en attente d’activation
-              </Txt>{' '}
-              par PadelConnect. Prépare ta page (photos, terrains, créneaux) : les joueurs la verront dès l’activation.
-            </Txt>
-            <Pressable
-              onPress={() => {
-                cancelOwnClubRequest(club.id);
-                toast.show('Demande annulée');
-              }}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Annuler ma demande de club"
-            >
-              <Txt variant="small" color={colors.danger} style={{ fontWeight: '700' }}>
-                Annuler
-              </Txt>
-            </Pressable>
-          </View>
-        ) : null}
       </View>
 
       <SegmentedControl options={SECTIONS} value={section} onChange={setSection} />
@@ -470,7 +442,16 @@ export default function ClubAdmin() {
         </Pressable>
       ) : null}
 
-      {section === 'Réservations' ? <SectionReservations key={club.id} club={club} comps={comps} onSelectCell={setSelectedCell} /> : null}
+      {section === 'Réservations' ? (
+        <SectionReservations
+          key={club.id}
+          club={club}
+          comps={comps}
+          onSelectCell={setSelectedCell}
+          slotNotes={slotNotes}
+          onNotesChanged={reloadSlotNotes}
+        />
+      ) : null}
 
       {section === 'Mon club' ? <SectionMonClub key={club.id} club={club} /> : null}
 
@@ -497,6 +478,7 @@ export default function ClubAdmin() {
           ) : (
             (() => {
               const cellTs = slotTimestamp(selectedCell.dateKey, selectedCell.time);
+              const cellMin = toMin(selectedCell.time); // instant touché, en minutes (repli `covering`)
               const isPast = cellTs <= now;
               // Terrains retenus par un tournoi PARTIEL (certains terrains/créneaux seulement —
               // la journée entière est déjà couverte par hasFullDayCompetition ci-dessus).
@@ -509,9 +491,9 @@ export default function ClubAdmin() {
               );
               return courts.map((c, i) => {
                 const isTournoi = compBlocked === 'all' || compBlocked.includes(c);
-                // Durée RÉELLE du créneau ouvert de CE terrain à cette heure (null = pas de créneau
-                // ouvert ici sur ce terrain). Détection en CHEVAUCHEMENT d'intervalle (créneaux
-                // 1h/1h30) : un 08:00·1h30 « occupe » aussi la cellule 09:00 du même terrain.
+                // Durée du créneau OUVERT de CE terrain qui COMMENCE à cette heure (égalité d'heure ;
+                // null = aucun). Les résas/blocages se détectent ensuite en CHEVAUCHEMENT d'intervalle
+                // (créneaux 1h/1h30) : un 08:00·1h30 « occupe » aussi la cellule 09:00 du même terrain.
                 const courtDur = slotDurationAt(grid, c, selectedCell.time);
                 const cellDur = courtDur ?? selectedCell.durationMin;
                 const overlapsCell = (x: { time: string; durationMin: number }) =>
@@ -519,9 +501,22 @@ export default function ClubAdmin() {
                 const resa = clubRes.find((r) => r.dateKey === selectedCell.dateKey && r.court === c && overlapsCell(r));
                 const blk = clubBlocked.find((b) => b.dateKey === selectedCell.dateKey && b.court === c && overlapsCell(b));
                 const rng = clubRanges.find((r) => rangeBlocks(r, selectedCell.dateKey, selectedCell.time, c, cellDur));
-                // Fermé (grille par terrain `x:true` → pas de créneau ouvert ici) OU ancienne map
-                // court_closed héritée. Dans les deux cas, rien à bloquer sur ce terrain.
-                const closedHere = courtDur === null || (closedByCourt[c] ?? []).includes(selectedCell.time);
+                // Aucun créneau ouvert ne COMMENCE ici : repli sur le créneau de ce terrain qui COUVRE
+                // la cellule (fermés compris) — un terrain aux horaires décalés n'est pas « fermé ».
+                // Priorité au créneau qui CONTIENT l'instant touché (`[s, s+d)`), puis au premier qui
+                // chevauche la cellule (un créneau suivant ne doit pas masquer celui en cours).
+                const covering =
+                  courtDur === null
+                    ? ((grid[c] ?? []).find((sl) => {
+                        const s = toMin(sl.t);
+                        return cellMin !== null && s !== null && s <= cellMin && cellMin < s + sl.d;
+                      }) ?? (grid[c] ?? []).find((sl) => overlaps({ t: selectedCell.time, d: cellDur as 60 | 90 }, sl)))
+                    : undefined;
+                // Fermé : créneau `x:true` OU ancienne map court_closed héritée — rien à bloquer ici.
+                const closedHere =
+                  courtDur === null
+                    ? !!covering && (!!covering.x || (closedByCourt[c] ?? []).includes(covering.t))
+                    : (closedByCourt[c] ?? []).includes(selectedCell.time);
                 const isBlocking = blockingCourt === c;
                 return (
                   <View key={c} style={{ marginTop: spacing.sm }}>
@@ -586,12 +581,20 @@ export default function ClubAdmin() {
                         </>
                       ) : rng || closedHere ? (
                         // Pas de « Débloquer » ponctuel ici : une période se rouvre dans
-                        // « Périodes fermées » (onglet Réservations), un horaire de terrain
-                        // dans « Horaires par terrain » (onglet Mon club).
+                        // « Périodes fermées » (onglet Réservations), un créneau fermé dans
+                        // « Horaires d’ouverture » (onglet Mon club — titre présent dans les deux modes).
                         <Txt variant="small" color={colors.coral} style={{ flex: 1, fontWeight: '600' }} numberOfLines={2}>
                           {rng
                             ? 'Fermé sur période — rouvrable dans « Périodes fermées »'
-                            : 'Fermé sur ce terrain — voir « Horaires par terrain » (Mon club)'}
+                            : 'Fermé sur ce terrain — voir « Horaires d’ouverture » (Mon club)'}
+                        </Txt>
+                      ) : courtDur === null ? (
+                        // Pas de « Bloquer » ici : la fiche est intitulée par l'heure touchée, bloquer
+                        // le créneau couvrant (autre heure, autre durée) se fait depuis SA case.
+                        <Txt variant="small" color={colors.textMuted} style={{ flex: 1, fontWeight: '600' }} numberOfLines={2}>
+                          {covering
+                            ? `Créneau ${covering.t} · ${durationLabel(covering.d)} — touche sa case dans le planning`
+                            : 'Pas de créneau à cette heure sur ce terrain'}
                         </Txt>
                       ) : (
                         <>
@@ -677,13 +680,14 @@ export default function ClubAdmin() {
             onCancel={() => setClosingId(null)}
             onDelete={
               closingComp.createdByMe
-                ? () => {
-                    // Écriture honnête : on attend le serveur avant de fermer la feuille.
-                    void deleteCompetition(closingComp.id).then((ok) => {
+                ? () =>
+                    // Écriture honnête : on attend le serveur avant de fermer la feuille. Promesse
+                    // RENDUE au panneau (comme onClose) : il ne dégèle son bouton qu'en cas d'échec.
+                    deleteCompetition(closingComp.id).then((ok) => {
                       toast.show(ok ? 'Tournoi annulé' : 'Annulation impossible — réessaie.', ok ? undefined : { icon: 'alert-circle' });
                       if (ok) setClosingId(null);
-                    });
-                  }
+                      return ok;
+                    })
                 : undefined
             }
           />
@@ -720,17 +724,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     backgroundColor: colors.amberSoft,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginTop: spacing.md,
-  },
-  pendingBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.signatureSoft,
-    borderWidth: 1,
-    borderColor: colors.signature,
     borderRadius: radius.md,
     padding: spacing.md,
     marginTop: spacing.md,

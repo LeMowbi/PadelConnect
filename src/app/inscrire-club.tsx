@@ -9,10 +9,9 @@ import { useToast } from '@/components/Toast';
 import { isValidPhone } from '@/lib/phone';
 import { Button, Card, IconCircle, Txt } from '@/components/ui';
 import { type Club } from '@/data/clubs';
+import { CLUB_TYPES } from '@/lib/clubConstants';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
-
-const CLUB_TYPES: Club['type'][] = ['Couvert', 'Extérieur', 'Mixte'];
 
 // Écran ouvert à TOUT joueur (depuis le profil) : « Tu gères un club ? Inscris-le ».
 // La demande part sur le SERVEUR (table club_requests) → elle apparaît dans l’espace

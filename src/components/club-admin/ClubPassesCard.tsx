@@ -4,7 +4,7 @@ import { Chip } from '@/components/Chip';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, Tag, Txt } from '@/components/ui';
 import { clubGrantPass, fetchClubPasses, type ClubPass } from '@/lib/passes';
-import { isValidPhone } from '@/lib/phone';
+import { DEFAULT_DIAL, isValidPhone } from '@/lib/phone';
 import { colors, radius, spacing } from '@/theme';
 
 // Carnets de séances (17) : le gérant crédite N séances à un joueur (par téléphone) puis
@@ -12,9 +12,6 @@ import { colors, radius, spacing } from '@/theme';
 // Ici : le formulaire de crédit + les soldes des porteurs. Écriture honnête (on attend le
 // serveur avant de vider le formulaire), convention §8 (null = échec réseau ≠ [] = aucun carnet).
 
-// Indicatif Côte d'Ivoire pré-rempli (modifiable) — même idiome que les autres flux « par
-// téléphone » (amis, coach, accès gérant).
-const DEFAULT_DIAL = '+225 ';
 // Formules courantes en un tap ; la saisie libre couvre le reste (1 à 100 = borne serveur).
 const PRESETS = [5, 10, 20];
 
@@ -56,9 +53,14 @@ export function ClubPassesCard({ clubId, clubName, connected }: { clubId: string
     setGranting(true);
     const name = await clubGrantPass(clubId, phone, count, label.trim());
     setGranting(false);
-    // null = numéro introuvable, AMBIGU (deux comptes portent ce numéro → refus anti-usurpation),
-    // hors bornes, ou panne réseau : un seul message net, et le formulaire reste rempli.
-    if (!name) {
+    // 'error' = panne réseau : réessayer a du sens, le numéro n'est pas en cause.
+    if (name === 'error') {
+      toast.show('Connexion impossible — réessaie', { icon: 'cloud-offline-outline' });
+      return;
+    }
+    // 'refused' = numéro introuvable, AMBIGU (deux comptes portent ce numéro → refus
+    // anti-usurpation) ou hors bornes : un seul message net, et le formulaire reste rempli.
+    if (!name || name === 'refused') {
       toast.show('Numéro introuvable ou ambigu — vérifie avec le joueur', { icon: 'alert-circle' });
       return;
     }

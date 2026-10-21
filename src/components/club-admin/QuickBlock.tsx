@@ -11,7 +11,9 @@ import { colors, radius, spacing } from '@/theme';
 // Mini-formulaire « Bloquer un créneau » : date → TERRAIN → un de SES créneaux (heure + durée,
 // 1h/1h30) → motif. Le terrain est choisi AVANT le créneau (68) : chaque terrain a sa propre
 // grille, un horaire n'a de sens qu'une fois le terrain connu.
-export type CourtStatus = { state: 'free' | 'reserved' | 'blocked' | 'tournoi'; label?: string };
+// `source` (bloqué seulement) : 'range' = fermé par une PÉRIODE, rouvrable uniquement depuis
+// « Périodes fermées » — un « Débloquer » ponctuel n'y changerait rien.
+export type CourtStatus = { state: 'free' | 'reserved' | 'blocked' | 'tournoi'; label?: string; source?: 'slot' | 'range' };
 
 export function QuickBlock({
   days,
@@ -144,6 +146,16 @@ export function QuickBlock({
                       {/* purpleDark : le violet clair échoue AA (~3,6:1) sur surfaceAlt — même token que le planning. */}
                       <Txt variant="small" color={colors.purpleDark} style={{ flex: 1, fontWeight: '600' }}>
                         Terrain retenu par un tournoi — non blocable.
+                      </Txt>
+                    </View>
+                  );
+                }
+                if (st.state === 'blocked' && st.source === 'range') {
+                  return (
+                    <View style={styles.statusBox}>
+                      <Ionicons name="calendar-clear-outline" size={16} color={colors.coral} />
+                      <Txt variant="small" color={colors.coralDark} style={{ flex: 1, fontWeight: '600' }}>
+                        {st.label ? `Fermé sur période · ${st.label}` : 'Fermé sur période'} — rouvrable dans « Périodes fermées »
                       </Txt>
                     </View>
                   );
