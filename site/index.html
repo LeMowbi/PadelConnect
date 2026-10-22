@@ -113,28 +113,29 @@
             </div>
           </div>
 
-          <!-- Visuel « mockup » en CSS pur — aucune image à fournir. -->
-          <div class="mockups reveal">
+          <!-- Visuel « mockup » en CSS pur — aucune image à fournir. Il DÉCRIT ce que fait l'app,
+               sans aucune donnée inventée (pas de faux créneau, de faux match ni de fausses équipes
+               inscrites) : les vraies captures de l'app le remplaceront (fiche App Store, H2). -->
+          <div class="mockups reveal" aria-hidden="true">
             <div class="telephone">
               <div class="encoche"></div>
               <div class="telephone-ecran">
                 <div class="ecran-carte">
-                  <div class="ecran-titre" data-i18n="hero.mockup.club">Padelta · Cocody Danga</div>
-                  <div class="ecran-ligne" data-i18n="hero.mockup.creneau">Aujourd'hui · 18h00 — 19h30</div>
+                  <div class="ecran-titre" data-i18n="hero.mockup.reserver">📅 Réserver un terrain</div>
+                  <div class="ecran-ligne" data-i18n="hero.mockup.reserverLigne">1h ou 1h30, selon les créneaux du club</div>
                 </div>
                 <div class="ecran-carte">
-                  <div class="ecran-titre" data-i18n="hero.mockup.prochain">🔥 Prochain match</div>
-                  <div class="ecran-ligne" data-i18n="hero.mockup.avatars">Toi + 3 joueurs</div>
-                  <div class="pile-avatars"><span>🙂</span><span>🙂</span><span>🙂</span><span>🙂</span></div>
+                  <div class="ecran-titre" data-i18n="hero.mockup.matchs">🤝 Matchs ouverts</div>
+                  <div class="ecran-ligne" data-i18n="hero.mockup.matchsLigne">Rejoins une partie à qui il manque un joueur</div>
                 </div>
                 <div class="ecran-carte">
-                  <div class="ecran-titre" data-i18n="hero.mockup.tournoi">🏆 Tournoi du week-end</div>
-                  <div class="ecran-ligne" data-i18n="hero.mockup.places">6 équipes inscrites</div>
+                  <div class="ecran-titre" data-i18n="hero.mockup.tournois">🏆 Tournois</div>
+                  <div class="ecran-ligne" data-i18n="hero.mockup.tournoisLigne">Inscris ton équipe en quelques gestes</div>
                 </div>
               </div>
             </div>
             <div class="carte-flottante haut-droite" id="badge-nb-clubs" data-i18n="hero.badgeClubs">⭐ Clubs à Abidjan</div>
-            <div class="carte-flottante bas-gauche">✅ <span data-i18n="hero.mockup.confirme">Confirmé</span></div>
+            <div class="carte-flottante bas-gauche">✅ <span data-i18n="hero.mockup.confirme">Confirmé par le club</span></div>
           </div>
         </div>
       </section>
@@ -185,7 +186,7 @@
           <div class="section-tete reveal">
             <span class="badge-section" data-i18n="clubs.badge">Nos clubs</span>
             <h2 data-i18n="clubs.titre">Nos clubs partenaires</h2>
-            <p data-i18n="clubs.soustitre">Des terrains couverts à Cocody aux clubs outdoor de Marcory et Zone 3.</p>
+            <p data-i18n="clubs.soustitre">Les clubs d’Abidjan sur PadelConnect, à jour en direct : terrains, tarifs et position.</p>
           </div>
 
           <!-- Grille remplie par assets/site.js (renderClubs) — données réelles, mêmes clubs que
@@ -253,12 +254,14 @@
           </div>
 
           <div class="cta-club reveal">
-            <a class="btn btn-or" href="https://apps.apple.com/app/id6785261310">
+            <!-- Vers la version web (club.padelconnectci.com) : un gérant sur ordinateur s'y inscrit
+                 directement (« Je gère un club »), sans passer par l'App Store. -->
+            <a class="btn btn-or" href="https://club.padelconnectci.com">
               <span>🏟️</span><span data-i18n="pourclubs.cta">Inscrire mon club</span>
             </a>
             <p class="liens-secondaires" data-i18n-html="pourclubs.cta-aide">
-              Télécharge l'app puis choisis « Je gère un club » à l'inscription, ou écris-nous directement à
-              <a href="mailto:contact@padelconnectci.com">contact@padelconnectci.com</a>.
+              Crée ton compte sur club.padelconnectci.com (ou dans l’app) et choisis « Je gère un club » à l’inscription, ou
+              écris-nous directement à <a href="mailto:contact@padelconnectci.com">contact@padelconnectci.com</a>.
             </p>
           </div>
         </div>
@@ -323,13 +326,13 @@
         'hero.preuve1': { fr: "Les meilleurs clubs d'Abidjan", en: "Abidjan's best clubs" },
         'hero.preuve2': { fr: 'Réservation confirmée par le club', en: 'Booking confirmed by the club' },
         'hero.preuve3': { fr: 'Gratuit pour les joueurs', en: 'Free for players' },
-        'hero.mockup.club': { fr: 'Padelta · Cocody Danga', en: 'Padelta · Cocody Danga' },
-        'hero.mockup.creneau': { fr: "Aujourd'hui · 18h00 — 19h30", en: 'Today · 6:00 — 7:30 PM' },
-        'hero.mockup.prochain': { fr: '🔥 Prochain match', en: '🔥 Next match' },
-        'hero.mockup.avatars': { fr: 'Toi + 3 joueurs', en: 'You + 3 players' },
-        'hero.mockup.tournoi': { fr: '🏆 Tournoi du week-end', en: '🏆 Weekend tournament' },
-        'hero.mockup.places': { fr: '6 équipes inscrites', en: '6 teams registered' },
-        'hero.mockup.confirme': { fr: 'Confirmé', en: 'Confirmed' },
+        'hero.mockup.reserver': { fr: '📅 Réserver un terrain', en: '📅 Book a court' },
+        'hero.mockup.reserverLigne': { fr: '1h ou 1h30, selon les créneaux du club', en: '1h or 1h30, depending on the club’s slots' },
+        'hero.mockup.matchs': { fr: '🤝 Matchs ouverts', en: '🤝 Open matches' },
+        'hero.mockup.matchsLigne': { fr: 'Rejoins une partie à qui il manque un joueur', en: 'Join a match that’s missing a player' },
+        'hero.mockup.tournois': { fr: '🏆 Tournois', en: '🏆 Tournaments' },
+        'hero.mockup.tournoisLigne': { fr: 'Inscris ton équipe en quelques gestes', en: 'Register your team in a few taps' },
+        'hero.mockup.confirme': { fr: 'Confirmé par le club', en: 'Confirmed by the club' },
         'hero.badgeClubs': { fr: '⭐ Clubs à Abidjan', en: '⭐ Clubs in Abidjan' },
 
         'features.badge': { fr: 'Fonctionnalités', en: 'Features' },
@@ -367,8 +370,8 @@
         'clubs.badge': { fr: 'Nos clubs', en: 'Our clubs' },
         'clubs.titre': { fr: 'Nos clubs partenaires', en: 'Our partner clubs' },
         'clubs.soustitre': {
-          fr: 'Des terrains couverts à Cocody aux clubs outdoor de Marcory et Zone 3.',
-          en: 'From indoor courts in Cocody to outdoor clubs in Marcory and Zone 3.',
+          fr: 'Les clubs d’Abidjan sur PadelConnect, à jour en direct : terrains, tarifs et position.',
+          en: 'Abidjan’s clubs on PadelConnect, updated live: courts, prices and location.',
         },
         'clubs.note': {
           fr: "Tarifs « dès » indicatifs (heures creuses) — à confirmer sur chaque fiche club dans l'application. Le règlement se fait directement au club, jamais dans l'app.",
@@ -403,8 +406,8 @@
         },
         'pourclubs.cta': { fr: 'Inscrire mon club', en: 'Register my club' },
         'pourclubs.cta-aide': {
-          fr: 'Télécharge l\'app puis choisis « Je gère un club » à l\'inscription, ou écris-nous directement à <a href="mailto:contact@padelconnectci.com">contact@padelconnectci.com</a>.',
-          en: 'Download the app then choose "I manage a club" at sign-up, or email us directly at <a href="mailto:contact@padelconnectci.com">contact@padelconnectci.com</a>.',
+          fr: 'Crée ton compte sur club.padelconnectci.com (ou dans l’app) et choisis « Je gère un club » à l’inscription, ou écris-nous directement à <a href="mailto:contact@padelconnectci.com">contact@padelconnectci.com</a>.',
+          en: 'Create your account on club.padelconnectci.com (or in the app) and choose "Je gère un club" (I manage a club) at sign-up, or email us directly at <a href="mailto:contact@padelconnectci.com">contact@padelconnectci.com</a>.',
         },
 
         'final.titre': { fr: 'Prêt à taper la balle ?', en: 'Ready to hit the court?' },

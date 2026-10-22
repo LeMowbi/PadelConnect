@@ -10,8 +10,8 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230C6A57'/%3E%3Ctext x='32' y='42' font-size='30' text-anchor='middle' fill='white' font-family='Arial'%3EP%3C/text%3E%3C/svg%3E"
     />
-    <!-- OG/Twitter : cette page sert AUSSI /invite/* et /club/* (liens de parrainage/partage
-         de club diffusés sur WhatsApp) → un aperçu propre est essentiel à la boucle de croissance. -->
+    <!-- OG/Twitter : cette page sert AUSSI /club/* (liens de partage de club diffusés sur WhatsApp ;
+         /invite/* a sa propre page, invite.html) → un aperçu propre est essentiel à la croissance. -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="PadelConnect" />
     <meta property="og:title" content="PadelConnect — Réserve ton terrain de padel à Abidjan" />
@@ -46,8 +46,9 @@
         display: block; text-decoration: none; border-radius: 14px; padding: 15px 20px;
         font-size: 16px; font-weight: 600; margin: 12px 0;
       }
-      a.ios { background: var(--vert); color: #fff; }
-      a.android { background: #fff; color: var(--vert); border: 1.5px solid var(--vert); }
+      /* Action principale / secondaire : le script les PERMUTE hors iPhone (voir plus bas). */
+      a.principal { background: var(--vert); color: #fff; }
+      a.android, a.secondaire { background: #fff; color: var(--vert); border: 1.5px solid var(--vert); }
       .note { font-size: 13px; color: #7a8a84; margin-top: 20px; }
     </style>
   </head>
@@ -55,13 +56,24 @@
     <main class="card">
       <div class="logo">P</div>
       <h1>PadelConnect</h1>
-      <p>Réserve un terrain de padel à Abidjan en 2 minutes. Installe l'app pour continuer.</p>
-      <a class="btn ios" id="ios" href="https://apps.apple.com/app/id6785261310">Télécharger sur l'App Store</a>
+      <p id="accroche">Réserve un terrain de padel à Abidjan en 2 minutes. Installe l'app pour continuer.</p>
+      <a class="btn principal" id="ios" href="https://apps.apple.com/app/id6785261310">Télécharger sur l'App Store</a>
       <!-- ⚠️ Android : la fiche Google Play n'existe PAS ENCORE (le lien play.google.com/…ci.padelco.app
            répond 404) — un bouton (ou une redirection auto) dessus enverrait chaque invité Android sur
-           une page d'erreur. Au lancement Play : remettre le <a class="btn android" id="android"> et la
-           branche isAndroid du script ci-dessous. -->
+           une page d'erreur. Au lancement Play : remettre le <a class="btn android" id="android"> en
+           action PRINCIPALE Android (branche isAndroid du script ci-dessous), reléguer ou retirer le
+           bloc #web, et faire de même dans invite.html (sinon le pont navigateur y resterait en tête,
+           devant Google Play). -->
       <p class="note" id="android-soon">L'app est disponible sur iPhone — la version Android arrive bientôt.</p>
+      <!-- Pont Android / ordinateur (H4, étape A) : la MÊME app, servie dans le navigateur par
+           club.padelconnectci.com. Le chemin d'un lien de club partagé (/club/ID) est conservé par le
+           script ci-dessous, qui fait de ce pont l'action PRINCIPALE hors iPhone (même règle
+           qu'invite.html). Honnête : pas de notifications dans le navigateur. À reléguer au lancement
+           de Google Play. -->
+      <div id="web">
+        <a class="btn secondaire" id="web-lien" href="https://club.padelconnectci.com">Utiliser la version navigateur</a>
+        <p class="note">Sur Android ou sur ordinateur : PadelConnect fonctionne dans ton navigateur, sans notifications.</p>
+      </div>
     </main>
     <script>
       // Redirection automatique vers le store selon l'appareil (le bouton reste affiché en repli
@@ -71,7 +83,29 @@
       (function () {
         var ua = navigator.userAgent || '';
         var isIOS = /iPhone|iPad|iPod/i.test(ua) || (/(Mac)/i.test(ua) && 'ontouchend' in document);
-        if (isIOS) window.location.replace(document.getElementById('ios').href);
+        var ios = document.getElementById('ios');
+        var web = document.getElementById('web');
+        var webLien = document.getElementById('web-lien');
+        // Version navigateur : on garde le chemin d'un lien de club partagé (/club/ID) ; l'app web
+        // n'ouvre la fiche que pour un compte DÉJÀ connecté — sans compte, elle passe d'abord par
+        // l'inscription et la fiche n'est pas reprise ensuite (le texte de la page ne la promet pas).
+        // /invite/* a sa propre page, invite.html. Chemin filtré (lettres, chiffres, - et _ seulement).
+        var chemin = /^\/club\/[A-Za-z0-9_-]{1,64}\/?$/.test(location.pathname) ? location.pathname : '';
+        webLien.href = 'https://club.padelconnectci.com' + chemin;
+        if (isIOS) {
+          // iPhone : l'App Store suffit, le pont navigateur ne s'adresse qu'à Android et à l'ordinateur.
+          web.style.display = 'none';
+          window.location.replace(ios.href);
+        } else {
+          // Android / ordinateur : l'App Store n'y installe rien → la version navigateur passe EN TÊTE
+          // et en action principale ; le lien App Store ne promet plus qu'un téléchargement iPhone.
+          ios.parentNode.insertBefore(web, ios);
+          webLien.className = 'btn principal';
+          ios.className = 'btn secondaire';
+          ios.textContent = 'Télécharger sur iPhone';
+          document.getElementById('accroche').textContent =
+            'Réserve un terrain de padel à Abidjan en 2 minutes, directement dans ton navigateur.';
+        }
       })();
     </script>
   </body>

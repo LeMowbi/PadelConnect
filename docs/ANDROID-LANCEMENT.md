@@ -81,7 +81,9 @@ lancement Play : le lien de l'e-mail passe d'abord par Supabase (`/verify`) puis
 
 1. Build **production Android** (`.aab`) via EAS + envoi sur Play Console.
 2. Ajout de l'empreinte Google au `assetlinks.json` (cf. §4).
-3. Compléter `site/get.html` : activer la redirection Android vers la fiche Play (aujourd'hui
-   la page n'envoie que vers l'App Store, par choix, tant que la fiche n'existe pas).
+3. Compléter `site/get.html` ET `site/invite.html` : remettre le bouton Google Play (et la redirection
+   Android de get.html) en action PRINCIPALE sur Android, et reléguer ou retirer le bloc `#web`
+   (pont « Utiliser la version navigateur », action principale hors iPhone tant que la fiche Play
+   n'existe pas — voir le commentaire « Android » de get.html). Redéployer `site/` en entier.
 4. Test fermé (Google impose ~14 jours de test avec des testeurs pour un compte personnel neuf —
    prévoir cette fenêtre), puis production.

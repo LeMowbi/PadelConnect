@@ -2,8 +2,9 @@ import { ScrollViewStyleReset } from 'expo-router/html';
 import { type PropsWithChildren } from 'react';
 import { colors } from '@/theme';
 
-// Document HTML racine de la version web (export Expo déployé sur club.padelconnectci.com). Définit le
-// titre, la description et le viewport.
+// Document HTML racine du rendu STATIQUE (web.output: "static") uniquement. Avec web.output: "single"
+// (réglage actuel, club.padelconnectci.com), l'export lit public/index.html : garder les deux alignés
+// (lang, titre, description, theme-color).
 export default function Root({ children }: PropsWithChildren) {
   return (
     <html lang="fr">

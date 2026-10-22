@@ -123,8 +123,10 @@ créé côté serveur (e-mail déjà validé) — **ses identifiants te sont com
       l'empreinte EAS déjà présente (ne pas l'écraser : les APK signés EAS perdraient leurs App Links
       — voir `docs/ANDROID-LANCEMENT.md` §4).
 - [ ] Au lancement Play, remettre dans **`site/get.html`** le bouton `<a class="btn android" id="android">`
-      et la branche `isAndroid` du script (voir le commentaire de la page) : aujourd'hui la page
-      n'envoie volontairement que vers l'App Store, tant que la fiche Play n'existe pas.
+      et la branche `isAndroid` du script en action PRINCIPALE Android, puis reléguer ou retirer le
+      bloc `#web` (pont navigateur) dans **`site/get.html` ET `site/invite.html`** (voir le commentaire
+      « Android » de get.html) : tant que la fiche Play n'existe pas, ce pont est l'action principale
+      hors iPhone.
 - [ ] **Redéployer le dossier `site/`** sur Cloudflare Pages. ⚠️ Redéployer `site/` **en entier**.
 
 ### c-bis. Clé de notifications Apple (APNs)

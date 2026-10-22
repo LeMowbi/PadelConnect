@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Plan du site vitrine (statique) : les pages PUBLIQUES, à leur URL canonique (sans « .html » —
+     Cloudflare Pages redirige /cgu.html vers /cgu). À compléter si une page publique est ajoutée. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://padelconnectci.com/</loc>
+  </url>
+  <url>
+    <loc>https://padelconnectci.com/get</loc>
+  </url>
+  <url>
+    <loc>https://padelconnectci.com/cgu</loc>
+  </url>
+  <url>
+    <loc>https://padelconnectci.com/privacy</loc>
+  </url>
+</urlset>

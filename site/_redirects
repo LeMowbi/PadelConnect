@@ -6,11 +6,16 @@
 # Android App Links exige /.well-known/assetlinks.json servi tel quel (même astuce que ci-dessus).
 /.well-known/assetlinks.json  /assetlinks.json  200
 
-# Utilisateur SANS l'app : un lien /invite/CODE ou /club/ID ouvert dans le navigateur → page
-# d'atterrissage /get qui redirige les iPhone vers l'App Store (Android : pas de redirection tant
-# que la fiche Play n'existe pas). On RÉÉCRIT (200) vers l'URL PROPRE /get (Pages sert get.html).
-# ⚠️ NE PAS cibler /get.html : le « clean URL » de Cloudflare Pages le redirige (308) vers /get,
-# ce qui BOUCLAIT à l'infini (ERR_TOO_MANY_REDIRECTS) et cassait toute la page de téléchargement.
+# Utilisateur SANS l'app : un lien /club/ID ouvert dans le navigateur → page d'atterrissage /get
+# qui redirige les iPhone vers l'App Store et propose la version navigateur (Android, ordinateur).
+# Un lien /invite/CODE → page /invite qui AFFICHE le code de parrainage : sur iPhone, elle le copie
+# avant /get (sinon le passage par l'App Store perdait le code) ; sur Android et ordinateur, elle met
+# en tête la version navigateur, qui reçoit le code. L'adresse reste /invite/CODE dans la barre :
+# la page y lit le code. On RÉÉCRIT (200) vers les URL PROPRES /get et /invite (Pages sert get.html
+# et invite.html).
+# ⚠️ NE PAS cibler /get.html ni /invite.html : le « clean URL » de Cloudflare Pages les redirige
+# (308) vers /get et /invite, ce qui BOUCLAIT à l'infini (ERR_TOO_MANY_REDIRECTS) et cassait toute
+# la page de téléchargement.
 # Vérifié au curl après déploiement : /get, /invite/*, /club/* doivent répondre 200 (pas 308).
-/invite/*  /get  200
+/invite/*  /invite  200
 /club/*  /get  200

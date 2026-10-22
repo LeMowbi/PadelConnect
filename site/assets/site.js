@@ -416,6 +416,21 @@
       });
   }
 
+  // Nombre de TERRAINS DE PADEL parmi les terrains saisis par le gérant (club_config.courts).
+  // Certains clubs y listent aussi d'autres sports (Elite Club : PADBOL, BASKET, VOLLEY).
+  // ⚠️ RÈGLE PROVISOIRE, en attendant la décision du porteur : on ne compte que les lignes dont le
+  // nom contient « Terrain » ou « Padel » (un « Terrain de basket » compterait donc encore). Un club
+  // qui nomme ses terrains librement (Padelta : VIBORA, SMASH…) n'a aucune ligne de ce genre : on
+  // les compte alors toutes (sinon il afficherait 0 terrain). La fiche club de l'app compte, elle,
+  // TOUS les terrains : les deux chiffres peuvent différer tant que la règle n'est pas tranchée
+  // (idéalement par une donnée explicite — le sport de chaque terrain — plutôt qu'un filtre de nom).
+  function nbTerrainsPadel(terrains) {
+    var padel = terrains.filter(function (t) {
+      return /terrain|padel/i.test(t == null ? '' : String(t));
+    }).length;
+    return padel || terrains.length;
+  }
+
   // Prix « dès » : MIROIR de l'app (pricing.minPrice + courtSchedule.resolveCourtSlots /
   // offeredDurations). Le site n'a pas de bundler, d'où cette copie : toute évolution de ces
   // règles côté app doit être reportée ici, sinon le site et l'app annoncent des prix différents.
@@ -522,12 +537,12 @@
         (configs || []).forEach(function (cf) {
           cfgById[cf.club_id] = cf;
         });
-        // Nb de terrains RÉEL : longueur du tableau club_config.courts (édité par le gérant), sinon
-        // la valeur fondateur embarquée. Description : texte gérant (une langue) s'il existe, sinon
-        // le blurb bilingue seed.
+        // Nb de terrains RÉEL : terrains de padel du tableau club_config.courts (édité par le gérant,
+        // voir nbTerrainsPadel), sinon la valeur fondateur embarquée. Description : texte gérant (une
+        // langue) s'il existe, sinon le blurb bilingue seed.
         function liveCourts(id, seed) {
           var cf = cfgById[id];
-          return cf && Array.isArray(cf.courts) && cf.courts.length ? cf.courts.length : seed;
+          return cf && Array.isArray(cf.courts) && cf.courts.length ? nbTerrainsPadel(cf.courts) : seed;
         }
         function liveBlurb(o, seed) {
           return o && o.blurb && String(o.blurb).trim() ? { fr: o.blurb, en: o.blurb } : seed;
