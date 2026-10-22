@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React from 'react';
+import { useRouter, useScrollToTop } from 'expo-router';
+import React, { useRef } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -24,7 +24,8 @@ type Props = {
   headerRight?: React.ReactNode;
   contentStyle?: ViewStyle;
   overlay?: React.ReactNode;
-  scrollRef?: React.Ref<ScrollView>;
+  // Objet ref (useRef) : il sert aussi au « retour en haut » au second tap sur l’onglet.
+  scrollRef?: React.RefObject<ScrollView | null>;
   // Élément RefreshControl pour le « tirer pour rafraîchir » (laissé au choix de l’écran).
   refreshControl?: React.ReactElement<RefreshControlProps>;
 };
@@ -43,6 +44,13 @@ export function Screen({
 }: Props) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  // Retaper l’onglet actif remonte l’écran en haut (comme toutes les grandes apps). Le hook
+  // détecte seul les onglets : il ne s’abonne qu’aux navigateurs à onglets PARENTS et ne
+  // défile que si l’écran est au premier plan → no-op pour les écrans de détail de la pile
+  // racine et pour `scroll={false}` (ref vide). Ref interne si l’écran n’en fournit pas.
+  const ownScrollRef = useRef<ScrollView>(null);
+  const scrollTarget = scrollRef ?? ownScrollRef;
+  useScrollToTop(scrollTarget);
 
   const header = (title || back) && (
     <View style={styles.header}>
@@ -90,7 +98,7 @@ export function Screen({
     <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       {scroll ? (
         <ScrollView
-          ref={scrollRef}
+          ref={scrollTarget}
           showsVerticalScrollIndicator={false}
           // Le 1er tap sur un bouton ne doit pas être « avalé » par la fermeture du clavier ;
           // et on referme le clavier dès qu’on fait défiler un formulaire.
