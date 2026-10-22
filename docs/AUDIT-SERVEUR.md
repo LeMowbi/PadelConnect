@@ -8,6 +8,17 @@
 > **`91`** (pré-lancement 2026-10) : ÉCRITE + prouvée en local 29/29 (contre-épreuve 6/6 sur
 > les anciennes définitions), **À APPLIQUER en prod** (coordinateur) — ne pas la noter « appliquée »
 > avant la preuve en base.
+> **`92`** (fidélité cible), **`93`** (index) et **`94`** (anti-abus) — vague 3 du 2026-10-22 :
+> ÉCRITES + prouvées en LOCAL (Postgres 16), **PAS appliquées en prod**. À coller DANS L'ORDRE après
+> la 91, puis recaler ici et dans `CLAUDE.md` §8 (« SQL 02 → 94 »). Au passage : la **92 corrige la
+> 82** (`fetch_loyalty_claims` levait 42702 « column reference id is ambiguous » → la liste « Fidélité
+> à servir » de l'opérateur ne se chargeait jamais) et la **94 corrige la définition LIVE de
+> `send_friend_request`** (42702 « friend_id is ambiguous » dès que le numéro correspond à un vrai
+> compte — défaut PROBABLE en prod, à vérifier en transaction annulée AVANT la 94 : `begin;`
+> puis `select set_config('request.jwt.claims', '{"sub":"<uuid A>","role":"authenticated"}', true);`
+> puis `select * from public.send_friend_request('<numéro du compte B>');` puis `rollback;` —
+> avant la 94 : erreur 42702 attendue ; après : 'sent'). Les compteurs vivent dans `rate_counters`
+> (vidée par le RESET).
 > Les sections datées ci-dessous (« ⏳ À FAIRE ») sont un HISTORIQUE conservé pour la
 > trace — elles ne sont plus des actions en attente. Reste au porteur (hors SQL) : lien Wave,
 > FCM Android + empreinte SHA-256 d'assetlinks.

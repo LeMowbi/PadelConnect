@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { BarChart } from '@/components/BarChart';
+import { CalendarPicker } from '@/components/CalendarPicker';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, EmptyState, IconCircle, SectionHeader, StatTile, Tag, Txt } from '@/components/ui';
 import { LegendDot } from '@/components/club-admin/LegendDot';
@@ -40,6 +41,14 @@ import { colors, radius, shadows, spacing } from '@/theme';
 
 type SelectedCell = { dateKey: string; time: string; durationMin: number; label: string };
 
+const DOW_SHORT = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
+
+// Horizon du planning GÉRANT (D1, décision porteur) : un client qui appelle pour « samedi dans
+// 12 jours » se bloque au même endroit que d'habitude — jusqu'à 60 jours après aujourd'hui.
+// Les 7 premiers jours restent en pastilles ; au-delà, « Autre date » ou les flèches ‹ ›.
+// L'horizon JOUEUR (tunnel de réservation) reste, lui, à 7 jours.
+const PLANNING_HORIZON_DAYS = 60;
+
 export function SectionReservations({
   club,
   comps,
@@ -69,6 +78,8 @@ export function SectionReservations({
   } = useApp();
   const toast = useToast();
   const [planDayKey, setPlanDayKey] = useState<string | null>(null);
+  // Calendrier « Autre date » du planning du jour (replié par défaut).
+  const [showPlanCalendar, setShowPlanCalendar] = useState(false);
   // Résa en cours d'annulation par le club (chevauchement hors app) : id ouvert dans un mini-form.
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [showBlockForm, setShowBlockForm] = useState(false);
@@ -345,9 +356,17 @@ export function SectionReservations({
   const clubRanges = state.blockedRanges.filter((r) => r.clubId === club.id).sort((a, b) => a.dateFrom.localeCompare(b.dateFrom));
 
   // Planning par TERRAIN pour un jour donné — chaque terrain a SA grille (1h/1h30, 68).
-  // Recalé après minuit (todayKey) : `week` démarre AUJOURD'HUI, il ne doit pas rester sur la veille.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const week = useMemo(() => nextDays(7), [todayKey]);
+  // Recalé après minuit (todayKey) : `horizon` démarre AUJOURD'HUI, il ne doit pas rester sur la
+  // veille. Au-delà de la première semaine, le libellé devient ABSOLU (« Sam 3 nov. ») : « Samedi 3 »
+  // serait ambigu d'un mois sur l'autre.
+  const horizon = useMemo(
+    () => nextDays(PLANNING_HORIZON_DAYS + 1).map((d, i) => (i < 7 ? d : { ...d, label: dateKeyLabel(d.key) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [todayKey],
+  );
+  // La SEMAINE (7 j) reste la base des pastilles, des mini-stats, du récurrent et de la
+  // proposition d'alternative de ClubCancelForm (inchangés).
+  const week = useMemo(() => horizon.slice(0, 7), [horizon]);
   const courts = courtsFor(club, state.clubCourts);
   // Grille EFFECTIVE de chaque terrain (courtSlots par terrain si réglée, sinon dérivée de la
   // grille club unique) : source de vérité unique pour le planning, les stats et QuickBlock/
@@ -359,7 +378,23 @@ export function SectionReservations({
     courtClosed: state.clubCourtClosed,
   };
   const grid = resolvedGridFor(club, sched);
-  const planDay = week.find((d) => d.key === planDayKey) ?? week[0];
+  // Jour retrouvé par CLÉ dans l'horizon : après minuit, un jour devenu passé retombe sur aujourd'hui.
+  const planIdx = Math.max(
+    0,
+    horizon.findIndex((d) => d.key === planDayKey),
+  );
+  const planDay = horizon[planIdx];
+  // Jour choisi HORS de la première semaine (8ᵉ pastille « Autre date » active).
+  const planFar = planIdx >= 7;
+  const goPlanDay = (key: string) => {
+    setPlanDayKey(key);
+    setShowPlanCalendar(false);
+  };
+  // Flèches ‹ › : un jour avant/après, bornées à l'horizon (aujourd'hui → J+60).
+  const shiftPlanDay = (delta: number) => {
+    const next = horizon[planIdx + delta];
+    if (next) goPlanDay(next.key);
+  };
   // « Jour bloqué entièrement » : seulement un tournoi PUBLIÉ sans terrains/créneaux précis.
   // Un tournoi en attente/refusé, ou qui ne réserve que quelques terrains, ne ferme pas la grille.
   const dayTournament = hasFullDayCompetition(club.id, planDay.key, comps);
@@ -482,7 +517,7 @@ export function SectionReservations({
       </View>
       {showBlockForm ? (
         <QuickBlock
-          days={week}
+          days={horizon}
           courts={courts}
           grid={grid}
           dayHasTournament={(dKey) => hasFullDayCompetition(club.id, dKey, comps)}
@@ -706,14 +741,14 @@ export function SectionReservations({
             return (
               <Pressable
                 key={d.key}
-                onPress={() => setPlanDayKey(d.key)}
+                onPress={() => goPlanDay(d.key)}
                 style={[styles.dayPill, active && styles.dayPillActive]}
                 accessibilityRole="button"
                 accessibilityLabel={d.label}
                 accessibilityState={{ selected: active }}
               >
                 <Txt variant="small" color={active ? colors.onSignature : colors.textFaint} style={{ fontSize: 10, fontWeight: '700' }}>
-                  {['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'][dd.getUTCDay()]}
+                  {DOW_SHORT[dd.getUTCDay()]}
                 </Txt>
                 <Txt variant="h3" color={active ? colors.onSignature : colors.text} style={{ fontSize: 16 }}>
                   {dd.getUTCDate()}
@@ -721,7 +756,64 @@ export function SectionReservations({
               </Pressable>
             );
           })}
+          {/* 8ᵉ pastille « Autre date » (D1) : ouvre le calendrier jusqu'à J+60. Active, elle montre
+              le jour lointain choisi (son libellé complet est sous les pastilles). */}
+          <Pressable
+            onPress={() => setShowPlanCalendar((v) => !v)}
+            style={[styles.dayPill, planFar && styles.dayPillActive]}
+            accessibilityRole="button"
+            accessibilityLabel={planFar ? `Autre date : ${planDay.label}` : 'Autre date'}
+            accessibilityState={{ selected: planFar, expanded: showPlanCalendar }}
+          >
+            {planFar ? (
+              <>
+                <Txt variant="small" color={colors.onSignature} style={{ fontSize: 10, fontWeight: '700' }}>
+                  {DOW_SHORT[new Date(planDay.value).getUTCDay()]}
+                </Txt>
+                <Txt variant="h3" color={colors.onSignature} style={{ fontSize: 16 }}>
+                  {new Date(planDay.value).getUTCDate()}
+                </Txt>
+              </>
+            ) : (
+              <>
+                <Txt variant="small" color={colors.textMuted} style={{ fontSize: 10, fontWeight: '700' }}>
+                  AUTRE
+                </Txt>
+                <Ionicons name="calendar-outline" size={18} color={colors.text} style={{ marginTop: 1 }} />
+              </>
+            )}
+          </Pressable>
         </ScrollView>
+        {showPlanCalendar ? (
+          <CalendarPicker value={planDay.key} minKey={horizon[0].key} maxKey={horizon[horizon.length - 1].key} onSelect={goPlanDay} />
+        ) : null}
+        {/* Flèches ‹ › : un jour à la fois, de aujourd'hui à J+60 — le libellé COMPLET du jour
+            affiché lève toute ambiguïté au-delà de la première semaine. */}
+        <View style={styles.dayNav}>
+          <Pressable
+            onPress={() => shiftPlanDay(-1)}
+            disabled={planIdx <= 0}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Jour précédent"
+            accessibilityState={{ disabled: planIdx <= 0 }}
+          >
+            <Ionicons name="chevron-back" size={20} color={planIdx > 0 ? colors.text : colors.textFaint} />
+          </Pressable>
+          <Txt variant="h3" style={{ flex: 1, textAlign: 'center' }} numberOfLines={1}>
+            {planDay.label}
+          </Txt>
+          <Pressable
+            onPress={() => shiftPlanDay(1)}
+            disabled={planIdx >= horizon.length - 1}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Jour suivant"
+            accessibilityState={{ disabled: planIdx >= horizon.length - 1 }}
+          >
+            <Ionicons name="chevron-forward" size={20} color={planIdx < horizon.length - 1 ? colors.text : colors.textFaint} />
+          </Pressable>
+        </View>
 
         <Card>
           {dayTournament ? (
@@ -1190,6 +1282,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dayPillActive: { backgroundColor: colors.signature, borderColor: colors.signature, ...shadows.e1 },
+  dayNav: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.sm, marginVertical: spacing.sm },
   // Puce de créneau (une par terrain, largeur libre — le libellé porte l'heure ET la durée).
   gridSlotBox: {
     flexDirection: 'row',

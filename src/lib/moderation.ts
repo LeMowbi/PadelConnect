@@ -4,10 +4,39 @@
 
 import { supabase } from './supabase';
 
-// Signale un avis (motif optionnel). true = enregistré (l'opérateur modère sous 24 h).
-export async function reportReview(reviewId: string, reason = ''): Promise<boolean> {
+// ─── Plafonds anti-abus (SQL 94) ───────────────────────────────────────────────
+// Le serveur refuse par un CODE, jamais par une panne : 'rate_limited' = fenêtre HORAIRE (30
+// recherches de numéro / h, partagées entre la recherche d'ami et la demande d'ami) ;
+// 'rate_limited_day' = fenêtre JOURNALIÈRE (20 demandes d'ami, 5 messages support, 10 signalements,
+// 3 demandes de club). Une RPC qui renvoie un texte le renvoie en statut ; les triggers et
+// find_player_by_phone le LÈVENT (SQLSTATE P0001) → il arrive dans `error.message` (PostgREST).
+// Afficher « Connexion impossible — réessaie » serait un mensonge en boucle : on dit la vraie
+// fenêtre.
+export type RateLimited = 'rate_limited' | 'rate_limited_day';
+
+// Code de plafond porté par une erreur PostgREST (null = autre erreur, réseau compris).
+export function rateLimitedCode(error: { message?: string } | null | undefined): RateLimited | null {
+  const msg = error?.message ?? '';
+  if (msg.includes('rate_limited_day')) return 'rate_limited_day';
+  if (msg.includes('rate_limited')) return 'rate_limited';
+  return null;
+}
+
+// Message honnête par fenêtre (texte horaire décidé par le porteur ; la variante journalière évite
+// de promettre « dans une heure » quand le compteur ne se remet à zéro qu'à minuit).
+export function rateLimitedMessage(code: RateLimited): string {
+  return code === 'rate_limited_day'
+    ? 'Doucement 😊 — tu as atteint la limite du jour, réessaie demain'
+    : 'Doucement 😊 — réessaie dans une heure';
+}
+
+// Signale un avis (motif optionnel). 'ok' = enregistré (l'opérateur modère sous 24 h) ;
+// 'rate_limited_day' = plafond de 10 signalements / jour (trigger 94, traverse la RPC) ;
+// 'error' = échec réseau / serveur.
+export async function reportReview(reviewId: string, reason = ''): Promise<'ok' | 'rate_limited_day' | 'error'> {
   const { data, error } = await supabase.rpc('report_review', { p_review_id: reviewId, p_reason: reason });
-  return !error && data === true;
+  if (error) return rateLimitedCode(error) ? 'rate_limited_day' : 'error';
+  return data === true ? 'ok' : 'error';
 }
 
 // Bloque un joueur (ses avis et ses matchs ouverts disparaissent de MA vue). true = ok.

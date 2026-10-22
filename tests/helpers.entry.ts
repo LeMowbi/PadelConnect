@@ -86,7 +86,7 @@ check(!isReservationOwner(other, null), 'owner : sans session, résa « bookedBy
 const cleared = loggedOutState({
   ...initialState,
   serverUserId: 'me',
-  loyalty: { played: 12, claimed: 1 },
+  loyalty: { played: 12, playedAll: 12, claimed: 1, cap: 5000 },
   friends: [{ id: 'f1', name: 'Awa', phone: '0707070707' }],
   favoritePlayerIds: ['f1'],
   blockedUserIds: ['x'],

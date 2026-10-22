@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import { hapticLight } from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, font } from '@/theme';
 
@@ -32,6 +33,9 @@ export default function TabsLayout() {
         // Le clavier ne doit pas pousser la barre au-dessus des champs (Android).
         tabBarHideOnKeyboard: true,
       }}
+      // Petite vibration à chaque tap sur un onglet (y compris le second tap qui remonte
+      // l’écran en haut, cf. Screen). No-op sur le web.
+      screenListeners={{ tabPress: () => hapticLight() }}
     >
       <Tabs.Screen
         name="index"

@@ -7,7 +7,7 @@ import { BookingConfirmation } from './BookingConfirmation';
 import { Chip } from './Chip';
 import { LevelRangePicker } from './LevelRangePicker';
 import { Reveal } from './Reveal';
-import { useToast } from './Toast';
+import { ToastOutlet, useToast } from './Toast';
 import { Button, IconCircle, Txt } from './ui';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { activeClubs, type Club } from '@/data/clubs';
@@ -263,7 +263,9 @@ export function BookingSheet({
           accessible passe par le bouton « Fermer » libellé + onRequestClose. */}
       <Pressable style={styles.backdrop} onPress={requestClose} accessible={false} importantForAccessibility="no-hide-descendants" />
       <KeyboardAvoidingView style={styles.wrapper} pointerEvents="box-none" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={[styles.sheet, { paddingBottom: spacing.xxl + insets.bottom }]}>
+        {/* accessibilityViewIsModal (même règle que BottomSheet) : le lecteur d'écran reste
+            PIÉGÉ dans la feuille au lieu de balayer l'arrière-plan. */}
+        <View accessibilityViewIsModal style={[styles.sheet, { paddingBottom: spacing.xxl + insets.bottom }]}>
           <View style={styles.handle} />
 
           {/* Contenu DÉFILABLE (même protection que BottomSheet) : le sélecteur « Type de match »
@@ -533,6 +535,11 @@ export function BookingSheet({
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+      {/* Refus visibles DANS la feuille (terrain pris, pas de réseau, trop de réservations) : sans
+          lui, le toast racine restait caché sous le Modal et le bouton redevenait actif sans un mot.
+          Fermer démonte la feuille : un message montré juste avant (« créneau passé ») repart
+          aussitôt sur la racine. */}
+      <ToastOutlet />
     </Modal>
   );
 }

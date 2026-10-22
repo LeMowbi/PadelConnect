@@ -2,8 +2,15 @@ import { SaveFormat, manipulateAsync, type Action } from 'expo-image-manipulator
 import * as ImagePicker from 'expo-image-picker';
 import { Alert, Linking, Platform } from 'react-native';
 
-// Message clair par défaut quand l’accès aux photos est refusé : on propose d’ouvrir Réglages.
+import { alertAsync } from './confirm';
+
+// Message clair par défaut quand l’accès aux photos est refusé : on propose d’ouvrir Réglages
+// (natif). Sur le web, Alert.alert ne fait rien et il n’y a pas de Réglages : simple message.
 function defaultDenied() {
+  if (Platform.OS === 'web') {
+    alertAsync('Accès aux photos refusé', 'Pour choisir une image, autorise l’accès aux fichiers dans ton navigateur.');
+    return;
+  }
   Alert.alert(
     'Accès aux photos refusé',
     'Pour choisir une image, autorise PadelConnect à accéder à tes photos dans les Réglages de ton téléphone.',

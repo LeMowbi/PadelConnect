@@ -11,6 +11,7 @@ import { Button, Card, Divider, EmptyState, SectionHeader, Tag, Txt } from '@/co
 import { useToast } from '@/components/Toast';
 import { levelText } from '@/lib/format';
 import { findPlayerByPhone } from '@/lib/friends';
+import { rateLimitedMessage } from '@/lib/moderation';
 import { DEFAULT_DIAL, isValidPhone } from '@/lib/phone';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { openWhatsApp } from '@/lib/contact';
@@ -55,6 +56,12 @@ export default function AmisScreen() {
     const res = await findPlayerByPhone(q);
     setSearching(false);
     if (q !== phoneRef.current) return; // recherche périmée (le champ a changé pendant l’attente)
+    if (res === 'rate_limited') {
+      // Plafond de 30 recherches / heure (94) : refus DÉFINITIF pour l'heure, pas une panne réseau.
+      hapticWarning();
+      toast.show(rateLimitedMessage('rate_limited'), { icon: 'alert-circle' });
+      return;
+    }
     if (res === undefined) {
       // Échec RÉSEAU ≠ « pas de compte » : on n'affirme pas qu'il n'est pas inscrit.
       hapticWarning();
@@ -96,6 +103,11 @@ export default function AmisScreen() {
       // → même message terminal que la recherche, et on rend le formulaire.
       hapticWarning();
       toast.show('Personne avec ce numéro sur PadelConnect.', { icon: 'alert-circle' });
+    } else if (res.status === 'rate_limited' || res.status === 'rate_limited_day') {
+      // Plafond anti-abus (94) : la fenêtre réelle (heure / jour), jamais « réessaie dans un instant ».
+      hapticWarning();
+      toast.show(rateLimitedMessage(res.status), { icon: 'alert-circle' });
+      return;
     } else {
       hapticWarning();
       toast.show('Envoi impossible — réessaie dans un instant', { icon: 'alert-circle' });

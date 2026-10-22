@@ -72,3 +72,32 @@ jobs:
           --project-name=padelconnect-club
           --branch=main
           --commit-dirty=true
+
+      # Contrôle APRÈS déploiement : le job ÉCHOUE (au lieu de passer au vert en silence) si le site
+      # en ligne ne sert pas la police Ionicons en font/ttf (bug du 2026-10-21 : HTML servi à la place
+      # → toutes les icônes vides) ou si l'index en ligne ne pointe pas vers le bundle qu'on vient
+      # d'exporter (version en retard). Quelques essais espacés : le domaine peut mettre un instant
+      # à suivre le nouveau déploiement.
+      - name: Contrôler le site en ligne (police d'icônes + bundle)
+        run: |
+          set -euo pipefail
+          BASE="https://club.padelconnectci.com"
+          POLICE="$(find dist/assets -type f -name 'Ionicons*.ttf' | head -n 1)"
+          BUNDLE="$(grep -o '/_expo/static/js/web/entry-[^"]*\.js' dist/index.html | head -n 1 || true)"
+          if [[ -z "$POLICE" || -z "$BUNDLE" ]]; then
+            echo "::error::Export incomplet : police Ionicons ou bundle introuvable dans dist/"
+            exit 1
+          fi
+          URL_POLICE="$BASE/${POLICE#dist/}"
+          for ESSAI in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            TYPE="$(curl -sS -o /dev/null -w '%{content_type}' "$URL_POLICE" || true)"
+            INDEX="$(curl -sS "$BASE/" || true)"
+            if [[ "$TYPE" == font/ttf* && "$INDEX" == *"$BUNDLE"* ]]; then
+              echo "✓ police servie en $TYPE et index à jour ($BUNDLE)"
+              exit 0
+            fi
+            echo "essai $ESSAI : police « ${TYPE:-aucune réponse} », bundle à jour : $([[ "$INDEX" == *"$BUNDLE"* ]] && echo oui || echo non)"
+            sleep 15
+          done
+          echo "::error::Le site en ligne ne sert pas la police en font/ttf ou n'a pas le dernier bundle ($URL_POLICE)"
+          exit 1

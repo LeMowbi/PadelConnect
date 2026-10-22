@@ -1,21 +1,26 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { AccessibilityInfo, Keyboard, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Chip } from '@/components/Chip';
 import { Logo } from '@/components/Logo';
 import { Stepper } from '@/components/Stepper';
+import { useToast } from '@/components/Toast';
 import { Button, Card, IconCircle, Txt } from '@/components/ui';
 import { type Club } from '@/data/clubs';
 import { CLUB_TYPES } from '@/lib/clubConstants';
 import { levelLabel, levelText } from '@/lib/format';
+import { hapticLight } from '@/lib/haptics';
 import { QUIZ_QUESTIONS, levelFromQuiz, type QuizAnswers } from '@/lib/levelQuiz';
-import { DEFAULT_DIAL, isValidPhone } from '@/lib/phone';
+import { DEFAULT_DIAL, PHONE_INCOMPLETE, isValidPhone } from '@/lib/phone';
 import { clearPendingReferral, getPendingReferral } from '@/lib/pendingReferral';
 import { pickImage } from '@/lib/pickImage';
+import { REFERRAL_CODE, referralCodeIn } from '@/lib/referralCode';
 import { GENDERS, ageFrom, maskBirthDate, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
 import { useApp } from '@/store/AppContext';
 import { colors, font, gradients, radius, shadows, spacing } from '@/theme';
@@ -37,6 +42,8 @@ const FIELD_ORDER: FieldKey[] = STEP_FIELDS.flat();
 
 export default function Onboarding() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const toast = useToast();
   const { signUpWithEmail, signInWithEmail, signInWithPhone, resetPassword, resendConfirmation } = useApp();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -94,6 +101,15 @@ export default function Onboarding() {
   const [siInfo, setSiInfo] = useState<string | null>(null); // « lien envoyé » (mot de passe oublié)
   const [resendMsg, setResendMsg] = useState<string | null>(null); // retour du renvoi d’e-mail
   const [resending, setResending] = useState(false); // garde anti double-tap
+  // Lecture du presse-papiers en cours (« Coller mon code ») : la ref bloque le double-tap,
+  // l’état gèle le CTA de création (le code envoyé = le code affiché).
+  const [pasting, setPasting] = useState(false);
+  const pastingRef = useRef(false);
+  // Collage réussi : le bouton « Coller mon code » (qui a le focus) disparaît avec le code
+  // valide — on pose alors le focus sur la confirmation qui le remplace (effet ci-dessous).
+  // Une ref (pas un state) : la lire/la remettre à false ne doit pas re-déclencher de rendu.
+  const pastedRef = useRef(false);
+  const referralHintRef = useRef<View>(null);
   const scrollRef = useRef<ScrollView>(null);
   const positions = useRef<Partial<Record<FieldKey, number>>>({});
   // Champ à cibler après un changement d’étape déclenché par create() (filet de sécurité) —
@@ -111,6 +127,18 @@ export default function Onboarding() {
     }, 60);
     return () => clearTimeout(id);
   }, [step]);
+
+  // Focus après « Coller mon code » : APRÈS le rendu qui affiche la confirmation (avant, sa
+  // ref est vide). Natif : focus du lecteur d’écran (VoiceOver/TalkBack la lit) ; web :
+  // `sendAccessibilityEvent` n’existe pas, le focus DOM sur la confirmation la fait lire.
+  useEffect(() => {
+    if (!pastedRef.current) return;
+    pastedRef.current = false;
+    const hint = referralHintRef.current;
+    if (!hint) return;
+    if (Platform.OS === 'web') hint.focus();
+    else AccessibilityInfo.sendAccessibilityEvent(hint, 'focus');
+  }, [referralCode]);
 
   const birthDate = parseBirthDate(birth);
   const zodiac = birthDate ? zodiacFor(birthDate) : null;
@@ -131,7 +159,7 @@ export default function Onboarding() {
     const e: Partial<Record<FieldKey, string>> = {};
     if (!isEmail(email)) e.email = 'Adresse e-mail invalide.';
     if (password.length < 6) e.password = 'Mot de passe : 6 caractères minimum.';
-    if (!isValidPhone(phone)) e.phone = 'Numéro invalide — au moins 8 chiffres.';
+    if (!isValidPhone(phone)) e.phone = PHONE_INCOMPLETE;
     if (firstName.trim().length < 2) e.firstName = 'Indique ton prénom (2 lettres minimum).';
     if (lastName.trim().length < 1) e.lastName = 'Indique ton nom.';
     // Date de naissance optionnelle : on ne signale une erreur QUE si elle est mal saisie.
@@ -163,8 +191,12 @@ export default function Onboarding() {
       scrollRef.current?.scrollTo({ y: Math.max(0, (positions.current[first] ?? 0) - 24), animated: true });
       return;
     }
-    if (step < STEP_LABELS.length - 1) setStep((s) => s + 1);
-    else await create();
+    if (step < STEP_LABELS.length - 1) {
+      // Les identifiants restent montés (repliés) après l’étape 0 : sans ça, le champ qui avait
+      // le focus garderait le clavier ouvert et la frappe partirait dans un champ invisible.
+      Keyboard.dismiss();
+      setStep((s) => s + 1);
+    } else await create();
   };
 
   const create = async () => {
@@ -215,7 +247,7 @@ export default function Onboarding() {
     const e: Partial<Record<FieldKey, string>> = {};
     if (!isEmail(email)) e.email = 'Adresse e-mail invalide.';
     if (password.length < 6) e.password = 'Mot de passe : 6 caractères minimum.';
-    if (!isValidPhone(phone)) e.phone = 'Numéro invalide — au moins 8 chiffres.';
+    if (!isValidPhone(phone)) e.phone = PHONE_INCOMPLETE;
     if (firstName.trim().length < 2) e.firstName = 'Indique ton prénom (2 lettres minimum).';
     if (lastName.trim().length < 1) e.lastName = 'Indique ton nom.';
     setErrors(e);
@@ -254,7 +286,7 @@ export default function Onboarding() {
     const byEmail = siMode === 'email';
     const idOk = byEmail ? isEmail(siEmail) : isValidPhone(siPhone);
     if (!idOk) {
-      setSiError(byEmail ? 'Adresse e-mail invalide.' : 'Numéro invalide.');
+      setSiError(byEmail ? 'Adresse e-mail invalide.' : PHONE_INCOMPLETE);
       return;
     }
     if (siPass.length < 6) {
@@ -297,6 +329,46 @@ export default function Onboarding() {
     setResendMsg(res.ok ? 'E-mail renvoyé ✓' : (res.error ?? 'Renvoi impossible — réessaie.'));
   };
 
+  // « Coller mon code » (parrainage) : le presse-papiers n’est lu QU’AU TAP — jamais à
+  // l’ouverture de l’écran (iOS affiche alors sa demande d’autorisation de coller).
+  const pasteCode = async () => {
+    if (pastingRef.current || busy) return;
+    // Le collage REMPLACE la saisie : on ferme le clavier, sinon le toast d’échec (ancré en
+    // bas, il ne suit pas le clavier) resterait caché dessous.
+    Keyboard.dismiss();
+    pastingRef.current = true;
+    setPasting(true);
+    let text: string | null = null;
+    try {
+      text = await Clipboard.getStringAsync();
+    } catch {
+      text = null; // lecture refusée (web) ou indisponible
+    }
+    pastingRef.current = false;
+    setPasting(false);
+    if (text === null) {
+      toast.show('Impossible de lire le presse-papiers — tape ton code', { icon: 'alert-circle' });
+      return;
+    }
+    // iOS 16+ : refuser la demande « Autoriser le collage » renvoie une chaîne VIDE (pas une
+    // exception) — indiscernable d’un presse-papiers vide, d’où un message qui couvre les deux.
+    if (text.trim() === '') {
+      toast.show('Presse-papiers vide ou accès refusé — tape ton code', { icon: 'alert-circle' });
+      return;
+    }
+    const code = referralCodeIn(text);
+    if (!code) {
+      toast.show('Aucun code dans le presse-papiers — copie-le depuis le lien de ton ami', { icon: 'alert-circle' });
+      return;
+    }
+    hapticLight();
+    // Succès annoncé aux lecteurs d’écran (le retour visuel seul — confirmation verte — leur
+    // échappait) ; le focus suit sur cette confirmation (effet sur referralCode).
+    AccessibilityInfo.announceForAccessibility('Code de parrainage collé');
+    pastedRef.current = true;
+    setReferralCode(code);
+  };
+
   const clearError = (k: FieldKey) => {
     setErrors((cur) => (cur[k] ? { ...cur, [k]: undefined } : cur));
     // On efface aussi le bandeau d’erreur GLOBAL dès que l’utilisateur corrige un champ, sinon
@@ -309,8 +381,13 @@ export default function Onboarding() {
   if (sentTo) {
     return (
       <View style={styles.root}>
-        <LinearGradient colors={gradients.deepGreen} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-          <Logo size={40} />
+        <LinearGradient
+          colors={gradients.deepGreen}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.hero, { paddingTop: insets.top + spacing.xl }]}
+        >
+          <Logo size={40} tone="light" />
         </LinearGradient>
         <View style={[styles.body, { alignItems: 'center' }]}>
           <View style={styles.confirmIcon}>
@@ -400,8 +477,13 @@ export default function Onboarding() {
     return (
       <View style={styles.root}>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xxxl }}>
-          <LinearGradient colors={gradients.deepGreen} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-            <Logo size={40} />
+          <LinearGradient
+            colors={gradients.deepGreen}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.hero, { paddingTop: insets.top + spacing.xl }]}
+          >
+            <Logo size={40} tone="light" />
             <Txt variant="display" color={colors.onSignature} style={styles.heroTitle}>
               Bienvenue sur PadelConnect
             </Txt>
@@ -481,8 +563,13 @@ export default function Onboarding() {
           keyboardDismissMode="on-drag"
           contentContainerStyle={{ paddingBottom: spacing.xxxl }}
         >
-          <LinearGradient colors={gradients.deepGreen} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-            <Logo size={40} />
+          <LinearGradient
+            colors={gradients.deepGreen}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.hero, { paddingTop: insets.top + spacing.xl }]}
+          >
+            <Logo size={40} tone="light" />
             <Txt variant="display" color={colors.onSignature} style={styles.heroTitle}>
               Inscris ton club
             </Txt>
@@ -687,8 +774,13 @@ export default function Onboarding() {
         keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingBottom: spacing.xxxl }}
       >
-        <LinearGradient colors={gradients.deepGreen} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-          <Logo size={40} />
+        <LinearGradient
+          colors={gradients.deepGreen}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.hero, { paddingTop: insets.top + spacing.xl }]}
+        >
+          <Logo size={40} tone="light" />
           <Txt variant="display" color={colors.onSignature} style={styles.heroTitle}>
             Réserve ton terrain à Abidjan
           </Txt>
@@ -715,7 +807,13 @@ export default function Onboarding() {
           {/* Progression « Compte / Profil / Parrainage » — purement visuelle (kit Stepper). */}
           <Stepper steps={STEP_LABELS} current={step} />
 
-          {step === 0 ? (
+          {/* Identifiants (étape 0) REPLIÉS, pas démontés, aux étapes suivantes : iOS (trousseau,
+              webcredentials) et Android (Autofill) proposent « Enregistrer le mot de passe ? » dès
+              que l’e-mail et le mot de passe QUITTENT l’écran. Démontés au passage à l’étape 2, ils
+              déclenchaient la proposition AVANT que le compte existe (création encore refusable :
+              e-mail déjà pris, réseau…). Repliés, ils ne partent qu’avec le formulaire, une fois le
+              compte créé. Web : démontés comme avant (un champ replié resterait atteignable au clavier). */}
+          {step === 0 || Platform.OS !== 'web' ? (
             <>
               {/* E-mail : identifiant de connexion (confirmé par un lien envoyé par mail). */}
               <Field
@@ -732,6 +830,7 @@ export default function Onboarding() {
                 onLayout={(y) => {
                   positions.current.email = y;
                 }}
+                offstage={step !== 0}
               />
               {/* Téléphone : conservé (sans SMS) pour que les clubs puissent joindre les joueurs. */}
               <Field
@@ -748,6 +847,7 @@ export default function Onboarding() {
                 onLayout={(y) => {
                   positions.current.phone = y;
                 }}
+                offstage={step !== 0}
               />
               <Field
                 label="Mot de passe"
@@ -763,9 +863,11 @@ export default function Onboarding() {
                 onLayout={(y) => {
                   positions.current.password = y;
                 }}
+                offstage={step !== 0}
               />
             </>
-          ) : step === 1 ? (
+          ) : null}
+          {step === 1 ? (
             <>
               <View style={{ alignItems: 'center' }}>
                 <Pressable
@@ -941,7 +1043,7 @@ export default function Onboarding() {
                 ) : null}
               </View>
             </>
-          ) : (
+          ) : step === 2 ? (
             <>
               {/* Parrainage (facultatif) : code d’un ami qui t’a invité. */}
               <Field
@@ -951,11 +1053,28 @@ export default function Onboarding() {
                 placeholder="Ex. A1B2C3D4E5F6"
                 autoCapitalize="characters"
               />
+              {/* Lien d’invitation ouvert SANS l’app (App Store) : le code est perdu à l’installation.
+                  Le filleul l’a copié depuis la page d’invitation → un tap le colle. Masqué dès
+                  qu’un code valide est en place (pré-rempli par le lien ou déjà collé). */}
+              {!REFERRAL_CODE.test(referralCode.trim()) ? (
+                <View style={styles.pasteRow}>
+                  <Button
+                    label={pasting ? 'Lecture…' : 'Coller mon code'}
+                    icon="clipboard-outline"
+                    variant="secondary"
+                    onPress={pasteCode}
+                    disabled={busy || pasting}
+                    accessibilityLabel="Coller mon code de parrainage depuis le presse-papiers"
+                  />
+                </View>
+              ) : null}
               {/* Retour immédiat sur le code saisi/pré-rempli : sans lui, la saisie était muette
                   (un code mal tapé passait inaperçu, un lien d’invitation semblait ignoré). */}
               {referralCode.trim().length > 0 ? (
-                /^[0-9A-F]{12}$/.test(referralCode.trim()) ? (
-                  <View style={styles.referralHint}>
+                REFERRAL_CODE.test(referralCode.trim()) ? (
+                  // Cible du focus après « Coller mon code » (cf. pasteCode) : focalisable par le
+                  // code seulement sur le web (tabIndex -1, jamais un arrêt de tabulation).
+                  <View ref={referralHintRef} style={styles.referralHint} accessible tabIndex={Platform.OS === 'web' ? -1 : undefined}>
                     <Ionicons name="checkmark-circle" size={14} color={colors.green} />
                     <Txt variant="small" color={colors.signature}>
                       Code de parrainage détecté ✓ — ton ami sera crédité
@@ -980,7 +1099,7 @@ export default function Onboarding() {
                 </View>
               ) : null}
             </>
-          )}
+          ) : null}
 
           {/* Navigation entre étapes : « Retour » (sauf à la 1ʳᵉ) + CTA principal — valide
               l’étape affichée puis avance (ou crée le compte à la dernière étape). */}
@@ -993,7 +1112,7 @@ export default function Onboarding() {
                 label={step === STEP_LABELS.length - 1 ? (busy ? 'Création…' : 'Créer mon profil') : 'Continuer'}
                 icon={step === STEP_LABELS.length - 1 ? 'checkmark' : 'arrow-forward'}
                 onPress={goNext}
-                disabled={busy}
+                disabled={busy || pasting}
                 full
               />
             </View>
@@ -1141,7 +1260,9 @@ function SignInSheet({
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
-            textContentType="emailAddress"
+            // « username » (et non emailAddress) : iOS associe ce champ au mot de passe et propose
+            // l’identifiant enregistré dans le trousseau (remplissage automatique).
+            textContentType="username"
             autoComplete="email"
             accessibilityLabel="Adresse e-mail"
             style={styles.input}
@@ -1217,19 +1338,22 @@ function SignInSheet({
 }
 
 // Champ mot de passe avec œil pour révéler/masquer (évite les fautes de frappe invisibles).
-// Réutilisé par le formulaire d’inscription et la feuille de connexion.
+// Réutilisé par le formulaire d’inscription et la feuille de connexion. `newPassword` (inscription) :
+// iOS propose un mot de passe fort et l’enregistre dans le trousseau ; sinon il remplit l’existant.
 function PasswordInput({
   value,
   onChangeText,
   placeholder,
   error,
   autoFocus,
+  newPassword,
 }: {
   value: string;
   onChangeText: (t: string) => void;
   placeholder: string;
   error?: boolean;
   autoFocus?: boolean;
+  newPassword?: boolean;
 }) {
   const [hidden, setHidden] = useState(true);
   return (
@@ -1244,8 +1368,8 @@ function PasswordInput({
         autoCorrect={false}
         autoFocus={autoFocus}
         returnKeyType="done"
-        textContentType="password"
-        autoComplete="password"
+        textContentType={newPassword ? 'newPassword' : 'password'}
+        autoComplete={newPassword ? 'new-password' : 'password'}
         accessibilityLabel={placeholder}
         style={[styles.input, styles.pwInput, error ? { borderColor: colors.danger } : null]}
       />
@@ -1274,6 +1398,7 @@ function Field({
   autoFocus,
   autoCapitalize = 'sentences',
   secureTextEntry,
+  offstage,
 }: {
   label: string;
   value: string;
@@ -1286,14 +1411,25 @@ function Field({
   autoFocus?: boolean;
   autoCapitalize?: 'none' | 'words' | 'sentences' | 'characters';
   secureTextEntry?: boolean;
+  // Replié (identifiants hors de l’étape 0) : monté mais sans hauteur, ni visible ni touchable,
+  // masqué aux lecteurs d’écran.
+  offstage?: boolean;
 }) {
   return (
-    <View onLayout={(e) => onLayout?.(e.nativeEvent.layout.y)}>
+    <View onLayout={(e) => onLayout?.(e.nativeEvent.layout.y)} style={offstage ? styles.offstage : undefined} aria-hidden={offstage}>
       <Txt variant="label" style={styles.fieldLabel}>
         {label}
       </Txt>
       {secureTextEntry ? (
-        <PasswordInput value={value} onChangeText={onChangeText} placeholder={placeholder} error={!!error} autoFocus={autoFocus} />
+        // Field ne sert qu’aux formulaires d’INSCRIPTION : son mot de passe est toujours un nouveau.
+        <PasswordInput
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          error={!!error}
+          autoFocus={autoFocus}
+          newPassword
+        />
       ) : (
         <TextInput
           value={value}
@@ -1306,7 +1442,8 @@ function Field({
           autoCapitalize={autoCapitalize}
           autoCorrect={false}
           returnKeyType="done"
-          textContentType={keyboardType === 'email-address' ? 'emailAddress' : keyboardType === 'phone-pad' ? 'telephoneNumber' : undefined}
+          // E-mail = identifiant du compte → « username » : iOS l’enregistre avec le nouveau mot de passe.
+          textContentType={keyboardType === 'email-address' ? 'username' : keyboardType === 'phone-pad' ? 'telephoneNumber' : undefined}
           autoComplete={keyboardType === 'email-address' ? 'email' : keyboardType === 'phone-pad' ? 'tel' : undefined}
           accessibilityLabel={label}
           style={[styles.input, error ? { borderColor: colors.danger } : null]}
@@ -1325,9 +1462,9 @@ const styles = StyleSheet.create({
   // Plafond de largeur (comme Screen.tsx) : sur iPad, le formulaire ne s’étire pas sur
   // toute la largeur — il reste lisible, centré, colonne de 640 pt max.
   root: { flex: 1, backgroundColor: colors.bg, width: '100%', maxWidth: 640, alignSelf: 'center' },
+  // paddingTop posé au rendu (zone sûre + 24) : le haut du héros ne passe plus sous l’encoche.
   hero: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xxxl,
     paddingBottom: spacing.xxl,
     borderBottomLeftRadius: radius.xl,
     borderBottomRightRadius: radius.xl,
@@ -1355,9 +1492,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
   },
   fieldLabel: { marginTop: spacing.lg },
+  // overflow hidden : le contenu est rogné à la hauteur nulle (rendu ET toucher).
+  offstage: { height: 0, overflow: 'hidden' },
   roleCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
   stepNav: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center', marginTop: spacing.xl },
   referralHint: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.xs },
+  pasteRow: { flexDirection: 'row', marginTop: spacing.sm },
   authError: {
     flexDirection: 'row',
     alignItems: 'center',

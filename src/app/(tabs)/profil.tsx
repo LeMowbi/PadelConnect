@@ -3,9 +3,10 @@ import Constants from 'expo-constants';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { AppState, Platform, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AppState, Linking, Platform, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { Avatar } from '@/components/Avatar';
+import { deviceLabel, useMatchAlerts, usePushPermission } from '@/components/BienvenuePrefs';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Chip } from '@/components/Chip';
 import { PopIn } from '@/components/PopIn';
@@ -14,23 +15,21 @@ import { Screen } from '@/components/Screen';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt, type IconName } from '@/components/ui';
 import { isPlayed, useApp } from '@/store/AppContext';
+import { findClub } from '@/data/clubs';
 import { canAccessOperator, canSeeClubSpace } from '@/lib/access';
-import { levelLabel, levelText } from '@/lib/format';
+import { fcfa, levelLabel, levelText } from '@/lib/format';
 import { hapticSuccess } from '@/lib/haptics';
-import { ensureNotificationPermission } from '@/lib/notifications';
-import { isValidPhone } from '@/lib/phone';
+import { LOYALTY_CYCLE, loyaltyProgress } from '@/lib/loyalty';
+import { PHONE_INCOMPLETE, isValidPhone } from '@/lib/phone';
 import { pickImage } from '@/lib/pickImage';
-import {
-  claimLoyalty,
-  fetchLoyaltyReward,
-  fetchMatchAlerts,
-  fetchMyLoyaltyClaims,
-  setMatchAlerts,
-  type MyLoyaltyClaim,
-} from '@/lib/social';
+import { claimLoyalty, fetchMyLoyaltyClaims, type MyLoyaltyClaim } from '@/lib/social';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { GENDERS, ageFrom, genderLabel, maskBirthDate, parseBirthDate, zodiacFor, type Gender } from '@/lib/zodiac';
 import { colors, gradients, radius, spacing } from '@/theme';
+
+// « Noter PadelConnect » (E3) : lien DIRECT vers l'écriture d'un avis sur la fiche App Store
+// (aucun module natif). iOS seulement : sur Android et le web, la fiche Apple n'a pas de sens.
+const APP_STORE_REVIEW_URL = 'https://apps.apple.com/app/id6785261310?action=write-review';
 
 // Un trophée évolue par paliers : chaque seuil franchi monte d’un rang.
 type Trophy = { label: string; icon: IconName; value: number; steps: number[] };
@@ -78,30 +77,12 @@ export default function ProfilScreen() {
     else setEmailMsg(res.error ?? 'Impossible — réessaie.');
   };
 
-  // Alerte « un match à ton niveau vient d’ouvrir » (81) : préférence SERVEUR (le ciblage —
-  // clubs suivis × fourchette de niveau — vit dans notify-club), donc réservée aux comptes
-  // connectés. Tri-état : null = pas encore lue (ou échec réseau) → interrupteur neutre,
-  // désactivé, marqué « … » — on ne fait jamais croire à un réglage qu’on ne connaît pas.
+  // Alerte « un match à ton niveau vient d’ouvrir » (81) : préférence SERVEUR, donc réservée aux
+  // comptes connectés — tri-état et écriture honnête partagés avec l’écran Bienvenue (E1).
   const connected = !!state.serverUserId;
-  const [alertsOn, setAlertsOn] = useState<boolean | null>(null);
-  const [alertsBusy, setAlertsBusy] = useState(false);
-  useEffect(() => {
-    if (!connected) return;
-    let alive = true;
-    void fetchMatchAlerts().then((v) => alive && v != null && setAlertsOn(v));
-    return () => {
-      alive = false;
-    };
-  }, [connected]);
-  // Écriture HONNÊTE : on n’affiche le nouvel état QUE si le serveur l’a accepté.
-  const toggleMatchAlerts = async (next: boolean) => {
-    if (alertsBusy || alertsOn === null) return; // anti double-tap + état inconnu
-    setAlertsBusy(true);
-    const ok = await setMatchAlerts(next);
-    setAlertsBusy(false);
-    if (ok) setAlertsOn(next);
-    else toast.show('Connexion impossible — réessaie', { icon: 'alert-circle' });
-  };
+  const alerts = useMatchAlerts();
+  // Permission push RÉELLE de l’appareil (relue au retour des Réglages) — même source que Bienvenue.
+  const push = usePushPermission();
 
   const confirmDelete = async () => {
     if (deleting) return;
@@ -395,8 +376,8 @@ export default function ProfilScreen() {
         </Card>
       </View>
 
-      {/* Fidélité « 10 parties = 1 récompense » (82) — compteur SERVEUR, donc réservé aux
-          comptes connectés (un compte local n’a rien à compter côté récompenses). */}
+      {/* Fidélité « 10 réservations jouées = −50 % » (82 → 92) — compteur SERVEUR, donc réservé
+          aux comptes connectés (un compte local n’a rien à compter côté récompenses). */}
       {connected ? (
         <View style={{ marginTop: spacing.xl }}>
           <SectionHeader title="Fidélité" />
@@ -427,6 +408,41 @@ export default function ProfilScreen() {
       {/* Notifications */}
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Notifications" />
+        {/* État RÉEL de la permission (E1). Refusée : seuls les Réglages peuvent la rouvrir — on le
+            dit et on y emmène. Jamais demandée (compte inscrit avant l’écran Bienvenue) : la
+            fenêtre système s’ouvre une fois, depuis ce bouton. Accordée / web : rien à dire. */}
+        {push.status === 'blocked' || push.status === 'ask' ? (
+          <Card style={[styles.cta, { marginBottom: spacing.sm }]}>
+            <IconCircle icon="notifications-off-outline" color={colors.coralDark} bg={colors.coralSoft} />
+            <View style={{ flex: 1, gap: spacing.sm }}>
+              <View>
+                <Txt variant="body" style={{ fontWeight: '600' }}>
+                  {push.status === 'blocked' ? `Notifications désactivées sur ${deviceLabel}` : 'Notifications pas encore activées'}
+                </Txt>
+                <Txt variant="small" color={colors.textMuted}>
+                  Confirmations du club, places libérées, rappels : sans elles, tu ne reçois rien.
+                </Txt>
+              </View>
+              {push.status === 'blocked' ? (
+                <Button
+                  label="Ouvrir les Réglages"
+                  icon="settings-outline"
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => void Linking.openSettings()}
+                />
+              ) : (
+                <Button
+                  label={push.asking ? 'Un instant…' : 'Activer les notifications'}
+                  icon="notifications"
+                  size="sm"
+                  onPress={() => void push.ask()}
+                  disabled={push.asking}
+                />
+              )}
+            </View>
+          </Card>
+        ) : null}
         <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
           <IconCircle icon="notifications" color={colors.coral} bg={colors.coralSoft} />
           <View style={{ flex: 1 }}>
@@ -434,21 +450,30 @@ export default function ProfilScreen() {
               Rappels de match
             </Txt>
             <Txt variant="small" color={colors.textMuted}>
-              Deux rappels par match : avant la fin de l’annulation gratuite, puis ~2 h avant. Désactivable ici.
+              Avant la fin de l’annulation gratuite, ~2 h avant, puis 20 min après la fin pour saisir le score. Désactivable ici.
             </Txt>
           </View>
+          {/* L’interrupteur montre l’état RÉEL : ON seulement si des rappels peuvent vraiment partir
+              (permission accordée, ou web). Jamais demandée / pas encore lue : OFF — le basculer ouvre
+              la fenêtre. Bloquée : verrouillé, la carte ci-dessus mène aux Réglages. La préférence,
+              elle, est gardée. */}
           <Switch
-            value={state.remindersOn}
+            value={state.remindersOn && (push.status === 'granted' || push.status === 'unsupported')}
             onValueChange={(v) => {
-              setRemindersOn(v);
-              // Permission iOS/Android refusée : sans ce mot, l'interrupteur restait ON en promettant
-              // des rappels qui ne partiront jamais. Natif seulement (sur le web, la permission
-              // est toujours « refusée » et le message serait faux).
-              if (v && Platform.OS !== 'web')
-                void ensureNotificationPermission().then((ok) => {
-                  if (!ok) toast.show('Autorise les notifications dans les réglages pour recevoir tes rappels.', { icon: 'alert-circle' });
-                });
+              if (!v || Platform.OS === 'web') {
+                // Sur le web, la permission est toujours « refusée » : le message serait faux.
+                setRemindersOn(v);
+                return;
+              }
+              // La permission D'ABORD (syncMatchReminders est muet : sans accord, rien ne serait posé),
+              // puis la préférence — l'interrupteur ne reste ON qu'avec de vrais rappels armés. Refus
+              // iOS/Android : sans ce mot, il restait ON en promettant des rappels qui ne partiront jamais.
+              void push.ask().then((ok) => {
+                if (ok) setRemindersOn(true);
+                else toast.show('Autorise les notifications dans les réglages pour recevoir tes rappels.', { icon: 'alert-circle' });
+              });
             }}
+            disabled={push.status === 'blocked' || push.asking}
             trackColor={{ true: colors.signature, false: colors.border }}
             thumbColor={colors.white}
             accessibilityRole="switch"
@@ -469,15 +494,15 @@ export default function ProfilScreen() {
               </Txt>
             </View>
             {/* Réglage pas encore connu : on le dit, plutôt que de montrer un faux « désactivé ». */}
-            {alertsOn === null ? (
+            {alerts.on === null ? (
               <Txt variant="small" color={colors.textMuted}>
                 …
               </Txt>
             ) : null}
             <Switch
-              value={alertsOn === true}
-              onValueChange={(v) => void toggleMatchAlerts(v)}
-              disabled={alertsOn === null || alertsBusy}
+              value={alerts.on === true}
+              onValueChange={(v) => void alerts.toggle(v)}
+              disabled={alerts.on === null || alerts.busy}
               trackColor={{ true: colors.signature, false: colors.border }}
               thumbColor={colors.white}
               accessibilityRole="switch"
@@ -571,6 +596,24 @@ export default function ProfilScreen() {
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
         </Card>
+        {Platform.OS === 'ios' ? (
+          <Card
+            onPress={() =>
+              void Linking.openURL(APP_STORE_REVIEW_URL).catch(() =>
+                toast.show('Impossible d’ouvrir l’App Store — réessaie', { icon: 'alert-circle' }),
+              )
+            }
+            style={styles.cta}
+            accessibilityLabel="Noter PadelConnect sur l’App Store"
+          >
+            <IconCircle icon="star" color={colors.amberDark} bg={colors.amberSoft} />
+            <View style={{ flex: 1 }}>
+              <Txt variant="h3">Noter PadelConnect ⭐</Txt>
+              <Txt variant="muted">Ton avis aide d’autres joueurs à nous trouver.</Txt>
+            </View>
+            <Ionicons name="open-outline" size={20} color={colors.textMuted} />
+          </Card>
+        ) : null}
       </View>
 
       {/* Adresse e-mail du compte — ajout/changement (confirmation par lien). */}
@@ -720,29 +763,27 @@ export default function ProfilScreen() {
   );
 }
 
-// CARTE À TAMPONS (82) — « 10 parties jouées = 1 récompense ». Le compteur (`played`) et les
-// cycles déjà réclamés (`claimed`) viennent du SERVEUR (mêmes parties que les +2 points du
-// classement : réservation passée, encore 'booked') — rien n’est compté côté client, donc rien
-// ne se perd à la réinstallation et rien ne se triche.
+// CARTE À TAMPONS (82 → règle cible 92) — « 10 réservations CRÉÉES par le joueur et JOUÉES =
+// −50 % sur son prochain match, plafonné, offert par PadelConnect ». Le compteur (`played` : ses
+// réservations passées, encore 'booked', dont il est l’auteur) et les cycles déjà réclamés
+// (`claimed`) viennent du SERVEUR — rien n’est compté côté client, donc rien ne se perd à la
+// réinstallation et rien ne se triche. Le CLUB sert la remise sur présentation de cet écran.
 function LoyaltyCard() {
   const toast = useToast();
-  // Compteur = tranche du STORE (chargée en session + premier plan) : même source que la tuile
-  // « Parties jouées » — null = pas encore chargé (ou échec réseau), jamais inventé (§8).
+  // Compteur = tranche du STORE (chargée en session + premier plan) — null = pas encore chargé
+  // (ou échec réseau), jamais inventé (§8).
   const { state, refreshLoyalty } = useApp();
   const loyalty = state.loyalty;
-  // null = texte inconnu (échec réseau) ; '' = récompense pas encore réglée par l’opérateur.
-  const [reward, setReward] = useState<string | null>(null);
-  const [claiming, setClaiming] = useState(false); // garde anti double-tap
+  const [claiming, setClaiming] = useState(false); // libellé « Envoi… » + bouton grisé
+  const claimingRef = useRef(false); // garde anti double-tap (même frame : l’état n’est pas encore rendu)
   // Mes cycles réclamés, lus du SERVEUR : le justificatif « montre cet écran au club » doit
   // SURVIVRE au démontage de l’onglet (le lendemain au club, il est encore là). null = inconnu.
   const [myClaims, setMyClaims] = useState<MyLoyaltyClaim[] | null>(null);
 
-  // Chargement au montage ET au retour au premier plan (l’opérateur a pu régler la récompense
-  // ou servir un cycle entre-temps).
+  // Chargement au montage ET au retour au premier plan (le club a pu servir une remise entre-temps).
   useEffect(() => {
     let alive = true;
     const load = () => {
-      void fetchLoyaltyReward().then((t) => alive && t !== null && setReward(t));
       void fetchMyLoyaltyClaims().then((c) => alive && c && setMyClaims(c));
     };
     load();
@@ -753,26 +794,34 @@ function LoyaltyCard() {
     };
   }, []);
 
-  const played = loyalty?.played ?? 0;
-  // Cycles complets NON réclamés — exactement la règle du serveur (`claim_loyalty`).
-  const pending = loyalty ? Math.floor(played / 10) - loyalty.claimed : 0;
-  // Cycle complet : les 10 pastilles sont pleines (sinon `played % 10` repasserait à 0 et
-  // donnerait l’impression d’avoir perdu ses parties avant même d’avoir réclamé).
-  const filled = pending > 0 ? 10 : played % 10;
+  // Cycles complets NON réclamés + pastilles pleines — exactement la règle du serveur
+  // (`claim_loyalty`), logique pure partagée (lib/loyalty).
+  const { pending, filled } = loyaltyProgress(loyalty);
+  // Plafond RÉEL (réglé par l’opérateur, lu avec le compteur). Tant qu’il n’est pas lu (ou
+  // échec réseau), la règle s’affiche SANS montant : jamais un plafond inventé (§8).
+  const reward =
+    loyalty === null
+      ? '−50 % sur ton prochain match (plafonné), offert par PadelConnect'
+      : `−50 % sur ton prochain match (jusqu’à ${fcfa(loyalty.cap)}), offert par PadelConnect`;
+  const lastServed = myClaims?.find((c) => c.served) ?? null;
 
   const claim = async () => {
-    if (claiming) return;
+    if (claimingRef.current) return;
+    claimingRef.current = true;
     setClaiming(true);
     const res = await claimLoyalty();
     // Dans tous les cas on relit le compteur serveur : il fait foi (une partie a pu être
     // annulée entre-temps, ou la récompense déjà réclamée depuis un autre appareil).
     const [, freshClaims] = await Promise.all([refreshLoyalty(), fetchMyLoyaltyClaims()]);
+    claimingRef.current = false;
     setClaiming(false);
     if (freshClaims) setMyClaims(freshClaims);
     if (res === 'ok') {
       hapticSuccess();
     } else if (res === 'not_yet') {
-      toast.show('Pas encore : il faut 10 parties jouées depuis ta dernière récompense.', { icon: 'information-circle' });
+      toast.show(`Pas encore : il faut ${LOYALTY_CYCLE} réservations jouées depuis ta dernière récompense.`, {
+        icon: 'information-circle',
+      });
     } else {
       toast.show('Connexion impossible — réessaie', { icon: 'alert-circle' });
     }
@@ -783,40 +832,37 @@ function LoyaltyCard() {
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
         <IconCircle icon="gift" color={colors.amberDark} bg={colors.amberSoft} />
         <View style={{ flex: 1 }}>
-          <Txt variant="h3">10 parties = 1 récompense</Txt>
+          <Txt variant="h3">{LOYALTY_CYCLE} réservations = −50 %</Txt>
           <Txt variant="muted">
             {loyalty === null
               ? 'Chargement de ton compteur…'
               : pending > 0
-                ? 'Carte complète 🎉 — ta récompense t’attend.'
-                : `${filled}/10 parties jouées vers ta prochaine récompense.`}
+                ? 'Carte complète 🎉 — ta remise t’attend.'
+                : `${filled}/${LOYALTY_CYCLE} réservations jouées vers ta prochaine remise.`}
           </Txt>
         </View>
       </View>
 
-      {/* Les 10 tampons : une pastille pleine = une partie jouée, comptée par le serveur. */}
+      {/* Les 10 tampons : une pastille pleine = une réservation créée par toi et jouée, comptée par le serveur. */}
       <View
         style={styles.stamps}
         accessible
-        accessibilityLabel={loyalty === null ? 'Carte de fidélité en cours de chargement' : `${filled} tampons sur 10`}
+        accessibilityLabel={loyalty === null ? 'Carte de fidélité en cours de chargement' : `${filled} tampons sur ${LOYALTY_CYCLE}`}
       >
-        {Array.from({ length: 10 }, (_, i) => (
+        {Array.from({ length: LOYALTY_CYCLE }, (_, i) => (
           <View key={i} style={[styles.stamp, i < filled ? styles.stampOn : null]}>
             <Ionicons name="tennisball" size={13} color={i < filled ? colors.amberDark : colors.textFaint} />
           </View>
         ))}
       </View>
 
-      {/* Récompense réglée par l’opérateur (Espace opérateur → Finances). Texte inconnu (échec
-          réseau) : on n’affiche rien plutôt qu’une promesse inventée. */}
-      {reward !== null ? (
-        <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.md }}>
-          {reward.trim() ? `🎁 ${reward.trim()}` : 'Récompense en préparation — continue de jouer !'}
-        </Txt>
-      ) : null}
+      {/* Règle cible (décision porteur) : seules TES réservations comptent, pas les invitations. */}
+      <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.md }}>
+        🎁 {LOYALTY_CYCLE} réservations créées et jouées = {reward}.
+      </Txt>
 
       {/* Cycles réclamés PAS ENCORE SERVIS (état serveur, permanent) : le justificatif reste
-          affiché tant que le club/PadelConnect n’a pas marqué la remise « servie ». */}
+          affiché tant que le club n’a pas marqué la remise « servie ». */}
       {(myClaims ?? [])
         .filter((c) => !c.served)
         .map((c) => (
@@ -825,22 +871,46 @@ function LoyaltyCard() {
               <Ionicons name="gift" size={20} color={colors.amberDark} />
               <View style={{ flex: 1 }}>
                 <Txt variant="body" style={{ fontWeight: '700' }}>
-                  Récompense n°{c.cycle} à recevoir
+                  Remise n°{c.cycle} à utiliser
                 </Txt>
-                <Txt variant="small" color={colors.textMuted}>
-                  Montre cet écran au club ou à PadelConnect pour la recevoir.
-                </Txt>
+                {/* Justificatif (92) : code court que le gérant saisit dans son Espace Club. Lu
+                    lettre par lettre par le lecteur d’écran (sinon prononcé comme un mot). Absent
+                    (serveur d’avant la 92) : bloc omis plutôt qu’un plantage de l’onglet. */}
+                {c.code ? (
+                  <>
+                    <View accessible accessibilityLabel={`Code ${c.code.split('').join(' ')}`}>
+                      <Txt variant="h2" color={colors.amberDark} style={styles.claimCode}>
+                        {c.code}
+                      </Txt>
+                    </View>
+                    <Txt variant="small" color={colors.textMuted}>
+                      Montre ce code au club en réglant ton prochain match : il applique la remise.
+                    </Txt>
+                  </>
+                ) : null}
               </View>
             </View>
           </PopIn>
         ))}
 
+      {/* Dernière remise SERVIE (cycles triés du plus récent au plus ancien côté serveur) : la preuve
+          que le club l’a bien appliquée — montant réel et club (null = remise en secours par PadelConnect). */}
+      {lastServed ? (
+        <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
+          ✓{' '}
+          {lastServed.amount && lastServed.clubId
+            ? `Remise de ${fcfa(lastServed.amount)} servie chez ${findClub(lastServed.clubId, state.customClubs, state.clubInfo)?.name ?? 'ton club'}`
+            : `Remise n°${lastServed.cycle} servie par PadelConnect`}
+          .
+        </Txt>
+      ) : null}
+
       {pending > 0 ? (
         <View style={{ marginTop: spacing.md }}>
-          <Button label={claiming ? 'Envoi…' : 'Réclamer 🎁'} onPress={claim} disabled={claiming} full />
+          <Button label={claiming ? 'Envoi…' : 'Réclamer ma remise 🎁'} onPress={claim} disabled={claiming} full />
           {pending > 1 ? (
-            <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
-              {pending} récompenses en attente — réclame-les une par une.
+            <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.xs }}>
+              {pending} remises en attente — réclame-les une par une.
             </Txt>
           ) : null}
         </View>
@@ -879,7 +949,7 @@ function EditAccount({ onDone }: { onDone: () => void }) {
       return;
     }
     if (!isValidPhone(phone)) {
-      setError('Numéro invalide — au moins 8 chiffres.');
+      setError(PHONE_INCOMPLETE);
       return;
     }
     // Date facultative : vide = retrait ('' → null côté serveur) ; saisie invalide = refus avec le
@@ -1063,6 +1133,8 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginTop: spacing.md,
   },
+  // Code de remise : espacé pour se lire d’un coup d’œil au comptoir (alphabet sans 0/O ni 1/I).
+  claimCode: { letterSpacing: 4, marginVertical: spacing.xs },
   cta: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   statsLink: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
   input: {

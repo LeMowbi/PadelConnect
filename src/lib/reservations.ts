@@ -115,6 +115,11 @@ export async function insertReservation(
 // null = échec réseau → l’appelant garde l’existant. BORNÉ à aujourd'hui-et-après (les
 // fermetures passées ne servent plus à l'affichage) et plafonné : la table n'est jamais
 // purgée, sans borne le téléchargement grossissait à chaque retour au premier plan.
+// ⚠️ LIMITE CONNUE : le miroir couvre TOUS les clubs (policy select using true), trié par date
+// croissante. Au-delà de 1000 lignes (créneaux récurrents jusqu'à 26 semaines), ce sont les
+// blocages LOINTAINS qui tombent. Le planning gérant (horizon J+60) peut alors afficher « Libre »
+// sur une case bloquée. Aucune corruption, car block_slot fait un upsert. Correctif prévu : un
+// rechargement filtré .eq('club_id', club géré) pour l'Espace Club.
 export async function fetchBlockedSlots(): Promise<BlockedSlot[] | null> {
   const { data, error } = await supabase
     .from('blocked_slots')

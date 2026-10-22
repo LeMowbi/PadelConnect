@@ -23,12 +23,15 @@ export function PhotoPlaceholder({
       <View style={[StyleSheet.absoluteFill, { backgroundColor: accent, opacity: 0.16 }]} />
       <View style={[styles.blob, { backgroundColor: accent, opacity: 0.22, top: -30, right: -20 }]} />
       <View style={[styles.blob, { backgroundColor: accent, opacity: 0.14, bottom: -40, left: -10, width: 120, height: 120 }]} />
-      <Ionicons name="tennisball-outline" size={height * 0.34} color={accent} style={{ opacity: 0.55 }} />
+      {/* Initiales CENTRÉES et ATTÉNUÉES (A3), à la place de la balle : décoratives (le nom du club
+          est lu ailleurs), elles ne concurrencent jamais une légende. */}
       {initials ? (
-        <Txt variant="display" style={{ position: 'absolute', left: spacing.md, bottom: spacing.sm, opacity: 0.9 }} color={colors.text}>
+        <Txt variant="display" color={accent} style={{ opacity: 0.55 }}>
           {initials}
         </Txt>
-      ) : null}
+      ) : (
+        <Ionicons name="tennisball-outline" size={height * 0.34} color={accent} style={{ opacity: 0.55 }} />
+      )}
       {showBadge ? (
         <View style={styles.badge}>
           {/* onPhoto (et non textMuted) : le badge est posé sur un scrim sombre — textMuted y

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<!-- Document HTML de la version web (Espace Club / opérateur, club.padelconnectci.com). Avec
+     `web.output: "single"` (app.json), l'export lit CE fichier (pas `src/app/+html.tsx`, réservé
+     au rendu statique) : sans lui, le gabarit par défaut d'Expo servait `lang="en"` (voix anglaise
+     des lecteurs d'écran), le titre nu « PadelConnect » et un <noscript> en anglais. Généré par
+     `npx expo customize public/index.html` puis francisé ; l'export y ajoute lui-même les scripts. -->
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>PadelConnect — Réserver un terrain de padel à Abidjan</title>
+    <meta
+      name="description"
+      content="PadelConnect — l’app qui réunit les clubs de padel d’Abidjan : réserve un terrain, trouve des partenaires, joue des tournois."
+    />
+    <!-- Mêmes valeurs que le thème de l'app (src/theme : colors.signature, colors.bg). -->
+    <meta name="theme-color" content="#0C6A57" />
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+      /* Fond beige de l'app dès le premier affichage (pas d'éclair blanc avant le bundle). */
+      html,
+      body,
+      #root {
+        background: #efeadf;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>
+      PadelConnect a besoin de JavaScript pour fonctionner. Active-le dans ton navigateur, ou télécharge l’app sur
+      https://padelconnectci.com/get
+    </noscript>
+    <!-- Élément racine de l'app Expo. -->
+    <div id="root"></div>
+  </body>
+</html>

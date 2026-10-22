@@ -2,13 +2,15 @@ import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnimatedSplash } from '@/components/AnimatedSplash';
+import { hasSeenWelcome, markWelcomeSeen } from '@/components/BienvenuePrefs';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ToastProvider, useToast } from '@/components/Toast';
+import { DAY_MS } from '@/lib/days';
 import { installGlobalErrorLogging } from '@/lib/diagnostics';
 import { useNotificationTapRouter } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
@@ -20,6 +22,11 @@ import { colors } from '@/theme';
 // prêtes : sinon, sur iPhone/Android, le splash se masque trop tôt et l’utilisateur
 // voit un bref écran crème vide. (No-op sur le web.)
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// Écran Bienvenue (E1) : réservé aux comptes NEUFS — créés il y a moins de 7 jours (laisse le temps
+// de confirmer l'e-mail puis d'ouvrir l'app). Un compte plus ancien qui se connecte sur un nouvel
+// appareil ne le voit jamais : ses réglages existent déjà (profil → Notifications).
+const WELCOME_MAX_AGE_MS = 7 * DAY_MS;
 
 // Journalise les erreurs JS non rattrapées (crashs) dans nos diagnostics (self-hosted Supabase).
 // Appelé une fois au chargement du module — avant tout rendu.
@@ -95,6 +102,32 @@ function RootNav() {
     if (!signedIn && !publicRoute) router.replace('/onboarding');
     else if (state.account && onboarding) router.replace('/');
   }, [hydrated, state.account, state.serverUserId, segments, router]);
+
+  // Écran Bienvenue (E1) — UNE fois par compte, juste après l'inscription : dès que le nouvel
+  // inscrit (connecté, joueur) arrive dans les onglets, on le redirige vers /bienvenue. On attend
+  // les ONGLETS (jamais par-dessus email-confirmed, onboarding ou un lien profond ouvert à froid).
+  // Vérifié une seule fois par compte et par lancement (ref) ; le drapeau persistant est posé par
+  // l'écran lui-même à l'affichage, ou ici quand le compte n'est plus « neuf » (rien à relire).
+  const welcomeCheckedFor = useRef<string | null>(null);
+  useEffect(() => {
+    const userId = state.serverUserId;
+    if (!hydrated || !userId || !state.account || state.accountType === 'club') return;
+    if (segments[0] !== '(tabs)' || welcomeCheckedFor.current === userId) return;
+    welcomeCheckedFor.current = userId;
+    void (async () => {
+      if (await hasSeenWelcome(userId)) return;
+      // Lecture LOCALE de la session (aucun réseau) : date de création du compte.
+      const { data } = await supabase.auth.getSession();
+      const user = data.session?.user;
+      if (!user || user.id !== userId) return; // bascule de compte entre-temps : on ne fait rien
+      const createdAt = Date.parse(user.created_at ?? '');
+      if (!Number.isFinite(createdAt) || Date.now() - createdAt > WELCOME_MAX_AGE_MS) {
+        void markWelcomeSeen(userId); // compte ancien : plus jamais candidat sur cet appareil
+        return;
+      }
+      router.replace('/bienvenue');
+    })().catch(() => {}); // lecture de session impossible : pas de Bienvenue, l'app reste utilisable
+  }, [hydrated, state.serverUserId, state.account, state.accountType, segments, router]);
 
   // Confirmation d’e-mail : le lien reçu par mail rouvre l’app → on échange le code contre
   // une session, on recharge le profil. Trois cas distincts : NOUVEL inscrit (bienvenue +

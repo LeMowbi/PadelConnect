@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ton ami t’invite — PadelConnect</title>
+    <meta name="description" content="Ton ami t’invite sur PadelConnect : réserve un terrain de padel à Abidjan en 2 minutes." />
+    <!-- Lien PERSONNEL (code de parrainage d'un joueur) : jamais indexé. Ce « noindex » ne marche que
+         si robots.txt laisse explorer /invite/ (voir son commentaire). -->
+    <meta name="robots" content="noindex" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230C6A57'/%3E%3Ctext x='32' y='42' font-size='30' text-anchor='middle' fill='white' font-family='Arial'%3EP%3C/text%3E%3C/svg%3E"
+    />
+    <!-- Aperçu WhatsApp du lien d'invitation (canal n°1 du parrainage) : même image que /get. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="PadelConnect" />
+    <meta property="og:title" content="Ton ami t’invite sur PadelConnect" />
+    <meta property="og:description" content="Réserve ton terrain de padel à Abidjan en 2 minutes, trouve des partenaires et joue des tournois." />
+    <meta property="og:image" content="https://padelconnectci.com/og.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Ton ami t’invite sur PadelConnect" />
+    <meta name="twitter:description" content="Réserve ton terrain de padel à Abidjan en 2 minutes, trouve des partenaires et joue des tournois." />
+    <meta name="twitter:image" content="https://padelconnectci.com/og.png" />
+    <!-- Page servie à TOUTE adresse /invite/CODE (réécriture 200 de _redirects) : chemins ABSOLUS
+         uniquement, style inline (autorisé par la CSP de _headers), même charte que get.html. -->
+    <style>
+      :root { --vert: #00544d; --creme: #f4f1e8; --or: #c9a24b; --texte: #14241f; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+        background: var(--creme); color: var(--texte);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        padding: 24px;
+      }
+      .card { max-width: 420px; width: 100%; text-align: center; }
+      .logo {
+        width: 72px; height: 72px; border-radius: 20px; background: var(--vert); color: #fff;
+        display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;
+        font-size: 34px; font-weight: 700;
+      }
+      h1 { font-size: 24px; margin: 0 0 8px; }
+      p { color: #4a5a54; margin: 0 0 20px; line-height: 1.5; }
+      .code-bloc {
+        background: #fff; border: 1.5px dashed var(--or); border-radius: 14px; padding: 14px 16px; margin: 0 0 8px;
+      }
+      .code-libelle { font-size: 13px; color: #7a8a84; margin: 0 0 4px; }
+      .code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 22px; font-weight: 700;
+        letter-spacing: 2px; color: var(--vert); margin: 0; word-break: break-all;
+      }
+      a.btn {
+        display: block; text-decoration: none; border-radius: 14px; padding: 15px 20px; min-height: 44px;
+        font-size: 16px; font-weight: 600; margin: 12px 0;
+      }
+      /* Action principale / secondaire : le script les PERMUTE hors iPhone (voir plus bas). */
+      a.principal { background: var(--vert); color: #fff; }
+      a.secondaire { background: #fff; color: var(--vert); border: 1.5px solid var(--vert); }
+      .statut { font-size: 14px; color: var(--vert); font-weight: 600; min-height: 1.5em; margin: 4px 0 0; }
+      .note { font-size: 13px; color: #7a8a84; margin-top: 20px; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="logo" aria-hidden="true">P</div>
+      <h1 id="titre">Rejoins PadelConnect</h1>
+      <p>Réserve un terrain de padel à Abidjan en 2 minutes, trouve des partenaires et joue des tournois.</p>
+      <!-- Bloc du code : affiché seulement si l'adresse porte un code au bon format (script). -->
+      <div class="code-bloc" id="code-bloc" hidden>
+        <p class="code-libelle">Ton code de parrainage</p>
+        <p class="code" id="code"></p>
+      </div>
+      <p class="note" id="code-aide" hidden>À l’inscription, colle-le dans « Code de parrainage » : ton ami sera crédité.</p>
+      <!-- Sans JavaScript : simple lien vers /get (téléchargement). Avec : copie du code d'abord
+           (iPhone : puis /get → App Store ; ailleurs : copie seule, voir le script). -->
+      <a class="btn principal" id="copier" href="/get">Télécharger l’app</a>
+      <p class="statut" id="statut" role="status" aria-live="polite"></p>
+      <!-- Pont Android / ordinateur (même règle que get.html) : la version navigateur reçoit le code
+           dans son chemin (/invite/CODE) et le pré-remplit à l'inscription. À reléguer au lancement
+           de Google Play, en même temps que get.html (voir son commentaire « Android »). -->
+      <div id="web">
+        <a class="btn secondaire" id="web-lien" href="https://club.padelconnectci.com">Utiliser la version navigateur</a>
+        <p class="note">Sur Android ou sur ordinateur : PadelConnect fonctionne dans ton navigateur, sans notifications.</p>
+      </div>
+    </main>
+    <script>
+      // Lit le code dans l'adresse /invite/CODE, l'affiche et le copie avant d'envoyer vers /get :
+      // sur un iPhone SANS l'app, le passage par l'App Store perdait le code (le filleul devait le
+      // retaper). Même nettoyage que l'app (pendingReferral.clean) et même format
+      // (onboarding : 12 caractères hexadécimaux) — un autre texte n'est jamais affiché.
+      // Hors iPhone, /get ne peut rien installer (fiche Google Play pas encore ouverte, voir
+      // get.html) : l'action principale y devient la version navigateur, qui porte déjà le code.
+      (function () {
+        var ua = navigator.userAgent || '';
+        var isIOS = /iPhone|iPad|iPod/i.test(ua) || (/(Mac)/i.test(ua) && 'ontouchend' in document);
+        var brut = (/^\/invite\/([^/]+)\/?$/.exec(location.pathname) || [])[1] || '';
+        try {
+          brut = decodeURIComponent(brut);
+        } catch (e) {
+          /* code mal encodé → on nettoie la valeur brute */
+        }
+        var nettoye = brut.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 24);
+        var code = /^[0-9A-F]{12}$/.test(nettoye) ? nettoye : '';
+        var bouton = document.getElementById('copier');
+        var statut = document.getElementById('statut');
+        var web = document.getElementById('web');
+        var webLien = document.getElementById('web-lien');
+
+        webLien.href = 'https://club.padelconnectci.com' + (code ? '/invite/' + code : '');
+        if (isIOS) {
+          // iPhone : l'App Store suffit, le pont navigateur ne s'adresse qu'à Android et à l'ordinateur.
+          web.hidden = true;
+        } else {
+          // Android / ordinateur : la version navigateur passe EN TÊTE et en action principale ; le
+          // lien vers /get ne promet plus qu'un téléchargement réellement possible (iPhone).
+          bouton.parentNode.insertBefore(web, bouton);
+          webLien.className = 'btn principal';
+          bouton.className = 'btn secondaire';
+          bouton.textContent = 'Télécharger sur iPhone';
+        }
+        if (!code) return; // pas de code lisible : page d'accueil simple, lien direct vers /get
+
+        document.getElementById('titre').textContent = 'Ton ami t’invite';
+        document.getElementById('code').textContent = code;
+        document.getElementById('code-bloc').hidden = false;
+        document.getElementById('code-aide').hidden = false;
+        if (isIOS) {
+          bouton.textContent = 'Copier le code et télécharger';
+        } else {
+          // Hors iPhone : copie SEULE, sans navigation → c'est un bouton, plus un lien (Espace
+          // l'active comme un vrai bouton ; Entrée déclenche déjà le clic d'un lien).
+          bouton.textContent = 'Copier le code';
+          bouton.setAttribute('role', 'button');
+          bouton.addEventListener('keydown', function (e) {
+            if (e.key !== ' ') return;
+            e.preventDefault();
+            bouton.click();
+          });
+        }
+
+        // Presse-papiers : API moderne (contexte sécurisé), sinon repli execCommand.
+        function copier(texte) {
+          if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(texte);
+          return new Promise(function (ok, ko) {
+            var zone = document.createElement('textarea');
+            zone.value = texte;
+            zone.setAttribute('readonly', '');
+            zone.style.position = 'fixed';
+            zone.style.opacity = '0';
+            document.body.appendChild(zone);
+            zone.select();
+            var reussi = false;
+            try {
+              reussi = document.execCommand('copy');
+            } catch (e) {
+              reussi = false;
+            }
+            document.body.removeChild(zone);
+            if (reussi) ok();
+            else ko();
+          });
+        }
+
+        var enCours = false;
+        var copieRatee = false;
+        // Retour arrière depuis /get ou l'App Store : Safari peut restaurer la page telle quelle
+        // (bfcache) → on rend la main au bouton et on efface « direction le téléchargement… ».
+        window.addEventListener('pageshow', function (e) {
+          if (!e.persisted) return;
+          enCours = false;
+          statut.textContent = '';
+        });
+        bouton.addEventListener('click', function (e) {
+          // iPhone : après un échec de copie, le bouton devient un simple lien vers /get (le code
+          // reste affiché). Ailleurs, il ne navigue jamais : on peut retenter la copie.
+          if (copieRatee && isIOS) return;
+          e.preventDefault();
+          if (enCours) return; // double tap : une seule copie, une seule navigation
+          enCours = true;
+          copier(code).then(
+            function () {
+              if (!isIOS) {
+                enCours = false;
+                statut.textContent = 'Code copié ✓';
+                return;
+              }
+              statut.textContent = 'Code copié ✓ — direction le téléchargement…';
+              setTimeout(function () {
+                window.location.href = '/get';
+              }, 700);
+            },
+            function () {
+              enCours = false;
+              if (!isIOS) {
+                statut.textContent = 'Copie impossible : note ton code ' + code + '.';
+                return;
+              }
+              copieRatee = true;
+              statut.textContent = 'Copie impossible : note ton code ' + code + ', puis continue.';
+              bouton.textContent = 'Continuer vers le téléchargement';
+            },
+          );
+        });
+      })();
+    </script>
+  </body>
+</html>

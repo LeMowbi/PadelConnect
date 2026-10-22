@@ -1,0 +1,10 @@
+# Site vitrine PadelConnect (padelconnectci.com) — tout est explorable.
+# ⚠️ NE PAS « Disallow » /invite/ ni /club/ : (1) Google ne lirait plus le « noindex » d'invite.html
+# (une URL bloquée peut être indexée nue si elle est liée) ; (2) les robots d'aperçu qui respectent
+# robots.txt (X, LinkedIn, Facebook/Messenger) ne pourraient plus construire l'aperçu des liens
+# partagés. L'exclusion de l'index passe par les pages elles-mêmes : invite.html, auth-callback.html
+# et 404.html portent « noindex » ; /club/* sert get.html, dont la canonical pointe vers /get.
+User-agent: *
+Disallow:
+
+Sitemap: https://padelconnectci.com/sitemap.xml

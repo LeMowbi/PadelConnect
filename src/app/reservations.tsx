@@ -29,7 +29,7 @@ import { DAY_MS, MINUTE_MS, MONTHS, dateKeyLabel, dayKey, slotTimestamp } from '
 import { fcfa, perPlayerOf } from '@/lib/format';
 import { APP_DOMAIN } from '@/lib/referrals';
 import { openMaps } from '@/lib/maps';
-import { onPushReceivedInForeground } from '@/lib/notifications';
+import { cancelMatchReminder, onPushReceivedInForeground } from '@/lib/notifications';
 import { fetchSharePayments, type ShareState } from '@/lib/sharePayments';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { colors, radius, spacing } from '@/theme';
@@ -424,6 +424,9 @@ export default function ReservationsScreen() {
       return;
     }
     // Les cas terminaux (validé / en attente / conflit / sans autre compte) ferment la feuille.
+    // Score saisi (ou refus définitif) : le rappel « Alors, ce match ? » (C2, fin + 20 min) n'a plus
+    // lieu d'être — on le retire sans attendre la prochaine resync.
+    void cancelMatchReminder(scoreTarget.id);
     setScoreTarget(null);
     void loadScores();
   };

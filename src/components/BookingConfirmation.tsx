@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, Easing, Modal, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Confetti } from './Confetti';
-import { useToast } from './Toast';
+import { ToastOutlet, useToast } from './Toast';
 import { Button, Txt } from './ui';
 import { addReservationToCalendar } from '@/lib/calendar';
 import { openWhatsApp } from '@/lib/contact';
@@ -132,6 +132,8 @@ export function BookingConfirmation({
           <Button label="Terminé" variant="ghost" onPress={onClose} full />
         </Animated.View>
       </LinearGradient>
+      {/* « Ajouté à ton calendrier ✓ » visible au-dessus de l'écran de succès (Modal plein écran). */}
+      <ToastOutlet />
     </Modal>
   );
 }

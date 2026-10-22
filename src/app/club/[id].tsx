@@ -36,7 +36,7 @@ import { canAccessClub } from '@/lib/access';
 import { courtsFor, resolvedGridFor, type ScheduleCtx } from '@/lib/availability';
 import { fetchClubCoaches, type ServerCoach } from '@/lib/coachesServer';
 import { deleteMyReview, fetchClubReviews, replyToReview, submitReview, type ServerReview } from '@/lib/reviewsServer';
-import { reportReview } from '@/lib/moderation';
+import { rateLimitedMessage, reportReview } from '@/lib/moderation';
 import { confirmAsync } from '@/lib/confirm';
 import { openWhatsApp } from '@/lib/contact';
 import { durationLabel, offeredDurations } from '@/lib/courtSchedule';
@@ -190,9 +190,11 @@ export default function ClubDetail() {
   const reportReviewItem = async (reviewId: string) => {
     if (moderationBusy) return;
     setModerationBusy(reviewId);
-    const ok = await reportReview(reviewId);
+    const res = await reportReview(reviewId);
     setModerationBusy(null);
-    showToast(ok ? 'Avis signalé — merci, on le vérifie.' : 'Signalement impossible — réessaie.', ok ? 'success' : 'error');
+    // 'rate_limited_day' = plafond de 10 signalements / jour (94) : refus définitif pour aujourd'hui, pas une panne.
+    if (res === 'ok') showToast('Avis signalé — merci, on le vérifie.');
+    else showToast(res === 'rate_limited_day' ? rateLimitedMessage(res) : 'Signalement impossible — réessaie.', 'error');
   };
   const blockReviewAuthor = async (userId: string, author: string) => {
     if (moderationBusy) return;
