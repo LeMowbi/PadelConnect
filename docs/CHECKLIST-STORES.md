@@ -36,10 +36,22 @@
 
 ## 3. Éléments marketing (à préparer)
 
-- [ ] **Icône** 1024×1024 (déjà présente, opaque ✅).
-- [ ] **Captures d'écran** par taille d'appareil (iPhone 6.7" et 6.5", + tablette si `supportsTablet`; Android téléphone). On peut les générer depuis la démo.
-- [ ] **Description** (FR), **mots-clés**, **catégorie** (Sport / Style de vie).
-- [ ] **Nom affiché** : PadelConnect.
+> Source de vérité des textes et du plan de captures : **`docs/STORE-LISTING.md`** (lot H2, fiche
+> v1.0.3 / build #69) — conditions à vérifier avant de pousser (§0), textes prêts à coller (§1-2),
+> captures (§3), procédure manuelle et API (§4), comptage calculé de chaque champ (§5).
+
+- [x] **Icône** 1024×1024 (déjà présente, opaque ✅).
+- [ ] **Captures d'écran** RÉELLES (aucun club ni avis fictif) : iPhone 6,9" et 6,5", iPad 13"
+      (obligatoire, `supportsTablet: true`), Android téléphone + image de présentation 1024×500 —
+      plan et légendes : `docs/STORE-LISTING.md` §3.
+- [x] **Textes rédigés** (FR, au « tu ») : nom « PadelConnect CI: Padel Abidjan », sous-titre, texte
+      promotionnel, mots-clés (95/100 octets), description, nouveautés 1.0.3, fiche Google Play —
+      `docs/STORE-LISTING.md` §1-2.
+- [ ] **Textes poussés** dans App Store Connect avec la version 1.0.3 (après les conditions du §0 :
+      binaire #69 contenant la fidélité, SQL 92 en production, version 1.0.3, chrono « 2 min »,
+      quartiers des mots-clés visibles).
+- [ ] **Catégorie** (Sports / Style de vie) et URL marketing / assistance vérifiées dans la fiche.
+- [ ] **Nom affiché** sur l'écran d'accueil : PadelConnect (inchangé ; le nom du store change seul).
 
 ## 4. Identité technique (déjà figée dans app.json)
 
