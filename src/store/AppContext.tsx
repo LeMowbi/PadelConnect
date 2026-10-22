@@ -88,7 +88,7 @@ import {
   type NoShowStatus,
   type SlotOccupancy,
 } from '@/lib/reservations';
-import { blockUser as blockUserRpc, fetchBlockedUserIds } from '@/lib/moderation';
+import { blockUser as blockUserRpc, fetchBlockedUserIds, rateLimitedCode, rateLimitedMessage } from '@/lib/moderation';
 import {
   fetchFavoritePlayerIds,
   fetchMyFollowedClubIds,
@@ -98,12 +98,21 @@ import {
   toggleFavoritePlayer as toggleFavoritePlayerRpc,
   type Loyalty,
 } from '@/lib/social';
+import { asLoyalty } from '@/lib/loyalty';
 import { DAY_MS, dayKey, MINUTE_MS } from '@/lib/days';
 import { samePhone } from '@/lib/phone';
 import { alertAsync } from '@/lib/confirm';
 import { overlaps, type CourtSlot } from '@/lib/courtSchedule';
 import { minutesToSlot, SESSION_MIN, slotToMinutes } from '@/lib/slots';
-import { cancelMatchReminder, onPushReceivedInForeground, scheduleMatchReminder, syncMatchReminders } from '@/lib/notifications';
+import { fetchMyMatchScores } from '@/lib/matchResults';
+import {
+  cancelMatchReminder,
+  hasNotificationPermission,
+  onPushReceivedInForeground,
+  scheduleMatchReminder,
+  scoreReminderAt,
+  syncMatchReminders,
+} from '@/lib/notifications';
 import { registerPushToken } from '@/lib/push';
 import { uploadAvatar } from '@/lib/avatar';
 import { clearOperatorNewsServer, fetchOperatorNews, setOperatorNewsServer } from '@/lib/operatorNews';
@@ -536,8 +545,9 @@ type AppContextType = {
 
 const AppContext = createContext<AppContextType | null>(null);
 // `pendingInvitationIds` : une invitation jamais acceptée n'est pas une partie jouée (même règle
-// que le serveur, `rp.status = 'accepted'`). `serverPlayed` = compteur serveur (my_loyalty, TOUT
-// l'historique) ; le miroir local est borné à 180 j → sans lui, les trophées RÉGRESSAIENT quand
+// que le serveur, `rp.status = 'accepted'`). `serverPlayed` = compteur serveur (my_loyalty.played_all :
+// créateur OU invité accepté, TOUT l'historique — `played` ne compte plus que les réservations
+// CRÉÉES, base de la fidélité 92) ; le miroir local est borné à 180 j → sans lui, les trophées RÉGRESSAIENT quand
 // les vieilles résas sortaient de la fenêtre. max() : le miroir est à jour à la seconde, le
 // serveur n'est relu qu'au premier plan — une partie tout juste finie ne « disparaît » pas.
 function computeStats(
@@ -580,6 +590,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // On repart de l’état par défaut puis on superpose l’état persisté (champs connus).
         if (raw) {
           const parsed = { ...initialState, ...JSON.parse(raw) } as AppState;
+          // Compteur fidélité persisté par une version antérieure (82 : sans `cap` ni `playedAll`) :
+          // écarté (relu en session) — sinon `fcfa(loyalty.cap)` plantait la carte du Profil.
+          parsed.loyalty = asLoyalty(parsed.loyalty);
           // Clubs LOCAUX « en attente » : fantômes créés par l'ancien « Inscrire mon club » (jamais
           // reliés au club serveur créé à l'activation) — purgés une fois pour toutes.
           parsed.customClubs = parsed.customClubs.filter((c) => c.fromServer || c.status !== 'pending');
@@ -609,6 +622,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     favoriteClubIdsRef.current = state.favoriteClubIds;
   }, [state.favoriteClubIds]);
+  // Miroir COURANT des résas / participations / invitations (même motif) : relu par respondInvitation
+  // APRÈS son aller-retour RPC — sa closure, figée avant l’appel, peut précéder un refreshMirror
+  // appliqué entre-temps (match annulé ailleurs → ses rappels seraient réarmés à tort).
+  const reminderMirrorRef = useRef({
+    reservations: state.reservations,
+    active: state.participantReservationIds,
+    pending: state.pendingInvitationIds,
+  });
+  useEffect(() => {
+    reminderMirrorRef.current = {
+      reservations: state.reservations,
+      active: state.participantReservationIds,
+      pending: state.pendingInvitationIds,
+    };
+  }, [state.reservations, state.participantReservationIds, state.pendingInvitationIds]);
 
   // NOTE : le NIVEAU est écrit par le client UNE SEULE FOIS, à l’inscription (quiz levelQuiz,
   // borné [1.0, 7.0] côté serveur par handle_new_user — cf. supabase/36_audit_hardening.sql).
@@ -683,6 +711,72 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return cleared;
     });
   }, []);
+
+  // Rappels LOCAUX de MES matchs — resync COMPLÈTE (cf. syncMatchReminders) : une résa créée sur
+  // un autre appareil gagne ses rappels ; une résa annulée / « pas venu » / annulée par le club
+  // quitte le miroir `booked` → ses rappels tombent. `isOwner` distingue MES résas (je peux
+  // annuler) d’une invitation d’ami (rappels adaptés, cf. scheduleMatchReminder) — sinon un invité
+  // recevait « annulation gratuite » / « confirme ton équipe » sans bouton Annuler ni équipe.
+  // Rappel de SCORE (C2) : on garde aussi un match en cours ou tout juste fini tant que fin + 20 min
+  // est devant nous, et seulement s’il est `scorable` (≥ 1 partenaire AVEC COMPTE ayant accepté —
+  // sinon submit_match_score répondrait 'no_players') :
+  //  • invitation reçue : MON acceptation suffit (le créateur a un compte) ;
+  //  • MES résas : le miroir `invited` ne porte PAS l’acceptation (respond_invitation ne retire que
+  //    les refus, 73) → lecture de reservation_participants (RLS rp_select : l’auteur voit les
+  //    lignes de SA résa), bornée aux résas concernées. Échec réseau → repli « un invité avec compte
+  //    encore présent » (jamais un nom libre `x-…`) : au pire un rappel pour rien, jamais un oubli ;
+  //  • score DÉJÀ saisi par moi OU déjà validé par les autres (fenêtre des 20 min après la fin) :
+  //    relu seulement quand un match vient de finir, pour ne pas relancer « Alors, ce match ? » sur
+  //    un score acquis — une saisie adverse en attente de MA confirmation garde le rappel (utile).
+  //    Hors session : rien n’est saisissable.
+  // Sans permission (ou sur le web) : rien ne pourra être posé → on efface sans aucune lecture réseau.
+  // Gardes après les lectures asynchrones : époque (une déconnexion entre-temps a déjà effacé les
+  // rappels — forceLoggedOut/signOut —, on ne les reposerait pas pour un compte sorti),
+  // interrupteur relu (coupé pendant la lecture → setRemindersOn a déjà effacé, on ne re-pose rien)
+  // et ORDRE pris à l’ENTRÉE (`reminderSyncReqRef`) : seule la DERNIÈRE resync demandée s’applique
+  // — une resync partie d’un instantané plus ancien mais dont les lectures finissent après ne
+  // supplante plus la plus récente (la génération de syncMatchReminders n’ordonne que ses appels,
+  // donc l’ordre de FIN des lectures).
+  const reminderSyncReqRef = useRef(0);
+  const syncReminders = useCallback(
+    async (reservations: Reservation[], userId: string | null, active: string[], pending: string[], enabled: boolean) => {
+      const req = ++reminderSyncReqRef.current;
+      const superseded = () => req !== reminderSyncReqRef.current;
+      const epoch = sessionEpochRef.current;
+      if (!enabled || !(await hasNotificationPermission())) {
+        if (!superseded()) void syncMatchReminders([], false);
+        return;
+      }
+      const now = Date.now();
+      const hasAccount = (iv: Invited) => !iv.id.startsWith('x-');
+      const mine = userId ? reservations.filter((r) => isReservationOwner(r, userId) || active.includes(r.id)) : reservations;
+      const candidates = mine.filter((r) => r.startsAt > now || scoreReminderAt(r.startsAt, r.durationMin) > now);
+      const ownerIds = userId ? candidates.filter((r) => isReservationOwner(r, userId) && r.invited.some(hasAccount)).map((r) => r.id) : [];
+      const justEnded = !!userId && candidates.some((r) => r.startsAt <= now);
+      const [parts, scores] = await Promise.all([
+        ownerIds.length
+          ? supabase.from('reservation_participants').select('reservation_id').in('reservation_id', ownerIds).eq('status', 'accepted')
+          : null,
+        justEnded ? fetchMyMatchScores() : null,
+      ]);
+      if (superseded() || sessionEpochRef.current !== epoch || !remindersOnRef.current) return;
+      // null = lecture impossible → repli ci-dessous (convention §8) ; [] = aucun partenaire accepté.
+      const accepted = parts && !parts.error ? new Set((parts.data ?? []).map((p: { reservation_id: string }) => p.reservation_id)) : null;
+      const settled = new Set((scores ?? []).filter((s) => s.mine || s.validated).map((s) => s.reservationId));
+      const list = candidates
+        .map((r) => {
+          const isOwner = !userId || isReservationOwner(r, userId);
+          const scorable =
+            !!userId &&
+            !settled.has(r.id) &&
+            (isOwner ? (accepted ? accepted.has(r.id) : r.invited.some(hasAccount)) : !pending.includes(r.id));
+          return { ...r, isOwner, scorable };
+        })
+        .filter((r) => r.startsAt > now || r.scorable);
+      void syncMatchReminders(list, true);
+    },
+    [],
+  );
 
   // Charge (ou recharge) la session serveur : profil + rôle, réservations, occupation,
   // participations et clubs serveur. Réutilisé au démarrage ET après la confirmation
@@ -965,20 +1059,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           loyalty: loyalty ?? s.loyalty,
         };
       });
-      // Resynchronise les rappels locaux (résas créées sur un autre appareil incluses). isOwner
-      // distingue MES résas (je peux annuler) d’une invitation d’ami (rappels adaptés, cf.
-      // scheduleMatchReminder) — sinon un invité recevait « annulation gratuite » / « confirme ton
-      // équipe » alors qu’il n’a ni bouton Annuler ni équipe à confirmer.
+      // Resynchronise les rappels locaux (résas créées sur un autre appareil incluses — cf. syncReminders).
       if (reservationsRes.ok) {
-        const mine = reservationsRes.reservations
-          .filter((r) => (isReservationOwner(r, userId) || activeParts.includes(r.id)) && r.startsAt > Date.now())
-          .map((r) => ({ ...r, isOwner: isReservationOwner(r, userId) }));
-        void syncMatchReminders(mine, remindersOnRef.current);
+        void syncReminders(reservationsRes.reservations, userId, activeParts, split ? split.pending : [], remindersOnRef.current);
       }
     } catch {
       // getSession a échoué (réseau) : on reste sur l’état local hydraté, sans crash.
     }
-  }, [forceLoggedOut]);
+  }, [forceLoggedOut, syncReminders]);
 
   // Recharge les tournois serveur + mes inscriptions et les fusionne (foreground et après
   // une création/inscription/clôture). null = échec réseau → on garde l’existant.
@@ -1028,8 +1116,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const waveW = waveWriteRef.current; // écriture du lien Wave pendant la relecture → idem
       // Ré-enregistre le jeton de push à CHAQUE retour au premier plan (pas seulement au
       // démarrage/à la connexion) : un utilisateur qui refuse d'abord puis ACTIVE les
-      // notifications dans les Réglages iOS est alors capté sans redémarrer l'app. Idempotent
-      // et silencieux (no-op si déjà refusé sans nouvelle demande possible, ou déjà enregistré).
+      // notifications dans les Réglages iOS est alors capté sans redémarrer l'app. Idempotent,
+      // silencieux et MUET (E1) : no-op tant que la permission n'est pas accordée — il ne la
+      // demande jamais ici, seul un geste explicite le fait (requestPushPermission).
       void registerPushToken(userId);
       void (async () => {
         try {
@@ -1140,14 +1229,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               level: prof ? clampLevel(Number(prof.level ?? s.level)) : s.level,
             };
           });
-          // Resynchronise les rappels locaux (même bloc que loadSession) : un match annulé par
-          // son créateur (ou une invitation refusée ailleurs) perd son rappel sans redémarrage.
+          // Resynchronise les rappels locaux (même geste que loadSession) : un match annulé par
+          // son créateur (ou une invitation refusée ailleurs) perd son rappel sans redémarrage ;
+          // un partenaire qui vient d'accepter arme le rappel de score du créateur (C2).
           if (reservationsRes.ok) {
-            const activeParts = split ? split.active : [];
-            const mine = reservationsRes.reservations
-              .filter((r) => (isReservationOwner(r, userId) || activeParts.includes(r.id)) && r.startsAt > Date.now())
-              .map((r) => ({ ...r, isOwner: isReservationOwner(r, userId) }));
-            void syncMatchReminders(mine, remindersOnRef.current);
+            void syncReminders(
+              reservationsRes.reservations,
+              userId,
+              split ? split.active : [],
+              split ? split.pending : [],
+              remindersOnRef.current,
+            );
           }
         } catch {
           // échec réseau global : on reste sur le miroir local, sans crash (comme loadSession)
@@ -1191,7 +1283,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       offPush();
       if (pushTimer) clearTimeout(pushTimer);
     };
-  }, [state.serverUserId]);
+  }, [state.serverUserId, syncReminders]);
 
   // Expiration AUTOMATIQUE des boosts « Sponsorisé » : à l’ouverture et à chaque retour au
   // premier plan, on retire ceux dont la date est dépassée — aucun badge doré ne traîne
@@ -1278,7 +1370,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [state.reservations, state.serverUserId, state.participantReservationIds],
   );
 
-  const serverPlayed = state.loyalty?.played ?? null;
+  const serverPlayed = state.loyalty?.playedAll ?? null;
   const stats = useMemo(
     () => computeStats(myReservations, state.officialResults, state.pendingInvitationIds, serverPlayed),
     [myReservations, state.officialResults, state.pendingInvitationIds, serverPlayed],
@@ -1608,14 +1700,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return true;
       },
       setRemindersOn: (on) => {
+        // Ref posée TOUT DE SUITE (sans attendre l’effet du rendu suivant) : la resync ci-dessous et
+        // toute resync en vol la relisent après leurs lectures asynchrones (cf. syncReminders).
+        remindersOnRef.current = on;
         setState((s) => ({ ...s, remindersOn: on }));
-        // (Dé)programme les rappels locaux pour MES résas à venir (pas celles des autres,
-        // qu’un compte club/opérateur reçoit via RLS) selon l’interrupteur. isOwner distingue
-        // mes réservations d’une invitation d’ami (rappels adaptés, cf. scheduleMatchReminder).
-        const upcoming = myReservations
-          .filter((r) => r.startsAt > Date.now())
-          .map((r) => ({ ...r, isOwner: isReservationOwner(r, state.serverUserId) }));
-        void syncMatchReminders(upcoming, on);
+        // (Dé)programme les rappels locaux pour MES résas (pas celles des autres, qu’un compte
+        // club/opérateur reçoit via RLS — syncReminders filtre) selon l’interrupteur.
+        void syncReminders(state.reservations, state.serverUserId, state.participantReservationIds, state.pendingInvitationIds, on);
       },
       setReserverView: (v) => setState((s) => ({ ...s, reserverView: v })),
       // Création : serveur (visible par tous, synchronisé) si connecté — club → publié direct,
@@ -1929,6 +2020,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // On ne mute le miroir QUE sur 'ok' (les refus métier 'played'/'gone'/'forbidden' et les
         // échecs réseau 'error' laissent l'état intact — l'appelant affiche le message adéquat).
         if (st !== 'ok' || sessionEpochRef.current !== epoch) return st;
+        // Un « pas venu » ne jouera pas de match : plus de rappel de score (C2) — ne concerne que le
+        // gérant qui joue lui-même sur son club ; chez le joueur, la résa quitte le miroir à la resync.
+        // Limite ASSUMÉE des rappels LOCAUX : aucun push « pas venu » ne réveille l'appareil du
+        // joueur (notify-club n'a pas de branche booked → no_show) — s'il ne revient pas au premier
+        // plan avant fin + 20 min, « Alors, ce match ? » sonne pour rien (le tap mène à « Mes
+        // réservations », où le match n'est plus). Même classe qu'une annulation club app fermée.
+        void cancelMatchReminder(id);
         setState((s) => ({
           ...s,
           reservations: s.reservations.filter((r) => r.id !== id),
@@ -1988,6 +2086,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const ok = await clubCancelReservationRow(id, reason, proposal);
         if (!ok) return false;
         if (sessionEpochRef.current !== epoch) return false;
+        void cancelMatchReminder(id); // même motif que markNoShow : un créneau annulé n'a pas de score
         setState((s) => ({
           ...s,
           reservations: s.reservations.filter((r) => r.id !== id),
@@ -2042,6 +2141,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Refus accepté par le serveur : on retire aussi les rappels locaux déjà posés pour ce
         // match (comme cancelReservation) — sinon « Ton match approche » sonne pour un match refusé.
         if (ok && !accept) void cancelMatchReminder(reservationId);
+        // Acceptation : le rappel de score (C2) devient dû pour MOI dès maintenant — resync sans
+        // attendre le prochain retour au premier plan (l'invitation n'est plus « à confirmer »).
+        // Miroir relu APRÈS l'appel (reminderMirrorRef), pas la closure figée avant l'appel RPC.
+        if (ok && accept && sessionEpochRef.current === epoch) {
+          const mirror = reminderMirrorRef.current;
+          void syncReminders(
+            mirror.reservations,
+            state.serverUserId,
+            mirror.active,
+            mirror.pending.filter((id) => id !== reservationId),
+            remindersOnRef.current,
+          );
+        }
         return ok;
       },
       confirmReservationByClub: async (id) => {
@@ -2439,6 +2551,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           message: input.message?.trim() || null,
           requested_by: userId,
         });
+        // Plafond 3 demandes de club / jour (trigger 94) : code dans le message d'erreur, pas une panne réseau.
+        const limited = rateLimitedCode(error);
+        if (limited) return { ok: false, error: rateLimitedMessage(limited) };
         if (error) return { ok: false, error: 'Envoi impossible — réessaie dans un instant.' };
         return { ok: true };
       },
@@ -2549,6 +2664,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           contact_phone: contactPhone?.trim() || state.account?.phone || null,
           message: body,
         });
+        // Plafond 5 messages / jour (trigger 94).
+        const limited = rateLimitedCode(error);
+        if (limited) return { ok: false, error: rateLimitedMessage(limited) };
         if (error) return { ok: false, error: 'Envoi impossible — réessaie.' };
         return { ok: true };
       },
@@ -2824,7 +2942,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       dismissNews: (id) => setState((s) => ({ ...s, dismissedNewsId: id })),
     }),
-    [state, hydrated, stats, myReservations, loadSession, refreshCompetitions],
+    [state, hydrated, stats, myReservations, loadSession, refreshCompetitions, syncReminders],
   );
 
   return <AppContext.Provider value={api}>{children}</AppContext.Provider>;
