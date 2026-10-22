@@ -1,6 +1,7 @@
 // Social & niveau (chantier v3, lot A — SQL 80) : joueurs favoris, fiabilité publique,
 // moteur de niveau (historique + réconciliation du chemin « validé à 48 h »).
 
+import { LOYALTY_CAP_DEFAULT, type Loyalty } from './loyalty';
 import { supabase } from './supabase';
 
 // ─── Joueurs favoris ────────────────────────────────────────────────────────────
@@ -156,73 +157,207 @@ export async function fetchMyFollowedClubIds(): Promise<string[] | null> {
   return ((data ?? []) as { club_id: string }[]).map((r) => r.club_id).filter(Boolean);
 }
 
-// ─── Fidélité « 10 parties = 1 récompense » (82) ────────────────────────────────
+// ─── Fidélité (82, règle cible 92) ──────────────────────────────────────────────
+// « 10 réservations CRÉÉES et JOUÉES = −50 % sur le prochain match (jusqu'au plafond), offert
+// par PadelConnect ». Logique pure (code, remise, progression) : src/lib/loyalty.ts.
 
-export type Loyalty = { played: number; claimed: number };
+// Type du compteur (et sa garde d'hydratation `asLoyalty`) : src/lib/loyalty.ts.
+export type { Loyalty };
 
-// Mon compteur (parties réellement jouées + cycles déjà réclamés). null = échec réseau.
+// Mon compteur. null = échec réseau.
 export async function fetchMyLoyalty(): Promise<Loyalty | null> {
   const { data, error } = await supabase.rpc('my_loyalty');
   if (error) return null;
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return null;
-  return { played: Number(row.played ?? 0), claimed: Number(row.claimed ?? 0) };
+  return {
+    played: Number(row.played ?? 0),
+    playedAll: Number(row.played_all ?? 0),
+    claimed: Number(row.claimed ?? 0),
+    cap: Number(row.cap ?? LOYALTY_CAP_DEFAULT),
+  };
 }
 
-// Réclamer la récompense du cycle suivant. 'not_yet' = pas encore 10 nouvelles parties.
+// Réclamer la récompense du cycle suivant. 'not_yet' = pas encore 10 nouvelles réservations.
 export async function claimLoyalty(): Promise<'ok' | 'not_yet' | 'error'> {
   const { data, error } = await supabase.rpc('claim_loyalty');
   if (error) return 'error';
   return data === 'ok' || data === 'not_yet' ? data : 'error';
 }
 
-// Texte de la récompense, réglé par l'opérateur (app_config). null = échec réseau, '' = non réglé.
-export async function fetchLoyaltyReward(): Promise<string | null> {
-  const { data, error } = await supabase.from('app_config').select('value').eq('key', 'loyalty_reward').maybeSingle();
-  if (error) return null;
-  return data?.value ?? '';
+// Plafond courant de la remise (FCFA), lu du serveur. null = échec réseau (on garde le dernier
+// connu ou le défaut, jamais une promesse inventée dans un libellé « jusqu'à … »).
+export async function fetchLoyaltyCap(): Promise<number | null> {
+  const { data, error } = await supabase.rpc('loyalty_cap');
+  if (error || typeof data !== 'number') return null;
+  return data;
 }
 
-// Opérateur : règle le texte de la récompense. true = enregistré.
-export async function setLoyaltyReward(text: string): Promise<boolean> {
-  const { data, error } = await supabase.rpc('set_app_config', { p_key: 'loyalty_reward', p_value: text });
+// Opérateur : règle le plafond (bornes serveur [100, 1 000 000]). true = enregistré.
+export async function setLoyaltyCap(cap: number): Promise<boolean> {
+  const { data, error } = await supabase.rpc('set_loyalty_cap', { p_cap: cap });
   return !error && data === true;
 }
 
-export type MyLoyaltyClaim = { cycle: number; claimedAt: number; served: boolean };
+// Une réclamation : `code` = le justificatif à montrer au club ; `clubId`/`amount` renseignés
+// une fois la remise servie par un club (null si servie en secours par PadelConnect).
+export type MyLoyaltyClaim = {
+  cycle: number;
+  claimedAt: number;
+  served: boolean;
+  code: string;
+  clubId: string | null;
+  amount: number | null;
+};
 
-// MES cycles réclamés (le justificatif « montre cet écran au club » doit SURVIVRE au démontage
-// de l'onglet — sans cette lecture, la preuve ne s'affichait qu'une fois). null = échec réseau.
+// MES cycles réclamés (le justificatif « montre ce code au club » doit SURVIVRE au démontage de
+// l'onglet — sans cette lecture, la preuve ne s'affichait qu'une fois). null = échec réseau.
 export async function fetchMyLoyaltyClaims(): Promise<MyLoyaltyClaim[] | null> {
   const { data, error } = await supabase.rpc('my_loyalty_claims');
   if (error) return null;
-  return ((data ?? []) as { cycle: number; claimed_at: string; served: boolean }[]).map((r) => ({
+  return (
+    (data ?? []) as {
+      cycle: number;
+      claimed_at: string;
+      served: boolean;
+      code: string | null;
+      club_id: string | null;
+      amount: number | null;
+    }[]
+  ).map((r) => ({
     cycle: r.cycle,
     claimedAt: new Date(r.claimed_at).getTime(),
     served: r.served === true,
+    code: r.code ?? '', // serveur d'avant la 92 : pas de colonne code → '' (le profil masque alors le bloc)
+    clubId: r.club_id ?? null,
+    amount: r.amount ?? null,
   }));
 }
 
-export type LoyaltyClaim = { id: string; userId: string; playerName: string; cycle: number; claimedAt: number; served: boolean };
+export type LoyaltyClaim = {
+  id: string;
+  userId: string | null; // null = compte supprimé (la remise servie reste au décompte, SQL 92)
+  playerName: string;
+  cycle: number;
+  claimedAt: number;
+  served: boolean;
+  code: string;
+  clubId: string | null;
+  amount: number | null;
+  matchPrice: number | null; // prix du match déclaré par le club au service (null : secours PadelConnect)
+  servedAt: number | null;
+};
 
-// Opérateur : réclamations à servir (les non servies d'abord). null = échec réseau.
+// Opérateur : réclamations (les non servies d'abord). null = échec réseau.
 export async function fetchLoyaltyClaims(): Promise<LoyaltyClaim[] | null> {
   const { data, error } = await supabase.rpc('fetch_loyalty_claims');
   if (error) return null;
-  return ((data ?? []) as { id: string; user_id: string; player_name: string; cycle: number; claimed_at: string; served: boolean }[]).map(
-    (r) => ({
-      id: r.id,
-      userId: r.user_id,
-      playerName: r.player_name,
-      cycle: r.cycle,
-      claimedAt: new Date(r.claimed_at).getTime(),
-      served: r.served,
-    }),
-  );
+  return (
+    (data ?? []) as {
+      id: string;
+      user_id: string | null;
+      player_name: string;
+      cycle: number;
+      claimed_at: string;
+      served: boolean;
+      code: string;
+      club_id: string | null;
+      amount: number | null;
+      match_price: number | null;
+      served_at: string | null;
+    }[]
+  ).map((r) => ({
+    id: r.id,
+    userId: r.user_id ?? null,
+    playerName: r.player_name,
+    cycle: r.cycle,
+    claimedAt: new Date(r.claimed_at).getTime(),
+    served: r.served,
+    code: r.code,
+    clubId: r.club_id ?? null,
+    amount: r.amount ?? null,
+    matchPrice: r.match_price ?? null,
+    servedAt: r.served_at ? new Date(r.served_at).getTime() : null,
+  }));
 }
 
-// Opérateur : marque une réclamation « servie » (remise en main propre faite). true = ok.
+// Opérateur, cas de SECOURS : marque une réclamation « servie » en main propre par PadelConnect
+// (sans club ni montant → rien n'est déduit à un club). true = ok.
 export async function serveLoyaltyClaim(id: string): Promise<boolean> {
   const { data, error } = await supabase.rpc('serve_loyalty_claim', { p_id: id });
   return !error && data === true;
+}
+
+const SERVE_STATUSES = ['ok', 'not_found', 'already', 'over_cap', 'invalid', 'forbidden', 'rate_limited'] as const;
+export type ServeLoyaltyStatus = (typeof SERVE_STATUSES)[number] | 'error';
+
+// Gérant : sert la remise du code montré par le joueur (montant RÉELLEMENT remis, ≤ moitié du
+// prix du match ET ≤ plafond ; le prix est tracé) — atomique côté serveur (double service →
+// 'already') ; 'rate_limited' = 30 essais / heure dépassés (anti-devinette des codes). 'error' =
+// échec réseau (réessayer a du sens).
+export async function clubServeLoyaltyClaim(clubId: string, code: string, amount: number, matchPrice: number): Promise<ServeLoyaltyStatus> {
+  const { data, error } = await supabase.rpc('club_serve_loyalty_claim', {
+    p_club_id: clubId,
+    p_claim_code: code,
+    p_amount: amount,
+    p_match_price: matchPrice,
+  });
+  if (error) return 'error';
+  return SERVE_STATUSES.find((st) => st === data) ?? 'error';
+}
+
+export type ClubLoyaltyServed = {
+  id: string;
+  playerName: string;
+  code: string;
+  amount: number;
+  matchPrice: number | null;
+  servedAt: number;
+};
+
+// Gérant : les remises servies par SON club (récentes d'abord) — ce qui sera déduit de son
+// décompte. null = échec réseau (≠ [] = aucune remise).
+export async function fetchClubLoyaltyServed(clubId: string): Promise<ClubLoyaltyServed[] | null> {
+  const { data, error } = await supabase.rpc('club_loyalty_served', { p_club_id: clubId });
+  if (error) return null;
+  return (
+    (data ?? []) as { id: string; player_name: string; code: string; amount: number; match_price: number | null; served_at: string }[]
+  ).map((r) => ({
+    id: r.id,
+    playerName: r.player_name,
+    code: r.code,
+    amount: Number(r.amount ?? 0),
+    matchPrice: r.match_price ?? null,
+    servedAt: new Date(r.served_at).getTime(),
+  }));
+}
+
+export type LoyaltyServedLine = { clubId: string; amount: number; servedAt: number };
+
+// Opérateur : remises servies par les clubs sur [from, to) — regroupées côté client par club ×
+// semaine du service (loyaltyServedByWeek) et déduites du décompte. null = échec réseau.
+export async function fetchOperatorLoyaltyServed(fromMs: number, toMs: number): Promise<LoyaltyServedLine[] | null> {
+  const { data, error } = await supabase.rpc('operator_loyalty_served', {
+    p_from: new Date(fromMs).toISOString(),
+    p_to: new Date(toMs).toISOString(),
+  });
+  if (error) return null;
+  return ((data ?? []) as { club_id: string; amount: number; served_at: string }[]).map((r) => ({
+    clubId: r.club_id,
+    amount: Number(r.amount ?? 0),
+    servedAt: new Date(r.served_at).getTime(),
+  }));
+}
+
+// Opérateur : coût total de la fidélité sur [from, to) (somme EXACTE des remises servies par les
+// clubs + nombre). null = échec réseau.
+export async function fetchOperatorLoyaltyCost(fromMs: number, toMs: number): Promise<{ total: number; served: number } | null> {
+  const { data, error } = await supabase.rpc('operator_loyalty_cost', {
+    p_from: new Date(fromMs).toISOString(),
+    p_to: new Date(toMs).toISOString(),
+  });
+  if (error) return null;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  return { total: Number(row.total ?? 0), served: Number(row.served ?? 0) };
 }

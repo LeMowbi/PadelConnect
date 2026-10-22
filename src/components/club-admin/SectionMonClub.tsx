@@ -8,6 +8,7 @@ import { Button, Card, IconCircle, SectionHeader, Tag, Txt } from '@/components/
 import { ClubInfoCard } from '@/components/club-admin/ClubInfoCard';
 import { ClubNewsEditor } from '@/components/club-admin/ClubNewsEditor';
 import { ClubPassesCard } from '@/components/club-admin/ClubPassesCard';
+import { LoyaltyServeCard } from '@/components/club-admin/LoyaltyServeCard';
 import { SAMPLE_SLOTS, type Club } from '@/data/clubs';
 import { courtsFor, resolvedGridFor, type ScheduleCtx } from '@/lib/availability';
 import { canAddCourtSlot, durationLabel, offeredDurations, overlaps, slotEnd, toMin, type CourtSlot } from '@/lib/courtSchedule';
@@ -1410,6 +1411,13 @@ export function SectionMonClub({ club }: { club: Club }) {
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Carnets" />
         <ClubPassesCard clubId={club.id} clubName={club.name} connected={connected} />
+      </View>
+
+      {/* Récompense fidélité PadelConnect (92) : le joueur montre son code, le gérant sert la
+          remise (−50 % plafonné) — déduite de son décompte de commission. */}
+      <View style={{ marginTop: spacing.xl }}>
+        <SectionHeader title="Fidélité PadelConnect" />
+        <LoyaltyServeCard clubId={club.id} clubName={club.name} connected={connected} />
       </View>
 
       {/* Terrains (courts) — avec une photo par terrain (montrée sur la fiche du club) */}

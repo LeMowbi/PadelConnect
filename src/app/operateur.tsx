@@ -12,7 +12,7 @@ import { CommissionRates } from '@/components/operator/CommissionRates';
 import { ManagerAccess } from '@/components/operator/ManagerAccess';
 import { TournamentFee } from '@/components/operator/TournamentFee';
 import { TournamentFees } from '@/components/operator/TournamentFees';
-import { LoyaltyReward } from '@/components/operator/LoyaltyReward';
+import { LoyaltySettings } from '@/components/operator/LoyaltySettings';
 import { WaveLink } from '@/components/operator/WaveLink';
 import { DiagnosticsCard } from '@/components/operator/DiagnosticsCard';
 import { NewsEditor } from '@/components/operator/NewsEditor';
@@ -23,7 +23,8 @@ import { isTournamentPublic } from '@/data/competitions';
 import { canAccessOperator } from '@/lib/access';
 import { hapticSuccess } from '@/lib/haptics';
 import { fetchReviewReports, operatorDeleteReview, operatorDismissReport, type ReviewReport } from '@/lib/moderation';
-import { fetchLoyaltyClaims, serveLoyaltyClaim, type LoyaltyClaim } from '@/lib/social';
+import { fetchLoyaltyClaims, fetchOperatorLoyaltyServed, serveLoyaltyClaim, type LoyaltyClaim, type LoyaltyServedLine } from '@/lib/social';
+import { loyaltyByClubForWeek, loyaltyServedByWeek, loyaltyWeekKey } from '@/lib/loyalty';
 import { COMMISSION_RATE, isPlayed, useApp, type ServerClubRequest, type ServerSupportMessage } from '@/store/AppContext';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { DAY_MS, addWeeks, dateKeyLabel, dayKey, weekKeyOf, weekLabel } from '@/lib/days';
@@ -280,18 +281,48 @@ export default function Operateur() {
     if (claimBusy) return;
     setClaimBusy(c.id);
     const ok = await serveLoyaltyClaim(c.id);
-    setClaimBusy(null);
     if (ok) {
+      setClaimBusy(null);
       // Marquage local immédiat (APRÈS confirmation serveur), puis relecture : la liste revient
       // triée « à servir d'abord » et intègre les réclamations arrivées entre-temps.
       setClaims((cur) => cur.map((x) => (x.id === c.id ? { ...x, served: true } : x)));
       toast.show('Récompense marquée servie ✓');
       void loadClaims();
-    } else {
-      toast.show('Action impossible — réessaie.', { icon: 'alert-circle' });
+      return;
     }
+    // Refus : la RPC rend false aussi quand un CLUB a servi ce code entre-temps (liste périmée,
+    // course avec son verrou) — « réessaie » échouerait à l'infini. On relit pour savoir.
+    const rows = await fetchLoyaltyClaims();
+    setClaimBusy(null);
+    if (rows) setClaims(rows);
+    const fresh = rows?.find((x) => x.id === c.id);
+    if (fresh?.served) toast.show(fresh.clubId ? 'Déjà servie par un club — rien à faire.' : 'Déjà marquée servie — rien à faire.');
+    else if (rows && !fresh) toast.show('Réclamation retirée entre-temps — liste mise à jour.', { icon: 'information-circle' });
+    else toast.show('Action impossible — réessaie.', { icon: 'alert-circle' });
   };
   const pendingClaims = claims.filter((c) => !c.served).length;
+
+  // REMISES FIDÉLITÉ servies par les clubs (92) : déduites du décompte de commission sur la semaine
+  // du service. Même fenêtre que le miroir des résas (~6 mois) + demain (fuseau). undefined =
+  // chargement, null = échec réseau (le décompte ne montre alors PAS « 0 déduit » à tort).
+  const [loyaltyServed, setLoyaltyServed] = useState<LoyaltyServedLine[] | null | undefined>(undefined);
+  const loadLoyaltyServed = useCallback(async () => {
+    const now = Date.now();
+    const rows = await fetchOperatorLoyaltyServed(now - 183 * DAY_MS, now + DAY_MS);
+    setLoyaltyServed((cur) => rows ?? (cur === undefined ? null : cur)); // §8 : un échec ne vide pas
+  }, []);
+  useEffect(() => {
+    let alive = true;
+    const now = Date.now();
+    void fetchOperatorLoyaltyServed(now - 183 * DAY_MS, now + DAY_MS).then((rows) => {
+      if (alive) setLoyaltyServed((cur) => rows ?? (cur === undefined ? null : cur));
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  // Déductions par « club:semaine » (clé = celle de operatorPayments).
+  const servedByKey = useMemo(() => loyaltyServedByWeek(loyaltyServed ?? []), [loyaltyServed]);
 
   const markSupport = async (id: string, status: ServerSupportMessage['status']) => {
     const prev = support.find((m) => m.id === id)?.status;
@@ -327,8 +358,11 @@ export default function Operateur() {
   // Placé APRÈS loadRequests (règle React Compiler : pas d'accès avant déclaration).
   // `loadRequests` inclus : sans lui, « Demandes reçues » restait figé pendant que les trois
   // autres blocs de l'onglet se rafraîchissaient (seule l'icône ↻ dédiée la rechargeait).
+  // Relecture du plafond et du coût total de la fidélité (LoyaltySettings) au pull-to-refresh.
+  const [loyaltyRefresh, setLoyaltyRefresh] = useState(0);
   const { refreshControl, webRefreshButton } = usePullToRefresh(async () => {
-    await Promise.all([loadSupport(), loadReports(), loadClaims(), loadRequests()]);
+    setLoyaltyRefresh((k) => k + 1);
+    await Promise.all([loadSupport(), loadReports(), loadClaims(), loadRequests(), loadLoyaltyServed()]);
   });
   // Chargement initial : on n’appelle setState que DANS le callback async (après await),
   // jamais de façon synchrone dans le corps de l’effet (cf. react-hooks/set-state-in-effect).
@@ -396,7 +430,7 @@ export default function Operateur() {
   // résas de TOUS les clubs, et sans useMemo chaque frappe dans un champ du formulaire
   // ré-exécutait ces passes complètes (priceOf → findClub par résa) à chaque re-rendu.
   const { reservations, clubCommission, customClubs, clubInfo } = state;
-  const { weekUpcoming, rows, allTimePlayed, allTimeCommission, thisWeekCommission } = useMemo(() => {
+  const { weekUpcoming, rows, allTimePlayed, allTimeCommission, thisWeekCommission, servedTotal } = useMemo(() => {
     // Prix d’une résa — MÊME règle partout (hebdo et cumulé) pour que le chiffre vitrine
     // ne sous-estime jamais la somme des semaines : prix figé, sinon tarif actuel du club.
     const priceOf = (r: (typeof reservations)[number]) => r.price ?? findClub(r.clubId, customClubs, clubInfo)?.priceFrom ?? 0;
@@ -417,22 +451,42 @@ export default function Operateur() {
     // Commission cumulée sur la fenêtre du miroir (~6 derniers mois, MIRROR_WINDOW_MS) — chiffre
     // vitrine. Chaque résa est commissionnée au taux de SON club (pas un taux global), pour rester exact.
     const allPlayedRes = reservations.filter((r) => isPlayed(r));
+    // Remises fidélité (92) : `loyalty` = servies par le club sur la semaine du service, `net` =
+    // commission − remises (ce que le club règle VRAIMENT ; négatif = PadelConnect lui doit la
+    // différence). Les cumuls vitrine les déduisent aussi (même fenêtre de 6 mois).
+    // Un club qui a servi une remise SANS partie jouée en app cette semaine a quand même sa ligne
+    // (0 partie, net négatif) : sinon sa remise disparaissait du décompte, de l'export et du total.
+    const weekLoyalty = loyaltyByClubForWeek(servedByKey, week);
+    for (const clubId of Object.keys(weekLoyalty)) {
+      if (!groups.has(clubId)) {
+        const clubName = findClub(clubId, customClubs, clubInfo)?.name ?? clubId;
+        groups.set(clubId, { clubName, count: 0, revenue: 0, items: [] });
+      }
+    }
+    const servedTotal = Object.values(servedByKey).reduce((s, v) => s + v, 0);
+    const servedThisWeek = Object.entries(servedByKey).reduce((s, [k, v]) => (k.endsWith(`:${thisWeek}`) ? s + v : s), 0);
     return {
       weekUpcoming: weekAll.length - played.length,
       rows: [...groups.entries()]
-        .map(([clubId, g]) => ({ clubId, ...g, rate: rateOf(clubId), commission: Math.round(g.revenue * rateOf(clubId)) }))
-        .sort((a, b) => b.revenue - a.revenue),
+        .map(([clubId, g]) => {
+          const commission = Math.round(g.revenue * rateOf(clubId));
+          const loyalty = weekLoyalty[clubId] ?? 0;
+          return { clubId, ...g, rate: rateOf(clubId), commission, loyalty, net: commission - loyalty };
+        })
+        .sort((a, b) => b.revenue - a.revenue || b.loyalty - a.loyalty),
       allTimePlayed: allPlayedRes.length,
-      allTimeCommission: Math.round(allPlayedRes.reduce((s, r) => s + priceOf(r) * rateOf(r.clubId), 0)),
+      allTimeCommission: Math.round(allPlayedRes.reduce((s, r) => s + priceOf(r) * rateOf(r.clubId), 0)) - servedTotal,
       // Commission de la semaine EN COURS (indépendante du sélecteur ‹ › de la « Santé
       // plateforme », un aperçu stable) — sinon naviguer vers une semaine passée la changerait.
-      thisWeekCommission: Math.round(
-        reservations
-          .filter((r) => weekKeyOf(r.startsAt) === thisWeek && isPlayed(r))
-          .reduce((s, r) => s + priceOf(r) * rateOf(r.clubId), 0),
-      ),
+      thisWeekCommission:
+        Math.round(
+          reservations
+            .filter((r) => weekKeyOf(r.startsAt) === thisWeek && isPlayed(r))
+            .reduce((s, r) => s + priceOf(r) * rateOf(r.clubId), 0),
+        ) - servedThisWeek,
+      servedTotal,
     };
-  }, [reservations, clubCommission, customClubs, clubInfo, week, thisWeek]);
+  }, [reservations, clubCommission, customClubs, clubInfo, week, thisWeek, servedByKey]);
 
   // Tournois JOUEURS publiés avec un frais fixe → à encaisser (Wave). Non réglés d’abord,
   // puis par date décroissante. On garde les réglés visibles (historique récent).
@@ -453,27 +507,62 @@ export default function Operateur() {
   const totalCount = rows.reduce((s, r) => s + r.count, 0);
   const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
   const totalCommission = rows.reduce((s, r) => s + r.commission, 0);
-  const totalDue = rows.filter((r) => state.operatorPayments[`${r.clubId}:${week}`] !== 'paid').reduce((s, r) => s + r.commission, 0);
+  const totalLoyalty = rows.reduce((s, r) => s + r.loyalty, 0);
+  // Reste à encaisser = NET (remises fidélité déduites) des clubs pas encore « payé », chaque club
+  // borné à 0 : un net NÉGATIF (remises > commission) est une dette de PadelConnect envers CE club,
+  // il ne réduit pas ce que doivent les autres → totalisé à part (« À reverser aux clubs »).
+  const unsettled = rows.filter((r) => state.operatorPayments[`${r.clubId}:${week}`] !== 'paid');
+  const totalDue = unsettled.reduce((s, r) => s + Math.max(0, r.net), 0);
+  const totalOwed = unsettled.reduce((s, r) => s + Math.max(0, -r.net), 0);
 
   // Relance : impayés des semaines passées PRÉSENTES DANS LE MIROIR (~6 derniers mois, cf.
   // MIRROR_WINDOW_MS) — au-delà, les résas ne sont plus rapatriées, donc un impayé de plus de
   // 6 mois n'apparaît pas ici (à traiter par une vraie RPC d'agrégat serveur si le volume grandit).
   // Total estimé au taux de chaque club + semaine la plus ancienne à traiter (le tap y amène
   // directement). La semaine EN COURS est exclue : elle se facture à sa clôture.
+  // Dans l'AUTRE sens aussi : `owed` = ce que PadelConnect doit REVERSER aux clubs (remises
+  // fidélité > commission sur une semaine passée non soldée) — sinon cette dette n'apparaissait
+  // que sur la semaine sélectionnée et s'oubliait une fois la semaine passée.
   const unpaid = useMemo(() => {
-    let total = 0;
-    const weeks = new Set<string>();
+    // Commission par « club:semaine » non soldé, puis NET (remises fidélité déduites) par ligne —
+    // même règle que « Reste à encaisser » / « À reverser » : un net négatif ne masque pas la dette
+    // d'un autre club, il est totalisé à part.
+    const commissionByKey = new Map<string, { wk: string; commission: number }>();
     for (const r of state.reservations) {
       if (!isPlayed(r)) continue;
       const wk = weekKeyOf(r.startsAt);
       if (wk >= thisWeek) continue;
       if (state.operatorPayments[`${r.clubId}:${wk}`] === 'paid') continue;
       const price = r.price ?? findClub(r.clubId, state.customClubs, state.clubInfo)?.priceFrom ?? 0;
-      total += Math.round(price * (state.clubCommission[r.clubId] ?? COMMISSION_RATE));
+      const key = loyaltyWeekKey(r.clubId, wk);
+      const cur = commissionByKey.get(key) ?? { wk, commission: 0 };
+      cur.commission += price * (state.clubCommission[r.clubId] ?? COMMISSION_RATE);
+      commissionByKey.set(key, cur);
+    }
+    // Remises servies par un club SANS partie jouée en app cette semaine-là : pas de commission,
+    // mais une ligne quand même (même règle que le décompte hebdo, loyaltyByClubForWeek).
+    for (const key of Object.keys(servedByKey)) {
+      const wk = key.slice(key.lastIndexOf(':') + 1);
+      if (wk >= thisWeek || commissionByKey.has(key) || state.operatorPayments[key] === 'paid') continue;
+      commissionByKey.set(key, { wk, commission: 0 });
+    }
+    let total = 0;
+    let owed = 0;
+    const weeks = new Set<string>();
+    for (const [key, { wk, commission }] of commissionByKey) {
+      const net = Math.round(commission) - (servedByKey[key] ?? 0);
+      if (net === 0) continue;
+      if (net > 0) total += net;
+      else owed -= net;
       weeks.add(wk);
     }
-    return { total, weeksCount: weeks.size, oldest: [...weeks].sort()[0] ?? null };
-  }, [state.reservations, state.operatorPayments, state.clubCommission, state.customClubs, state.clubInfo, thisWeek]);
+    return { total, owed, weeksCount: weeks.size, oldest: [...weeks].sort()[0] ?? null };
+  }, [state.reservations, state.operatorPayments, state.clubCommission, state.customClubs, state.clubInfo, thisWeek, servedByKey]);
+  // Libellé de la relance (pastille hors Finances + rappel en Finances) : les DEUX sens.
+  const unpaidLabel =
+    [unpaid.total > 0 ? `Reste à encaisser : ${fcfa(unpaid.total)}` : null, unpaid.owed > 0 ? `À reverser : ${fcfa(unpaid.owed)}` : null]
+      .filter((b): b is string => b !== null)
+      .join(' · ') + ` (${unpaid.weeksCount} semaine${unpaid.weeksCount > 1 ? 's' : ''} passée${unpaid.weeksCount > 1 ? 's' : ''})`;
 
   // Santé plateforme (3 chiffres) — mémoïsé : ces deux filter() parcourent TOUTES les résas
   // (tous clubs confondus) et ne doivent pas se rejouer à chaque frappe dans « Ajouter un club ».
@@ -489,23 +578,45 @@ export default function Operateur() {
   const activeClubsCount = useMemo(() => activeClubs(state.customClubs, state.clubInfo).length, [state.customClubs, state.clubInfo]);
 
   const statusOf = (clubId: string): 'tofacture' | 'sent' | 'paid' => state.operatorPayments[`${clubId}:${week}`] ?? 'tofacture';
+  // Libellé du statut — un net NÉGATIF se REVERSE au club (même statut serveur « payé » = soldé).
+  const statusLabel = (row: (typeof rows)[number], st: ReturnType<typeof statusOf>) =>
+    st === 'paid' ? (row.net < 0 ? 'Reversé' : 'Payé') : st === 'sent' ? 'Décompte envoyé' : row.net < 0 ? 'À reverser' : 'À facturer';
+
+  // Remises fidélité pas (encore) lues : un décompte envoyé ou exporté SANS la déduction serait
+  // faux — on refuse plutôt que d'envoyer un chiffre que le club contesterait.
+  const loyaltyUnknown = () => {
+    if (Array.isArray(loyaltyServed)) return false;
+    toast.show('Remises fidélité non lues — tire pour rafraîchir avant d’envoyer le décompte', { icon: 'cloud-offline-outline' });
+    return true;
+  };
 
   // Message Wave formaté, prêt à envoyer au club.
   const sendHistory = (row: (typeof rows)[number]) => {
-    const lines = row.items
+    if (loyaltyUnknown()) return;
+    const lines = [...row.items]
       .sort((a, b) => a.startsAt - b.startsAt)
       // Date ABSOLUE dérivée de dateKey (jamais le libellé relatif « Sem. dernière »).
       .map(
         (r) => `• ${dateKeyLabel(r.dateKey)} · ${r.time} · ${r.court}${r.bookedBy ? ` · ${r.bookedBy.name}` : ''} · ${fcfa(r.price ?? 0)}`,
       )
       .join('\n');
+    // Net NÉGATIF (remises > commission) : c'est PadelConnect qui verse la différence au club —
+    // jamais « à régler » un montant négatif (ni nul).
+    const settle =
+      row.net < 0
+        ? `PadelConnect te doit : *${fcfa(-row.net)}* (versement Wave à venir) 🙏`
+        : row.net === 0 && row.loyalty > 0
+          ? `Net : *${fcfa(0)}* — rien à régler cette semaine ✅`
+          : `${row.loyalty > 0 ? `Net à régler : *${fcfa(row.net)}*\n` : ''}À régler par Wave 🙏`;
     const message =
       `*PadelConnect — Décompte semaine ${weekLabel(week)}*\n${row.clubName}\n\n` +
       `Parties jouées : ${row.count}\n` +
       `Volume estimé : ${fcfa(row.revenue)}\n` +
-      `Commission PadelConnect (${pctLabel(row.rate)}\u00a0%) : *${fcfa(row.commission)}*\n` +
-      `À régler par Wave 🙏\n\n` +
-      `Détail :\n${lines}`;
+      `Commission PadelConnect (${pctLabel(row.rate)}\u00a0%) : ${row.loyalty > 0 ? fcfa(row.commission) : `*${fcfa(row.commission)}*`}\n` +
+      // Remises fidélité servies par le club cette semaine : remboursées par déduction.
+      (row.loyalty > 0 ? `Remises fidélité servies (remboursées) : −${fcfa(row.loyalty)}\n` : '') +
+      `${settle}\n` +
+      (lines ? `\nDétail :\n${lines}` : '');
     const phone = findClub(row.clubId, state.customClubs, state.clubInfo)?.contactPhone ?? '';
     // Sans numéro connu, WhatsApp s’ouvre quand même (message prêt) mais SANS destinataire :
     // on le dit à l’opérateur pour qu’il choisisse le bon contact au lieu de croire à un envoi.
@@ -527,15 +638,15 @@ export default function Operateur() {
       toast.show('Rien à exporter sur cette semaine', { icon: 'alert-circle' });
       return;
     }
-    const header = 'Club;Parties;Volume(FCFA);Taux(%);Commission(FCFA);Statut';
+    if (loyaltyUnknown()) return;
+    const header = 'Club;Parties;Volume(FCFA);Taux(%);Commission(FCFA);Fidélité(FCFA);Net(FCFA);Statut';
     const body = rows
       .map((r) => {
-        const st = statusOf(r.clubId);
-        const label = st === 'paid' ? 'Payé' : st === 'sent' ? 'Décompte envoyé' : 'À facturer';
-        return `${r.clubName};${r.count};${r.revenue};${pctLabel(r.rate)};${r.commission};${label}`;
+        const label = statusLabel(r, statusOf(r.clubId));
+        return `${r.clubName};${r.count};${r.revenue};${pctLabel(r.rate)};${r.commission};${r.loyalty};${r.net};${label}`;
       })
       .join('\n');
-    const total = `TOTAL;${totalCount};${totalRevenue};;${totalCommission};`;
+    const total = `TOTAL;${totalCount};${totalRevenue};;${totalCommission};${totalLoyalty};${totalCommission - totalLoyalty};`;
     const message = `PadelConnect — Décompte semaine ${weekLabel(week)}\n\n${header}\n${body}\n${total}`;
     // Via lib/share : feuille native sur mobile, repli presse-papiers sur le web de bureau
     // (l'Espace opérateur web est une cible réelle) — plus de rejet non géré ni d'export « muet ».
@@ -591,18 +702,17 @@ export default function Operateur() {
           <Ionicons name="chevron-forward" size={14} color={colors.amberDark} />
         </Pressable>
       ) : null}
-      {/* Même rappel pour les FINANCES : des semaines passées restent à encaisser. */}
-      {section !== 'Finances' && unpaid.total > 0 ? (
+      {/* Même rappel pour les FINANCES : des semaines passées restent à encaisser ou à reverser. */}
+      {section !== 'Finances' && unpaid.weeksCount > 0 ? (
         <Pressable
           onPress={() => setSection('Finances')}
           style={styles.pendingPill}
           accessibilityRole="button"
-          accessibilityLabel={`Reste à encaisser ${fcfa(unpaid.total)}`}
+          accessibilityLabel={unpaidLabel}
         >
           <Ionicons name="alarm-outline" size={14} color={colors.amberDark} />
           <Txt variant="small" color={colors.amberDark} style={{ fontWeight: '700', flex: 1 }}>
-            Reste à encaisser : {fcfa(unpaid.total)} ({unpaid.weeksCount} semaine{unpaid.weeksCount > 1 ? 's' : ''} passée
-            {unpaid.weeksCount > 1 ? 's' : ''})
+            {unpaidLabel}
           </Txt>
           <Ionicons name="chevron-forward" size={14} color={colors.amberDark} />
         </Pressable>
@@ -644,18 +754,18 @@ export default function Operateur() {
 
       {section === 'Finances' ? (
         <>
-          {/* Relance : reste à encaisser TOUTES semaines passées (tap → la plus ancienne à traiter) */}
-          {unpaid.total > 0 && unpaid.oldest ? (
+          {/* Relance : reste à encaisser ET à reverser, TOUTES semaines passées (tap → la plus
+              ancienne à traiter) */}
+          {unpaid.oldest ? (
             <Pressable
               onPress={() => setWeek(unpaid.oldest!)}
               style={styles.reminder}
               accessibilityRole="button"
-              accessibilityLabel={`Reste à encaisser ${fcfa(unpaid.total)} — voir la semaine la plus ancienne`}
+              accessibilityLabel={`${unpaidLabel} — voir la semaine la plus ancienne`}
             >
               <Ionicons name="alarm-outline" size={16} color={colors.coral} />
               <Txt variant="small" color={colors.text} style={{ flex: 1, fontWeight: '600' }}>
-                Reste à encaisser : {fcfa(unpaid.total)} sur {unpaid.weeksCount} semaine{unpaid.weeksCount > 1 ? 's' : ''} passée
-                {unpaid.weeksCount > 1 ? 's' : ''}.
+                {unpaidLabel}
               </Txt>
               <Ionicons name="chevron-forward" size={15} color={colors.coral} />
             </Pressable>
@@ -673,6 +783,7 @@ export default function Operateur() {
             <Txt style={styles.heroValue}>{fcfa(allTimeCommission)}</Txt>
             <Txt variant="small" color={colors.textMuted}>
               {allTimePlayed} partie{allTimePlayed > 1 ? 's' : ''} jouée{allTimePlayed > 1 ? 's' : ''} · réglées par Wave (hors app)
+              {servedTotal > 0 ? ` · remises fidélité déduites (${fcfa(servedTotal)})` : ''}
             </Txt>
           </Card>
 
@@ -734,10 +845,20 @@ export default function Operateur() {
               <StatTile value={fcfa(totalRevenue)} label="Volume" color={colors.green} bg={colors.greenSoft} />
               <StatTile value={fcfa(totalDue)} label="Reste à encaisser" color={colors.amberDark} bg={colors.amberSoft} />
             </View>
+            {totalOwed > 0 ? (
+              <Txt variant="small" color={colors.amberDark} style={{ marginTop: spacing.sm }}>
+                À reverser aux clubs : {fcfa(totalOwed)} (remises fidélité supérieures à leur commission).
+              </Txt>
+            ) : null}
             {weekUpcoming > 0 ? (
               <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
                 + {weekUpcoming} réservation{weekUpcoming > 1 ? 's' : ''} à venir cette semaine (à titre indicatif — facturée
                 {weekUpcoming > 1 ? 's' : ''} une fois jouée{weekUpcoming > 1 ? 's' : ''}).
+              </Txt>
+            ) : null}
+            {loyaltyServed === null ? (
+              <Txt variant="small" color={colors.amberDark} style={{ marginTop: spacing.sm }}>
+                Remises fidélité non lues (connexion) : le reste à encaisser peut être surestimé — tire pour rafraîchir.
               </Txt>
             ) : null}
             <Button size="sm" variant="ghost" label="Exporter la semaine (tableau)" icon="download-outline" onPress={exportWeek} full />
@@ -761,20 +882,34 @@ export default function Operateur() {
                           {r.clubName}
                         </Txt>
                         <Txt variant="muted">
-                          {r.count} résa{r.count > 1 ? 's' : ''} · volume ≈ {fcfa(r.revenue)} · {pctLabel(r.rate)}
-                          {'\u00a0'}%
+                          {r.count === 0 ? (
+                            'Aucune partie en app cette semaine'
+                          ) : (
+                            <>
+                              {r.count} résa{r.count > 1 ? 's' : ''} · volume ≈ {fcfa(r.revenue)} · {pctLabel(r.rate)}
+                              {'\u00a0'}%
+                            </>
+                          )}
                         </Txt>
                       </View>
                       <View style={{ alignItems: 'flex-end', gap: 4 }}>
                         <Txt variant="price" style={{ fontSize: 15 }}>
-                          {fcfa(r.commission)}
+                          {fcfa(r.net)}
                         </Txt>
                         <Tag
-                          label={st === 'paid' ? 'Payé ✓' : st === 'sent' ? 'Décompte envoyé' : 'À facturer'}
+                          label={st === 'paid' ? `${statusLabel(r, st)} ✓` : statusLabel(r, st)}
                           tone={st === 'paid' ? 'green' : st === 'sent' ? 'amber' : 'neutral'}
                         />
                       </View>
                     </View>
+                    {r.loyalty > 0 ? (
+                      // Remises fidélité (92) servies par ce club sur la semaine : PadelConnect les
+                      // rembourse en les déduisant — le montant affiché est le NET à régler.
+                      <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.xs }}>
+                        Commission {fcfa(r.commission)} − remises fidélité servies {fcfa(r.loyalty)} = net {fcfa(r.net)}
+                        {r.net < 0 ? ' (PadelConnect doit la différence au club)' : ''}
+                      </Txt>
+                    ) : null}
                     <Divider style={{ marginVertical: spacing.md }} />
                     <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                       <View style={{ flex: 1 }}>
@@ -800,10 +935,15 @@ export default function Operateur() {
                           }
                         />
                       ) : (
+                        // Semaine EN COURS : pas encore soldable — une partie jouée ou une remise
+                        // servie APRÈS le marquage n'entrerait plus dans aucun total (ni la semaine,
+                        // ni la relance) et la ligne afficherait « Payé/Reversé ✓ » sur un montant
+                        // jamais réglé. Elle se solde à sa clôture, comme le dit la relance.
                         <Button
                           size="sm"
-                          label="Marquer payé"
+                          label={week === thisWeek ? 'À solder lundi' : r.net < 0 ? 'Marquer reversé' : 'Marquer payé'}
                           icon="checkmark-circle"
+                          disabled={week === thisWeek}
                           onPress={() =>
                             void setPaymentStatus(r.clubId, week, 'paid').then(({ ok }) => {
                               if (ok)
@@ -876,11 +1016,17 @@ export default function Operateur() {
             <WaveLink link={state.waveLink} onSet={setWaveLink} toast={toast} />
           </View>
 
-          {/* Récompense de fidélité (82) : le texte affiché sur la carte à tampons des joueurs
-              (« 10 parties = 1 récompense »). Les réclamations se servent dans « Demandes ». */}
+          {/* Fidélité PadelConnect (92) : plafond de la remise + coût (remises servies par les
+              clubs, déduites de leurs décomptes ci-dessus). Les codes se servent dans l'Espace
+              Club ; le secours opérateur vit dans « Demandes ». */}
           <View style={{ marginTop: spacing.xl }}>
-            <SectionHeader title="Récompense fidélité" />
-            <LoyaltyReward toast={toast} />
+            <SectionHeader title="Fidélité PadelConnect" />
+            <LoyaltySettings
+              week={week}
+              weekCost={Array.isArray(loyaltyServed) ? totalLoyalty : loyaltyServed}
+              refreshKey={loyaltyRefresh}
+              toast={toast}
+            />
           </View>
 
           {/* Frais à encaisser (Wave) sur les tournois publiés par des joueurs. Confirmation
@@ -1323,8 +1469,10 @@ export default function Operateur() {
             )}
           </View>
 
-          {/* FIDÉLITÉ À SERVIR (82) : un joueur a atteint 10 parties jouées et réclamé sa
-              récompense — elle se remet en main propre (club ou PadelConnect), puis « Servie ✓ ». */}
+          {/* FIDÉLITÉ À SERVIR (82, règle cible 92) : un joueur a réclamé sa récompense — il montre
+              son CODE au club, qui sert la remise depuis son Espace Club (déduite de son décompte).
+              Ici : la liste + le SECOURS opérateur (remise en main propre par PadelConnect, sans
+              déduction à un club). */}
           <View style={{ marginTop: spacing.xl }}>
             <SectionHeader title={claimsLoaded ? `Fidélité à servir · ${pendingClaims}` : 'Fidélité à servir'} />
             {!claimsLoaded ? (
@@ -1336,7 +1484,7 @@ export default function Operateur() {
                 <Txt variant="muted">
                   {claimsError
                     ? 'Impossible de charger les réclamations — vérifie ta connexion, puis tire pour rafraîchir.'
-                    : 'Aucune réclamation. Dès qu’un joueur réclame sa récompense (Profil → Fidélité), elle arrive ici.'}
+                    : 'Aucune réclamation. Dès qu’un joueur réclame sa récompense (Profil → Fidélité), elle arrive ici — il la fait servir au club avec son code.'}
                 </Txt>
               </Card>
             ) : (
@@ -1350,20 +1498,30 @@ export default function Operateur() {
                       </Txt>
                       <Txt variant="muted">
                         {/* Date formatée en UTC (même motif que le reste du fichier). */}
-                        Cycle n°{c.cycle} · réclamée le {dateKeyLabel(dayKey(new Date(c.claimedAt)))}
+                        Cycle n°{c.cycle} · code {c.code} · réclamée le {dateKeyLabel(dayKey(new Date(c.claimedAt)))}
                       </Txt>
+                      {c.served ? (
+                        <Txt variant="small" color={colors.textMuted}>
+                          {c.clubId && c.amount !== null
+                            ? `Servie par ${findClub(c.clubId, state.customClubs, state.clubInfo)?.name ?? c.clubId} · remise ${fcfa(c.amount)}${c.matchPrice !== null ? ` sur un match à ${fcfa(c.matchPrice)}` : ''} (déduite)`
+                            : 'Servie en main propre par PadelConnect (rien à déduire)'}
+                        </Txt>
+                      ) : null}
                     </View>
                     <Tag label={c.served ? 'Servie ✓' : 'À servir'} tone={c.served ? 'green' : 'amber'} />
                   </View>
                   {!c.served ? (
                     <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+                      {/* SECOURS : à n'utiliser que si PadelConnect remet la récompense lui-même —
+                          la voie normale est le code servi par le club (déduction automatique). */}
                       <Button
                         size="sm"
-                        label={claimBusy === c.id ? '…' : 'Servie ✓'}
+                        variant="secondary"
+                        label={claimBusy === c.id ? '…' : 'Servie par PadelConnect'}
                         icon="checkmark"
                         disabled={claimBusy !== null}
                         onPress={() => void serveClaim(c)}
-                        accessibilityLabel={`Marquer la récompense de ${c.playerName} comme servie`}
+                        accessibilityLabel={`Marquer la récompense de ${c.playerName} comme servie en main propre par PadelConnect`}
                       />
                     </View>
                   ) : null}
