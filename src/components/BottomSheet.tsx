@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ToastOutlet } from './Toast';
 import { Txt } from './ui';
 import { colors, radius, shadows, spacing } from '@/theme';
 
@@ -91,6 +92,9 @@ export function BottomSheet({
           </ScrollView>
         </Animated.View>
       </KeyboardAvoidingView>
+      {/* Messages visibles AU-DESSUS de la feuille (le toast racine reste sous le Modal) ;
+          rendus à la surface d'en dessous dès que la fermeture commence (`visible` faux). */}
+      <ToastOutlet active={visible} />
     </Modal>
   );
 }
