@@ -2,12 +2,27 @@
 // (tables app_errors / app_events, cf. 33_diagnostics.sql). Aucun service externe, aucun pistage.
 // Tout est best-effort et TOTALEMENT silencieux : le suivi ne doit jamais casser l’app ni bloquer
 // l’utilisateur. Seul l’opérateur peut relire ces tables (RLS).
+// Côté serveur (94) : longueurs BORNÉES par CHECK (mêmes bornes qu’ici — une ligne hors borne
+// serait refusée, donc perdue en silence), coupe-circuit > 300 lignes / 10 min (ligne abandonnée
+// sans erreur) et purge > 30 jours à l’ouverture de l’Espace opérateur.
 
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
+// Bornes = CHECK de la 94 (message 1000, stack 4000, context 200, name 80, props 2000 en texte jsonb).
+const MAX_CONTEXT = 200;
+const MAX_NAME = 80;
+const MAX_PROPS_JSON = 2000;
+
+// Le CHECK serveur mesure `props::text` (rendu jsonb), qui ajoute une espace après chaque « : » et
+// chaque « , » : JSON.stringify sous-estime. Compter TOUS ces caractères (ceux des chaînes aussi)
+// donne un majorant pour des props ordinaires (chaînes, booléens, entiers) → jamais de ligne refusée.
+function jsonbTextLength(props: Record<string, unknown>): number {
+  const json = JSON.stringify(props);
+  return json.length + (json.match(/[:,]/g)?.length ?? 0);
+}
 
 // Réduit une erreur inconnue en (message, stack) exploitables.
 function describe(error: unknown): { message: string; stack?: string } {
@@ -27,7 +42,13 @@ export function logError(error: unknown, context?: string): void {
     const { message, stack } = describe(error);
     void supabase
       .from('app_errors')
-      .insert({ message: message.slice(0, 1000), stack: stack?.slice(0, 4000), context, platform: Platform.OS, app_version: APP_VERSION })
+      .insert({
+        message: message.slice(0, 1000),
+        stack: stack?.slice(0, 4000),
+        context: context?.slice(0, MAX_CONTEXT),
+        platform: Platform.OS,
+        app_version: APP_VERSION,
+      })
       .then(() => {});
   } catch {
     // silencieux : un échec de diagnostic ne doit jamais remonter à l’utilisateur.
@@ -35,11 +56,14 @@ export function logError(error: unknown, context?: string): void {
 }
 
 // Enregistre un événement d’usage (ex. 'reservation_created'). `props` = détails NON sensibles.
+// Des props trop volumineuses (au-delà de la borne serveur) sont omises plutôt que de perdre
+// l’événement entier : on ne tronque pas un JSON.
 export function track(name: string, props?: Record<string, unknown>): void {
   try {
+    const small = props && jsonbTextLength(props) <= MAX_PROPS_JSON ? props : null;
     void supabase
       .from('app_events')
-      .insert({ name, props: props ?? null, platform: Platform.OS })
+      .insert({ name: name.slice(0, MAX_NAME), props: small, platform: Platform.OS })
       .then(() => {});
   } catch {
     // silencieux

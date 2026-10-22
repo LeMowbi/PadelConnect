@@ -2,16 +2,19 @@
 // Tout passe par des fonctions SECURITY DEFINER : on n’expose jamais la table des profils.
 
 import { type Friend } from '@/data/user';
+import { rateLimitedCode } from './moderation';
 import { supabase } from './supabase';
 
 export type FoundPlayer = { name: string; level?: number };
 
 // Renvoie le joueur PadelConnect correspondant au numéro, null s’il n’a pas (encore) de
-// compte, ou undefined si la RECHERCHE a échoué (réseau) — à ne pas confondre : « pas de
-// compte » invite à s’inscrire, « échec réseau » invite à réessayer (convention §8).
-export async function findPlayerByPhone(phone: string): Promise<FoundPlayer | null | undefined> {
+// compte, undefined si la RECHERCHE a échoué (réseau), ou 'rate_limited' si le plafond de
+// 30 recherches / heure est atteint (SQL 94 : levé en exception, lu dans le message) — à ne pas
+// confondre : « pas de compte » invite à s’inscrire, « échec réseau » invite à réessayer
+// (convention §8), « plafond » invite à patienter une heure (rateLimitedMessage).
+export async function findPlayerByPhone(phone: string): Promise<FoundPlayer | null | undefined | 'rate_limited'> {
   const { data, error } = await supabase.rpc('find_player_by_phone', { p_phone: phone.trim() });
-  if (error) return undefined;
+  if (error) return rateLimitedCode(error) ? 'rate_limited' : undefined;
   if (!data || (Array.isArray(data) && data.length === 0)) return null;
   const row = (Array.isArray(data) ? data[0] : data) as { first_name: string | null; last_name: string | null; level: number | null };
   const name = `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim();
@@ -42,9 +45,11 @@ export async function fetchFriends(): Promise<Friend[] | null> {
 //   already_friends : on était déjà amis
 //   pending         : j’avais déjà une demande en attente vers cette personne
 //   not_found       : aucun joueur PadelConnect avec ce numéro
+//   rate_limited    : plafond de 30 recherches de numéro / heure (partagé avec la recherche, 94)
+//   rate_limited_day: plafond de 20 demandes / jour (94) — message via rateLimitedMessage
 //   error           : échec réseau / serveur
 export type FriendRequestResult = {
-  status: 'sent' | 'accepted' | 'already_friends' | 'pending' | 'not_found' | 'error';
+  status: 'sent' | 'accepted' | 'already_friends' | 'pending' | 'not_found' | 'rate_limited' | 'rate_limited_day' | 'error';
   friend?: Friend;
 };
 

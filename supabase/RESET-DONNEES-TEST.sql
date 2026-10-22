@@ -10,10 +10,13 @@
 --     l'app : ils réapparaissent automatiquement, remis à leur état d'origine.
 --   • TON COMPTE OPÉRATEUR EST PRÉSERVÉ (toute ligne profiles avec role = 'operator').
 --   • ⚠️ APRÈS LE RESET, re-saisis dans l'Espace opérateur : le LIEN WAVE de paiement, le
---     MONTANT des frais de tournoi et le texte de la RÉCOMPENSE FIDÉLITÉ — ces réglages sont
---     effacés (section 2) pour qu'aucun réglage de TEST ne survive au lancement.
+--     MONTANT des frais de tournoi et le PLAFOND de la remise fidélité (5 000 FCFA par défaut)
+--     — ces réglages sont effacés (section 2) pour qu'aucun réglage de TEST ne survive au lancement.
 --
 -- ⚠️ IRRÉVERSIBLE. À lancer UNE FOIS, juste avant d'ouvrir l'app au public.
+-- ⚠️ À lancer APRÈS avoir collé les migrations 92 → 94 dans l'ordre : les sections 1 et 2
+--   lisent puis vident `rate_counters` (créée par la 94). Lancé avant, le script s'arrête sur
+--   « relation does not exist », SANS rien effacer (la transaction est annulée).
 -- Comment faire, sans terminal :
 --   1) Dashboard Supabase → SQL Editor.
 --   2) D'ABORD la SECTION 1 (aperçu) : copie-la, Run → tu vois combien de lignes vont partir.
@@ -62,6 +65,7 @@ union all select 'Agenda (événements) à effacer',              count(*) from 
 union all select 'Décomptes de carnet à effacer',              count(*) from public.pass_uses
 union all select 'Carnets club à effacer',                     count(*) from public.club_passes
 union all select 'Annonces club à effacer',                    count(*) from public.club_news
+union all select 'Compteurs anti-abus à effacer',               count(*) from public.rate_counters
 union all select 'Parts Wave à effacer',                       count(*) from public.share_payments
 union all select 'Élèves de cours collectifs à effacer',       count(*) from public.lesson_students
 union all select 'Notes privées de créneaux à effacer',        count(*) from public.blocked_slot_notes
@@ -116,6 +120,7 @@ begin;
   delete from public.pass_uses;
   delete from public.club_passes;
   delete from public.club_news;
+  delete from public.rate_counters;             -- compteurs anti-abus (94)
 
   -- 2) Clubs de test + tout ce qui les décrit. Les 9 fondateurs vivent dans le code de l'app :
   --    vider ces tables les remet à leur apparence d'origine (nom, horaires, photos par défaut).
@@ -131,8 +136,9 @@ begin;
   -- Réglages OPÉRATEUR à effacer AUSSI (sinon un réglage de TEST survit à la remise à zéro) :
   --   • tournament_config : le LIEN WAVE de paiement + le montant des frais de tournoi — un lien
   --     Wave de test survivant enverrait de vrais organisateurs vers une caisse de test (argent réel) ;
-  --   • app_config : la récompense fidélité (texte marketing). Le porteur les re-saisit dans
-  --     l'Espace opérateur après le reset (cf. note en tête de fichier).
+  --   • app_config : le plafond de la remise fidélité (`loyalty_cap`, 92 — revient à 5 000 FCFA
+  --     par défaut). Le porteur les re-saisit dans l'Espace opérateur après le reset (cf. note en
+  --     tête de fichier).
   delete from public.tournament_config;
   delete from public.app_config;
 
