@@ -34,3 +34,8 @@ export function samePhone(a: string | undefined, b: string | undefined): boolean
 // Indicatif Côte d’Ivoire pré-rempli (modifiable) : la plupart des joueurs sont locaux.
 // Une seule source pour les champs « numéro » (onboarding, amis, carnets club).
 export const DEFAULT_DIAL = '+225 ';
+
+// Numéro trop court : on dit la règle LOCALE et quoi taper — le MÊME message partout où
+// `isValidPhone` s'applique (inscription, connexion, profil). La règle, elle, ne change pas
+// (8 chiffres minimum, les numéros étrangers restent acceptés).
+export const PHONE_INCOMPLETE = 'Numéro incomplet — en Côte d’Ivoire : 10 chiffres après +225 (ex. 07 07 07 07 07).';

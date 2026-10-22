@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PopIn } from '@/components/PopIn';
 import { Button, Txt } from '@/components/ui';
 import { colors, gradients, radius, spacing } from '@/theme';
@@ -41,6 +42,7 @@ const COPY: Record<Kind, { icon: keyof typeof Ionicons.glyphMap; title: string; 
 
 export default function EmailConfirmed() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { kind } = useLocalSearchParams<{ kind?: string }>();
   const k: Kind = kind === 'change' || kind === 'switch' || kind === 'error' ? kind : 'signup';
   const c = COPY[k];
@@ -48,7 +50,12 @@ export default function EmailConfirmed() {
   const go = () => router.replace(k === 'error' ? '/onboarding' : '/');
 
   return (
-    <LinearGradient colors={gradients.deepGreen} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.wrap}>
+    <LinearGradient
+      colors={gradients.deepGreen}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[styles.wrap, { paddingTop: insets.top + spacing.xl }]}
+    >
       <View style={styles.center}>
         <PopIn>
           <View style={styles.badge}>
@@ -68,7 +75,8 @@ export default function EmailConfirmed() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.xxl },
+  // paddingTop posé au rendu (zone sûre + 24) : rien ne passe sous l’encoche / la Dynamic Island.
+  wrap: { flex: 1, paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   badge: {
     width: 108,

@@ -13,7 +13,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "ci.padelco.app",
       "buildNumber": "68",
-      "associatedDomains": ["applinks:padelconnectci.com"],
+      "associatedDomains": ["applinks:padelconnectci.com", "webcredentials:padelconnectci.com"],
       "infoPlist": {
         "CFBundleDevelopmentRegion": "fr",
         "CFBundleLocalizations": ["fr"]

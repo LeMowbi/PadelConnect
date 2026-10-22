@@ -8,7 +8,7 @@ import { Button, Txt } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 import { useApp } from '@/store/AppContext';
 import { AUTH_ERROR_FALLBACK, frAuthError } from '@/store/helpers';
-import { colors, radius, spacing } from '@/theme';
+import { colors, font, radius, spacing } from '@/theme';
 
 // Écran de RÉINITIALISATION du mot de passe (ouvert par le lien reçu par e-mail, deep link
 // « padelco://reset-password?code=… »). On échange le code contre une session, puis on laisse
@@ -18,7 +18,10 @@ export default function ResetPasswordScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ code?: string }>();
   const toast = useToast();
-  const { refreshSession } = useApp();
+  const { state, refreshSession } = useApp();
+  // E-mail du compte réinitialisé : adopté par refreshSession AVANT le passage à « ready »
+  // (session.user.email fait foi, cf. AppContext) — sert d’identifiant au trousseau iOS.
+  const accountEmail = state.account?.email;
   const code = Array.isArray(params.code) ? params.code[0] : params.code;
   // Sans code dans le lien → « error » d’emblée (évite un setState synchrone dans l’effet).
   const [status, setStatus] = useState<'exchanging' | 'ready' | 'error'>(code ? 'exchanging' : 'error');
@@ -105,6 +108,22 @@ export default function ResetPasswordScreen() {
         </View>
       ) : (
         <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
+          {accountEmail ? (
+            // Identifiant en LECTURE SEULE (textContentType « username ») : sans lui, iOS
+            // enregistrait le nouveau mot de passe dans une entrée sans identifiant (ou en
+            // double) au lieu de mettre à jour celle de cet e-mail dans le trousseau.
+            <View style={styles.accountRow}>
+              <Txt variant="muted">Compte :</Txt>
+              <TextInput
+                value={accountEmail}
+                editable={false}
+                textContentType="username"
+                autoComplete="username"
+                accessibilityLabel={`Compte ${accountEmail}`}
+                style={styles.accountValue}
+              />
+            </View>
+          ) : null}
           <View style={styles.inputRow}>
             <TextInput
               value={pwd}
@@ -113,6 +132,11 @@ export default function ResetPasswordScreen() {
               placeholderTextColor={colors.textMuted}
               secureTextEntry={hidden}
               autoCapitalize="none"
+              autoCorrect={false}
+              // newPassword : iOS propose un mot de passe fort et met à jour le trousseau.
+              textContentType="newPassword"
+              autoComplete="new-password"
+              accessibilityLabel="Nouveau mot de passe"
               style={styles.inputInner}
             />
             <Pressable
@@ -131,6 +155,10 @@ export default function ResetPasswordScreen() {
             placeholderTextColor={colors.textMuted}
             secureTextEntry={hidden}
             autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="newPassword"
+            autoComplete="new-password"
+            accessibilityLabel="Confirme le nouveau mot de passe"
             style={styles.input}
           />
           <View style={{ marginTop: spacing.md }}>
@@ -143,6 +171,8 @@ export default function ResetPasswordScreen() {
 }
 
 const styles = {
+  accountRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.xs },
+  accountValue: { flex: 1, color: colors.text, fontSize: font.size.sm, padding: 0 },
   input: {
     backgroundColor: colors.surface,
     borderWidth: 1,
