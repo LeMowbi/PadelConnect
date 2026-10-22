@@ -803,7 +803,32 @@ Expo, Supabase, Anthropic, superpowers vendorisées, Markdown seul) et `.claude/
   **Vérification du numéro par WhatsApp** : OUI, via Twilio Verify dans Supabase Auth, inscription
   « téléphone d'abord » (code WhatsApp au lieu du lien e-mail, e-mail facultatif) — compte Twilio à
   créer par le porteur. **Parts Wave** : strictement optionnelles. Gardés de côté inchangés.
-- **Vague 3 (à lancer)** : audit des RÈGLES MÉTIER par scénarios (7 lentilles validées : résa &
+- **Vague 3a FAITE (2026-10-22)** : `docs/AUDIT-REGLES-METIER-2026-10.md` — 15 lentilles, 480
+  scénarios, 139 constats confirmés (1 HIGH, 14 MEDIUM, 105 LOW, 18 COSMETIC, lots M1→M12).
+  **HIGH R-01 FERMÉ** : la vue `slot_occupancy` (propriétaire `postgres`, sans `security_invoker`)
+  gardait INSERT/UPDATE/DELETE pour `anon`/`authenticated` → n'importe qui pouvait supprimer toutes
+  les réservations ; SQL **95** (revoke all + grant select à authenticated) **appliquée + prouvée
+  5/5** ; balayage : plus aucune relation sans RLS modifiable. ⚠️ Tout `drop view`/`create view`
+  REMET les droits par défaut : reposer revoke/grant. **Vague 3b** (chantiers décidés) **fusionnée**
+  avec SQL **92** (fidélité cible), **93** (index), **94** (anti-abus) — écrites + prouvées en
+  transaction annulée sur la prod (7/7), **à appliquer juste avant le build #69**. Fiches stores :
+  `docs/STORE-LISTING.md`. **Vague 3c** (correctifs M2→M11, SQL **96**/**97**, notify-club **v49**)
+  EN COURS.
+- **Décisions porteur du 2026-10-22 (« tout ok » sur les recommandations)** : un cours de coach
+  n'est PAS une partie (classement, fidélité) ; les réclamations de fidélité de l'ancienne règle
+  repartent à zéro ; « pas venu » INTERDIT sur un match au score validé ; compte supprimé → ses
+  partenaires GARDENT les matchs passés (anonymisés) ; « ex æquo » au classement ; badge et trophée
+  « amis » à 5 ; prix 1h dérivé arrondi à la centaine ; commission maintenue sur une séance de
+  carnet, aucune sur une absence ; tournoi annulé par le club → frais PadelConnect annulés ; coach
+  retiré → simple avertissement au gérant ; annuaire statique des coachs supprimé (`/coachs` →
+  `/cours`) ; notifications « actus et agenda » activées par défaut, désactivables dans le profil ;
+  badge « annulations » du gérant limité aux annulations à moins de 24 h ; Reanimated/Worklets
+  RETIRÉS dans le #69 (recette TestFlight des gestes). APRÈS le #69 : « pas venu » par joueur,
+  départ < 5 h visible du créateur, contestation fermée à J+7, partenaire de tournoi lié à un
+  compte (avec garde-fou « tournoi bidon »). Prix recalculé par le serveur : seulement après la
+  saisie des tarifs des 9 fondateurs. À fournir par le porteur : identité juridique + récépissé
+  ARTCI, compte Twilio, plan Supabase/sauvegardes, tarifs et photos des 9 clubs.
+- **Vague 3 (cadrage initial)** : audit des RÈGLES MÉTIER par scénarios (7 lentilles validées : résa &
   invitations, score/niveau/classement, tournois, clubs avec leur propre système, comptes & rôles,
   argent, temps & concurrence) + trous de la critique de complétude (2 appareils, fuseau,
   multi-clubs, web runtime, transitions de rôle, RLS, dérive live < 80, Android, supply-chain,
