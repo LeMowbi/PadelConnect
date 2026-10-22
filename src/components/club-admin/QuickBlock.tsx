@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { CalendarPicker } from '@/components/CalendarPicker';
 import { Chip } from '@/components/Chip';
 import { Button, Card, Txt } from '@/components/ui';
 import { BLOCK_REASONS } from '@/lib/clubConstants';
@@ -11,6 +12,8 @@ import { colors, radius, spacing } from '@/theme';
 // Mini-formulaire « Bloquer un créneau » : date → TERRAIN → un de SES créneaux (heure + durée,
 // 1h/1h30) → motif. Le terrain est choisi AVANT le créneau (68) : chaque terrain a sa propre
 // grille, un horaire n'a de sens qu'une fois le terrain connu.
+// Date (D1) : `days` = l'HORIZON du planning gérant (aujourd'hui → J+60) — les 7 premiers jours
+// en puces, les suivants via « Autre date » (calendrier) ou les flèches ‹ ›.
 // `source` (bloqué seulement) : 'range' = fermé par une PÉRIODE, rouvrable uniquement depuis
 // « Périodes fermées » — un « Débloquer » ponctuel n'y changerait rien.
 export type CourtStatus = { state: 'free' | 'reserved' | 'blocked' | 'tournoi'; label?: string; source?: 'slot' | 'range' };
@@ -24,7 +27,7 @@ export function QuickBlock({
   onBlock,
   onUnblock,
 }: {
-  days: { key: string; label: string; value: number }[];
+  days: { key: string; label: string; value: number }[]; // horizon : aujourd'hui en tête, ≥ 7 jours
   courts: string[];
   grid: Record<string, CourtSlot[]>; // grille EFFECTIVE de chaque terrain (resolvedGridFor)
   dayHasTournament: (dateKey: string) => boolean;
@@ -35,7 +38,13 @@ export function QuickBlock({
   // Jour retrouvé par CLÉ (pas l'objet capturé au montage) : après minuit, days[0] change de
   // valeur — un état objet figerait le formulaire sur la veille (motif : cours/[coachId].tsx).
   const [selDayKey, setSelDayKey] = useState<string | null>(null);
-  const day = days.find((d) => d.key === selDayKey) ?? days[0];
+  const dayIdx = Math.max(
+    0,
+    days.findIndex((d) => d.key === selDayKey),
+  );
+  const day = days[dayIdx];
+  const dayFar = dayIdx >= 7; // jour choisi hors de la première semaine (puce « Autre date »)
+  const [showCalendar, setShowCalendar] = useState(false);
   const [court, setCourt] = useState<string | null>(null);
   const [slot, setSlot] = useState<CourtSlot | null>(null);
   const [confirmUnblock, setConfirmUnblock] = useState<CourtSlot | null>(null);
@@ -51,6 +60,18 @@ export function QuickBlock({
     setError(null);
     setConfirmUnblock(null);
   };
+  // Changer de jour repart d'une sélection vierge (terrain/créneau d'un autre jour = incohérent).
+  // Gelé pendant un envoi : l'erreur éventuelle s'afficherait sous un AUTRE jour que celui visé.
+  const pickDay = (key: string) => {
+    if (busy) return;
+    setSelDayKey(key);
+    setShowCalendar(false);
+    reset();
+  };
+  const shiftDay = (delta: number) => {
+    const next = days[dayIdx + delta];
+    if (next) pickDay(next.key);
+  };
   const tournamentDay = dayHasTournament(day.key);
   // Créneaux OUVERTS du terrain sélectionné (les fermés `x:true` ne se bloquent pas — déjà indisponibles).
   const courtSlots = court ? openCourtSlots(grid, court) : [];
@@ -59,17 +80,46 @@ export function QuickBlock({
     <Card style={{ marginTop: spacing.sm, borderColor: colors.coral }}>
       <Txt variant="label">Jour</Txt>
       <View style={styles.wrap}>
-        {days.map((d) => (
-          <Chip
-            key={d.key}
-            label={d.label}
-            active={d.key === day.key}
-            onPress={() => {
-              setSelDayKey(d.key);
-              reset();
-            }}
-          />
+        {days.slice(0, 7).map((d) => (
+          <Chip key={d.key} label={d.label} active={d.key === day.key} onPress={() => pickDay(d.key)} />
         ))}
+        <Chip
+          label={dayFar ? day.label : 'Autre date'}
+          icon="calendar-outline"
+          active={dayFar}
+          onPress={() => {
+            if (busy) return;
+            setShowCalendar((v) => !v);
+          }}
+          accessibilityLabel={dayFar ? `Autre date : ${day.label}` : 'Autre date'}
+        />
+      </View>
+      {showCalendar ? <CalendarPicker value={day.key} minKey={days[0].key} maxKey={days[days.length - 1].key} onSelect={pickDay} /> : null}
+      {/* Flèches ‹ › : un jour à la fois jusqu'à la fin de l'horizon — libellé complet du jour. */}
+      <View style={styles.dayNav}>
+        <Pressable
+          onPress={() => shiftDay(-1)}
+          disabled={dayIdx <= 0 || busy}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Jour précédent"
+          accessibilityState={{ disabled: dayIdx <= 0 || busy }}
+        >
+          <Ionicons name="chevron-back" size={20} color={dayIdx > 0 ? colors.text : colors.textFaint} />
+        </Pressable>
+        <Txt variant="body" style={{ flex: 1, textAlign: 'center', fontWeight: '700' }} numberOfLines={1}>
+          {day.label}
+        </Txt>
+        <Pressable
+          onPress={() => shiftDay(1)}
+          disabled={dayIdx >= days.length - 1 || busy}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Jour suivant"
+          accessibilityState={{ disabled: dayIdx >= days.length - 1 || busy }}
+        >
+          <Ionicons name="chevron-forward" size={20} color={dayIdx < days.length - 1 ? colors.text : colors.textFaint} />
+        </Pressable>
       </View>
 
       {tournamentDay ? (
@@ -91,6 +141,7 @@ export function QuickBlock({
                 label={c}
                 active={c === court}
                 onPress={() => {
+                  if (busy) return; // gelé pendant un envoi (même raison que le jour)
                   setCourt(c);
                   setSlot(null);
                   setError(null);
@@ -115,6 +166,7 @@ export function QuickBlock({
                       active={slot?.t === s.t}
                       disabled={past}
                       onPress={() => {
+                        if (busy) return;
                         setSlot(s);
                         setError(null);
                         setConfirmUnblock(null);
@@ -260,6 +312,7 @@ export function QuickBlock({
 
 const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  dayNav: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.sm, marginTop: spacing.md },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',

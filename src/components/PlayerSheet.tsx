@@ -71,8 +71,10 @@ export function PlayerSheet({ player, onClose }: { player: PlayerLike | null; on
 
   const rel = playerId ? reliability[playerId] : undefined;
   const reliable = rel && rel.played >= RELIABILITY_MIN_PLAYED ? rel : undefined;
-  // Cœur visible seulement si je suis connecté, sur la fiche d’un AUTRE compte joueur.
-  const canFollow = !!playerId && !!state.serverUserId && playerId !== state.serverUserId;
+  // Cœur visible seulement si je suis connecté, sur la fiche d’un AUTRE compte joueur — et jamais
+  // pour un compte que j’ai BLOQUÉ (le blocage rompt le suivi, 91 ; la fiche s’ouvre désormais
+  // aussi depuis le classement, où un compte bloqué peut figurer).
+  const canFollow = !!playerId && !!state.serverUserId && playerId !== state.serverUserId && !state.blockedUserIds.includes(playerId);
   const followed = !!playerId && state.favoritePlayerIds.includes(playerId);
 
   return (

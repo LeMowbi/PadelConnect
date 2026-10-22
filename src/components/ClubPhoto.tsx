@@ -8,6 +8,8 @@ import { colors, radius, spacing } from '@/theme';
 
 // Photo distante (réelle) avec repli automatique sur le visuel d’accent du club si l’image manque.
 // `overlay` + `caption` permettent un rendu "héros" (nom du club superposé sur la photo).
+// Avec une légende, le repli ne dessine PAS les initiales : le nom du club est déjà écrit en blanc
+// en bas, deux textes se superposaient (A3).
 export function ClubPhoto({
   uri,
   accent,
@@ -38,7 +40,7 @@ export function ClubPhoto({
         <Image source={{ uri }} onError={() => setError(true)} contentFit="cover" transition={200} style={StyleSheet.absoluteFill} />
       ) : (
         <View style={StyleSheet.absoluteFill}>
-          <PhotoPlaceholder accent={accent} initials={initials} height={height} rounded={0} showBadge={false} />
+          <PhotoPlaceholder accent={accent} initials={caption ? undefined : initials} height={height} rounded={0} showBadge={false} />
         </View>
       )}
 

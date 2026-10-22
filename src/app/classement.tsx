@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { PlayerSheet, type PlayerLike } from '@/components/PlayerSheet';
 import { Screen } from '@/components/Screen';
 import { SkeletonLines } from '@/components/Skeleton';
 import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
@@ -22,6 +23,10 @@ export default function ClassementScreen() {
   // undefined = chargement ; null = échec réseau (≠ [] = classement vide), convention §8.
   const [rows, setRows] = useState<LeaderboardRow[] | null | undefined>(undefined);
   const [myRank, setMyRank] = useState<number | null>(null);
+  // Mini-fiche d'un joueur du classement (C3) : champs SERVEUR seulement (id, nom, niveau).
+  // Les compteurs de la ligne (officiels joués/gagnés) ne remplissent PAS « Tournois joués /
+  // gagnés » de la fiche : ils ne comptent que les tournois officiels — ce serait trompeur.
+  const [openPlayer, setOpenPlayer] = useState<PlayerLike | null>(null);
   // rank : null = échec réseau (on garde la valeur affichée) ; 0 = non classé (on masque la
   // carte « Ta position ») ; sinon = rang réel. Les vieux serveurs (avant la 49) renvoient
   // encore null pour « non classé » — dans ce cas on garde simplement l'existant, comme avant.
@@ -98,7 +103,18 @@ export default function ClassementScreen() {
             return (
               <View key={r.userId}>
                 {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
-                <View style={[styles.row, isMe && styles.rowMe]}>
+                <Pressable
+                  onPress={() => setOpenPlayer({ id: r.userId, name: r.name, level: r.level })}
+                  style={({ pressed }) => [styles.row, isMe && styles.rowMe, pressed && { opacity: 0.75 }]}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  // Le label REMPLACE la ligne de détail : on y reprend tout ce qu'elle affiche.
+                  accessibilityLabel={`Rang ${i + 1}, ${r.name}${isMe ? ' (toi)' : ''}, ${r.points} points${
+                    r.wins > 0 ? `, ${r.wins} tournoi${r.wins > 1 ? 's' : ''} gagné${r.wins > 1 ? 's' : ''}` : ''
+                  }${r.offPlayed > 0 ? `, ${r.offPlayed} officiel${r.offPlayed > 1 ? 's' : ''} joué${r.offPlayed > 1 ? 's' : ''}` : ''}${
+                    r.matchWins > 0 ? `, ${r.matchWins} victoire${r.matchWins > 1 ? 's' : ''}` : ''
+                  }, ${r.played} partie${r.played > 1 ? 's' : ''}, niveau ${levelText(r.level, 1)} — voir le profil`}
+                >
                   <Txt variant="h3" style={styles.rank}>
                     {MEDALS[i] ?? `${i + 1}`}
                   </Txt>
@@ -115,7 +131,7 @@ export default function ClassementScreen() {
                     </Txt>
                   </View>
                   <Tag label={`${r.points} pts`} tone={i < 3 ? 'amber' : 'neutral'} />
-                </View>
+                </Pressable>
               </View>
             );
           })}
@@ -126,6 +142,8 @@ export default function ClassementScreen() {
         joueur saisit le score dans « Mes réservations » — le match est validé quand un joueur du camp perdant confirme le même score, ou 48
         h après une saisie gagnante restée seule), 2 par partie jouée. Tout est vérifié — rien ne se déclare tout seul.
       </Txt>
+
+      <PlayerSheet player={openPlayer} onClose={() => setOpenPlayer(null)} />
     </Screen>
   );
 }

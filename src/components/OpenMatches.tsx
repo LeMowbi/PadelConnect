@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
+import { PlayerSheet, type PlayerLike } from '@/components/PlayerSheet';
 import { SkeletonLines } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, SectionHeader, Tag, Txt } from '@/components/ui';
@@ -37,6 +38,9 @@ export function OpenMatches({ refreshToken, full = false, clubId }: { refreshTok
   // Fiabilité publique des CRÉATEURS (badge « Fiable · N % »), par compte. Un id absent = pas
   // encore chargé ou échec réseau → aucun badge (convention §8 : jamais de chiffre inventé).
   const [reliability, setReliability] = useState<Record<string, PublicReliability>>({});
+  // Mini-fiche du CRÉATEUR (C3) : seuls les champs connus (id + prénom) — le niveau du créateur
+  // n'est pas exposé par fetch_open_matches (m.level = niveau CHERCHÉ), on ne l'invente pas.
+  const [openCreator, setOpenCreator] = useState<PlayerLike | null>(null);
 
   const load = async () => {
     const ms = await fetchOpenMatches();
@@ -113,8 +117,9 @@ export function OpenMatches({ refreshToken, full = false, clubId }: { refreshTok
     );
     setModerationBusy(false);
     setModerating(null);
+    // Refus : res.error porte le message honnête (plafond 5 messages / jour de la 94 → « Doucement 😊 … réessaie demain »).
     toast.show(
-      res.ok ? 'Match signalé — merci, on le vérifie.' : 'Signalement impossible — réessaie.',
+      res.ok ? 'Match signalé — merci, on le vérifie.' : (res.error ?? 'Signalement impossible — réessaie.'),
       res.ok ? undefined : { icon: 'alert-circle' },
     );
   };
@@ -263,13 +268,28 @@ export function OpenMatches({ refreshToken, full = false, clubId }: { refreshTok
                     {reliable ? <Tag label={`Fiable · ${reliable.presencePct} %`} tone="green" icon="shield-checkmark-outline" /> : null}
                     {m.placesLeft === 1 ? <Tag label="Dernière place !" tone="coral" icon="flame" /> : null}
                   </View>
-                  <Txt variant="small" color={colors.textMuted} numberOfLines={1} style={{ marginTop: 2 }}>
-                    par {m.creatorName}
-                    {/* Fourchette affichée en badge : le niveau ne se répète pas ici. Sinon, on
-                        garde l'ancien texte libre (matchs créés avant la 81) ou « tous niveaux ». */}
-                    {rangeText ? '' : m.level ? ` · niveau ${m.level}` : ' · tous niveaux'}
-                    {m.placesLeft > 1 ? ` · ${m.placesLeft} places` : ''}
-                  </Txt>
+                  {/* Le prénom du créateur ouvre sa mini-fiche (niveau, fiabilité, Suivre). */}
+                  <Pressable
+                    onPress={() => setOpenCreator({ id: m.creatorId, name: m.creatorName })}
+                    hitSlop={{ top: 14, bottom: 14, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    // Le label REMPLACE le texte lu : il reprend le niveau libre et les places restantes.
+                    accessibilityLabel={`Par ${m.creatorName}${rangeText ? '' : m.level ? `, niveau ${m.level}` : ', tous niveaux'}${
+                      m.placesLeft > 1 ? `, ${m.placesLeft} places` : ''
+                    } — voir son profil`}
+                    style={{ marginTop: 2 }}
+                  >
+                    <Txt variant="small" color={colors.textMuted} numberOfLines={1}>
+                      par{' '}
+                      <Txt variant="small" color={colors.signature} style={{ fontWeight: '700' }}>
+                        {m.creatorName}
+                      </Txt>
+                      {/* Fourchette affichée en badge : le niveau ne se répète pas ici. Sinon, on
+                          garde l'ancien texte libre (matchs créés avant la 81) ou « tous niveaux ». */}
+                      {rangeText ? '' : m.level ? ` · niveau ${m.level}` : ' · tous niveaux'}
+                      {m.placesLeft > 1 ? ` · ${m.placesLeft} places` : ''}
+                    </Txt>
+                  </Pressable>
                 </View>
                 {mine ? (
                   <Tag label="Ton match" tone="green" />
@@ -344,6 +364,8 @@ export function OpenMatches({ refreshToken, full = false, clubId }: { refreshTok
           />
         </View>
       </BottomSheet>
+
+      <PlayerSheet player={openCreator} onClose={() => setOpenCreator(null)} />
     </View>
   );
 }
