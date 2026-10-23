@@ -1,5 +1,5 @@
 import { useFonts } from 'expo-font';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { DefaultTheme, Stack, ThemeProvider, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -38,6 +38,11 @@ const WELCOME_MAX_AGE_MS = 7 * DAY_MS;
 // vers « / », où la garde renvoie à l'onboarding (code pré-rempli).
 const PUBLIC_ROUTES = ['onboarding', 'reset-password', 'auth-callback', 'email-confirmed', 'legal', 'decouvrir', 'invite'];
 const isPublicRoute = (segment: string | undefined) => PUBLIC_ROUTES.includes(segment ?? '');
+
+// Thème de navigation : le fond crème de l'app, y compris DERRIÈRE les écrans — expo-router le
+// transmet au conteneur natif de la pile (56.2.13) ; sans lui, le gris du thème par défaut
+// apparaissait pendant le balayage retour sur iOS.
+const NAV_THEME = { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: colors.bg } };
 
 // Journalise les erreurs JS non rattrapées (crashs) dans nos diagnostics (self-hosted Supabase).
 // Appelé une fois au chargement du module — avant tout rendu.
@@ -193,25 +198,27 @@ function RootNav() {
   return (
     <>
       <StatusBar style="dark" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: colors.bg },
-          animation: 'slide_from_right',
-        }}
-        // Écran PROTÉGÉ ouvert sans compte (lien direct, F5 sur le web) : le renvoi vers /onboarding
-        // part d'un effet, APRÈS un premier rendu — l'écran se montait une frame et lançait ses
-        // lectures serveur (401 en console). On rend un fond nu à sa place jusqu'au renvoi (C-09),
-        // y compris AVANT l'hydratation (on ne sait pas encore s'il y a un compte : une seule
-        // lecture AsyncStorage). Les routes publiques, elles, restent montées dès le départ.
-        screenLayout={({ route, children }) =>
-          (!hydrated || !signedIn) && !isPublicRoute(route.name.split('/')[0]) ? (
-            <View style={{ flex: 1, backgroundColor: colors.bg }} />
-          ) : (
-            children
-          )
-        }
-      />
+      <ThemeProvider value={NAV_THEME}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.bg },
+            animation: 'slide_from_right',
+          }}
+          // Écran PROTÉGÉ ouvert sans compte (lien direct, F5 sur le web) : le renvoi vers /onboarding
+          // part d'un effet, APRÈS un premier rendu — l'écran se montait une frame et lançait ses
+          // lectures serveur (401 en console). On rend un fond nu à sa place jusqu'au renvoi (C-09),
+          // y compris AVANT l'hydratation (on ne sait pas encore s'il y a un compte : une seule
+          // lecture AsyncStorage). Les routes publiques, elles, restent montées dès le départ.
+          screenLayout={({ route, children }) =>
+            (!hydrated || !signedIn) && !isPublicRoute(route.name.split('/')[0]) ? (
+              <View style={{ flex: 1, backgroundColor: colors.bg }} />
+            ) : (
+              children
+            )
+          }
+        />
+      </ThemeProvider>
     </>
   );
 }
