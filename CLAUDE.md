@@ -109,10 +109,17 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser. Dét
   derrière les écrans au balayage retour (`ThemeProvider` de la pile), conseiller de sécurité relu
   (décision écrite `slot_occupancy`, `docs/AUDIT-SERVEUR.md`). Web `club.padelconnectci.com` ET site
   `padelconnectci.com` redéployés le même jour sur ce code (bundle et police Ionicons vérifiés en
-  ligne ; `og.png` régénéré). Reste : mise en REVUE de la 1.0.3 dans App Store Connect (clé ASC
-  absente de la session → par le porteur, ou clé à refournir), après chronométrage du sous-titre
-  « en 2 min » sur le #69 installé (`docs/STORE-LISTING.md` §0) et tests TestFlight
-  (navigation 4.26, démarrage à froid, liens, notifications, photos, calendrier, partage).
+  ligne ; `og.png` régénéré). ✅ Build **TERMINÉ** (15:42 UTC, commit `13c3bd7`, distribution STORE).
+  ❌ **Auto-submit ÉCHOUÉ** : `EAS_ASC_REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED` — un accord Apple est
+  manquant ou expiré : le TITULAIRE du compte (porteur) doit l'accepter dans App Store Connect →
+  Business (appstoreconnect.apple.com/business) et, si demandé, la licence du programme sur
+  developer.apple.com/account. Ensuite RE-SOUMETTRE le MÊME binaire, sans rebuild :
+  `npx eas-cli@24.12.1 submit --platform ios --id 91f218a1-f323-4a07-9d6a-edbf8bd8a730
+--non-interactive` (ou expo.dev → build #69 → Submit). Puis : mise en REVUE de la 1.0.3 dans App
+  Store Connect (clé ASC absente de la session → par le porteur, ou clé à refournir), après
+  chronométrage du sous-titre « en 2 min » sur le #69 installé (`docs/STORE-LISTING.md` §0) et
+  tests TestFlight (navigation 4.26, démarrage à froid, liens, notifications, photos, calendrier,
+  partage).
   🆕 **Build #68 (v1.0.2)** lancé et TERMINÉ sur EAS le 2026-08-17 **AVEC auto-submit** (App
   Store) : embarque TOUS les correctifs de la campagne d'audit « refait autant de fois qu'il le
   faut » (tours 1→9 + post-lancement — classe « écran menteur pendant le submit » fermée, messages
