@@ -152,7 +152,7 @@ export default function ClubAdmin() {
   const [closingId, setClosingId] = useState<string | null>(null);
   const [selectedCell, setSelectedCell] = useState<{ dateKey: string; time: string; durationMin: number; label: string } | null>(null);
   const [blockingCourt, setBlockingCourt] = useState<string | null>(null);
-  // Série d'habitué en cours d'arrêt (`terrain|heure`) — garde anti double-tap.
+  // Série d'habitué en cours d'arrêt (habitueSeriesKey : terrain|heure|jour) — garde anti double-tap.
   const [stoppingSeries, setStoppingSeries] = useState<string | null>(null);
 
   // Inscription d’un nouveau club (validée ensuite par l’opérateur PadelConnect).

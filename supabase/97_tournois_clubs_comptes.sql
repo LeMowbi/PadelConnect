@@ -17,7 +17,9 @@
 --  4) R-36 · R-39 — validation refusée pour une date passée ; jamais de tournoi créé pour
 --     aujourd'hui (garde serveur, toutes voies).
 --  5) R-40 — upsert_club_config refuse de retirer un terrain d'un tournoi publié à venir.
---  6) R-43 · R-06 — block_recurring n'écrase plus rien (`taken`) ; unblock_recurring (NOUVELLE).
+--  6) R-43 · R-06 — block_recurring n'écrase plus rien (`taken`), annonce un habitué renommé
+--     (`renamed`) et une série déjà posée avec une autre durée (`resized`, et `resized_other`
+--     quand elle est au nom d'un autre habitué) ; unblock_recurring (NOUVELLE).
 --  7) R-07 · R-53 · R-58 — delete_account : données personnelles anonymisées, cours d'un coach
 --     supprimé annulés sans pénalité ET élèves prévenus, compte opérateur protégé.
 --  8) R-42 · R-60 — delete_club : tournois publiés annulés (push), résas marquées, id inconnu refusé.
@@ -601,14 +603,30 @@ revoke execute on function public.upsert_club_config(text, text[], text[], jsonb
 grant execute on function public.upsert_club_config(text, text[], text[], jsonb, jsonb, text[], text, jsonb, jsonb, jsonb) to authenticated;
 
 -- ── 6) R-43 · R-06 — Séries d'habitués ───────────────────────────────────────────
--- Recopie STRICTE de la 83 (live) hormis la boucle d'écriture (R-43) : plus aucun `do update` —
+-- Recopie STRICTE de la 83 (live) hormis la boucle d'écriture (R-43) : plus aucun `do update` sur
+-- une fermeture (blocked_slots) —
 --  • une date dont le créneau CHEVAUCHE un tournoi publié du club part dans `conflicts` (comme
 --    une résa) ;
 --  • une date déjà couverte par une AUTRE fermeture (blocked_slots qui chevauche) part dans la
 --    nouvelle liste `taken` au lieu d'être écrasée en silence ;
 --  • une re-pose IDENTIQUE (même heure, même durée, déjà « Récurrent ») est idempotente : comptée
---    dans `blocked`, sa note privée inchangée.
--- Clé `taken` AJOUTÉE (rétrocompatible : la v1.0.2 ne lit que blocked / conflicts).
+--    dans `blocked`, sa fermeture inchangée — seule sa note privée suit la nouvelle saisie (comme
+--    la 83 : renommer l'habitué en re-posant la série ne se perd plus derrière « N posés ✓ ») ;
+--    si cette note portait un AUTRE nom, la date part AUSSI dans la nouvelle liste `renamed` : le
+--    gérant voit qu'il a remplacé un autre habitué au lieu d'un « posé ✓ » muet ;
+--  • une date où la série est déjà posée à la MÊME heure mais avec une AUTRE durée (grille du
+--    terrain changée depuis) part dans la nouvelle liste `resized` (rien n'est écrit) au lieu de
+--    `taken` : c'est une série, pas « une autre fermeture » — il l'arrête pour la reposer ; si sa
+--    note privée porte un AUTRE nom, la date part AUSSI dans `resized_other` (sous-liste de
+--    `resized`) : c'est la série d'un autre habitué, que l'arrêter retirerait.
+-- Clés `taken`, `renamed`, `resized` et `resized_other` AJOUTÉES : la v1.0.2 (build #68, et
+-- l'Espace Club web tant qu'il n'est pas redéployé) ne lit que blocked / conflicts, les nouvelles
+-- clés y sont IGNORÉES — compatibles par la FORME, pas par le SENS : une série entièrement
+-- `taken`/`resized` y apparaît comme « déjà réservé par un joueur sur toute la série » (formulaire ;
+-- toast « Aucun créneau posé — vérifie le terrain et l’heure »), un conflit de tournoi comme
+-- « déjà réservés par un joueur », et une re-pose partielle dit « N posés ✓ » sans les dates
+-- sautées. Déjà vrai avant ce lot (ces dates partaient dans `taken`) ; seul remède :
+-- redéployer l'Espace Club web dans la foulée de l'application de 92→98 (puis le #69).
 create or replace function public.block_recurring(p_club_id text, p_court text, p_time text, p_duration integer, p_date_keys text[], p_reason text default ''::text)
 returns jsonb
 language plpgsql
@@ -622,6 +640,12 @@ declare
   v_blocked text[] := '{}';
   v_conflicts text[] := '{}';
   v_taken text[] := '{}';
+  v_renamed text[] := '{}';
+  v_resized text[] := '{}';
+  v_resized_other text[] := '{}';
+  v_old_note text;
+  -- Nom saisi sous forme COMPARABLE (casse et espaces ignorés) : « Ali » et « ali  » = même habitué.
+  v_note_key text := lower(regexp_replace(left(trim(coalesce(p_reason, '')), 200), '\s+', ' ', 'g'));
 begin
   if not public.can_manage_club(p_club_id) then return null; end if;
   if coalesce(trim(p_court), '') = '' or public.hhmm_to_min(p_time) is null then return null; end if;
@@ -685,13 +709,46 @@ begin
         )
     ) then
       v_conflicts := v_conflicts || dk;
-    -- Re-pose IDENTIQUE : déjà en place, rien à écrire (idempotence).
+    -- Re-pose IDENTIQUE : la fermeture est déjà en place (idempotence, rien à y écrire) ; seule
+    -- la note privée suit la saisie (parité 83). Clé = CETTE fermeture « Récurrent » : une
+    -- fermeture d'un autre type ne reçoit jamais de note. `for update` : `unblock_slot` ne prend
+    -- pas le verrou club:jour — une ligne supprimée en parallèle n'est alors plus vue (lecture
+    -- validée) et la date retombe dans les branches suivantes, qui la reposent, au lieu d'écrire
+    -- une note orpheline (23503) qui annulerait toute la série.
     elsif exists (
       select 1 from public.blocked_slots b
       where b.club_id = p_club_id and b.date_key = dk and b.court = p_court
         and b."time" = p_time and b.duration_min = p_duration and b.reason = 'Récurrent'
+      for update
     ) then
+      -- Note d'un AUTRE habitué (non vide, différente hors casse/espaces) → remplacée, mais ANNONCÉE
+      -- (`renamed`).
+      -- Sans ligne de note, `select into` rend null (jamais la valeur de la date précédente).
+      select n.note into v_old_note from public.blocked_slot_notes n
+      where n.club_id = p_club_id and n.date_key = dk and n."time" = p_time and n.court = p_court;
+      if coalesce(v_old_note, '') <> '' and lower(regexp_replace(trim(v_old_note), '\s+', ' ', 'g')) <> v_note_key then
+        v_renamed := v_renamed || dk;
+      end if;
+      insert into public.blocked_slot_notes (club_id, date_key, "time", court, note)
+        values (p_club_id, dk, p_time, p_court, left(trim(coalesce(p_reason, '')), 200))
+        on conflict (club_id, date_key, "time", court) do update set note = excluded.note;
       v_blocked := v_blocked || dk;
+    -- Série déjà posée à cette heure mais avec une AUTRE durée (grille du terrain changée
+    -- depuis) : jamais écrasée non plus, mais rangée à part (`resized`) — ce n'est pas « une autre
+    -- fermeture », le gérant doit arrêter la série pour la reposer. Rien n'est écrit. Si sa note
+    -- privée porte un AUTRE nom (non vide, différente), la date part AUSSI dans `resized_other` :
+    -- c'est la série d'un autre habitué, que « Arrêter la série » retirerait — on le DIT.
+    elsif exists (
+      select 1 from public.blocked_slots b
+      where b.club_id = p_club_id and b.date_key = dk and b.court = p_court
+        and b."time" = p_time and b.duration_min <> p_duration and b.reason = 'Récurrent'
+    ) then
+      v_resized := v_resized || dk;
+      select n.note into v_old_note from public.blocked_slot_notes n
+      where n.club_id = p_club_id and n.date_key = dk and n."time" = p_time and n.court = p_court;
+      if coalesce(v_old_note, '') <> '' and lower(regexp_replace(trim(v_old_note), '\s+', ' ', 'g')) <> v_note_key then
+        v_resized_other := v_resized_other || dk;
+      end if;
     -- R-43 : une AUTRE fermeture chevauche ce créneau → jamais écrasée.
     elsif exists (
       select 1 from public.blocked_slots b
@@ -713,7 +770,8 @@ begin
     end if;
   end loop;
   return jsonb_build_object('blocked', to_jsonb(v_blocked), 'conflicts', to_jsonb(v_conflicts),
-                            'taken', to_jsonb(v_taken));
+                            'taken', to_jsonb(v_taken), 'renamed', to_jsonb(v_renamed),
+                            'resized', to_jsonb(v_resized), 'resized_other', to_jsonb(v_resized_other));
 end;
 $$;
 revoke execute on function public.block_recurring(text, text, text, integer, text[], text) from public, anon;

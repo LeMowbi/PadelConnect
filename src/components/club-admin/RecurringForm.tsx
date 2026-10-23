@@ -27,13 +27,14 @@ export function RecurringForm({
   courts: string[];
   grid: Record<string, CourtSlot[]>; // grille EFFECTIVE de chaque terrain (resolvedGridFor)
   // Rend le détail serveur ({posées, conflits, déjà fermées}) ou null (refus global / panne réseau).
-  onSubmit: (input: {
-    court: string;
-    time: string;
-    durationMin: 60 | 90;
-    dateKeys: string[];
-    name: string;
-  }) => Promise<{ blocked: string[]; conflicts: string[]; taken: string[] } | null>;
+  onSubmit: (input: { court: string; time: string; durationMin: 60 | 90; dateKeys: string[]; name: string }) => Promise<{
+    blocked: string[];
+    conflicts: string[];
+    taken: string[];
+    renamed: string[];
+    resized: string[];
+    resizedOther: string[];
+  } | null>;
 }) {
   const [court, setCourt] = useState<string | null>(null);
   // Jour retrouvé par CLÉ (pas l'objet capturé au montage) : après minuit, days[0] change de

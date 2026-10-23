@@ -198,7 +198,55 @@ check(
 );
 check(/c\.status = 'published'/.test(body(sql97, 'upsert_club_config')), 'R-40 : terrain d’un tournoi publié non retirable');
 const br = body(sql97, 'block_recurring');
-check(!/do update/.test(br) && /'taken', to_jsonb\(v_taken\)/.test(br), 'R-43 : la série n’écrase plus rien, clé `taken`');
+check(
+  !/insert into public\.blocked_slots \([^;]*do update/.test(br) && /'taken', to_jsonb\(v_taken\)/.test(br),
+  'R-43 : la série n’écrase plus aucune fermeture, clé `taken`',
+);
+// Re-pose identique : la note PRIVÉE (nom de l'habitué) suit la saisie (parité 83) — c'est le seul
+// `do update` de la fonction, et il vit dans la branche « déjà Récurrent ».
+const brRepose = br.slice(br.indexOf("b.reason = 'Récurrent'"), br.indexOf('-- Série déjà posée à cette heure'));
+check(
+  (br.match(/do update/g) ?? []).length === 1 &&
+    /insert into public\.blocked_slot_notes[^;]*do update set note = excluded\.note;/.test(brRepose),
+  'R-43 : re-poser une série met à jour la note privée de l’habitué',
+);
+// …sous verrou de LIGNE : `unblock_slot` ne prend pas le verrou club:jour — sans `for update`,
+// une fermeture retirée en parallèle laisserait écrire une note orpheline (23503, série annulée).
+check(/^b\.reason = 'Récurrent'\s*for update\s*\) then/.test(brRepose), 'R-43 : re-pose sous verrou de ligne');
+// …et une note d'un AUTRE habitué remplacée est ANNONCÉE (`renamed`) — lue AVANT l'upsert.
+check(
+  /select n\.note into v_old_note[\s\S]*v_renamed := v_renamed \|\| dk;[\s\S]*insert into public\.blocked_slot_notes/.test(brRepose) &&
+    /'renamed', to_jsonb\(v_renamed\)/.test(br),
+  'R-43 : un habitué remplacé en re-posant la série est annoncé (`renamed`)',
+);
+// Série déjà posée à la même heure avec une AUTRE durée (grille changée) : rangée dans `resized`
+// — AVANT la branche `taken` (sinon « bloqué par une autre fermeture », faux) — et rien n'est écrit.
+const brResized = br.slice(br.indexOf('-- Série déjà posée à cette heure'), br.indexOf('-- R-43 : une AUTRE fermeture'));
+check(
+  brResized.length > 0 &&
+    /b\."time" = p_time and b\.duration_min <> p_duration and b\.reason = 'Récurrent'\s*\) then\s*v_resized := v_resized \|\| dk;/.test(
+      brResized,
+    ) &&
+    !/insert|update|delete/.test(brResized.replace(/--[^\n]*/g, '')) &&
+    /'resized', to_jsonb\(v_resized\)/.test(br),
+  'R-43 : série re-posée avec une autre durée annoncée (`resized`), avant `taken`, sans écriture',
+);
+// …et si cette série est au nom d'un AUTRE habitué (note non vide, différente), la date part AUSSI
+// dans `resized_other` : le gérant sait qu'« Arrêter la série » retirerait les créneaux d'un autre.
+check(
+  /select n\.note into v_old_note[\s\S]*coalesce\(v_old_note, ''\) <> '' and lower\(regexp_replace\(trim\(v_old_note\), '\\s\+', ' ', 'g'\)\) <> v_note_key then\s*v_resized_other := v_resized_other \|\| dk;\s*end if;\s*$/.test(
+    brResized,
+  ) && /'resized_other', to_jsonb\(v_resized_other\)/.test(br),
+  'R-43 : série d’une autre durée au nom d’un AUTRE habitué annoncée (`resized_other`)',
+);
+// Même habitué retapé avec une autre casse ou d'autres espaces (« Ali » / « ali  ») : jamais annoncé
+// comme un AUTRE habitué — les deux branches comparent la forme normalisée `v_note_key`.
+check(
+  /v_note_key text := lower\(regexp_replace\(left\(trim\(coalesce\(p_reason, ''\)\), 200\), '\\s\+', ' ', 'g'\)\);/.test(br) &&
+    (br.match(/lower\(regexp_replace\(trim\(v_old_note\), '\\s\+', ' ', 'g'\)\) <> v_note_key/g) ?? []).length === 2 &&
+    !/v_old_note <> left\(/.test(br),
+  'R-43 : nom de l’habitué comparé hors casse et espaces (`renamed` et `resized_other`)',
+);
 check(
   /reason = 'Récurrent'/.test(body(sql97, 'unblock_recurring')) && /blocked_slot_notes/.test(body(sql97, 'unblock_recurring')),
   'R-06 : arrêt de série (notes comprises)',

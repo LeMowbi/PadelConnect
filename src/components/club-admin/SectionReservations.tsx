@@ -796,15 +796,40 @@ export function SectionReservations({
             const taken = res.taken.length
               ? ` · ${res.taken.length} déjà bloqué${res.taken.length > 1 ? 's' : ''} par une autre fermeture`
               : '';
+            // Série déjà posée à cette heure avec une AUTRE durée (grille du terrain changée — 97,
+            // `resized`) : rien n'est écrasé, on dit QUOI faire au lieu d'« une autre fermeture ».
+            // Au nom d'un AUTRE habitué (`resizedOther`) : on prévient que l'arrêter retirerait SES
+            // créneaux, jamais « arrête la série » comme si c'était celle de ce client.
+            const resizedOwn = res.resized.length - res.resizedOther.length;
+            const resized =
+              (resizedOwn > 0
+                ? ` · ${resizedOwn} déjà posé${resizedOwn > 1 ? 's' : ''} avec une autre durée — arrête la série pour la reposer`
+                : '') +
+              (res.resizedOther.length
+                ? ` · ${res.resizedOther.length} déjà fermé${res.resizedOther.length > 1 ? 's' : ''} (autre durée) au nom d’un autre habitué — arrêter cette série retire ses créneaux`
+                : '');
+            // Dates déjà fermées pour cette série mais au nom d'un AUTRE habitué (97, `renamed`) :
+            // la note privée a suivi la saisie — on le DIT, jamais un « posé ✓ » muet.
+            const renamed = res.renamed.length
+              ? ` · ${res.renamed.length} renommé${res.renamed.length > 1 ? 's' : ''} (${res.renamed.slice(0, 3).map(dateKeyLabel).join(', ')}${
+                  res.renamed.length > 3 ? '…' : ''
+                }) — ${res.renamed.length > 1 ? 'étaient' : 'était'} au nom d’un autre habitué`
+              : '';
             if (res.blocked.length === 0) {
               hapticWarning();
-              toast.show(`Aucun créneau posé${conflicts || taken ? `${conflicts}${taken}` : ' — vérifie le terrain et l’heure'}`, {
-                icon: 'alert-circle',
-              });
+              toast.show(
+                `Aucun créneau posé${conflicts || taken || resized ? `${conflicts}${taken}${resized}` : ' — vérifie le terrain et l’heure'}`,
+                { icon: 'alert-circle' },
+              );
               return res;
             }
-            hapticSuccess();
-            toast.show(`${res.blocked.length} créneau${res.blocked.length > 1 ? 'x posés' : ' posé'} ✓${conflicts}${taken}`);
+            // Habitué remplacé ou série à deux durées : une action du gérant est attendue → avertissement.
+            if (renamed || resized) hapticWarning();
+            else hapticSuccess();
+            toast.show(
+              `${res.blocked.length} créneau${res.blocked.length > 1 ? 'x posés' : ' posé'} ✓${conflicts}${taken}${resized}${renamed}`,
+              renamed || resized ? { icon: 'alert-circle' } : undefined,
+            );
             // Le planning et la dispo lisent le MIROIR des fermetures : on le recharge (le
             // serveur a écrit en direct, aucune action du store n'a mis le miroir à jour).
             await refreshSession();

@@ -282,7 +282,12 @@ export async function unblockSlotRow(clubId: string, dateKey: string, time: stri
 // Créneau RÉCURRENT (83) : ferme le même (terrain, heure, durée) sur plusieurs dates (calculées
 // par `recurringDates`). Résultat HONNÊTE du serveur : `blocked` = dates posées, `conflicts` =
 // dates refusées (une résa joueur OU un tournoi publié y vit déjà), `taken` = dates où une AUTRE
-// fermeture était déjà posée (jamais écrasée, 97 — absente d'un serveur plus ancien → []).
+// fermeture était déjà posée (jamais écrasée, 97 — absente d'un serveur plus ancien → []),
+// `renamed` = dates de `blocked` dont la série portait le nom d'un AUTRE habitué, remplacé (97,
+// même repli []), `resized` = dates où CETTE série est déjà posée à la même heure avec une AUTRE
+// durée (grille changée — rien n'est écrit, il faut l'arrêter pour la reposer ; 97, même repli []),
+// `resizedOther` = celles de `resized` dont la série est au nom d'un AUTRE habitué (l'arrêter
+// retirerait ses créneaux ; 97, même repli []).
 // null = refus global (droits, bornes) ou réseau.
 export async function blockRecurringRows(b: {
   clubId: string;
@@ -291,7 +296,14 @@ export async function blockRecurringRows(b: {
   durationMin: 60 | 90;
   dateKeys: string[];
   reason: string;
-}): Promise<{ blocked: string[]; conflicts: string[]; taken: string[] } | null> {
+}): Promise<{
+  blocked: string[];
+  conflicts: string[];
+  taken: string[];
+  renamed: string[];
+  resized: string[];
+  resizedOther: string[];
+} | null> {
   const { data, error } = await supabase.rpc('block_recurring', {
     p_club_id: b.clubId,
     p_court: b.court,
@@ -301,8 +313,22 @@ export async function blockRecurringRows(b: {
     p_reason: b.reason,
   });
   if (error || !data) return null;
-  const raw = data as { blocked?: string[]; conflicts?: string[]; taken?: string[] };
-  return { blocked: raw.blocked ?? [], conflicts: raw.conflicts ?? [], taken: raw.taken ?? [] };
+  const raw = data as {
+    blocked?: string[];
+    conflicts?: string[];
+    taken?: string[];
+    renamed?: string[];
+    resized?: string[];
+    resized_other?: string[];
+  };
+  return {
+    blocked: raw.blocked ?? [],
+    conflicts: raw.conflicts ?? [],
+    taken: raw.taken ?? [],
+    renamed: raw.renamed ?? [],
+    resized: raw.resized ?? [],
+    resizedOther: raw.resized_other ?? [],
+  };
 }
 
 // « Arrêter la série » (97) : retire les fermetures RÉCURRENTES À VENIR de ce terrain, à cette heure,
