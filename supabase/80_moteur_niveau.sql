@@ -9,9 +9,9 @@
 --    rapporte plus), borné [0.02, 0.30] ; gains ET pertes ÉCRÊTÉS à ±0.5 par joueur par 7 jours
 --    glissants (anti-farming ET anti-sandbagging — le niveau filtre l'accès aux matchs, 81).
 --    Seuls les COMPTES AYANT SAISI un score bougent. Idempotence DURE :
---    unique(reservation_id, user_id) — un match n'ajuste jamais deux fois. Les ±0.5 des tournois
---    officiels (close_competition, trigger protect_level 34) restent INCHANGÉS ; leur
---    journalisation dans level_history viendra avec la ligue (lot E, migration à venir).
+--    unique(reservation_id, user_id) — un joueur n'est jamais ajusté deux fois pour un match (par
+--    joueur depuis la 96). Les ±0.5 / −0.25 des tournois officiels (close_competition) sont
+--    journalisés dans level_history (reason 'tournament') depuis la 97.
 -- 2) reconcile_my_levels : rattrape les matchs à MIROIR COMPLET dont l'application a été manquée
 --    (app fermée au moment de la validation) — appelé à l'ouverture de session.
 -- 3) public_reliability : taux de présence AGRÉGÉ (jamais le détail — il reste réservé au club

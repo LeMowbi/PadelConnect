@@ -14,9 +14,11 @@
 --     — ces réglages sont effacés (section 2) pour qu'aucun réglage de TEST ne survive au lancement.
 --
 -- ⚠️ IRRÉVERSIBLE. À lancer UNE FOIS, juste avant d'ouvrir l'app au public.
--- ⚠️ À lancer APRÈS avoir collé les migrations 92 → 94 dans l'ordre : les sections 1 et 2
---   lisent puis vident `rate_counters` (créée par la 94). Lancé avant, le script s'arrête sur
---   « relation does not exist », SANS rien effacer (la transaction est annulée).
+-- ⚠️ À lancer APRÈS avoir collé les migrations 92 → 98 dans l'ordre : les sections 1 et 2
+--   lisent puis vident `rate_counters` (créée par la 94) et `lesson_cancel_notices` (créée par
+--   la 97). Lancé avant, le script s'arrête sur « relation does not exist », SANS rien effacer
+--   (la transaction est annulée). La préférence « Actus et agenda » (`profiles.news_push`, 98)
+--   est un réglage du joueur : comme son compte, elle est CONSERVÉE.
 -- Comment faire, sans terminal :
 --   1) Dashboard Supabase → SQL Editor.
 --   2) D'ABORD la SECTION 1 (aperçu) : copie-la, Run → tu vois combien de lignes vont partir.
@@ -68,6 +70,7 @@ union all select 'Annonces club à effacer',                    count(*) from pu
 union all select 'Compteurs anti-abus à effacer',               count(*) from public.rate_counters
 union all select 'Parts Wave à effacer',                       count(*) from public.share_payments
 union all select 'Élèves de cours collectifs à effacer',       count(*) from public.lesson_students
+union all select 'Avis de cours annulés (coach supprimé) à effacer', count(*) from public.lesson_cancel_notices
 union all select 'Notes privées de créneaux à effacer',        count(*) from public.blocked_slot_notes
 union all select 'Réglages tournoi (lien Wave, frais) à effacer', count(*) from public.tournament_config
 union all select 'Réglages app (fidélité) à effacer',          count(*) from public.app_config
@@ -102,6 +105,7 @@ begin;
   delete from public.friends;
   delete from public.blocked_users;
   delete from public.lesson_students;            -- élèves des cours collectifs (83)
+  delete from public.lesson_cancel_notices;      -- élèves à prévenir d'un cours d'un coach supprimé (97)
   delete from public.lessons;
   delete from public.coaches;
   delete from public.blocked_slot_notes;         -- notes privées des créneaux récurrents (83)
