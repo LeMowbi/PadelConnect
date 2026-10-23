@@ -1,38 +1,21 @@
 # Audit — actions serveur (sans terminal)
 
-> ✅ **À JOUR au 2026-10-22.** Le SQL `02`→`91` et la **`95`** (vue `slot_occupancy` en lecture
-> seule, R-01) sont **appliqués en base** (Management API — état détaillé : `CLAUDE.md` §8),
-> `notify-club` est déployée (version en ligne : `CLAUDE.md` §7 ; le dépôt porte la **v49** — à
-> redéployer par le coordinateur APRÈS la 97, cf. ci-dessous) et les 11 Database Webhooks sont en
-> place, protégés par un secret partagé (`x-webhook-secret`, comparé à temps constant — §3).
-> **`92`** (fidélité cible), **`93`** (index) et **`94`** (anti-abus) — vague 3 du 2026-10-22 :
-> ÉCRITES + prouvées en LOCAL (Postgres 16), **PAS appliquées en prod**. À coller DANS L'ORDRE après
-> la 91, puis recaler ici et dans `CLAUDE.md` §8. Au passage : la **92 corrige la
-> 82** (`fetch_loyalty_claims` levait 42702 « column reference id is ambiguous » → la liste « Fidélité
-> à servir » de l'opérateur ne se chargeait jamais) et la **94 corrige la définition LIVE de
-> `send_friend_request`** (42702 « friend_id is ambiguous » dès que le numéro correspond à un vrai
-> compte — défaut PROBABLE en prod, à vérifier en transaction annulée AVANT la 94 : `begin;`
-> puis `select set_config('request.jwt.claims', '{"sub":"<uuid A>","role":"authenticated"}', true);`
-> puis `select * from public.send_friend_request('<numéro du compte B>');` puis `rollback;` —
-> avant la 94 : erreur 42702 attendue ; après : 'sent'). Les compteurs vivent dans `rate_counters`
-> (vidée par le RESET).
-> **`96`** (réservations, invitations, cours, score, niveau, classement, accès directs) et **`97`**
-> (tournois, clubs, comptes) — audit des règles métier du 2026-10-22, lot M2 : ÉCRITES + prouvées
-> en LOCAL sur un rejeu complet du dépôt (Postgres 16 : **46/46** cas, contre-épreuve sur les
-> anciennes définitions, **4 courses à 2 sessions** — annulation joueur/club, blocage/acceptation,
-> niveau tardif, annulation/inscription de tournoi), **PAS appliquées en prod**. Ordre : 92 → 93 →
-> 94 → 96 → 97, PUIS `notify-club` v49 (elle lit `lessons.cancelled_by`, `lesson_cancel_notices`
-> et `competitions.cancel_reason`, créés par la 96/97). Compatibles avec la v1.0.2 publiée : aucun
-> type de retour changé, seule `fetch_open_matches` gagne une colonne `price` en dernier.
-> ⚠️ Avant la 96, relire en prod les droits `anon` des tables (R-79, lecture seule) :
-> `select table_name, privilege_type from information_schema.role_table_grants where grantee = 'anon'
-and table_schema = 'public' order by 1;` — la 96 retire SELECT à `anon` sur `reviews`, `coaches`,
-> `blocked_slots`, `club_news`, `events`, `club_boost` et le GARDE sur `clubs`, `club_overrides`,
-> `club_status`, `club_config` (site vitrine). Depuis la v49, notify-club répond **202** (travail en
-> arrière-plan) : un 202 dans `net._http_response` est normal.
+> ✅ **À JOUR au 2026-10-23.** TOUT le SQL `02`→`98` est **appliqué en base** (Management API —
+> `92`, `93`, `94`, `96`, `97`, `98` le 2026-10-23 dans UNE transaction, prouvées par 20 assertions
+> en transaction annulée AVANT et APRÈS ; détail : `CLAUDE.md` §7/§8). `notify-club` **v50** est
+> déployée APRÈS la 98 (compteur plateforme 48, `verify_jwt` préservé ; elle lit `profiles.news_push`,
+> `competitions.cancelled_by`, `lessons.cancelled_by`, `lesson_cancel_notices`). Les 11 Database
+> Webhooks sont en place, protégés par un secret partagé (`x-webhook-secret`, comparé à temps
+> constant — §3). Depuis la v49, notify-club répond **202** (travail en arrière-plan) : un 202 dans
+> `net._http_response` est normal. Les compteurs anti-abus vivent dans `rate_counters` (vidée par le
+> RESET). Compatibilité avec la v1.0.2 publiée vérifiée : les fonctions dont le retour change ne font
+> que GAGNER des colonnes ; seule `unblock_recurring` change de paramètres (jour de la semaine) —
+> 0 série d'habitué en base au moment de l'application, et l'Espace Club web a été redéployé dans la
+> foulée.
 > Les sections datées ci-dessous (« ⏳ À FAIRE ») sont un HISTORIQUE conservé pour la
-> trace — elles ne sont plus des actions en attente. Reste au porteur (hors SQL) : lien Wave,
-> FCM Android + empreinte SHA-256 d'assetlinks.
+> trace — elles ne sont plus des actions en attente. Reste au porteur (hors SQL) : FCM Android
+> et l'empreinte SHA-256 de Play App Signing dans assetlinks (le lien Wave est posé, vérifié le
+> 2026-10-21 ; l'empreinte EAS aussi).
 >
 > 🔴 **NE JAMAIS recoller un vieux fichier SQL isolément** — même si une section historique
 > ci-dessous dit « le recoller est sans risque » : c'était vrai À SA DATE, plus aujourd'hui.
@@ -47,6 +30,25 @@ and table_schema = 'public' order by 1;` — la 96 retire SELECT à `anon` sur `
 >
 > - `btree_gist` dans `public` : accepté (contrainte d'exclusion `reservations_no_overlap`,
 >   anti double-vente — 68).
+> - `security_definer_view` (**ERROR**) sur `slot_occupancy` : **accepté, décision écrite du
+>   2026-10-23**. La vue s'exécute avec les droits de son propriétaire PAR CONCEPTION : la RLS de
+>   `reservations` ne laisse voir à chacun que SES réservations, alors que la dispo doit montrer les
+>   terrains pris par TOUS (en `security_invoker`, un créneau réservé par un autre paraîtrait libre →
+>   double vente affichée). Elle n'expose que `club_id`, `date_key`, `time`, `court`,
+>   `duration_min` des résas 'booked' — aucun nom, compte ni téléphone, exactement ce que l'app
+>   affiche (« pris ») —, en LECTURE SEULE et pour `authenticated` seul depuis la 95 (R-01).
+>   Remplacement possible plus tard par une RPC SECURITY DEFINER (il faudrait un build : le client
+>   lit la vue).
+> - `anon_security_definer_function_executable` : accepté — uniquement des fonctions TRIGGER
+>   (non appelables par l'API : un appel direct échoue) et `phone_available` (voulu, inscription).
+>   Toute AUTRE fonction de la liste bloque la sortie.
+> - `authenticated_security_definer_function_executable` : accepté — c'est le modèle du projet
+>   (§8 : RPC SECURITY DEFINER + `auth.uid()` + ACL), chaque fonction contrôle l'appelant.
+> - `rls_enabled_no_policy` (`competitions`, `competition_registrations`, `match_results`,
+>   `lesson_cancel_notices`, `rate_counters`) : accepté — accès UNIQUEMENT par RPC, voulu.
+> - `auth_leaked_password_protection` et `auth_otp_long_expiry` : acceptés — la protection contre
+>   les mots de passe divulgués exige le plan Pro (décision porteur sur le plan Supabase) ; les liens
+>   d'e-mail valent 24 h volontairement (« lien expiré » piégeait les joueurs, 2026-07-11).
 > - `function_search_path_mutable` : fermé par la 98 (`alter function … set search_path = public`
 >   sur les 4 fonctions trigger `protect_level`, `reservations_price_guard`, `strip_open_match_phone`,
 >   `support_stamp_resolved` et les 4 fonctions pures `phone10`, `hhmm_to_min`, `durations_60_90`,

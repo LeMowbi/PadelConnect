@@ -18,7 +18,9 @@ s'applique pas), tout correctif part avec un build.
 - **Conseiller de sécurité Supabase** relu juste avant le build : Dashboard → Advisors → Security
   Advisor (ou API Management `GET /v1/projects/$REF/advisors/security`, PAT du porteur). Toute alerte
   `ERROR` nouvelle (table sans RLS, vue `SECURITY DEFINER` exposée, fonction ouverte à `anon` hors
-  `phone_available`) bloque la sortie jusqu'à sa correction ou une décision écrite.
+  `phone_available`) bloque la sortie jusqu'à sa correction ou une décision écrite. Alertes déjà
+  tranchées par écrit (dont l'ERROR `security_definer_view` sur `slot_occupancy`, voulue) : liste
+  « avertissements acceptés » de `docs/AUDIT-SERVEUR.md` — seule une alerte HORS de cette liste bloque.
 - Nouveau module natif depuis le dernier build → config plugin dans `app.json` (chaîne de permission
   en français) ; sinon crash au lancement.
 - Version : `autoIncrement` ne bumpe QUE `ios.buildNumber`. Si `expo.version` est déjà publiée (ou si
