@@ -7,11 +7,11 @@ import { durationLabel, openCourtSlots, type CourtSlot } from '@/lib/courtSchedu
 import { slotTimestamp } from '@/lib/days';
 import { colors, radius, spacing } from '@/theme';
 
-// Motifs d'annulation par le club (chevauchement avec une réservation prise HORS APP).
+// Motifs d'annulation par le club (réservation prise HORS APP, terrain impraticable…).
 const CANCEL_REASONS = ['Déjà pris au téléphone', 'Réservé sur place', 'Terrain indisponible', 'Autre'];
 
-// Mini-formulaire « Annuler ce créneau (chevauchement) » : le club annule une résa joueur qui
-// chevauche une réservation hors app. Motif OBLIGATOIRE (le joueur le lit), PROPOSITION d'un autre
+// Mini-formulaire « Annuler ce créneau » : le club annule une résa joueur (créneau pris hors app,
+// pluie, terrain impraticable). Motif OBLIGATOIRE (le joueur le lit), PROPOSITION d'un autre
 // terrain/créneau OPTIONNELLE (le joueur l'accepte en un tap). Patron calqué sur QuickBlock (68).
 export function ClubCancelForm({
   days,
@@ -69,9 +69,11 @@ export function ClubCancelForm({
     <Card style={{ marginTop: spacing.sm, borderColor: colors.coral }}>
       <View style={styles.banner}>
         <Ionicons name="alert-circle" size={16} color={colors.coral} />
+        {/* Formulation NEUTRE (même phrase que le push « {club} a dû annuler ton créneau ») : pluie,
+            terrain impraticable ou résa prise hors app — le motif choisi dit la cause, rien d'autre. */}
         <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
-          Le joueur sera prévenu que son créneau chevauche une réservation hors application. Sa fiabilité n’est pas touchée (ce n’est pas de
-          sa faute).
+          Le joueur sera prévenu que le club a dû annuler son créneau, avec le motif choisi ci-dessous. Sa fiabilité n’est pas touchée (ce
+          n’est pas de sa faute).
         </Txt>
       </View>
 

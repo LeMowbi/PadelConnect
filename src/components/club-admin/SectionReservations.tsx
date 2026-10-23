@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { BarChart } from '@/components/BarChart';
 import { CalendarPicker } from '@/components/CalendarPicker';
@@ -20,7 +20,7 @@ import {
   type ScheduleCtx,
 } from '@/lib/availability';
 import { durationLabel, overlaps, toMin, type CourtSlot } from '@/lib/courtSchedule';
-import { DAY_MS, HOUR_MS, dateKeyLabel, nextDays, weekKeyOf, weekLabel } from '@/lib/days';
+import { DAY_MS, HOUR_MS, dateKeyLabel, nextDays, slotTimestamp, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
 import { confirmAsync } from '@/lib/confirm';
@@ -29,14 +29,16 @@ import { useTodayKey } from '@/lib/useTodayKey';
 import { clubUsePass, fetchClubPasses, fetchPassUses } from '@/lib/passes';
 import {
   blockRecurringRows,
+  clubReservationPhone,
   fetchCancelledReservations,
   fetchClubBlockedReasons,
   fetchNoShowReservations,
   fetchReliability,
   purgeOldBlockedRanges,
+  RECURRING_REASON,
   type Reliability,
 } from '@/lib/reservations';
-import { isPlayed, useApp, type Reservation } from '@/store/AppContext';
+import { isPlayed, useApp, type BlockedSlot, type Reservation } from '@/store/AppContext';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 type SelectedCell = { dateKey: string; time: string; durationMin: number; label: string };
@@ -49,12 +51,62 @@ const DOW_SHORT = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
 // L'horizon JOUEUR (tunnel de réservation) reste, lui, à 7 jours.
 const PLANNING_HORIZON_DAYS = 60;
 
+// « Terrain 1 · 1h30 · Tarif terrain 25 000 FCFA » : durée et prix FIGÉS à la réservation (ce que
+// le joueur paiera au comptoir) — le tarif est masqué s'il est absent (0).
+export function resaDetailLabel(r: Reservation): string {
+  return `${r.court} · ${durationLabel(r.durationMin)}${r.price > 0 ? ` · Tarif terrain ${fcfa(r.price)}` : ''}`;
+}
+
+// Message WhatsApp au réservant — n'affirme « confirmée » QUE si elle l'est vraiment côté serveur
+// (r.clubConfirmed), sinon on informe sans mentir au joueur. Porte la durée et le tarif figés.
+function resaWhatsAppText(r: Reservation, clubName: string): string {
+  const hello = r.bookedBy?.name ? `Bonjour ${r.bookedBy.name}` : 'Bonjour';
+  const what = `votre réservation du ${dateKeyLabel(r.dateKey)} à ${r.time} (${resaDetailLabel(r)}) à ${clubName}`;
+  return r.clubConfirmed
+    ? `${hello}, ${what} est bien confirmée ✅`
+    : `${hello}, ${what} est bien reçue, je reviens vers vous pour la confirmer.`;
+}
+
+// Ouvre WhatsApp vers le réservant. Le numéro d'un créateur de match ouvert n'est PAS stocké sur la
+// résa (51) : il est lu dans son profil AU TAP (club_reservation_phone, 96) et jamais mis en miroir.
+export async function contactBooker(r: Reservation, clubName: string, toast: ReturnType<typeof useToast>): Promise<void> {
+  const phone = r.bookedBy?.phone || (await clubReservationPhone(r.id));
+  if (!phone) {
+    toast.show('Numéro du joueur indisponible — vérifie ta connexion, ou il n’a pas renseigné de numéro', {
+      icon: 'alert-circle',
+    });
+    return;
+  }
+  openWhatsApp(phone, resaWhatsAppText(r, clubName));
+}
+
+// Séries d'HABITUÉS (créneaux « Récurrent ») encore À VENIR, regroupées par terrain + heure — la clé
+// même d'unblock_recurring (97). Dates triées (la première porte la note privée affichée).
+export function upcomingSeries(blocked: BlockedSlot[], now: number): { court: string; time: string; dateKeys: string[] }[] {
+  const byKey = new Map<string, { court: string; time: string; dateKeys: string[] }>();
+  for (const b of blocked) {
+    if (b.reason !== RECURRING_REASON || slotTimestamp(b.dateKey, b.time) <= now) continue;
+    const k = `${b.court}|${b.time}`;
+    let s = byKey.get(k);
+    if (!s) {
+      s = { court: b.court, time: b.time, dateKeys: [] };
+      byKey.set(k, s);
+    }
+    s.dateKeys.push(b.dateKey);
+  }
+  return [...byKey.values()]
+    .map((s) => ({ ...s, dateKeys: s.dateKeys.sort() }))
+    .sort((a, b) => a.court.localeCompare(b.court) || a.time.localeCompare(b.time));
+}
+
 export function SectionReservations({
   club,
   comps,
   onSelectCell,
   slotNotes,
   onNotesChanged,
+  stoppingSeries,
+  onStopSeries,
 }: {
   club: Club;
   comps: import('@/data/competitions').Competition[];
@@ -63,6 +115,10 @@ export function SectionReservations({
   // détail du planning les lit aussi) ; `onNotesChanged` la relit après une série posée.
   slotNotes: Record<string, string>;
   onNotesChanged: () => void;
+  // « Arrêter la série » d'un habitué — action tenue par le parent (partagée avec la fiche d'un
+  // créneau) ; `stoppingSeries` = série en cours d'arrêt (`terrain|heure`) ou null.
+  stoppingSeries: string | null;
+  onStopSeries: (court: string, time: string, count: number, who: string) => void;
 }) {
   const {
     state,
@@ -77,6 +133,15 @@ export function SectionReservations({
     refreshSession,
   } = useApp();
   const toast = useToast();
+  // Section encore affichée ? Elle est remontée (clé = club) quand le club ACTIF change : une
+  // relecture qui révèle un autre club démonte CETTE instance — le parent l'annonce alors lui-même.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const [planDayKey, setPlanDayKey] = useState<string | null>(null);
   // Calendrier « Autre date » du planning du jour (replié par défaut).
   const [showPlanCalendar, setShowPlanCalendar] = useState(false);
@@ -159,12 +224,13 @@ export function SectionReservations({
     };
   }, [playerIdsKey]);
 
-  // Badge d’alerte sous le nom d’un joueur peu fiable (≥1 annulation ou absence).
+  // Badge d’alerte sous le nom d’un joueur peu fiable (≥1 annulation tardive ou absence). Depuis la
+  // 98 (décision n° 18), `cancelled` ne compte plus que les annulations faites à MOINS DE 24 H du match.
   const reliabilityNote = (userId?: string) => {
     const rel = userId ? reliability[userId] : undefined;
     if (!rel || (rel.cancelled === 0 && rel.noShow === 0)) return null;
     const parts: string[] = [];
-    if (rel.cancelled > 0) parts.push(`${rel.cancelled} annulation${rel.cancelled > 1 ? 's' : ''}`);
+    if (rel.cancelled > 0) parts.push(`${rel.cancelled} annulation${rel.cancelled > 1 ? 's tardives' : ' tardive'} (< 24 h)`);
     if (rel.noShow > 0) parts.push(`${rel.noShow} absence${rel.noShow > 1 ? 's' : ''}`);
     return (
       <View style={styles.relNote}>
@@ -335,6 +401,12 @@ export function SectionReservations({
     };
   }, [shownUpcomingKey]);
   const pastRes = clubRes.filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt);
+  // Miroir TRONQUÉ au plafond de lignes (reservationsCoveredFrom) : la semaine qui contient le plus
+  // ancien créneau reçu, et toutes les précédentes, peuvent manquer de réservations — leur revenu
+  // serait faux (base de la commission). On ne les affiche pas et on le DIT (bandeau), au lieu
+  // de laisser croire à des semaines creuses.
+  const coveredFrom = state.reservationsCoveredFrom;
+  const partialWeek = coveredFrom !== null ? weekKeyOf(coveredFrom) : null;
   // Historique regroupé PAR SEMAINE (le décompte de la commission est hebdomadaire). Groupage en
   // O(n) via une Map d'index (au lieu d'un `.find` par item = O(n²)) : un club actif accumule des
   // centaines de résas passées, et cette section se recalcule à chaque tap (confirmer/bloquer).
@@ -342,6 +414,7 @@ export function SectionReservations({
   const weekIndex = new Map<string, { week: string; items: Reservation[] }>();
   for (const r of pastRes) {
     const wk = weekKeyOf(r.startsAt);
+    if (partialWeek !== null && wk <= partialWeek) continue; // semaine incomplète (clés AAAA-MM-JJ comparables)
     let g = weekIndex.get(wk);
     if (!g) {
       g = { week: wk, items: [] };
@@ -350,8 +423,11 @@ export function SectionReservations({
     }
     g.items.push(r);
   }
+  const pastShown = pastByWeek.reduce((n, g) => n + g.items.length, 0);
   // Blocages hors app de ce club.
   const clubBlocked = state.blockedSlots.filter((b) => b.clubId === club.id);
+  // Séries d'habitués encore à venir (liste « Habitués » : qui, quand, jusqu'à quand).
+  const habitues = upcomingSeries(clubBlocked, now);
   // Fermetures sur PÉRIODE (54) de ce club, triées par date de début (les plus proches d’abord).
   const clubRanges = state.blockedRanges.filter((r) => r.clubId === club.id).sort((a, b) => a.dateFrom.localeCompare(b.dateFrom));
 
@@ -523,10 +599,12 @@ export function SectionReservations({
           dayHasTournament={(dKey) => hasFullDayCompetition(club.id, dKey, comps)}
           courtStatus={courtStatusFor}
           onBlock={async (dKey, time, court, durationMin, reason, ts) => {
-            const ok = await blockSlot({ clubId: club.id, dateKey: dKey, time, court, reason, durationMin }, ts);
-            if (ok) hapticSuccess();
+            // 'taken' : un joueur vient de le réserver — le store a déjà relu le miroir, la case
+            // passe d'elle-même en « réservé » et QuickBlock nomme la cause.
+            const st = await blockSlot({ clubId: club.id, dateKey: dKey, time, court, reason, durationMin }, ts);
+            if (st === 'ok') hapticSuccess();
             else hapticWarning();
-            return ok;
+            return st;
           }}
           onUnblock={async (dKey, time, court, durationMin) => {
             // Après un changement de grille (bascule 1h/1h30, « Tout en 1h »…), la cellule peut
@@ -642,20 +720,26 @@ export function SectionReservations({
               toast.show('Série non posée — vérifie ta connexion', { icon: 'cloud-offline-outline' });
               return null;
             }
-            // Résultat HONNÊTE : une date déjà réservée par un joueur part en conflit, le reste
-            // passe. On nomme les dates en conflit (3 max, sinon le toast devient illisible).
+            // Résultat HONNÊTE : une date déjà prise (réservation joueur ou tournoi publié) part en
+            // conflit, une date déjà fermée par une AUTRE fermeture n'est jamais écrasée (97,
+            // `taken`), le reste passe. On nomme les dates en conflit (3 max, toast lisible).
             const conflicts = res.conflicts.length
               ? ` · ${res.conflicts.length} en conflit (${res.conflicts.slice(0, 3).map(dateKeyLabel).join(', ')}${
                   res.conflicts.length > 3 ? '…' : ''
-                }) — déjà réservés par un joueur`
+                }) — déjà réservé${res.conflicts.length > 1 ? 's' : ''} par un joueur ou un tournoi`
+              : '';
+            const taken = res.taken.length
+              ? ` · ${res.taken.length} déjà bloqué${res.taken.length > 1 ? 's' : ''} par une autre fermeture`
               : '';
             if (res.blocked.length === 0) {
               hapticWarning();
-              toast.show(`Aucun créneau posé${conflicts || ' — vérifie le terrain et l’heure'}`, { icon: 'alert-circle' });
+              toast.show(`Aucun créneau posé${conflicts || taken ? `${conflicts}${taken}` : ' — vérifie le terrain et l’heure'}`, {
+                icon: 'alert-circle',
+              });
               return res;
             }
             hapticSuccess();
-            toast.show(`${res.blocked.length} créneau${res.blocked.length > 1 ? 'x posés' : ' posé'} ✓${conflicts}`);
+            toast.show(`${res.blocked.length} créneau${res.blocked.length > 1 ? 'x posés' : ' posé'} ✓${conflicts}${taken}`);
             // Le planning et la dispo lisent le MIROIR des fermetures : on le recharge (le
             // serveur a écrit en direct, aucune action du store n'a mis le miroir à jour).
             await refreshSession();
@@ -665,6 +749,50 @@ export function SectionReservations({
             return res;
           }}
         />
+      ) : null}
+
+      {/* Habitués : une ligne par série À VENIR (terrain + heure), arrêtable d'un tap — sans
+          elle, une série de 26 semaines ne se retirait que case par case. */}
+      {habitues.length > 0 ? (
+        <View style={{ marginTop: spacing.xl }}>
+          <SectionHeader title={`Habitués · ${habitues.length}`} />
+          <Card>
+            {habitues.map((s, i) => {
+              const n = s.dateKeys.length;
+              const first = s.dateKeys[0];
+              const last = s.dateKeys[n - 1];
+              const who = slotNotes[`${first}|${s.time}|${s.court}`] ?? '';
+              const busy = stoppingSeries === `${s.court}|${s.time}`;
+              return (
+                <View key={`${s.court}|${s.time}`}>
+                  {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                    <View style={{ flex: 1 }}>
+                      <Txt variant="body" style={{ fontWeight: '600' }} numberOfLines={1}>
+                        {who || RECURRING_REASON} · {s.court} à {s.time}
+                        {/* Un terrain retiré depuis : la série reste arrêtable, on le signale. */}
+                        {!courts.includes(s.court) ? ' (terrain retiré)' : ''}
+                      </Txt>
+                      <Txt variant="small" color={colors.textFaint}>
+                        {n} semaine{n > 1 ? 's' : ''} à venir ·{' '}
+                        {first === last ? `le ${dateKeyLabel(first)}` : `jusqu’au ${dateKeyLabel(last)}`}
+                      </Txt>
+                    </View>
+                    <Button
+                      size="sm"
+                      label={busy ? 'Arrêt…' : 'Arrêter'}
+                      icon="stop-circle-outline"
+                      variant="ghost"
+                      disabled={!!stoppingSeries}
+                      accessibilityLabel={`Arrêter la série ${who || RECURRING_REASON} sur ${s.court} à ${s.time} (${n} semaine${n > 1 ? 's' : ''} à venir)`}
+                      onPress={() => onStopSeries(s.court, s.time, n, who)}
+                    />
+                  </View>
+                </View>
+              );
+            })}
+          </Card>
+        </View>
       ) : null}
 
       {/* Périodes fermées actives de ce club — chacune rouvrable d’un tap. */}
@@ -957,7 +1085,7 @@ export function SectionReservations({
                     {dateKeyLabel(r.dateKey)} · {r.time}
                   </Txt>
                   <Txt variant="muted">
-                    {r.court} · {r.players} joueur{r.players > 1 ? 's' : ''}
+                    {resaDetailLabel(r)} · {r.players} joueur{r.players > 1 ? 's' : ''}
                   </Txt>
                   {r.bookedBy ? (
                     <Txt variant="small" color={colors.textMuted}>
@@ -984,27 +1112,34 @@ export function SectionReservations({
                     variant={r.clubConfirmed ? 'ghost' : 'primary'}
                     onPress={() => {
                       const wasConfirmed = r.clubConfirmed;
-                      void confirmReservationByClub(r.id).then((ok) => {
+                      void confirmReservationByClub(r.id).then(async (ok) => {
                         if (!ok) {
                           hapticWarning();
-                          toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
+                          // Refus : on relit la session pour dire la VRAIE cause au lieu d'un
+                          // « réessaie » en boucle. Club actif changé ailleurs (web, opérateur) →
+                          // cette section est remontée sur l'autre club et le parent l'annonce ;
+                          // sinon la résa a pu tomber entre-temps (annulée) ou la connexion a coupé.
+                          await refreshSession();
+                          if (!mountedRef.current) return;
+                          toast.show(
+                            'Action impossible — écran actualisé : la réservation a peut-être été annulée, sinon vérifie ta connexion',
+                            {
+                              icon: 'alert-circle',
+                            },
+                          );
                           return;
                         }
                         hapticSuccess();
-                        // Confirmation posée + numéro connu → on PROPOSE de prévenir le joueur
-                        // dans la foulée (boucle fermée « confirmée → joueur prévenu », sans
-                        // dépendre d’un second tap que le gérant oublie souvent).
-                        if (!wasConfirmed && r.bookedBy?.phone) {
+                        // Confirmation posée → on PROPOSE de prévenir le joueur dans la foulée
+                        // (boucle fermée « confirmée → joueur prévenu », sans dépendre d’un second
+                        // tap que le gérant oublie souvent). Numéro lu au tap si absent (contactBooker).
+                        if (!wasConfirmed) {
                           // confirmAsync : cross-plateforme (sur le web l'Alert natif ne s'affiche pas).
-                          void confirmAsync('Réservation confirmée ✓', `Prévenir ${r.bookedBy.name} par WhatsApp ?`, {
+                          void confirmAsync('Réservation confirmée ✓', `Prévenir ${r.bookedBy?.name ?? 'le joueur'} par WhatsApp ?`, {
                             confirmLabel: 'Envoyer',
                             cancelLabel: 'Plus tard',
                           }).then((send) => {
-                            if (send)
-                              openWhatsApp(
-                                r.bookedBy!.phone,
-                                `Bonjour ${r.bookedBy!.name}, votre réservation du ${dateKeyLabel(r.dateKey)} à ${r.time} (${r.court}) à ${club.name} est bien confirmée ✅`,
-                              );
+                            if (send) void contactBooker({ ...r, clubConfirmed: true }, club.name, toast);
                           });
                         }
                       });
@@ -1012,24 +1147,14 @@ export function SectionReservations({
                     full
                   />
                 </View>
-                {r.bookedBy?.phone ? (
-                  <Button
-                    size="sm"
-                    label="WhatsApp"
-                    icon="logo-whatsapp"
-                    variant="secondary"
-                    onPress={() =>
-                      openWhatsApp(
-                        r.bookedBy!.phone,
-                        // Le message ne doit affirmer « confirmée » QUE si elle l’est vraiment
-                        // côté serveur (r.clubConfirmed) — sinon on informe sans mentir au joueur.
-                        r.clubConfirmed
-                          ? `Bonjour ${r.bookedBy!.name}, votre réservation du ${dateKeyLabel(r.dateKey)} à ${r.time} (${r.court}) à ${club.name} est bien confirmée ✅`
-                          : `Bonjour ${r.bookedBy!.name}, votre réservation du ${dateKeyLabel(r.dateKey)} à ${r.time} (${r.court}) à ${club.name} est bien reçue, je reviens vers vous pour la confirmer.`,
-                      )
-                    }
-                  />
-                ) : null}
+                <Button
+                  size="sm"
+                  label="WhatsApp"
+                  icon="logo-whatsapp"
+                  variant="secondary"
+                  accessibilityLabel={`Contacter ${r.bookedBy?.name ?? 'le joueur'} sur WhatsApp`}
+                  onPress={() => void contactBooker(r, club.name, toast)}
+                />
               </View>
               {/* Le joueur n’est pas venu (y c. annulation tardive par téléphone) : libère le
                   créneau et compte l’absence. Proposé seulement une fois le créneau COMMENCÉ —
@@ -1060,12 +1185,12 @@ export function SectionReservations({
                   full
                 />
               ) : null}
-              {/* Annulation par le CLUB (75) : ce créneau chevauche une réservation prise HORS APP
-                  (téléphone / sur place). On l'annule à tout moment sans pénaliser le joueur, et on
-                  lui envoie un message + une proposition d'alternative (via notify-club). */}
+              {/* Annulation par le CLUB (75) : réservation prise HORS APP sur ce créneau, pluie,
+                  terrain impraticable… On l'annule à tout moment sans pénaliser le joueur, et on
+                  lui envoie le motif + une proposition d'alternative (via notify-club). */}
               <Button
                 size="sm"
-                label="Annuler ce créneau (chevauchement)"
+                label="Annuler ce créneau"
                 icon="swap-horizontal-outline"
                 variant="ghost"
                 onPress={() => setCancellingId(cancellingId === r.id ? null : r.id)}
@@ -1195,8 +1320,18 @@ export function SectionReservations({
 
       {/* Historique du club — regroupé par semaine, base de la commission PadelConnect */}
       <View style={{ marginTop: spacing.xl }}>
-        <SectionHeader title={`Historique · ${pastRes.length}`} />
-        {pastRes.length === 0 ? (
+        <SectionHeader title={`Historique · ${pastShown}`} />
+        {/* Date = lundi de la première semaine COMPLÈTE : tout ce qui précède peut manquer. */}
+        {coveredFrom !== null ? (
+          <View style={styles.partialNote}>
+            <Ionicons name="information-circle-outline" size={16} color={colors.amberDark} />
+            <Txt variant="small" color={colors.amberDark} style={{ flex: 1 }}>
+              Historique incomplet avant le {dateKeyLabel(weekKeyOf(coveredFrom + 7 * DAY_MS))} : trop de réservations à charger d’un coup,
+              les semaines plus anciennes ne sont pas affichées.
+            </Txt>
+          </View>
+        ) : null}
+        {pastShown === 0 && coveredFrom === null ? (
           <Card>
             <EmptyState
               icon="time-outline"
@@ -1261,6 +1396,15 @@ const styles = StyleSheet.create({
   stats: { flexDirection: 'row', gap: spacing.sm },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
   relNote: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  partialNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: colors.amberSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',

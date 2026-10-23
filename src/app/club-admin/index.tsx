@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
 import { Screen } from '@/components/Screen';
 import { BottomSheet } from '@/components/BottomSheet';
@@ -10,18 +11,18 @@ import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, SectionHeader, Tag, Txt } from '@/components/ui';
 import { ClosePanel } from '@/components/club-admin/ClosePanel';
 import { SectionMonClub } from '@/components/club-admin/SectionMonClub';
-import { SectionReservations } from '@/components/club-admin/SectionReservations';
+import { contactBooker, resaDetailLabel, SectionReservations, upcomingSeries } from '@/components/club-admin/SectionReservations';
 import { SectionTournois } from '@/components/club-admin/SectionTournois';
 import { clubsByName, findClub, manageableClubs, type Club } from '@/data/clubs';
 import { canSeeClubSpace } from '@/lib/access';
 import { BLOCK_REASONS, CLUB_TYPES } from '@/lib/clubConstants';
-import { fetchMyManagedClubs, switchManagedClub } from '@/lib/clubsServer';
+import { fetchMyManagedClubs } from '@/lib/clubsServer';
 import { americanoPodiumTeams, seedCompetitions } from '@/data/competitions';
 import { competitionBlockedCourts, courtsFor, hasFullDayCompetition, rangeBlocks, resolvedGridFor } from '@/lib/availability';
 import { durationLabel, overlaps, slotDurationAt, toMin } from '@/lib/courtSchedule';
-import { openWhatsApp } from '@/lib/contact';
-import { dateKeyLabel, slotTimestamp } from '@/lib/days';
-import { fetchBlockedSlotNotes } from '@/lib/reservations';
+import { confirmAsync } from '@/lib/confirm';
+import { slotTimestamp } from '@/lib/days';
+import { fetchBlockedSlotNotes, RECURRING_REASON } from '@/lib/reservations';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useTodayKey } from '@/lib/useTodayKey';
 import { isPlayed, useApp } from '@/store/AppContext';
@@ -39,11 +40,34 @@ const GUIDE_STEPS: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
   { icon: 'alert-circle-outline', text: 'Un joueur absent ? Marque « pas venu » — sa fiabilité en tient compte' },
 ];
 
+// Rafraîchissement automatique de l'Espace Club WEB (ordinateur de l'accueil, aucun push) : le
+// planning doit refléter une résa prise dans l'app quelques minutes plus tôt.
+const WEB_AUTO_REFRESH_MS = 120_000;
+
+// « HH:MM » d'un instant — heure d'Abidjan (UTC), convention de toute l'app.
+function clockLabel(ts: number): string {
+  const d = new Date(ts);
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+}
+
 export default function ClubAdmin() {
-  const { state, setManagedClub, submitClubRequest, closeCompetition, deleteCompetition, blockSlot, unblockSlot, refreshSession } =
-    useApp();
+  const {
+    state,
+    setManagedClub,
+    switchManagedClub,
+    submitClubRequest,
+    closeCompetition,
+    deleteCompetition,
+    blockSlot,
+    unblockSlot,
+    unblockRecurring,
+  } = useApp();
   const toast = useToast();
-  const { refreshControl, webRefreshButton } = usePullToRefresh();
+  const navigation = useNavigation();
+  // Push « nouvelle réservation » d'un gérant multi-clubs : `clubId` = club concerné (peut ne pas
+  // être le club ACTIF → bandeau « Basculer » plus bas). Absent d'un ancien push : rien ne change.
+  const { clubId: pushClubId } = useLocalSearchParams<{ clubId?: string }>();
+  const [dismissedPushClubId, setDismissedPushClubId] = useState<string | null>(null);
 
   const [section, setSection] = useState<(typeof SECTIONS)[number]>('Réservations');
   // Guide de démarrage : null = drapeau pas encore lu (on n'affiche rien pour éviter un flash).
@@ -61,6 +85,9 @@ export default function ClubAdmin() {
   };
   // Multi-clubs (55) : la liste de MES clubs autorisés — le sélecteur n'apparaît qu'à 2+.
   // Convention §8 : null = échec réseau → on garde la liste déjà affichée.
+  // Relue aussi quand le club ACTIF change (bascule ailleurs, 2ᵉ club accordé pendant que l'écran
+  // est ouvert) et à chaque rafraîchissement (`reloadMyClubs`, plus bas) : sinon le sélecteur
+  // restait invisible jusqu'à la réouverture de l'Espace Club.
   const [myClubIds, setMyClubIds] = useState<string[]>([]);
   const [switching, setSwitching] = useState(false);
   const connectedManager = !!state.serverUserId && state.role === 'club';
@@ -71,11 +98,51 @@ export default function ClubAdmin() {
     return () => {
       alive = false;
     };
-  }, [connectedManager]);
+  }, [connectedManager, state.serverManagedClubId]);
+  const reloadMyClubs = async () => {
+    if (!connectedManager) return;
+    const ids = await fetchMyManagedClubs();
+    if (ids) setMyClubIds(ids);
+  };
+  // Club actif changé DANS LE DOS de cet écran (bascule sur le web, accès retiré/accordé par
+  // l'opérateur) : la session relue montre un autre club — on le DIT, au lieu de laisser le gérant
+  // croire à une panne (« réessaie » en boucle sur des actions refusées par le serveur). Une
+  // bascule faite ICI (`selfSwitchRef`) a déjà son propre message.
+  const selfSwitchRef = useRef(false);
+  const prevManagedRef = useRef(state.serverManagedClubId);
+  useEffect(() => {
+    const prev = prevManagedRef.current;
+    prevManagedRef.current = state.serverManagedClubId;
+    if (selfSwitchRef.current || !prev || !state.serverManagedClubId || prev === state.serverManagedClubId) return;
+    toast.show('Ton club actif a changé — écran actualisé', { icon: 'information-circle' });
+  }, [state.serverManagedClubId, toast]);
+  // Bascule de club ACTIF (multi-clubs, 55) : l'action du store change le club côté serveur PUIS
+  // recharge la session dans une nouvelle époque (une relecture partie avant ne remet plus
+  // l'ancien club). Écriture honnête : le message n'arrive qu'après le serveur.
+  const switchTo = (id: string) => {
+    if (switching) return;
+    setSwitching(true);
+    selfSwitchRef.current = true;
+    void switchManagedClub(id)
+      .then((ok) =>
+        toast.show(
+          ok
+            ? `Tu gères maintenant ${findClub(id, state.customClubs, state.clubInfo)?.name ?? 'ce club'} ✓`
+            : 'Changement de club impossible — vérifie ta connexion',
+          ok ? undefined : { icon: 'alert-circle' },
+        ),
+      )
+      .finally(() => {
+        selfSwitchRef.current = false;
+        setSwitching(false);
+      });
+  };
 
   const [closingId, setClosingId] = useState<string | null>(null);
   const [selectedCell, setSelectedCell] = useState<{ dateKey: string; time: string; durationMin: number; label: string } | null>(null);
   const [blockingCourt, setBlockingCourt] = useState<string | null>(null);
+  // Série d'habitué en cours d'arrêt (`terrain|heure`) — garde anti double-tap.
+  const [stoppingSeries, setStoppingSeries] = useState<string | null>(null);
 
   // Inscription d’un nouveau club (validée ensuite par l’opérateur PadelConnect).
   const [showSignup, setShowSignup] = useState(false);
@@ -116,6 +183,22 @@ export default function ClubAdmin() {
   // MÊME règle que la liste de l'onglet Réservations (!isPlayed) : une partie en cours non
   // confirmée reste confirmable — la pastille doit la compter comme la liste l'affiche.
   const pendingConfirm = clubRes.filter((r) => !r.clubConfirmed && !isPlayed(r, now)).length;
+  // WEB : titre d'onglet « (N) à confirmer » — repérable même quand l'onglet est en arrière-plan.
+  // Passé par les options d'écran (le titre du document suit les options de la navigation, qui
+  // réécrirait un `document.title` posé à la main).
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    navigation.setOptions({ title: pendingConfirm > 0 ? `(${pendingConfirm}) à confirmer · Espace Club` : 'Espace Club' });
+  }, [navigation, pendingConfirm]);
+  // « Mis à jour à HH:MM » (web) : instant où le miroir des réservations a changé pour la dernière
+  // fois — une relecture RÉUSSIE en livre un neuf, un échec réseau garde l'ancien (donc l'ancienne
+  // heure : l'affichage ne ment pas). Mémorisation au rendu (motif « valeur du rendu précédent »).
+  const [seenReservations, setSeenReservations] = useState(state.reservations);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  if (seenReservations !== state.reservations) {
+    setSeenReservations(state.reservations);
+    setUpdatedAt(now);
+  }
   const clubBlocked = state.blockedSlots.filter((b) => b.clubId === club.id);
   // Notes privées des créneaux RÉCURRENTS (83, RLS gérant) : le miroir partagé ne porte que le
   // générique « Récurrent » — le nom du client s'incruste ici (clé dateKey|time|court). Source
@@ -185,12 +268,60 @@ export default function ClubAdmin() {
     toast.show('Demande envoyée à PadelConnect ✅');
   };
 
+  // Tirer-pour-rafraîchir (+ bouton web) et rafraîchissement AUTOMATIQUE web toutes les 2 min,
+  // suspendu pendant un envoi ou une feuille ouverte (une relecture ne croise pas une écriture).
+  const { refreshControl, webRefreshButton } = usePullToRefresh(reloadMyClubs, {
+    everyMs: WEB_AUTO_REFRESH_MS,
+    paused: switching || sendingSignup || !!stoppingSeries || !!selectedCell || !!closingId,
+  });
+
+  // « Arrêter la série » d'un habitué (97) : retire les créneaux « Récurrent » À VENIR de ce
+  // terrain à cette heure (jamais le passé). Écriture qui attend le serveur ; les notes privées
+  // (nom de l'habitué) sont relues ensuite. Partagée par la fiche d'un créneau et « Habitués ».
+  const stopSeries = (court: string, time: string, count: number, who: string) => {
+    if (stoppingSeries) return;
+    void confirmAsync(
+      'Arrêter la série ?',
+      `${count} créneau${count > 1 ? 'x' : ''} à venir${who ? ` (${who})` : ''} sur ${court} à ${time} redeviendr${
+        count > 1 ? 'ont' : 'a'
+      } réservable${count > 1 ? 's' : ''}. Les dates passées ne changent pas.`,
+      { confirmLabel: 'Arrêter la série', destructive: true },
+    ).then(async (ok) => {
+      if (!ok) return;
+      setStoppingSeries(`${court}|${time}`);
+      const n = await unblockRecurring(club.id, court, time);
+      setStoppingSeries(null);
+      if (n === null) {
+        toast.show('Série non arrêtée — vérifie ta connexion', { icon: 'cloud-offline-outline' });
+        return;
+      }
+      reloadSlotNotes();
+      toast.show(n > 0 ? `Série arrêtée — ${n} créneau${n > 1 ? 'x rouverts' : ' rouvert'} ✓` : 'Cette série était déjà arrêtée ✓');
+    });
+  };
+
+  // Push d'un club que je gère mais qui n'est pas le club ACTIF (multi-clubs) : la réservation n'est
+  // pas visible ici tant que je ne bascule pas — on le dit, avec la bascule en un tap.
+  const pushTarget =
+    pushClubId &&
+    pushClubId !== club.id &&
+    pushClubId !== dismissedPushClubId &&
+    (isOperator ? manageable.some((c) => c.id === pushClubId) : myClubIds.includes(pushClubId))
+      ? pushClubId
+      : null;
+  const pushClubName = pushTarget ? (findClub(pushTarget, state.customClubs, state.clubInfo)?.name ?? 'un autre club') : '';
+
   const header = (
     <View style={styles.note}>
       <Ionicons name="business" size={15} color={colors.textFaint} />
       <Txt variant="small" color={colors.textFaint} style={{ flex: 1 }}>
         {club.name} — Espace Club.
       </Txt>
+      {Platform.OS === 'web' && updatedAt !== null ? (
+        <Txt variant="small" color={colors.textFaint}>
+          Mis à jour à {clockLabel(updatedAt)}
+        </Txt>
+      ) : null}
     </View>
   );
 
@@ -252,6 +383,32 @@ export default function ClubAdmin() {
   return (
     <Screen back title="Espace Club" subtitle="Gère ton club" refreshControl={refreshControl} headerRight={webRefreshButton}>
       {header}
+
+      {pushTarget ? (
+        <View style={styles.switchBanner}>
+          <Ionicons name="swap-horizontal" size={16} color={colors.amberDark} />
+          <Txt variant="small" color={colors.amberDark} style={{ flex: 1, fontWeight: '600' }}>
+            Cette réservation concerne {pushClubName}.
+          </Txt>
+          <Button
+            size="sm"
+            label={switching ? 'Bascule…' : 'Basculer'}
+            icon="swap-horizontal"
+            variant="secondary"
+            disabled={switching}
+            accessibilityLabel={`Basculer sur ${pushClubName}`}
+            onPress={() => (isOperator ? setManagedClub(pushTarget) : switchTo(pushTarget))}
+          />
+          <Pressable
+            onPress={() => setDismissedPushClubId(pushTarget)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Masquer ce message"
+          >
+            <Ionicons name="close" size={18} color={colors.amberDark} />
+          </Pressable>
+        </View>
+      ) : null}
 
       {/* Guide de démarrage — les 4 gestes essentiels, fermable une fois assimilé. */}
       {guideSeen === false ? (
@@ -324,18 +481,7 @@ export default function ClubAdmin() {
                   label={switching && id !== club.id ? '…' : (c?.name ?? id)}
                   active={id === club.id}
                   onPress={() => {
-                    if (switching || id === club.id) return;
-                    setSwitching(true);
-                    void switchManagedClub(id)
-                      .then(async (ok) => {
-                        if (!ok) {
-                          toast.show('Changement de club impossible — vérifie ta connexion', { icon: 'alert-circle' });
-                          return;
-                        }
-                        await refreshSession();
-                        toast.show(`Tu gères maintenant ${findClub(id, state.customClubs, state.clubInfo)?.name ?? 'ce club'} ✓`);
-                      })
-                      .finally(() => setSwitching(false));
+                    if (id !== club.id) switchTo(id);
                   }}
                 />
               );
@@ -450,6 +596,8 @@ export default function ClubAdmin() {
           onSelectCell={setSelectedCell}
           slotNotes={slotNotes}
           onNotesChanged={reloadSlotNotes}
+          stoppingSeries={stoppingSeries}
+          onStopSeries={stopSeries}
         />
       ) : null}
 
@@ -532,29 +680,27 @@ export default function ClubAdmin() {
                         </>
                       ) : resa ? (
                         <>
-                          <Txt variant="small" color={colors.text} style={{ flex: 1, fontWeight: '600' }} numberOfLines={1}>
-                            Réservé via PadelConnect · {resa.bookedBy?.name ?? 'Joueur'}
-                          </Txt>
+                          <View style={{ flex: 1 }}>
+                            <Txt variant="small" color={colors.text} style={{ fontWeight: '600' }} numberOfLines={1}>
+                              Réservé via PadelConnect · {resa.bookedBy?.name ?? 'Joueur'}
+                            </Txt>
+                            {/* Durée et tarif FIGÉS à la réservation : ce que le joueur paiera. */}
+                            <Txt variant="small" color={colors.textMuted} numberOfLines={1}>
+                              {resaDetailLabel(resa)}
+                            </Txt>
+                          </View>
                           {resa.clubConfirmed ? <Tag label="Confirmée ✓" tone="green" /> : <Tag label="À confirmer" tone="amber" />}
-                          {resa.bookedBy?.phone ? (
-                            // Contact direct depuis le planning — même message que la liste
-                            // « À confirmer » (on n'affirme « confirmée » que si c'est vrai).
-                            <Pressable
-                              onPress={() =>
-                                openWhatsApp(
-                                  resa.bookedBy!.phone,
-                                  resa.clubConfirmed
-                                    ? `Bonjour ${resa.bookedBy!.name}, votre réservation du ${dateKeyLabel(resa.dateKey)} à ${resa.time} (${resa.court}) à ${club.name} est bien confirmée ✅`
-                                    : `Bonjour ${resa.bookedBy!.name}, votre réservation du ${dateKeyLabel(resa.dateKey)} à ${resa.time} (${resa.court}) à ${club.name} est bien reçue, je reviens vers vous pour la confirmer.`,
-                                )
-                              }
-                              hitSlop={8}
-                              accessibilityRole="button"
-                              accessibilityLabel={`Contacter ${resa.bookedBy.name} sur WhatsApp`}
-                            >
-                              <Ionicons name="logo-whatsapp" size={18} color={colors.green} />
-                            </Pressable>
-                          ) : null}
+                          {/* Contact direct depuis le planning — même message que la liste « À confirmer »
+                              (on n'affirme « confirmée » que si c'est vrai). Le numéro d'un créateur de
+                              match ouvert n'est pas stocké sur la résa : lu au tap (contactBooker). */}
+                          <Pressable
+                            onPress={() => void contactBooker(resa, club.name, toast)}
+                            hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Contacter ${resa.bookedBy?.name ?? 'le joueur'} sur WhatsApp`}
+                          >
+                            <Ionicons name="logo-whatsapp" size={18} color={colors.green} />
+                          </Pressable>
                         </>
                       ) : blk ? (
                         <>
@@ -637,10 +783,16 @@ export default function ClubAdmin() {
                                   durationMin: cellDur,
                                 },
                                 cellTs,
-                              ).then((ok) =>
+                              ).then((st) =>
+                                // 'taken' : un joueur vient de le prendre — le store a relu le miroir,
+                                // la fiche montre déjà sa réservation (cause dite, jamais « réessaie »).
                                 toast.show(
-                                  ok ? 'Créneau bloqué' : 'Impossible de bloquer ce créneau',
-                                  ok ? undefined : { icon: 'alert-circle' },
+                                  st === 'ok'
+                                    ? 'Créneau bloqué'
+                                    : st === 'taken'
+                                      ? 'Ce créneau vient d’être réservé par un joueur'
+                                      : 'Impossible de bloquer ce créneau',
+                                  st === 'ok' ? undefined : { icon: 'alert-circle' },
                                 ),
                               );
                             }}
@@ -648,6 +800,27 @@ export default function ClubAdmin() {
                         ))}
                       </View>
                     ) : null}
+                    {/* Case d'une série d'HABITUÉ : l'arrêter d'ici (toutes ses dates À VENIR). */}
+                    {!isTournoi && !resa && blk?.reason === RECURRING_REASON
+                      ? (() => {
+                          const series = upcomingSeries(clubBlocked, now).find((s) => s.court === c && s.time === blk.time);
+                          if (!series) return null;
+                          const n = series.dateKeys.length;
+                          const busy = stoppingSeries === `${c}|${blk.time}`;
+                          return (
+                            <View style={{ marginTop: spacing.sm, alignItems: 'flex-start' }}>
+                              <Button
+                                size="sm"
+                                label={busy ? 'Arrêt…' : `Arrêter la série (${n} semaine${n > 1 ? 's' : ''} à venir)`}
+                                icon="stop-circle-outline"
+                                variant="ghost"
+                                disabled={!!stoppingSeries}
+                                onPress={() => stopSeries(c, blk.time, n, slotNotes[`${series.dateKeys[0]}|${blk.time}|${c}`] ?? '')}
+                              />
+                            </View>
+                          );
+                        })()
+                      : null}
                   </View>
                 );
               });
@@ -716,6 +889,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.md,
     marginTop: spacing.md,
+  },
+  switchBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.amberSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
   signupLink: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md, paddingVertical: spacing.xs },

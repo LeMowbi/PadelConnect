@@ -13,7 +13,7 @@ import { colors, radius, spacing } from '@/theme';
 
 // 3 lignes de plages tarifaires éditables (nom optionnel, heure début, fin, DEUX prix).
 // `price` = prix 1h30 (obligatoire dès que la plage est renseignée), `price60` = prix 1h
-// (optionnel — dérivé côté pricing.ts si vide, aux ⅔ du prix 1h30).
+// (optionnel — dérivé côté pricing.ts si vide : ⅔ du prix 1h30 arrondi à la centaine).
 type TierRow = { start: string; end: string; price: string; price60: string; label: string };
 
 function emptyTiers(club: Club): TierRow[] {
@@ -273,7 +273,8 @@ export function ClubInfoCard({
       ))}
       <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
         Si tu définis des plages, elles doivent couvrir tes heures d’ouverture ({openLabel} → {closeLabel}) sans trou. Nomme-les (Journée,
-        Soirée…) pour les afficher en onglets sur ta page. Prix 1h laissé vide : il est déduit automatiquement du prix 1h30 (environ ⅔).
+        Soirée…) pour les afficher en onglets sur ta page. Prix 1h laissé vide : il est déduit automatiquement du prix 1h30 (⅔, arrondi à la
+        centaine).
       </Txt>
       {tierError ? (
         <View style={styles.tierErrorBox}>

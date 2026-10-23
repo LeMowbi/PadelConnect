@@ -32,7 +32,16 @@ export function QuickBlock({
   grid: Record<string, CourtSlot[]>; // grille EFFECTIVE de chaque terrain (resolvedGridFor)
   dayHasTournament: (dateKey: string) => boolean;
   courtStatus: (dateKey: string, time: string, court: string, durationMin: number) => CourtStatus;
-  onBlock: (dateKey: string, time: string, court: string, durationMin: number, reason: string, ts: number) => Promise<boolean>;
+  // 'taken' = un joueur vient de réserver ce créneau (miroir relu : la case passe en « réservé ») ;
+  // 'error' = autre refus ou échec réseau.
+  onBlock: (
+    dateKey: string,
+    time: string,
+    court: string,
+    durationMin: number,
+    reason: string,
+    ts: number,
+  ) => Promise<'ok' | 'taken' | 'error'>;
   onUnblock: (dateKey: string, time: string, court: string, durationMin: number) => Promise<boolean>;
 }) {
   // Jour retrouvé par CLÉ (pas l'objet capturé au montage) : après minuit, days[0] change de
@@ -279,10 +288,16 @@ export function QuickBlock({
                           onPress={() => {
                             if (busy) return;
                             setBusy(true);
-                            void onBlock(day.key, slot.t, court, slot.d, reason, tsOf(slot.t)).then((ok) => {
+                            void onBlock(day.key, slot.t, court, slot.d, reason, tsOf(slot.t)).then((st) => {
                               setBusy(false);
-                              if (!ok) {
-                                setError('Impossible de bloquer ce créneau.');
+                              if (st === 'taken') {
+                                // Cause DITE (le gérant ne croit plus à une panne) ; la case affiche
+                                // déjà « Déjà réservé par … » avec le miroir relu.
+                                setError('Ce créneau vient d’être réservé par un joueur via PadelConnect.');
+                                return;
+                              }
+                              if (st !== 'ok') {
+                                setError('Impossible de bloquer ce créneau — il est peut-être déjà fermé, sinon vérifie ta connexion.');
                                 return;
                               }
                               reset();

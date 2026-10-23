@@ -9,9 +9,11 @@ import { colors, radius, spacing } from '@/theme';
 
 // Créneau RÉCURRENT (12) : le même créneau réservé chaque semaine par un habitué (payé au club,
 // hors app). Le client calcule les N dates (`recurringDates`, PUR), le serveur pose les
-// fermetures une à une (block_recurring) et rend un résultat HONNÊTE {posées, conflits} — une
-// date déjà réservée par un joueur part en conflit, le reste passe. Même langage visuel que
-// QuickBlock / BlockRangeForm (fermetures), avec la grille PROPRE du terrain choisi (68).
+// fermetures une à une (block_recurring) et rend un résultat HONNÊTE {posées, conflits, déjà
+// fermées} — une date déjà réservée (joueur ou tournoi) part en conflit, une date déjà fermée par
+// une AUTRE fermeture n'est jamais écrasée (97), le reste passe. Une série s'ARRÊTE depuis la liste
+// « Habitués » ou la fiche d'une de ses cases. Même langage visuel que QuickBlock / BlockRangeForm
+// (fermetures), avec la grille PROPRE du terrain choisi (68).
 const WEEKS = [4, 8, 12, 26];
 const DOW = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 
@@ -24,14 +26,14 @@ export function RecurringForm({
   days: { key: string; label: string; value: number }[];
   courts: string[];
   grid: Record<string, CourtSlot[]>; // grille EFFECTIVE de chaque terrain (resolvedGridFor)
-  // Rend le détail serveur ({posées, conflits}) ou null (refus global / panne réseau).
+  // Rend le détail serveur ({posées, conflits, déjà fermées}) ou null (refus global / panne réseau).
   onSubmit: (input: {
     court: string;
     time: string;
     durationMin: 60 | 90;
     dateKeys: string[];
     name: string;
-  }) => Promise<{ blocked: string[]; conflicts: string[] } | null>;
+  }) => Promise<{ blocked: string[]; conflicts: string[]; taken: string[] } | null>;
 }) {
   const [court, setCourt] = useState<string | null>(null);
   // Jour retrouvé par CLÉ (pas l'objet capturé au montage) : après minuit, days[0] change de
@@ -77,7 +79,7 @@ export function RecurringForm({
         // toast) → formulaire vierge pour l'habitué suivant. Sinon on garde la saisie : le
         // gérant n'a qu'à changer d'heure ou de terrain.
         if (res.blocked.length > 0) reset();
-        else setError('Aucune date libre : ce créneau est déjà réservé par un joueur sur toute la série.');
+        else setError('Aucune date libre : ce créneau est déjà réservé, pris par un tournoi ou déjà fermé sur toute la série.');
       })
       .finally(() => setBusy(false));
   };

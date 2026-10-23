@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Txt } from '@/components/ui';
@@ -9,10 +9,19 @@ import { colors, spacing } from '@/theme';
 // réservations, la disponibilité, les clubs et leur config. Factorisé pour que chaque écran
 // scrollable l’ajoute en une ligne : `const { refreshControl } = usePullToRefresh();`.
 // `extra` permet de recharger en plus une donnée propre à l’écran (ex. les avis d’un club).
-export function usePullToRefresh(extra?: () => Promise<void> | void) {
+// `webAuto` (WEB seulement) : rafraîchissement AUTOMATIQUE toutes les `everyMs` ms tant que
+// l'onglet est visible — un écran laissé ouvert sur l'ordinateur de l'accueil (Espace Club) ne
+// reçoit aucun push et ne se recharge sinon qu'au changement d'onglet. `paused` le suspend
+// (envoi en cours, feuille ouverte) : une relecture ne doit pas croiser une écriture du gérant.
+export function usePullToRefresh(extra?: () => Promise<void> | void, webAuto?: { everyMs: number; paused: boolean }) {
   const { refreshSession } = useApp();
   const [refreshing, setRefreshing] = useState(false);
+  // Verrou « déjà en cours » : un tir automatique ne double jamais un rafraîchissement manuel
+  // (ni l'inverse). Ref = verrou synchrone (deux déclenchements dans la même frame).
+  const inFlightRef = useRef(false);
   const onRefresh = async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setRefreshing(true);
     try {
       await Promise.all([refreshSession(), Promise.resolve(extra?.())]);
@@ -20,9 +29,27 @@ export function usePullToRefresh(extra?: () => Promise<void> | void) {
       /* rafraîchissement best-effort : un échec (réseau, extra de l'écran) ne doit pas remonter en
          rejet non géré — le spinner s'arrête quand même via le finally. */
     } finally {
+      inFlightRef.current = false;
       setRefreshing(false);
     }
   };
+  // Dernière version de onRefresh (elle capture `extra`) pour le minuteur, sans le relancer à
+  // chaque rendu : mise à jour APRÈS le rendu (jamais pendant), lue au tir.
+  const onRefreshRef = useRef(onRefresh);
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  });
+  const autoEveryMs = Platform.OS === 'web' && webAuto ? webAuto.everyMs : 0;
+  const autoPaused = !!webAuto?.paused;
+  useEffect(() => {
+    if (!autoEveryMs || autoPaused) return;
+    const id = setInterval(() => {
+      // Onglet masqué : rien (le retour sur l'onglet relance déjà une relecture via AppState).
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      void onRefreshRef.current();
+    }, autoEveryMs);
+    return () => clearInterval(id);
+  }, [autoEveryMs, autoPaused]);
   const refreshControl = (
     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.signature} colors={[colors.signature]} />
   );

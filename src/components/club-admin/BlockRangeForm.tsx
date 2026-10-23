@@ -112,7 +112,15 @@ export function BlockRangeForm({
       <Txt variant="label" style={{ marginTop: spacing.md }}>
         Au {dateTo ? `— ${dateKeyLabel(dateTo)}` : ''}
       </Txt>
-      <CalendarPicker value={dateTo} minKey={dateFrom ?? todayKey} maxKey={maxKey} onSelect={(key) => setDateTo(key)} />
+      {/* Remonté à chaque « Du » choisi (clé) : le calendrier « Au » s'ouvre sur le mois du début
+          au lieu de rester sur le mois courant (le mois affiché n'est lu qu'au montage). */}
+      <CalendarPicker
+        key={dateFrom ?? 'none'}
+        value={dateTo}
+        minKey={dateFrom ?? todayKey}
+        maxKey={maxKey}
+        onSelect={(key) => setDateTo(key)}
+      />
 
       <Txt variant="label" style={{ marginTop: spacing.md }}>
         Heures

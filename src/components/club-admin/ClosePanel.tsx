@@ -8,7 +8,7 @@ import { colors, radius, spacing } from '@/theme';
 // Panneau de clôture (organisateur) : équipes inscrites → vainqueur → fin de parcours.
 // Tournoi à élimination : vainqueur puis (option) dernière place (niveau +0,50 / −0,25 en officiel).
 // Americano (par rotation) : on clôture par un PODIUM 1ʳᵉ/2ᵉ/3ᵉ (niveau : seul le 1ᵉʳ, et seulement
-// en tournoi officiel).
+// en tournoi officiel). Le niveau ne bouge que pour le COMPTE qui a inscrit l'équipe.
 export function ClosePanel({
   comp,
   myTeam,
@@ -125,9 +125,10 @@ export function ClosePanel({
     <View style={{ marginTop: spacing.sm }}>
       {comp.official ? (
         <Txt variant="small" color={colors.amberDark} style={{ fontWeight: '600' }}>
+          {/* Seul le COMPTE qui a inscrit l'équipe est crédité : le partenaire n'est qu'un nom. */}
           {isAmericano
-            ? 'Tournoi officiel — l’équipe vainqueure gagne +0,50 de niveau.'
-            : 'Tournoi officiel — vainqueur +0,50, fin de tableau −0,25 de niveau.'}
+            ? 'Tournoi officiel — le joueur qui a inscrit l’équipe vainqueure gagne +0,50 de niveau.'
+            : 'Tournoi officiel — le joueur qui a inscrit l’équipe vainqueure gagne +0,50 de niveau, celui de la fin de tableau perd 0,25.'}
         </Txt>
       ) : null}
 

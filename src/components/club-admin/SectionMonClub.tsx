@@ -10,9 +10,17 @@ import { ClubNewsEditor } from '@/components/club-admin/ClubNewsEditor';
 import { ClubPassesCard } from '@/components/club-admin/ClubPassesCard';
 import { LoyaltyServeCard } from '@/components/club-admin/LoyaltyServeCard';
 import { SAMPLE_SLOTS, type Club } from '@/data/clubs';
+import { isCompFinished, isTournamentPublic } from '@/data/competitions';
 import { courtsFor, resolvedGridFor, type ScheduleCtx } from '@/lib/availability';
 import { canAddCourtSlot, durationLabel, offeredDurations, overlaps, slotEnd, toMin, type CourtSlot } from '@/lib/courtSchedule';
-import { clubAddCoach, clubRemoveCoach, clubSetCoachPrice, fetchClubCoaches, type ServerCoach } from '@/lib/coachesServer';
+import {
+  clubAddCoach,
+  clubRemoveCoach,
+  clubSetCoachPrice,
+  fetchClubCoaches,
+  fetchCoachLessons,
+  type ServerCoach,
+} from '@/lib/coachesServer';
 import { confirmAsync } from '@/lib/confirm';
 import { isPlayed, MAX_CLUB_PHOTOS, useApp, type Reservation } from '@/store/AppContext';
 import { fcfa, initials } from '@/lib/format';
@@ -31,6 +39,7 @@ import {
   SESSION_MIN,
 } from '@/lib/slots';
 import { isValidPhone } from '@/lib/phone';
+import { dayKey } from '@/lib/days';
 import { colors, radius, spacing } from '@/theme';
 
 // Refus « réservations à venir » : on oriente vers l'outil du gérant (75, « Annuler ce créneau »)
@@ -481,8 +490,8 @@ export function SectionMonClub({ club }: { club: Club }) {
   // Bornes ouverture/fermeture pour la VALIDATION TARIFAIRE (ClubInfoCard : les plages doivent
   // couvrir [openMin, closeMin)). Sous grille par terrain, le miroir `slots`@90 peut FINIR avant
   // le dernier créneau réel (ex. un 1h à 21:00 avec un miroir qui s'arrête à 20:00) → ce créneau
-  // serait vendu au tarif minimum en silence. On prend donc les bornes de la grille RÉELLE (min
-  // début / max fin de tous les terrains) quand elle existe.
+  // serait vendu au prix d’une autre plage en silence. On prend donc les bornes de la grille RÉELLE
+  // (min début / max fin de tous les terrains) quand elle existe.
   // ── Grille PAR TERRAIN (68) : source de vérité dès que `courtSlots[club.id]` existe (posée par
   // « Passer aux horaires par terrain » ci-dessous, ou déjà réglée). Tant qu'elle est absente, on
   // garde l'éditeur simple (grille club unique, 1h30 fixe) ci-dessus — écran plus léger pour les
@@ -512,8 +521,9 @@ export function SectionMonClub({ club }: { club: Club }) {
     return lo === Infinity ? null : { lo, hi };
   };
   // Sous grille par terrain, le miroir `slots`@90 peut FINIR avant le dernier créneau réel (ex.
-  // un 1h à 21:00 avec un miroir qui s'arrête à 20:00) → ce créneau serait vendu au tarif minimum
-  // en silence. On prend donc les bornes de la grille RÉELLE (min début / max fin) quand elle existe.
+  // un 1h à 21:00 avec un miroir qui s'arrête à 20:00) → ce créneau serait vendu au prix d’une autre
+  // plage en silence. On prend donc les bornes de la grille RÉELLE (min début / max fin) quand elle
+  // existe.
   const bounds = hasPerCourtGrid ? gridBounds() : null;
   const openMin = bounds?.lo ?? slotToMinutes(openTime) ?? MIN_OPEN;
   const closeMin = bounds?.hi ?? slotToMinutes(closeTime) ?? MAX_CLOSE;
@@ -635,6 +645,27 @@ export function SectionMonClub({ club }: { club: Club }) {
   // en attente du coach côté serveur — irréversible — même si sa fiche reste re-promouvable).
   const [confirmDemoteId, setConfirmDemoteId] = useState<string | null>(null);
   const [demoting, setDemoting] = useState<string | null>(null);
+  // Ses cours ACCEPTÉS à venir (privés et collectifs) RESTENT réservés après le retrait — le
+  // serveur ne les annule pas (décision porteur, T-16) : la confirmation les compte pour que le
+  // gérant prévienne les élèves (RLS lessons : il lit les cours de son club). count : undefined =
+  // comptage en cours, null = échec réseau (≠ 0, convention §8) — jamais un « 0 » inventé.
+  const [demoteLessons, setDemoteLessons] = useState<{ userId: string; count: number | null | undefined } | null>(null);
+  const askDemote = (c: ServerCoach) => {
+    if (confirmDemoteId === c.userId) {
+      setConfirmDemoteId(null);
+      return;
+    }
+    setConfirmDemoteId(c.userId);
+    setDemoteLessons({ userId: c.userId, count: undefined });
+    void fetchCoachLessons(c.userId).then((ls) => {
+      const now = Date.now();
+      const count = ls ? ls.filter((l) => l.clubId === clubId && l.status === 'accepted' && l.startsAt > now).length : null;
+      // Réponse d'un coach dont la confirmation a été fermée/remplacée entre-temps : ignorée.
+      setDemoteLessons((cur) => (cur?.userId === c.userId ? { userId: c.userId, count } : cur));
+    });
+  };
+  // Une seule confirmation ouverte à la fois : le comptage affiché est celui de CE coach.
+  const demoteCount = demoteLessons && demoteLessons.userId === confirmDemoteId ? demoteLessons.count : undefined;
   const demoteCoach = async (c: ServerCoach) => {
     if (demoting) return;
     setConfirmDemoteId(null);
@@ -792,8 +823,8 @@ export function SectionMonClub({ club }: { club: Club }) {
       toast.show(v.error, { icon: 'alert-circle' });
       return;
     }
-    // Un horaire hors de la couverture des plages tarifaires serait vendu au TARIF MINIMUM
-    // (repli silencieux de priceForSlot) : on prévient — l'ajout reste possible, le gérant
+    // Un horaire hors de la couverture des plages tarifaires serait vendu au prix de la plage la
+    // plus PROCHE (repli silencieux de priceForSlot) : on prévient — l'ajout reste possible, le gérant
     // ajuste ses plages dans « Infos du club » quand il veut.
     const tiers = priceTiersFor(club);
     const draftMin = slotToMinutes(draftSlot);
@@ -807,7 +838,7 @@ export function SectionMonClub({ club }: { club: Club }) {
       })
     ) {
       toast.show(
-        'Ce créneau sera vendu au tarif minimum tant que tes plages tarifaires ne le couvrent pas — ajuste-les dans « Infos du club »',
+        'Ce créneau sera vendu au prix de ta plage tarifaire la plus proche tant que tes plages ne le couvrent pas — ajuste-les dans « Infos du club »',
         {
           icon: 'information-circle',
         },
@@ -915,6 +946,19 @@ export function SectionMonClub({ club }: { club: Club }) {
       toast.show(`« ${n} » a des réservations à venir — annule-les ou attends qu’elles soient jouées.`, { icon: 'alert-circle' });
       return;
     }
+    // Même garde pour un tournoi PUBLIÉ pas encore terminé qui retient ce terrain (le serveur la
+    // tient aussi, 97) : retiré, le terrain redeviendrait réservable pendant le tournoi.
+    const today = dayKey(new Date(now));
+    if (
+      state.myCompetitions.some(
+        (c) => c.clubId === club.id && isTournamentPublic(c) && !c.closed && !isCompFinished(c, today) && !!c.courtNames?.includes(n),
+      )
+    ) {
+      toast.show(`Un tournoi publié utilise « ${n} » — attends sa fin ou annule-le (onglet Tournois) avant de retirer le terrain.`, {
+        icon: 'alert-circle',
+      });
+      return;
+    }
     // Destructif (grille du terrain + photo Storage supprimées, créneau retiré de la vente) :
     // confirmation explicite AVANT d'agir — un tap sur la corbeille ne doit pas suffire.
     const sure = await confirmAsync(
@@ -956,9 +1000,11 @@ export function SectionMonClub({ club }: { club: Club }) {
     });
     if (res === 'busy') toast.show('Une sauvegarde est en cours — réessaie dans un instant.', { icon: 'alert-circle' });
     else if (res === 'denied')
-      toast.show(`« ${n} » a une réservation à venir — annule-la ou attends qu’elle soit jouée avant de retirer le terrain.`, {
-        icon: 'alert-circle',
-      });
+      // Le SERVEUR refuse si une réservation à venir OU un tournoi publié non terminé utilise ce terrain.
+      toast.show(
+        `« ${n} » a une réservation à venir ou un tournoi publié l’utilise — annule-les ou attends qu’ils soient passés avant de retirer le terrain.`,
+        { icon: 'alert-circle' },
+      );
     else if (res === 'offline') toast.show('Terrain non retiré — vérifie ta connexion', { icon: 'alert-circle' });
   };
 
@@ -1353,7 +1399,7 @@ export function SectionMonClub({ club }: { club: Club }) {
                           />
                         </Pressable>
                         <Pressable
-                          onPress={() => setConfirmDemoteId((cur) => (cur === c.userId ? null : c.userId))}
+                          onPress={() => askDemote(c)}
                           hitSlop={13}
                           accessibilityRole="button"
                           accessibilityLabel={`Retirer le coach ${c.name}`}
@@ -1362,19 +1408,35 @@ export function SectionMonClub({ club }: { club: Club }) {
                         </Pressable>
                       </View>
                       {confirmDemoteId === c.userId ? (
-                        // Confirmation légère, en place — pas de retrait au premier tap.
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs }}>
-                          <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
-                            Retirer {c.name} de tes coachs ?
-                          </Txt>
-                          <Button
-                            size="sm"
-                            label={demoting === c.userId ? '…' : 'Oui, retirer'}
-                            variant="danger"
-                            onPress={() => void demoteCoach(c)}
-                            disabled={demoting === c.userId}
-                          />
-                          <Button size="sm" label="Non" variant="secondary" onPress={() => setConfirmDemoteId(null)} />
+                        // Confirmation légère, en place — pas de retrait au premier tap. « Oui » reste
+                        // grisé le temps du comptage : l'avertissement est lu AVANT de confirmer.
+                        <View style={{ marginTop: spacing.xs, gap: spacing.xs }}>
+                          {demoteCount === undefined ? (
+                            <Txt variant="small" color={colors.textFaint}>
+                              Vérification de ses cours à venir…
+                            </Txt>
+                          ) : demoteCount === null ? (
+                            <Txt variant="small" color={colors.amberDark}>
+                              Impossible de vérifier ses cours à venir — s’il en a, ils restent réservés : préviens ses élèves.
+                            </Txt>
+                          ) : demoteCount > 0 ? (
+                            <Txt variant="small" color={colors.amberDark}>
+                              {c.name} a {demoteCount} cours à venir : ils restent réservés après le retrait — préviens ses élèves.
+                            </Txt>
+                          ) : null}
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                            <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
+                              Retirer {c.name} de tes coachs ?
+                            </Txt>
+                            <Button
+                              size="sm"
+                              label={demoting === c.userId ? '…' : 'Oui, retirer'}
+                              variant="danger"
+                              onPress={() => void demoteCoach(c)}
+                              disabled={demoting === c.userId || demoteCount === undefined}
+                            />
+                            <Button size="sm" label="Non" variant="secondary" onPress={() => setConfirmDemoteId(null)} />
+                          </View>
                         </View>
                       ) : null}
                       {priceEditing === c.userId ? (
@@ -1528,8 +1590,8 @@ export function SectionMonClub({ club }: { club: Club }) {
                       nextGrid[c] = next;
                       return nextGrid;
                     }).then((res) => {
-                      // Un créneau hors des plages tarifaires serait vendu au TARIF MINIMUM en
-                      // silence (repli priceForSlot) : on le dit, comme l'éditeur simple.
+                      // Un créneau hors des plages tarifaires serait vendu au prix de la plage la
+                      // plus PROCHE en silence (repli priceForSlot) : on le dit, comme l'éditeur simple.
                       if (res === 'ok') {
                         const tiers = priceTiersFor(club);
                         const uncovered = next.some((sl) => {
@@ -1544,7 +1606,7 @@ export function SectionMonClub({ club }: { club: Club }) {
                         });
                         if (uncovered)
                           toast.show(
-                            'Certains créneaux sortent de tes plages tarifaires — ils seront vendus au tarif minimum. Ajuste tes plages dans « Infos du club ».',
+                            'Certains créneaux sortent de tes plages tarifaires — ils seront vendus au prix de la plage la plus proche. Ajuste tes plages dans « Infos du club ».',
                             { icon: 'information-circle' },
                           );
                       }
