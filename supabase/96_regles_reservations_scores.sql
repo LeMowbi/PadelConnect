@@ -1,6 +1,9 @@
 -- 96 — Règles métier : réservations, invitations, cours, score, niveau, classement, accès
 -- directs (audit des règles métier 2026-10-22, lot M2 — première moitié).
--- À coller dans Supabase → SQL Editor → Run APRÈS la 95. Idempotent, rejouable.
+-- À coller dans Supabase → SQL Editor → Run APRÈS la 95. Idempotente tant que la 98 n'est pas
+-- posée. APRÈS la 98, elle s'arrête sur `42P13 cannot change return type` (fetch_leaderboard a
+-- gagné `rank`) et ses versions ignorent la place anonyme d'un compte supprimé : pour la
+-- recoller, `drop function public.fetch_leaderboard(integer);` puis 96, 97 et 98 dans l'ordre.
 --
 -- Chaque fonction est une recopie STRICTE de sa définition LIVE (dump du 2026-10-21 — aucune
 -- n'est redéfinie par les 92 à 95) hormis le bloc commenté « R-n ». Les signatures et les types

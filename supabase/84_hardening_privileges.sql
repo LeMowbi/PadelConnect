@@ -47,3 +47,20 @@ begin
     execute format('grant execute on function public.%I(%s) to authenticated;', r.proname, r.args);
   end loop;
 end $$;
+
+-- C) HELPERS PURS — alignement du dépôt sur la production (C-11, audit 2026-10-23). Les 5 fonctions
+--    immuables utilisées par les gardes, la contrainte `slot_durations` et l'index d'unicité du
+--    téléphone ont été fermées à `anon` en production HORS dépôt : un rejeu du dépôt les rouvrait.
+--    Effet fonctionnel nul (fonctions pures, sans donnée) ; `authenticated` les garde (l'index
+--    `profiles_phone10_uniq` et la contrainte s'évaluent avec les droits de l'appelant). Sans
+--    effet en production : rien à recoller.
+revoke execute on function public.durations_60_90(integer[]) from public, anon;
+revoke execute on function public.hhmm_to_min(text) from public, anon;
+revoke execute on function public.min_to_hhmm(integer) from public, anon;
+revoke execute on function public.phone10(text) from public, anon;
+revoke execute on function public.slot_start_ms(text, text) from public, anon;
+grant execute on function public.durations_60_90(integer[]) to authenticated;
+grant execute on function public.hhmm_to_min(text) to authenticated;
+grant execute on function public.min_to_hhmm(integer) to authenticated;
+grant execute on function public.phone10(text) to authenticated;
+grant execute on function public.slot_start_ms(text, text) to authenticated;

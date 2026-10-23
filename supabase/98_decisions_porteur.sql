@@ -1,8 +1,8 @@
 -- 98 — Décisions du porteur du 2026-10-22 (« tout ok » sur les recommandations du §7 de
 -- docs/AUDIT-REGLES-METIER-2026-10.md), volet SERVEUR — lot D1.
 -- À coller dans Supabase → SQL Editor → Run APRÈS la 97, dans la MÊME passe que 92 → 97 (point 4 :
--- les réclamations de fidélité présentes au collage sont celles de l'ancienne règle). Idempotent,
--- rejouable.
+-- les réclamations de fidélité présentes au collage sont celles de l'ancienne règle). Idempotente,
+-- rejouable seule.
 --
 -- Chaque fonction est une recopie STRICTE de sa définition la plus récente (dépôt 92 → 97, sinon
 -- dump live du 2026-10-21) hormis le bloc commenté « décision n ». Signatures et types de retour
@@ -10,8 +10,10 @@
 -- (drop + create, client tolérant), comme `fetch_open_matches` dans la 96.
 --
 --  1) Décision 3 (T-3) — un COURS de coach (résa portant `coach_name`, privé ou collectif) n'est
---     pas une partie : ni +2 / +3 au classement, ni fidélité, ni présence / fiabilité, ni niveau.
---     `coach_name` n'est plus forgeable par le joueur qui réserve pour lui-même.
+--     pas une partie : ni +2 / +3 au classement, ni fidélité, ni niveau. Il RESTE dans la
+--     présence (T-3 : « restent dans la présence ») — `public_reliability` (80) n'est pas
+--     redéfinie et le badge d'absences du gérant compte les cours. `coach_name` n'est plus
+--     forgeable par le joueur qui réserve pour lui-même.
 --  2) Décision 4 — fidélité : les réclamations faites sous l'ANCIENNE règle (82) ne comptent plus
 --     (`legacy`) ; le compteur de la règle cible (92) repart de zéro. Elles restent servables
 --     (aucune remise promise n'est retirée) et leur numéro de cycle est gardé.
@@ -24,13 +26,31 @@
 --     « Paiement reçu » refusé sur un tournoi annulé (la créance annulée ne ressuscite pas).
 --  7) Décision 17 (T-14) — push « actus et agenda » activés par défaut, désactivables.
 --  8) Décision 18 (T-21) — badge « annulations » du gérant : annulations à moins de 24 h du match.
+--  9) Finitions de l'audit (tour 1 du 2026-10-23) : suivi des frais « à rembourser »
+--     (operator_refunds_due / operator_mark_refunded), auteur d'une annulation de tournoi
+--     (`cancelled_by`, lu par notify-club), `search_path` figé sur 8 fonctions (R-80),
+--     rattrapage R-16 rejoué après la nouvelle garde de disponibilité ; (tour 2) suppressions de
+--     compte sérialisées (interblocage de deux partenaires), tournoi « à rembourser » non supprimable,
+--     rattrapage R-52 (invitations en attente entre comptes bloqués AVANT la 96) ; (tour 3)
+--     delete_competition sous le verrou 'reg:' (course avec une annulation ou une inscription).
 -- Sans SQL : décision 13 (T-11 — aucune RPC ne calcule la commission : l'Espace opérateur la
 -- calcule sur les parties jouées 'booked', l'absence en est déjà exclue, la séance de carnet y
 -- reste) ; décisions 11, 12, 15, 16 et 19 (app, site — le serveur ne dérive aucun prix 1h).
--- ⚠️ Après la 98, ne JAMAIS recoller seules la 80 (submit_match_score) ni la 96 (apply_match_level,
--- classement) : leurs versions ne connaissent pas la place anonyme d'un compte supprimé — prouvé
--- en local, l'ancienne submit_match_score laisse alors un TIERS saisir et valider le score.
--- notify-club v50 lit `profiles.news_push` : coller la 98 AVANT de la déployer.
+-- ⚠️ Après la 98, ne JAMAIS recoller SEULE une migration antérieure qui redéfinit ses fonctions —
+-- tout recollage reprend la suite dans l'ordre JUSQU'À LA 98 INCLUSE (prouvé : catalogue
+-- identique à un passage unique) :
+--   • la 80 (submit_match_score) ou la 96 (apply_match_level, classement) : leurs versions ne
+--     connaissent pas la place anonyme d'un compte supprimé — prouvé en local, l'ancienne
+--     submit_match_score laisse alors un TIERS saisir et valider le score ; la 96 s'ARRÊTE en
+--     plus sur `42P13 cannot change return type` (fetch_leaderboard a gagné `rank`) — la
+--     recoller exige `drop function public.fetch_leaderboard(integer);` d'abord ;
+--   • la 92 (my_loyalty, claim_loyalty) : passe SANS ERREUR et remet en silence l'ancienne
+--     fidélité (réclamations `legacy` recomptées, cours recomptés) ;
+--   • la 97 (cancel_competition, delete_club, delete_account) : passe SANS ERREUR et efface en
+--     silence les décisions 9 et 14 (code 'fees', 'refund_due', matchs passés des partenaires) —
+--     et sa delete_competition, la garde qui empêche de supprimer un tournoi « à rembourser ».
+-- notify-club v50 lit `profiles.news_push` et `competitions.cancelled_by` : coller la 98 AVANT de
+-- la déployer.
 
 -- ── 0) Colonnes ──────────────────────────────────────────────────────────────────
 -- Décision 9 : résa passée REPRISE par un partenaire (son auteur a supprimé son compte) — exclue
@@ -52,12 +72,19 @@ alter table public.profiles add column if not exists news_push boolean not null 
 alter table public.loyalty_claims add column if not exists legacy boolean;
 update public.loyalty_claims set legacy = true where legacy is null;
 alter table public.loyalty_claims alter column legacy set default false, alter column legacy set not null;
+-- Décision 14 (finition) : AUTEUR de l'annulation d'un tournoi (cancel_competition, delete_club) —
+-- notify-club ne renvoie pas « Ton tournoi est annulé » à l'organisateur qui vient de l'annuler
+-- lui-même (gérant qui annule le tournoi de SON club, organisateur sans inscrit). Détaché à la
+-- suppression du compte, comme `organizer_id` (64).
+alter table public.competitions add column if not exists cancelled_by uuid references auth.users (id) on delete set null;
 
 -- ── 1) Décision 3 — `coach_name` réservé aux cours ───────────────────────────────
 -- Recopie STRICTE de la 96 hormis `new.coach_name := null` dans le bloc R-76 : un joueur qui
--- réserve pour lui-même ne peut plus se déclarer « cours » (il échapperait à sa fiabilité). Les
--- cours gardent le nom du coach : respond_lesson insère pour l'ÉLÈVE (auth.uid() = coach) et un
--- cours collectif passe par padel.group_lesson — tous deux hors de ce bloc.
+-- réserve pour lui-même ne peut plus se déclarer « cours » (il échapperait au moteur de niveau et
+-- sortirait sa partie du classement de ses partenaires). Les cours gardent le nom du coach :
+-- respond_lesson insère pour l'ÉLÈVE (auth.uid() = coach) et un cours collectif passe par
+-- padel.group_lesson — tous deux hors de ce bloc. Et les colonnes de la 98 naissent neutres
+-- (`owner_deleted`, `cancelled_at` : seules delete_account et le trigger d'annulation les posent).
 create or replace function public.reservations_insert_guard()
 returns trigger
 language plpgsql
@@ -79,6 +106,8 @@ begin
   -- Une réservation naît TOUJOURS 'booked' et non confirmée (seules les RPC la font évoluer).
   new.club_confirmed := false;
   new.status := 'booked';
+  new.owner_deleted := false;
+  new.cancelled_at := null;
   -- R-76 : identité du réservant = son profil (jamais la valeur envoyée par le client).
   if auth.uid() is not null and auth.uid() = new.user_id
      and coalesce(current_setting('padel.group_lesson', true), '') <> 'on' then
@@ -355,43 +384,9 @@ revoke execute on function public.claim_loyalty() from public, anon;
 grant execute on function public.my_loyalty() to authenticated;
 grant execute on function public.claim_loyalty() to authenticated;
 
--- ── 4) Décisions 3 + 18 — Fiabilité ──────────────────────────────────────────────
--- Recopie STRICTE de la 80 hormis la décision 3 : un cours ne compte ni comme partie jouée ni
--- comme absence dans le taux de présence public.
-create or replace function public.public_reliability(p_user_ids uuid[])
-returns table (user_id uuid, played integer, presence_pct integer)
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now bigint := (extract(epoch from now()) * 1000)::bigint;
-begin
-  if auth.uid() is null then return; end if;
-  return query
-    select u.uid,
-           coalesce(p.cnt, 0)::int,
-           case when coalesce(p.cnt, 0) + coalesce(ns.cnt, 0) = 0 then 100
-                else round(100.0 * coalesce(p.cnt, 0) / (coalesce(p.cnt, 0) + coalesce(ns.cnt, 0)))::int
-           end
-      from unnest(p_user_ids[1:50]) as u(uid)
-      left join lateral (
-        select count(*) as cnt from public.reservations r
-          where r.status = 'booked'
-            and r.starts_at + (coalesce(r.duration_min, 90) * 60000) < v_now
-            and coalesce(r.coach_name, '') = ''
-            and (r.user_id = u.uid or exists (
-                  select 1 from public.reservation_participants rp
-                  where rp.reservation_id = r.id and rp.user_id = u.uid and rp.status = 'accepted'))
-      ) p on true
-      left join lateral (
-        select count(*) as cnt from public.reservations r
-          where r.status = 'no_show' and r.user_id = u.uid and coalesce(r.coach_name, '') = ''
-      ) ns on true;
-end;
-$$;
-revoke execute on function public.public_reliability(uuid[]) from public, anon;
-grant execute on function public.public_reliability(uuid[]) to authenticated;
+-- ── 4) Décision 18 — Fiabilité ──────────────────────────────────────────────────
+-- `public_reliability` (80) n'est PAS redéfinie : un cours reste dans la présence publique (T-3,
+-- « restent dans la présence » — parties jouées comme absences).
 
 -- Décision 18 : horodatage de l'annulation (toutes voies : joueur, delete_account, delete_club).
 -- BEFORE UPDATE OF status + WHEN : ne coûte rien aux autres écritures.
@@ -416,7 +411,7 @@ create trigger reservations_stamp_cancelled
 -- hormis : (décision 18) une annulation ne compte que si elle a été faite à MOINS DE 24 H du
 -- match — une annulation permise des jours avant ne marque plus un joueur « peu fiable » ;
 -- celles d'avant la 98 (heure inconnue) et celles d'un club retiré ('club_deleted') ne comptent
--- pas ; (décision 3) les cours n'y entrent pas. Type inchangé.
+-- pas. Les cours y restent (T-3 : un élève absent à ses cours reste signalé au club). Type inchangé.
 create or replace function public.player_reliability(p_user_ids uuid[])
 returns table (user_id uuid, cancelled int, no_show int)
 language plpgsql
@@ -438,7 +433,6 @@ begin
     where me.role in ('club', 'operator')
       and r.user_id = any (p_user_ids)
       and (me.role = 'operator' or r.club_id = me.managed_club_id) -- un club ne voit QUE son club
-      and coalesce(r.coach_name, '') = ''
     group by r.user_id;
 end;
 $$;
@@ -812,7 +806,11 @@ revoke execute on function public.apply_match_level(uuid) from public, anon, aut
 -- cascade effaçait les résas passées dont le compte était l'AUTEUR (ses partenaires perdaient la
 -- partie, la victoire et les points) et ses participations / saisies (un 1v1 validé perdait son
 -- 2ᵉ joueur, donc la victoire). Aucune donnée personnelle ne survit : nom, téléphone, lien Wave
--- et entrées nommées retirés ; seules restent des places anonymes.
+-- et entrées nommées retirés ; seules restent des places anonymes. Finitions (tour 1) : téléphone
+-- retiré de TOUS ses tournois (un gérant y laissait le sien), nom de coach neutre (« Coach ») sur
+-- les cours de ses élèves, et une invitation jamais acceptée n'est pas une place confirmée.
+-- Tour 2 : suppressions sérialisées par un verrou consultatif commun (interblocage de deux
+-- partenaires croisés supprimant leur compte au même instant — prouvé à 2 sessions).
 create or replace function public.delete_account()
 returns void
 language plpgsql
@@ -832,6 +830,11 @@ begin
   if exists (select 1 from public.profiles p where p.id = uid and p.role = 'operator') then
     raise exception 'operator_account';
   end if;
+  -- Suppressions de compte SÉRIALISÉES (tour 2) : deux partenaires croisés qui suppriment leur
+  -- compte au même instant verrouillaient chacun la résa de l'autre (étape a) puis attendaient la
+  -- sienne (étape c) → interblocage, une suppression échouait. Pris AVANT tout verrou de ligne ;
+  -- les suppressions sont rares, les faire passer une à une ne coûte rien.
+  perform pg_advisory_xact_lock(hashtext('delete_account'));
   -- Avatar (bucket public, hors cascade) — GUC storage (bug plateforme, cf. 83).
   perform set_config('storage.allow_delete_query', 'true', true);
   delete from storage.objects
@@ -874,6 +877,10 @@ begin
   update public.competitions
     set organizer_name = 'Compte supprimé', organizer_phone = null
     where organizer_id = uid and organizer_type = 'joueur';
+  -- Tournois de club / PadelConnect : le nom affiché est celui du club, mais le téléphone est
+  -- celui du compte qui l'a créé (organizerPhone = téléphone du profil) → retiré aussi.
+  update public.competitions set organizer_phone = null
+    where organizer_id = uid and organizer_phone is not null;
   update public.support_messages set name = null, contact_phone = null where user_id = uid;
   delete from public.club_requests where requested_by = uid and status in ('new', 'contacted');
   update public.club_requests set contact_phone = null where requested_by = uid;
@@ -899,6 +906,14 @@ begin
                  where l.coach_id = uid and l.status = 'accepted' and l.reservation_id is not null);
   update public.lessons set status = 'declined', responded_at = now()
     where coach_id = uid and status = 'pending';
+  -- Nom du coach NEUTRE sur les cours de ses élèves (passés, ou annulés juste au-dessus — le push
+  -- d'annulation est déjà parti avec son nom : chaque UPDATE porte son propre webhook). Jamais
+  -- vide : `coach_name` non vide est ce qui fait d'une résa un COURS (décision 3). Les cours
+  -- collectifs (résa au nom du coach) partent dans la cascade.
+  update public.reservations set coach_name = 'Coach'
+    where user_id <> uid and coalesce(coach_name, '') <> '' and coach_name <> 'Coach'
+      and id in (select l.reservation_id from public.lessons l
+                 where l.coach_id = uid and l.reservation_id is not null);
   -- Mes propres réservations À VENIR : annulées avant la cascade (webhook → club prévenu).
   update public.reservations
     set status = 'cancelled'
@@ -906,12 +921,18 @@ begin
   -- Décision 9 (T-6 / R-30) : matchs PASSÉS des partenaires conservés, auteur anonymisé.
   -- Aucun push : ni statut ni confirmation ne changent (les webhooks ne réagissent qu'à eux).
   -- (a) Mon entrée dans `invited` des résas des AUTRES (toute date, tout statut — les matchs à
-  --     venir ont déjà été nettoyés par C2) → place anonyme « Ancien joueur » (`players` inchangé).
+  --     venir ont déjà été nettoyés par C2) → place anonyme « Ancien joueur » (`players` inchangé),
+  --     « confirmée » seulement si j'avais ACCEPTÉ (une invitation restée sans réponse ne devient
+  --     pas une place confirmée qui n'a jamais existé).
   update public.reservations r
     set invited = (
       select coalesce(jsonb_agg(case when t.e ->> 'id' in (uid::text, 'open-' || uid::text)
                                      then jsonb_build_object('id', 'x-' || gen_random_uuid()::text,
-                                                             'name', 'Ancien joueur', 'confirmed', true)
+                                                             'name', 'Ancien joueur',
+                                                             'confirmed', exists (
+                                                               select 1 from public.reservation_participants rp
+                                                               where rp.reservation_id = r.id and rp.user_id = uid
+                                                                 and rp.status = 'accepted'))
                                      else t.e end order by t.o), '[]'::jsonb)
         from jsonb_array_elements(r.invited) with ordinality as t(e, o))
     where r.user_id <> uid and jsonb_typeof(r.invited) = 'array'
@@ -936,10 +957,10 @@ begin
       order by r.id
       for update
   loop
-    -- Héritier choisi SOUS VERROU de sa ligne : un partenaire qui supprime son compte au même
-    -- instant a déjà rendu sa place anonyme (étape b de SA suppression) → il est sauté au profit du
-    -- suivant ; sans ce verrou, la résa lui était transférée puis l'écriture échouait (clé
-    -- étrangère vers un compte disparu) et toute la suppression avec elle.
+    -- Héritier choisi SOUS VERROU de sa ligne : un partenaire qui a supprimé son compte juste
+    -- avant (suppressions sérialisées, verrou en tête) a déjà rendu sa place anonyme (étape b de
+    -- SA suppression) → il est sauté au profit du suivant ; sinon la résa lui était transférée puis
+    -- l'écriture échouait (clé étrangère vers un compte disparu) et toute la suppression avec elle.
     select rp.user_id into v_heir from public.reservation_participants rp
       where rp.reservation_id = v_rid and rp.status = 'accepted'
         and rp.user_id is not null and rp.user_id <> uid
@@ -983,7 +1004,8 @@ grant execute on function public.delete_account() to authenticated;
 --  • organisateur seul (aucun inscrit) : refusé tant que des frais restent DUS ('fees', nouveau
 --    code — sinon annuler effaçait une dette, comme delete_competition le refuse déjà). Il règle
 --    les frais, ou le club annule.
--- Calcul du statut des frais IDENTIQUE dans delete_club (à modifier ENSEMBLE).
+-- Calcul du statut des frais IDENTIQUE dans delete_club (à modifier ENSEMBLE). L'auteur est noté
+-- (`cancelled_by`) : notify-club ne lui renvoie pas son propre geste.
 create or replace function public.cancel_competition(p_id uuid, p_reason text)
 returns text
 language plpgsql
@@ -1018,7 +1040,7 @@ begin
   end if;
   if v_reason is null then return 'reason'; end if;
   update public.competitions
-    set status = 'cancelled', cancel_reason = v_reason,
+    set status = 'cancelled', cancel_reason = v_reason, cancelled_by = auth.uid(),
         -- T-12 : annulation par le club / l'opérateur → frais annulés (ou à rembourser).
         payment_status = case when not v_manager or coalesce(commission, 0) <= 0 then payment_status
                               when payment_status = 'paid' then 'refund_due' else 'cancelled' end
@@ -1030,7 +1052,7 @@ revoke execute on function public.cancel_competition(uuid, text) from public, an
 grant execute on function public.cancel_competition(uuid, text) to authenticated;
 
 -- Recopie STRICTE de la 97 hormis T-12 dans l'annulation des tournois publiés (club retiré par
--- l'OPÉRATEUR = frais annulés, même calcul que cancel_competition).
+-- l'OPÉRATEUR = frais annulés, même calcul que cancel_competition ; auteur noté).
 create or replace function public.delete_club(p_id text)
 returns boolean
 language plpgsql
@@ -1060,7 +1082,7 @@ begin
   -- clôturés (en attente, refusés, publiés déjà terminés) supprimés comme avant ; les clôturés
   -- survivent pour le palmarès.
   update public.competitions
-    set status = 'cancelled', cancel_reason = 'Club retiré de PadelConnect',
+    set status = 'cancelled', cancel_reason = 'Club retiré de PadelConnect', cancelled_by = auth.uid(),
         -- T-12 : annulation par l'opérateur → frais annulés (ou à rembourser).
         payment_status = case when coalesce(commission, 0) <= 0 then payment_status
                               when payment_status = 'paid' then 'refund_due' else 'cancelled' end
@@ -1091,6 +1113,56 @@ $$;
 revoke execute on function public.delete_club(text) from public, anon;
 grant execute on function public.delete_club(text) to authenticated;
 
+-- Recopie STRICTE de la 97 hormis T-12 (tour 2) : un tournoi ANNULÉ dont les frais sont « à
+-- rembourser » ne se supprime plus — ni par l'organisateur ni par le gérant —, sinon la dette de
+-- PadelConnect sortait de operator_refunds_due par un appel forgé (aucun bouton dans l'app :
+-- fetch_competitions masque les tournois annulés). Supprimable de nouveau une fois 'refunded'.
+-- (tour 3) Verrou 'reg:' + ligne relue `for update` AVANT les gardes, patron de cancel_competition :
+-- sans eux, un « Supprimer » concurrent d'un « Annuler » du club (refund_due) ou d'une inscription
+-- (register_competition) jugeait l'état d'AVANT et effaçait la créance ou l'inscrit sans prévenir.
+create or replace function public.delete_competition(p_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid;
+  v_owner uuid;
+  v_club text;
+begin
+  perform pg_advisory_xact_lock(hashtext('reg:' || p_id::text));
+  select id, organizer_id, club_id into v_id, v_owner, v_club from public.competitions where id = p_id for update;
+  if v_id is null then return false; end if;
+  if not (coalesce(v_owner = auth.uid(), false) or public.can_manage_club(v_club)) then return false; end if;
+  if exists (select 1 from public.competitions c where c.id = p_id and c.status = 'closed' and c.official) then
+    return false; -- le palmarès (niveau attribué, points) s'appuie dessus
+  end if;
+  -- T-12 : frais encaissés d'un tournoi annulé, pas encore remboursés → la créance reste visible.
+  if exists (select 1 from public.competitions c
+              where c.id = p_id and c.status = 'cancelled' and c.payment_status = 'refund_due') then
+    return false;
+  end if;
+  -- Un tournoi PUBLIÉ (validé par le club) avec des INSCRITS ou des frais opérateur DUS ne peut plus
+  -- être supprimé par l'ORGANISATEUR seul (audit 2026-07-11) : les équipes inscrites perdraient le
+  -- tournoi SANS notification (pas de webhook DELETE) et la carte « Frais à encaisser » de l'opérateur
+  -- disparaîtrait. Ce cas reste réservé au club / à l'opérateur (can_manage_club), qui préviennent.
+  if v_owner = auth.uid() and not public.can_manage_club(v_club)
+     and exists (select 1 from public.competitions c where c.id = p_id and c.status = 'published')
+     and (
+       exists (select 1 from public.competition_registrations cr where cr.competition_id = p_id)
+       or exists (select 1 from public.competitions c where c.id = p_id
+                    and coalesce(c.commission, 0) > 0 and coalesce(c.payment_status, 'unpaid') <> 'paid')
+     ) then
+    return false;
+  end if;
+  delete from public.competitions where id = p_id;
+  return true;
+end;
+$$;
+revoke execute on function public.delete_competition(uuid) from public, anon;
+grant execute on function public.delete_competition(uuid) to authenticated;
+
 -- « Paiement reçu » : recopie STRICTE de la 58 hormis la garde (décision 14) — un opérateur dont
 -- la liste « à encaisser » est périmée ne peut plus marquer « payé » un tournoi annulé entre-temps :
 -- depuis 'cancelled' (frais annulés) la créance ressusciterait, depuis 'refund_due' l'obligation de
@@ -1113,6 +1185,50 @@ $$;
 revoke execute on function public.operator_confirm_tournament_payment(uuid) from public, anon;
 grant execute on function public.operator_confirm_tournament_payment(uuid) to authenticated;
 
+-- Frais « à rembourser » (NOUVELLES) : fetch_competitions ne renvoie jamais un tournoi annulé (la
+-- v1.0.2 ne connaît pas ce statut) — sans cette lecture, la dette de PadelConnect envers
+-- l'organisateur ne vivait que dans un push (absent sur le web, sans rattrapage). L'opérateur
+-- liste les tournois annulés aux frais déjà encaissés, rembourse par Wave, puis les solde.
+-- Opérateur seul (sinon aucune ligne / false).
+create or replace function public.operator_refunds_due()
+returns table (id uuid, title text, club_name text, organizer_name text, organizer_phone text,
+               commission integer, cancel_reason text, date_key text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select c.id, c.title, c.club_name, c.organizer_name, c.organizer_phone,
+         c.commission, c.cancel_reason, c.date_key
+    from public.competitions c
+   where c.status = 'cancelled' and c.payment_status = 'refund_due'
+     and exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'operator')
+   order by c.date_key, c.id
+   limit 200;
+$$;
+revoke execute on function public.operator_refunds_due() from public, anon;
+grant execute on function public.operator_refunds_due() to authenticated;
+
+-- « Remboursé ✓ » : 'refund_due' → 'refunded' (et seulement depuis 'refund_due' : jamais une
+-- créance ordinaire soldée par erreur). false = refus (pas opérateur, déjà soldé) — l'app relit.
+create or replace function public.operator_mark_refunded(p_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'operator') then
+    return false;
+  end if;
+  update public.competitions set payment_status = 'refunded'
+    where id = p_id and status = 'cancelled' and payment_status = 'refund_due';
+  return found;
+end;
+$$;
+revoke execute on function public.operator_mark_refunded(uuid) from public, anon;
+grant execute on function public.operator_mark_refunded(uuid) to authenticated;
+
 -- ── 8) Décision 17 — Push « actus et agenda » désactivables ──────────────────────
 -- Écrit MA préférence (colonne posée plus haut, activée par défaut). La lecture se fait sur mon
 -- profil (RLS profiles_select_own), comme `match_alerts`. true = enregistré ; false = refus
@@ -1132,3 +1248,92 @@ end;
 $$;
 revoke execute on function public.set_news_push(boolean) from public, anon;
 grant execute on function public.set_news_push(boolean) to authenticated;
+
+-- ── 9) Finitions de l'audit ──────────────────────────────────────────────────────
+-- R-80 : `search_path` figé sur les 8 fonctions qui ne l'avaient pas (conseiller de sécurité
+-- Supabase « function_search_path_mutable », qui signale TOUTE fonction, pure comprise) : 4 trigger
+-- (34, 40, 51, 31) et 4 fonctions SQL pures (67, 68, 69/71). Corps inchangés — ils n'appellent que
+-- le catalogue. phone10 porte l'index unique profiles_phone10_uniq : le SET ne change ni les
+-- valeurs ni la validité de l'index (il empêche seulement l'inlining de la fonction).
+alter function public.protect_level() set search_path = public;
+alter function public.reservations_price_guard() set search_path = public;
+alter function public.strip_open_match_phone() set search_path = public;
+alter function public.support_stamp_resolved() set search_path = public;
+alter function public.phone10(text) set search_path = public;
+alter function public.hhmm_to_min(text) set search_path = public;
+alter function public.durations_60_90(integer[]) set search_path = public;
+alter function public.min_to_hhmm(integer) set search_path = public;
+
+-- R-16 · rattrapage REJOUÉ (recopie STRICTE du bloc de la 96) : collé avant la 98, il laissait
+-- « (en attente) » les acceptations des résas en conflit avec une fermeture posée APRÈS elles
+-- (check_violation de l'ancienne garde de disponibilité). La garde de la 98 (section 6) laisse
+-- passer un UPDATE qui ne déplace pas le créneau → ces entrées sont reprises ici. Idempotent.
+do $$
+declare
+  r record;
+begin
+  for r in
+    select res.id from public.reservations res
+     where res.status = 'booked' and jsonb_typeof(res.invited) = 'array'
+       and res.starts_at > (extract(epoch from now()) * 1000)::bigint - 86400000
+       and exists (select 1
+                     from public.reservation_participants rp
+                     join jsonb_array_elements(res.invited) x on x ->> 'id' = rp.user_id::text
+                    where rp.reservation_id = res.id and rp.status = 'accepted'
+                      and not coalesce(x -> 'confirmed' = 'true'::jsonb, false))
+  loop
+    begin
+      update public.reservations res
+        set invited = (
+          select coalesce(jsonb_agg(case when exists (select 1 from public.reservation_participants rp
+                                                       where rp.reservation_id = res.id and rp.status = 'accepted'
+                                                         and rp.user_id::text = t.e ->> 'id')
+                                         then jsonb_set(t.e, '{confirmed}', 'true'::jsonb)
+                                         else t.e end order by t.o), '[]'::jsonb)
+            from jsonb_array_elements(res.invited) with ordinality as t(e, o))
+        where res.id = r.id;
+    exception when check_violation then
+      raise notice 'R-16 : réservation % laissée telle quelle (créneau en conflit)', r.id;
+    end;
+  end loop;
+end $$;
+
+-- R-52 · rattrapage des blocages ANTÉRIEURS à la 96 : block_user (96) retire les invitations en
+-- attente croisées au moment du blocage, mais une paire bloquée sous la 91 garde les siennes —
+-- respond_invitation les refuse désormais, et l'invité les voyait « à confirmer » jusqu'au match.
+-- Recopie STRICTE de la boucle de block_user (96), sur TOUTES les paires bloquées : verrou de ligne,
+-- puis `invited` / `players` recalculés (un « Rejoindre » concurrent n'est jamais écrasé). Placé
+-- APRÈS la garde de la 98 (section 6) : l'UPDATE ne déplace pas le créneau. Un blocage dans les
+-- deux sens donne deux lignes : la seconde ne supprime rien (`if found`). Idempotent.
+do $$
+declare
+  v_now bigint := (extract(epoch from now()) * 1000)::bigint;
+  v_rid uuid;
+  v_guest uuid;
+  v_new jsonb;
+begin
+  for v_rid, v_guest in
+    select r.id, rp.user_id
+      from public.reservations r
+      join public.reservation_participants rp on rp.reservation_id = r.id and rp.status = 'invited'
+      join public.blocked_users b
+        on (b.blocker_id = r.user_id and b.blocked_id = rp.user_id)
+        or (b.blocker_id = rp.user_id and b.blocked_id = r.user_id)
+      where r.starts_at > v_now
+      order by r.id
+  loop
+    perform 1 from public.reservations where id = v_rid for update;
+    delete from public.reservation_participants
+      where reservation_id = v_rid and user_id = v_guest and status = 'invited';
+    if found then
+      select coalesce(jsonb_agg(e), '[]'::jsonb) into v_new
+        from jsonb_array_elements(
+          (select case when jsonb_typeof(invited) = 'array' then invited else '[]'::jsonb end
+             from public.reservations where id = v_rid)) e
+        where e ->> 'id' <> v_guest::text and e ->> 'id' <> 'open-' || v_guest::text;
+      update public.reservations
+        set invited = v_new, players = greatest(1, 1 + jsonb_array_length(v_new))
+        where id = v_rid;
+    end if;
+  end loop;
+end $$;

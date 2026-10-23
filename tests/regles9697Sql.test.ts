@@ -96,7 +96,10 @@ check(
   [...sql96.matchAll(/drop function if exists ([^;]+);/g)].map((m) => m[1]).join('|') === 'public.fetch_open_matches()',
   '96 : un seul drop function (fetch_open_matches, colonne `price` ajoutée)',
 );
-check(!/drop function/.test(sql97), '97 : aucun drop function (aucun type de retour changé)');
+check(
+  [...sql97.matchAll(/drop function if exists ([^;]+);/g)].map((m) => m[1]).join('|') === 'public.unblock_recurring(text, text, text)',
+  '97 : un seul drop function (unblock_recurring, NOUVELLE de la 97, gagne p_dow — aucune fonction live touchée)',
+);
 check(
   /open_level_max numeric, price integer\)/.test(body(sql96, 'fetch_open_matches')),
   '96 : `price` en DERNIÈRE colonne de fetch_open_matches',
@@ -199,6 +202,11 @@ check(!/do update/.test(br) && /'taken', to_jsonb\(v_taken\)/.test(br), 'R-43 : 
 check(
   /reason = 'Récurrent'/.test(body(sql97, 'unblock_recurring')) && /blocked_slot_notes/.test(body(sql97, 'unblock_recurring')),
   'R-06 : arrêt de série (notes comprises)',
+);
+check(
+  /extract\(dow from b\.date_key::date\)::int = p_dow/.test(body(sql97, 'unblock_recurring')) &&
+    /drop function if exists public\.unblock_recurring\(text, text, text\)/.test(sql97),
+  'R-06 : arrêt de série limité à SON jour de la semaine (mardi ≠ jeudi)',
 );
 const del = body(sql97, 'delete_account');
 check(/raise exception 'operator_account'/.test(del), 'R-58 : le compte opérateur ne se supprime pas');

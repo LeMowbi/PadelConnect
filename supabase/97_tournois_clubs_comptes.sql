@@ -1,6 +1,9 @@
 -- 97 — Règles métier : tournois, clubs, comptes (audit des règles métier 2026-10-22, lot M2 —
 -- seconde moitié).
--- À coller dans Supabase → SQL Editor → Run APRÈS la 96. Idempotent, rejouable.
+-- À coller dans Supabase → SQL Editor → Run APRÈS la 96. Idempotente, mais APRÈS la 98 elle ne se
+-- recolle jamais seule : elle passe SANS ERREUR et efface en silence les décisions 9 et 14
+-- (cancel_competition, delete_club, delete_account redeviennent ceux de la 97) — toujours
+-- recoller ENSUITE la 98.
 --
 -- Chaque fonction est une recopie STRICTE de sa définition LIVE (dump du 2026-10-21 — aucune
 -- n'est redéfinie par les 92 à 96) hormis le bloc commenté « R-n ». Signatures et types de retour
@@ -716,11 +719,14 @@ $$;
 revoke execute on function public.block_recurring(text, text, text, integer, text[], text) from public, anon;
 grant execute on function public.block_recurring(text, text, text, integer, text[], text) to authenticated;
 
--- R-06 : « Arrêter la série ». Retire les fermetures « Récurrent » À VENIR de ce terrain à cette
--- heure (jamais une date passée : l'historique reste), avec leurs notes privées. Verrous club:jour
--- en ordre croissant (patron block_recurring). Renvoie le NOMBRE de créneaux retirés (0 = rien à
--- arrêter) ; null = refus (pas gérant de ce club, paramètres invalides).
-create or replace function public.unblock_recurring(p_club_id text, p_court text, p_time text)
+-- R-06 : « Arrêter la série ». Retire les fermetures « Récurrent » À VENIR de ce terrain, à cette
+-- heure, CE jour de la semaine (p_dow : 0 = dimanche, comme extract(dow)) — deux habitués au même
+-- terrain et à la même heure, des jours différents, sont deux séries distinctes (arrêter le mardi
+-- ne rouvre jamais le jeudi). Jamais une date passée : l'historique reste ; notes privées comprises.
+-- Verrous club:jour en ordre croissant (patron block_recurring). Renvoie le NOMBRE de créneaux
+-- retirés (0 = rien à arrêter) ; null = refus (pas gérant de ce club, paramètres invalides).
+drop function if exists public.unblock_recurring(text, text, text);
+create or replace function public.unblock_recurring(p_club_id text, p_court text, p_time text, p_dow int)
 returns integer
 language plpgsql
 security definer
@@ -736,10 +742,12 @@ declare
   n int := 0;
 begin
   if not public.can_manage_club(p_club_id) then return null; end if;
-  if coalesce(trim(p_court), '') = '' or public.hhmm_to_min(p_time) is null then return null; end if;
+  if coalesce(trim(p_court), '') = '' or public.hhmm_to_min(p_time) is null
+     or p_dow is null or p_dow not between 0 and 6 then return null; end if;
   select array_agg(distinct b.date_key order by b.date_key) into v_dates
     from public.blocked_slots b
     where b.club_id = p_club_id and b.court = p_court and b."time" = p_time and b.reason = 'Récurrent'
+      and extract(dow from b.date_key::date)::int = p_dow
       and (b.date_key > v_today or (b.date_key = v_today and public.hhmm_to_min(p_time) > v_now_min));
   if v_dates is null then return 0; end if;
   foreach dk in array v_dates loop
@@ -757,8 +765,8 @@ begin
   return n;
 end;
 $$;
-revoke execute on function public.unblock_recurring(text, text, text) from public, anon;
-grant execute on function public.unblock_recurring(text, text, text) to authenticated;
+revoke execute on function public.unblock_recurring(text, text, text, int) from public, anon;
+grant execute on function public.unblock_recurring(text, text, text, int) to authenticated;
 
 -- ── 7) R-07 · R-53 · R-58 — Suppression de compte ────────────────────────────────
 -- R-53 : liste des élèves d'un cours COLLECTIF notée AVANT la cascade (lesson_students et la résa
@@ -1101,7 +1109,9 @@ grant execute on function public.revoke_club_access_by_phone(text) to authentica
 -- ── 10) R-68 — Annuler un « Paiement reçu » tapé par erreur ──────────────────────
 -- Miroir de operator_confirm_tournament_payment (58) : opérateur seul, tournoi avec des frais
 -- PadelConnect (commission > 0) actuellement 'paid' → 'unpaid'. true = annulé ; false = refus
--- (pas opérateur, introuvable, sans frais, ou déjà non payé).
+-- (pas opérateur, introuvable, sans frais, déjà non payé, ou tournoi ANNULÉ — pendant de la garde
+-- de « Paiement reçu » (98, décision 14) : sinon une créance soldée repassait « non payée » sans
+-- retour possible, confirm refusant un tournoi annulé).
 create or replace function public.operator_unconfirm_tournament_payment(p_id uuid)
 returns boolean
 language plpgsql
@@ -1113,7 +1123,7 @@ begin
     return false;
   end if;
   update public.competitions set payment_status = 'unpaid'
-    where id = p_id and coalesce(commission, 0) > 0 and payment_status = 'paid';
+    where id = p_id and status <> 'cancelled' and coalesce(commission, 0) > 0 and payment_status = 'paid';
   return found;
 end;
 $$;

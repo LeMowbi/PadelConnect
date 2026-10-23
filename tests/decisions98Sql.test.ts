@@ -76,7 +76,10 @@ expectSig('my_leaderboard_rank', '', 'integer');
 expectSig('submit_match_score', 'uuid, jsonb', 'text');
 expectSig('claim_loyalty', '', 'text');
 expectSig('my_loyalty', '', 'table');
-expectSig('public_reliability', 'uuid[]', 'table');
+check(
+  !created.some((f) => f.name === 'public_reliability'),
+  'T-3 : public_reliability (80) non redéfinie — un cours reste dans la présence',
+);
 expectSig('player_reliability', 'uuid[]', 'table');
 expectSig('delete_account', '', 'void');
 expectSig('delete_club', 'text', 'boolean');
@@ -100,11 +103,10 @@ for (const [f, n] of [
   ['fetch_leaderboard', 3],
   ['my_leaderboard_rank', 3],
   ['my_loyalty', 2],
-  ['public_reliability', 2],
-  ['player_reliability', 1],
 ] as const) {
   check((body(f).match(noCourse) ?? []).length === n, `T-3 : ${f} exclut les cours (${n} compteur(s))`);
 }
+check((body('player_reliability').match(noCourse) ?? []).length === 0, 'T-3 : player_reliability garde les cours (badge du gérant)');
 check(/coalesce\(v_res\.coach_name, ''\) <> ''/.test(body('apply_match_level')), 'T-3 : un cours n’ajuste jamais le niveau');
 check(
   /new\.coach_name := null;/.test(body('reservations_insert_guard')) &&
@@ -220,7 +222,7 @@ check(
 );
 check(
   /payment_status === 'refund_due'/.test(notify) &&
-    /select\('id, title, club_id, club_name, organizer_id, cancel_reason, status, commission, payment_status'\)/.test(notify),
+    /select\('id, title, club_id, club_name, organizer_id, cancel_reason, status, commission, payment_status, cancelled_by'\)/.test(notify),
   'notify-club : frais à rembourser signalés à l’opérateur',
 );
 check(

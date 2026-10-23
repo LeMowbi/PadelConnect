@@ -1,5 +1,7 @@
 -- 92 — FIDÉLITÉ, règle CIBLE (décision porteur 2026-10-21/22).
--- À coller dans Supabase → SQL Editor → Run APRÈS la 91. Idempotent, rejouable.
+-- À coller dans Supabase → SQL Editor → Run APRÈS la 91. Idempotente, mais APRÈS la 98 elle ne se
+-- recolle jamais seule : elle passe SANS ERREUR et remet en silence l'ancienne fidélité
+-- (réclamations `legacy` et cours recomptés) — toujours recoller ENSUITE 93 → 98.
 --
 -- « 10 réservations CRÉÉES par le joueur et JOUÉES = −50 % sur son prochain match, plafonné à
 -- 5 000 FCFA, offert par PadelConnect. » Ce qui change par rapport à la 82 :
