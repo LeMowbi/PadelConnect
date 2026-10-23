@@ -19,7 +19,7 @@ module.exports = defineConfig([
       'react-hooks/purity': 'off',
       'react-hooks/refs': 'off',
       // Icônes : importer la FAMILLE seule — un seul import racine de '@expo/vector-icons' suffit
-      // à embarquer les 19 polices d'icônes (~4,6 Mo) dans le bundle (R-95).
+      // à embarquer les 19 polices d'icônes (~4 Mo de .ttf) dans le bundle (R-95).
       'no-restricted-imports': [
         'error',
         {
