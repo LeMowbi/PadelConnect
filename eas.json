@@ -6,6 +6,7 @@
   "build": {
     "development": {
       "developmentClient": true,
+      "node": "22.22.0",
       "distribution": "internal",
       "ios": {
         "simulator": true
@@ -13,11 +14,13 @@
     },
     "preview": {
       "distribution": "internal",
+      "node": "22.22.0",
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "node": "22.22.0",
       "autoIncrement": true
     }
   },

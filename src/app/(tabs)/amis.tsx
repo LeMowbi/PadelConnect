@@ -144,6 +144,13 @@ export default function AmisScreen() {
   // Choisir un contact du téléphone (plus rapide que taper le numéro).
   const chooseContact = async () => {
     const c = await pickContact();
+    if (c === 'denied') {
+      // Android : accès aux contacts refusé — refus DÉFINITIF tant qu'il n'est pas autorisé dans
+      // les réglages : on dit quoi faire (jamais « réessaie »), la saisie manuelle reste ouverte.
+      hapticWarning();
+      toast.show('Autorise l’accès aux contacts ou tape le numéro.', { icon: 'alert-circle' });
+      return;
+    }
     if (!c) return;
     setPhone(c.phone);
     phoneRef.current = c.phone;

@@ -10,6 +10,7 @@ import { hapticLight } from '@/lib/haptics';
 import {
   canRemindEvent,
   cancelEventReminder,
+  resyncEventReminders,
   scheduleEventReminder,
   scheduledEventReminderIds,
   sweepEventReminders,
@@ -42,13 +43,17 @@ export function AgendaSection() {
       void fetchEvents(todayKey).then((rows) => {
         if (!alive) return;
         setEvents((cur) => rows ?? (cur === undefined ? null : cur));
-        // Rappels ORPHELINS (événement supprimé par l'opérateur) : balayés UNIQUEMENT sur une
-        // liste fraîche ET complète (< 20 = non tronquée) — jamais sur un échec réseau (§8).
-        if (rows && rows.length < 20) {
-          void sweepEventReminders(rows.map((r) => r.id)).then(() =>
-            scheduledEventReminderIds().then((ids) => alive && ids && setRemindedIds(ids)),
-          );
-        }
+        if (!rows) return; // échec réseau : on ne touche à AUCUN rappel (§8)
+        // Rappels recalés sur la liste fraîche (événement REPORTÉ ou texte corrigé, R-83), puis
+        // rappels ORPHELINS (événement supprimé par l'opérateur) balayés UNIQUEMENT si la liste est
+        // complète (< 20 = non tronquée). L'état des boutons est ensuite relu depuis le système.
+        void resyncEventReminders(rows)
+          .then(() => (rows.length < 20 ? sweepEventReminders(rows.map((r) => r.id)) : undefined))
+          .then(() => scheduledEventReminderIds())
+          .then((ids) => {
+            if (alive && ids) setRemindedIds(ids);
+          })
+          .catch(() => {}); // centre de notifications illisible : les boutons gardent leur état
       });
     load();
     // Retour au premier plan : l'opérateur peut avoir publié un événement entre-temps.

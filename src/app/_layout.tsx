@@ -3,7 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnimatedSplash } from '@/components/AnimatedSplash';
@@ -11,7 +11,7 @@ import { hasSeenWelcome, markWelcomeSeen } from '@/components/BienvenuePrefs';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ToastProvider, useToast } from '@/components/Toast';
 import { DAY_MS } from '@/lib/days';
-import { installGlobalErrorLogging } from '@/lib/diagnostics';
+import { installGlobalErrorLogging, logError } from '@/lib/diagnostics';
 import { useNotificationTapRouter } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { useEmailConfirmLink } from '@/lib/useEmailConfirmLink';
@@ -28,6 +28,14 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 // appareil ne le voit jamais : ses réglages existent déjà (profil → Notifications).
 const WELCOME_MAX_AGE_MS = 7 * DAY_MS;
 
+// Routes PUBLIQUES (1ᵉʳ segment) : ouvrables sans compte. reset-password parce que l’utilisateur qui
+// clique le lien « mot de passe oublié » est par définition déconnecté ; legal et decouvrir parce que
+// l’onboarding lui-même y renvoie (lien « CGU & confidentialité », aperçu des clubs) ; auth-callback
+// (échange du code PKCE d'e-mail) parce qu'un cold-start déconnecté via `padelco://auth-callback?code=`
+// rebondissait sinon brièvement vers /onboarding avant que useEmailConfirmLink ne pose le compte.
+const PUBLIC_ROUTES = ['onboarding', 'reset-password', 'auth-callback', 'email-confirmed', 'legal', 'decouvrir'];
+const isPublicRoute = (segment: string | undefined) => PUBLIC_ROUTES.includes(segment ?? '');
+
 // Journalise les erreurs JS non rattrapées (crashs) dans nos diagnostics (self-hosted Supabase).
 // Appelé une fois au chargement du module — avant tout rendu.
 installGlobalErrorLogging();
@@ -36,7 +44,7 @@ export default function RootLayout() {
   // Polices embarquées localement (assets/fonts). Refonte : Bricolage Grotesque
   // pour les titres/chiffres, Schibsted Grotesk pour le corps/UI. Les clés
   // correspondent aux familles déclarées dans src/theme.
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     BricolageGrotesque_600SemiBold: require('../../assets/fonts/BricolageGrotesque_600SemiBold.ttf'),
     BricolageGrotesque_700Bold: require('../../assets/fonts/BricolageGrotesque_700Bold.ttf'),
     BricolageGrotesque_800ExtraBold: require('../../assets/fonts/BricolageGrotesque_800ExtraBold.ttf'),
@@ -46,18 +54,27 @@ export default function RootLayout() {
     SchibstedGrotesk_700Bold: require('../../assets/fonts/SchibstedGrotesk_700Bold.ttf'),
   });
 
-  // Splash animée jouée une fois après le chargement des polices.
-  const [splashDone, setSplashDone] = useState(false);
-
-  // Polices chargées → on masque le splash NATIF (la splash animée prend le relais sans flash).
+  // Police en échec (web lent : le chargeur abandonne après 12 s ; police locale illisible) →
+  // on démarre QUAND MÊME, sur la police système : sans ce repli, la page restait vide à jamais
+  // (R-96). L'échec est journalisé pour la carte « Santé de l'app ».
+  const ready = fontsLoaded || !!fontError;
   useEffect(() => {
-    if (fontsLoaded) SplashScreen.hideAsync().catch(() => {});
-  }, [fontsLoaded]);
+    if (fontError) logError(fontError, 'fonts');
+  }, [fontError]);
+
+  // Splash animée jouée une fois après le chargement des polices — en NATIF seulement : sur le web
+  // (Espace Club), elle se rejouait à chaque rechargement de page (F5), ~1,8 s d'attente pour rien.
+  const [splashDone, setSplashDone] = useState(Platform.OS === 'web');
+
+  // Polices prêtes → on masque le splash NATIF (la splash animée prend le relais sans flash).
+  useEffect(() => {
+    if (ready) SplashScreen.hideAsync().catch(() => {});
+  }, [ready]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>
-        {fontsLoaded ? (
+        {ready ? (
           <ErrorBoundary>
             <AppProvider>
               <ToastProvider>
@@ -69,7 +86,7 @@ export default function RootLayout() {
           <View style={{ flex: 1, backgroundColor: colors.bg }} />
         )}
         {/* Par-dessus l’app : la splash animée « P → PadelConnect », puis fondu de sortie. */}
-        {fontsLoaded && !splashDone ? <AnimatedSplash onDone={() => setSplashDone(true)} /> : null}
+        {ready && !splashDone ? <AnimatedSplash onDone={() => setSplashDone(true)} /> : null}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
@@ -81,27 +98,19 @@ function RootNav() {
   const router = useRouter();
   const toast = useToast();
 
-  // Sans compte → onboarding obligatoire ; avec compte → on quitte l’onboarding.
-  // reset-password, legal et decouvrir sont des routes PUBLIQUES : reset-password parce que
-  // l’utilisateur qui clique le lien « mot de passe oublié » est par définition déconnecté ;
-  // legal et decouvrir parce que l’onboarding lui-même y renvoie (lien « CGU & confidentialité »,
-  // aperçu des clubs) — sans cette exemption, un visiteur sans compte ne pourrait jamais les lire.
+  // « Connecté » = une SESSION existe (serverUserId), pas seulement un profil chargé : loadSession
+  // pose serverUserId dès que getSession() rend un userId, mais laisse account=null si le fetch
+  // profiles a flanché (réseau). Se baser sur account seul éjectait un inscrit fraîchement confirmé
+  // vers /onboarding malgré une session valide.
+  const signedIn = !!state.account || !!state.serverUserId;
+
+  // Sans compte → onboarding obligatoire (hors routes PUBLIQUES) ; avec compte → on quitte l’onboarding.
   useEffect(() => {
     if (!hydrated) return;
     const onboarding = segments[0] === 'onboarding';
-    // `auth-callback` (échange du code PKCE d'e-mail) est public : sans ça, un cold-start
-    // déconnecté via `padelco://auth-callback?code=` rebondissait brièvement vers /onboarding
-    // avant que useEmailConfirmLink ne pose le compte (micro-flash).
-    const publicRoute =
-      onboarding || ['reset-password', 'auth-callback', 'email-confirmed', 'legal', 'decouvrir'].includes(segments[0] ?? '');
-    // « Connecté » = une SESSION existe (serverUserId), pas seulement un profil chargé : loadSession
-    // pose serverUserId dès que getSession() rend un userId, mais laisse account=null si le fetch
-    // profiles a flanché (réseau). Se baser sur account seul éjectait un inscrit fraîchement confirmé
-    // vers /onboarding malgré une session valide.
-    const signedIn = !!state.account || !!state.serverUserId;
-    if (!signedIn && !publicRoute) router.replace('/onboarding');
+    if (!signedIn && !isPublicRoute(segments[0])) router.replace('/onboarding');
     else if (state.account && onboarding) router.replace('/');
-  }, [hydrated, state.account, state.serverUserId, segments, router]);
+  }, [hydrated, signedIn, state.account, segments, router]);
 
   // Écran Bienvenue (E1) — UNE fois par compte, juste après l'inscription : dès que le nouvel
   // inscrit (connecté, joueur) arrive dans les onglets, on le redirige vers /bienvenue. On attend
@@ -164,7 +173,14 @@ function RootNav() {
     },
     [refreshSession, router, toast, state.account, state.serverUserId],
   );
-  useEmailConfirmLink(onConfirm);
+  // Lien de confirmation ouvert sur un AUTRE appareil ou navigateur (R-70) : l'adresse est confirmée
+  // côté serveur, seule la session n'a pas pu s'ouvrir ici (pas de code_verifier PKCE). Connecté :
+  // un toast ; sinon, l'écran dédié invite à se connecter (≠ « Lien expiré »).
+  const onConfirmedElsewhere = useCallback(() => {
+    if (state.account || state.serverUserId) toast.show('Adresse e-mail confirmée ✓');
+    else router.replace('/email-confirmed?kind=elsewhere');
+  }, [router, toast, state.account, state.serverUserId]);
+  useEmailConfirmLink(onConfirm, onConfirmedElsewhere);
 
   // Tap sur une notification (rappel local ou push serveur) → écran concerné plutôt que
   // de rouvrir l’app là où elle en était.
@@ -180,6 +196,16 @@ function RootNav() {
           contentStyle: { backgroundColor: colors.bg },
           animation: 'slide_from_right',
         }}
+        // Écran PROTÉGÉ ouvert sans compte (lien direct, F5 sur le web) : le renvoi vers /onboarding
+        // part d'un effet, APRÈS un premier rendu — l'écran se montait une frame et lançait ses
+        // lectures serveur (401 en console). On rend un fond nu à sa place jusqu'au renvoi (C-09).
+        screenLayout={({ route, children }) =>
+          hydrated && !signedIn && !isPublicRoute(route.name.split('/')[0]) ? (
+            <View style={{ flex: 1, backgroundColor: colors.bg }} />
+          ) : (
+            children
+          )
+        }
       />
     </>
   );

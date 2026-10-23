@@ -19,10 +19,20 @@ import { SESSION_MIN } from './slots';
 
 const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
 const REMINDER_LEAD_MS = 2 * HOUR_MS; // 1ᵉʳ rappel : 2 h avant le créneau
-// 2ᵉ rappel : 15 min AVANT la limite d’annulation gratuite (5 h avant le match, CANCEL_DEADLINE_MS
-// partagé avec l’écran Réservations), pour laisser le temps d’annuler sans frais si on ne peut plus
-// venir → 5 h 15 min avant le créneau.
-const CANCEL_WARNING_LEAD_MS = CANCEL_DEADLINE_MS + 15 * MINUTE_MS;
+// 2ᵉ rappel : AVANT la limite d’annulation gratuite (5 h avant le match, CANCEL_DEADLINE_MS partagé
+// avec l’écran Réservations), pour laisser le temps d’annuler sans frais si on ne peut plus venir.
+// iOS : 15 min avant la limite (5 h 15 avant le créneau), heure exacte. Android 12+ : sans la
+// permission « alarmes exactes » (non demandée), l'OS peut RETARDER un rappel local de plusieurs
+// dizaines de minutes → marge de 45 min et texte non chiffré (« moins d'une heure »), jamais
+// « dans 15 min » qui serait faux une fois le rappel décalé (R-90).
+const ANDROID_INEXACT = Platform.OS === 'android';
+const CANCEL_WARNING_LEAD_MS = CANCEL_DEADLINE_MS + (ANDROID_INEXACT ? 45 : 15) * MINUTE_MS;
+const CANCEL_WARNING_TEXT = ANDROID_INEXACT
+  ? 'Moins d’une heure pour annuler gratuitement.'
+  : 'Dans 15 min, l’annulation gratuite ne sera plus possible.';
+// Canal Android des rappels LOCAUX (R-88) : sans `channelId`, ils tombaient dans le canal par
+// défaut « Miscellaneous » (en anglais, importance moyenne) au lieu de « Rappels & alertes ».
+const ANDROID_CHANNEL = 'default';
 // 3ᵉ rappel (C2) : fin du créneau + 20 min — le temps de ranger les raquettes, pas celui d’oublier.
 const SCORE_REMINDER_DELAY_MS = 20 * MINUTE_MS;
 // Identifiants STABLES des trois rappels d’une résa (`cancel-{id}`, `soon-{id}`, `score-{id}`, comme
@@ -46,7 +56,7 @@ if (isNative) {
   // moyenne → pas d'affichage « heads-up ». On crée un canal HIGH pour que les alertes
   // (rappel d'annulation, match qui approche, push du gérant) apparaissent bien en avant-plan.
   if (Platform.OS === 'android') {
-    void Notifications.setNotificationChannelAsync('default', {
+    void Notifications.setNotificationChannelAsync(ANDROID_CHANNEL, {
       name: 'Rappels & alertes',
       importance: Notifications.AndroidImportance.HIGH,
       sound: 'default',
@@ -118,7 +128,7 @@ async function scheduleAt(
   await Notifications.scheduleNotificationAsync({
     identifier,
     content: { title, body, data: { reservationId: r.id, kind } },
-    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(when) },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(when), channelId: ANDROID_CHANNEL },
   });
 }
 
@@ -134,8 +144,9 @@ function enqueue(task: () => Promise<void>): Promise<void> {
 }
 
 // Programme les rappels d’UNE réservation (chacun ignoré si sa date est déjà passée) :
-//  1) 5 h 15 min avant → dernière fenêtre pour annuler sans frais (AUTEUR uniquement : un
-//     invité n’a pas de bouton « Annuler », ce rappel ne le concerne pas) ;
+//  1) 5 h 15 min avant (5 h 45 sur Android, cf. CANCEL_WARNING_LEAD_MS) → dernière fenêtre pour
+//     annuler sans frais (AUTEUR uniquement : un invité n’a pas de bouton « Annuler », ce rappel
+//     ne le concerne pas) ;
 //  2) 2 h avant → le match approche (tout le monde, texte adapté selon le rôle) ;
 //  3) fin du créneau + 20 min → saisir le score (C2, seulement si `scorable`). Texte honnête :
 //     le score compte au classement dès validation, et pour le niveau une fois confirmé en face
@@ -151,7 +162,7 @@ async function armMatchReminder(r: ReminderInput): Promise<void> {
       r,
       'match-reminder',
       'Tu joues toujours ? ⏳',
-      `${r.clubName} à ${r.time} · ${r.court}. Dans 15 min, l’annulation gratuite ne sera plus possible.`,
+      `${r.clubName} à ${r.time} · ${r.court}. ${CANCEL_WARNING_TEXT}`,
     );
   }
   await scheduleAt(
@@ -254,24 +265,41 @@ export async function scheduledEventReminderIds(): Promise<string[] | null> {
   return all.filter((n) => n.identifier.startsWith(EVENT_PREFIX)).map((n) => n.identifier.slice(EVENT_PREFIX.length));
 }
 
+type EventInput = { id: string; title: string; dateKey: string; place: string };
+
+// Texte du rappel d'un événement (comparé par resyncEventReminders pour détecter un changement).
+function eventReminderBody(ev: EventInput): string {
+  return ev.place ? `${ev.title} — ${ev.place}` : ev.title;
+}
+
+// Pose (ou remplace : identifiant stable) le rappel d'un événement. `dateKey` voyage dans `data` :
+// c'est lui qui permet à resyncEventReminders de voir qu'un événement a été REPORTÉ.
+function armEventReminder(ev: EventInput): Promise<string> {
+  return Notifications.scheduleNotificationAsync({
+    identifier: `${EVENT_PREFIX}${ev.id}`,
+    content: {
+      title: 'C’est demain 📅',
+      body: eventReminderBody(ev),
+      data: { kind: 'event', id: ev.id, dateKey: ev.dateKey },
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: new Date(eventReminderAt(ev.dateKey)),
+      channelId: ANDROID_CHANNEL,
+    },
+  });
+}
+
 // Pose le rappel d’un événement. false = refusé (permission, web, veille 18 h passée) ;
 // 'full' = budget de rappels d'agenda atteint (l'UI invite à en retirer un d'abord).
 // « Me rappeler » est un GESTE explicite : si la permission n’a jamais été demandée, la fenêtre
 // système s’ouvre ici — via l’unique helper (E1), jamais à froid.
-export async function scheduleEventReminder(ev: { id: string; title: string; dateKey: string; place: string }): Promise<boolean | 'full'> {
+export async function scheduleEventReminder(ev: EventInput): Promise<boolean | 'full'> {
   if (!canRemindEvent(ev.dateKey)) return false;
   if (!(await requestPushPermission())) return false;
   const existing = await scheduledEventReminderIds();
   if (existing && !existing.includes(ev.id) && existing.length >= MAX_EVENT_REMINDERS) return 'full';
-  await Notifications.scheduleNotificationAsync({
-    identifier: `${EVENT_PREFIX}${ev.id}`,
-    content: {
-      title: 'C’est demain 📅',
-      body: ev.place ? `${ev.title} — ${ev.place}` : ev.title,
-      data: { kind: 'event', id: ev.id },
-    },
-    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(eventReminderAt(ev.dateKey)) },
-  });
+  await armEventReminder(ev);
   return true;
 }
 
@@ -279,6 +307,34 @@ export async function scheduleEventReminder(ev: { id: string; title: string; dat
 export async function cancelEventReminder(id: string): Promise<void> {
   if (!isNative) return;
   await Notifications.cancelScheduledNotificationAsync(`${EVENT_PREFIX}${id}`);
+}
+
+// Recale les rappels DÉJÀ posés sur les événements tels que le serveur les décrit MAINTENANT (R-83) :
+// un événement REPORTÉ par l'opérateur gardait sinon son rappel à l'ANCIENNE date (« C'est demain »
+// la veille d'un jour où il ne se passe plus rien), un titre / lieu corrigé gardait l'ancien texte.
+// Rappel dont la date ou le texte a changé → reposé à la nouvelle veille 18 h ; plus rappelable
+// (veille déjà passée) ou permission retirée → retiré (le bouton repasse à « Me rappeler »). Ne
+// DEMANDE jamais la permission (resync à froid, E1). N'agit que sur les événements présents dans
+// `rows` (liste fraîche) : les ABSENTS relèvent de sweepEventReminders (liste complète seulement).
+export async function resyncEventReminders(rows: EventInput[]): Promise<void> {
+  if (!isNative) return;
+  const byId = new Map(rows.map((ev) => [ev.id, ev]));
+  const stale = (await Notifications.getAllScheduledNotificationsAsync()).filter((n) => {
+    if (!n.identifier.startsWith(EVENT_PREFIX)) return false;
+    const ev = byId.get(n.identifier.slice(EVENT_PREFIX.length));
+    if (!ev) return false;
+    // Rappel posé avant cette version (sans dateKey) : recalé une fois, par prudence.
+    const data = n.content.data as { dateKey?: string } | null;
+    return data?.dateKey !== ev.dateKey || n.content.body !== eventReminderBody(ev);
+  });
+  if (stale.length === 0) return;
+  const granted = await hasNotificationPermission();
+  await Promise.all(
+    stale.map((n) => {
+      const ev = byId.get(n.identifier.slice(EVENT_PREFIX.length))!;
+      return granted && canRemindEvent(ev.dateKey) ? armEventReminder(ev) : cancelEventReminder(ev.id);
+    }),
+  );
 }
 
 // Balaye les rappels ORPHELINS : un événement supprimé par l'opérateur côté serveur laisserait
@@ -297,9 +353,26 @@ export async function sweepEventReminders(liveIds: string[]): Promise<void> {
 // Route l’utilisateur vers l’écran concerné au lieu de rouvrir l’app là où elle en était.
 // `kind` couvre les rappels locaux (match-reminder / score-reminder) ET les push serveur
 // (notify-club) qui portent désormais un payload `data` (friend_request / reservation / tournament).
-type NotificationData = { kind?: string; id?: string; reservationId?: string; clubId?: string; dateKey?: string; time?: string };
+type NotificationData = {
+  kind?: string;
+  id?: string;
+  reservationId?: string;
+  clubId?: string;
+  dateKey?: string;
+  time?: string;
+  event?: string;
+};
 
-function routeForNotification(data: NotificationData | null | undefined): string | null {
+// Push « partie annulée » (notify-club : `kind: 'reservation'`, `event: 'cancelled'`, `id` = la résa) :
+// les rappels LOCAUX de cette partie sont retirés dès réception (app ouverte) ou au tap — sinon
+// « Ton match approche » sonnait pour un match qui n'a plus lieu (R-26). Reste le cas « push ignoré
+// et app jamais rouverte » : la resync suivante (ouverture de l'app) le rattrape.
+function dropCancelledReminders(data: NotificationData | null | undefined): void {
+  if (data?.kind === 'reservation' && data.event === 'cancelled' && data.id) void cancelMatchReminder(data.id);
+}
+
+// Exporté pour tests/notifications.entry.ts (routage vérifié sans monter de composant).
+export function routeForNotification(data: NotificationData | null | undefined): string | null {
   switch (data?.kind) {
     case 'friend_request':
       return '/amis';
@@ -316,7 +389,9 @@ function routeForNotification(data: NotificationData | null | undefined): string
     case 'club_tournament':
       // Push destiné au GÉRANT (nouvelle résa / annulation / demande de tournoi) → un seul
       // tap ouvre l’Espace Club au lieu de laisser naviguer Profil → Espace Club à la main.
-      return '/club-admin';
+      // `clubId` (R-47) : un gérant MULTI-CLUBS peut recevoir le push d'un club qui n'est pas son
+      // club actif — l'Espace Club le lit et propose de basculer. Ancien push sans clubId : inchangé.
+      return data.clubId ? `/club-admin?clubId=${encodeURIComponent(data.clubId)}` : '/club-admin';
     case 'tournament':
       return data.id ? `/competition/${data.id}` : '/competitions';
     case 'news':
@@ -346,7 +421,10 @@ function routeForNotification(data: NotificationData | null | undefined): string
 // abonnement permet à AppContext de resynchroniser le miroir dès réception. No-op sur le web.
 export function onPushReceivedInForeground(cb: () => void): () => void {
   if (!isNative) return () => {};
-  const sub = Notifications.addNotificationReceivedListener(() => cb());
+  const sub = Notifications.addNotificationReceivedListener((n) => {
+    dropCancelledReminders(n.request.content.data as NotificationData);
+    cb();
+  });
   return () => sub.remove();
 }
 
@@ -357,7 +435,9 @@ export function useNotificationTapRouter(push: (route: string) => void): void {
     if (!isNative) return;
     let active = true;
     const handle = (response: Notifications.NotificationResponse) => {
-      const route = routeForNotification(response.notification.request.content.data as NotificationData);
+      const data = response.notification.request.content.data as NotificationData;
+      dropCancelledReminders(data);
+      const route = routeForNotification(data);
       if (route && active) push(route);
     };
     const sub = Notifications.addNotificationResponseReceivedListener(handle);

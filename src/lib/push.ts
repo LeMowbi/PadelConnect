@@ -34,7 +34,7 @@ export async function requestPushPermission(): Promise<boolean> {
 // MUET (E1) : enregistre le jeton SEULEMENT si la permission est DÉJÀ accordée — appelé à froid à
 // chaque session et à chaque retour au premier plan, il ne demande plus rien. Après un accord via
 // requestPushPermission, l’appelant (usePushPermission) enregistre le jeton sans attendre.
-export async function registerPushToken(userId: string): Promise<void> {
+export async function registerPushToken(): Promise<void> {
   if (!isNative) return;
   try {
     if (!(await Notifications.getPermissionsAsync()).granted) return;
@@ -44,9 +44,9 @@ export async function registerPushToken(userId: string): Promise<void> {
     if (!token) return;
     // Un jeton = UN APPAREIL : la RPC (53) l'enregistre pour ce compte ET le retire de tout
     // autre profil — après une bascule de compte sur le même téléphone, l'ancien compte ne
-    // reçoit plus les push de cet appareil. Repli direct si la 53 n'est pas encore appliquée.
-    const { error } = await supabase.rpc('register_push_token', { p_token: token });
-    if (error) await supabase.from('profiles').update({ expo_push_token: token }).eq('id', userId);
+    // reçoit plus les push de cet appareil. (L'ancien repli par UPDATE direct de `profiles` est
+    // retiré : la 53 est en base, et il aurait laissé le jeton sur l'ancien compte — C-10.)
+    await supabase.rpc('register_push_token', { p_token: token });
   } catch {
     // pas de push (simulateur, permission refusée, réseau) — sans impact sur le reste de l’app
   }

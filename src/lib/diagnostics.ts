@@ -100,9 +100,25 @@ export async function fetchRecentErrors(limit = 5): Promise<RecentError[] | null
   }));
 }
 
+// Erreurs WEB hors rendu (R-72) : plafonds anti-rafale — une même erreur n'est renvoyée qu'une
+// fois par minute, et 20 envois au plus par session (une boucle d'erreurs dans un onglet laissé
+// ouvert ne doit pas remplir le journal ni déclencher le coupe-circuit serveur de la 94).
+const WEB_DEDUP_MS = 60_000;
+const WEB_MAX_PER_SESSION = 20;
+let globalLoggingInstalled = false;
+
 // Installe le gestionnaire GLOBAL d’erreurs JS (crashs non rattrapés) → on les journalise avant
-// que l’app ne réagisse. On chaîne le handler existant pour ne pas casser le comportement natif.
+// que l’app ne réagisse. Pose UNIQUE (un rechargement à chaud ne double pas les journaux).
+// Natif : on chaîne le handler existant d'ErrorUtils pour ne pas casser le comportement natif.
+// Web : ErrorUtils n'existe pas → écouteurs `error` / `unhandledrejection` de la fenêtre (sans eux,
+// une erreur hors rendu — gestionnaire de clic, promesse rejetée — n'était JAMAIS journalisée).
 export function installGlobalErrorLogging(): void {
+  if (globalLoggingInstalled) return;
+  globalLoggingInstalled = true;
+  if (Platform.OS === 'web') {
+    installWebErrorLogging();
+    return;
+  }
   const g = globalThis as unknown as {
     ErrorUtils?: {
       getGlobalHandler?: () => (e: unknown, fatal?: boolean) => void;
@@ -116,4 +132,25 @@ export function installGlobalErrorLogging(): void {
     logError(error, isFatal ? 'global:fatal' : 'global');
     previous?.(error, isFatal);
   });
+}
+
+function installWebErrorLogging(): void {
+  if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+  const lastSent = new Map<string, number>(); // message → dernier envoi (déduplication 60 s)
+  let sent = 0;
+  const report = (error: unknown, context: string) => {
+    const { message } = describe(error);
+    // « Script error. » = erreur d'un script d'une AUTRE origine, masquée par le navigateur :
+    // aucune information exploitable, on ne la journalise pas.
+    if (message === 'Script error.' || sent >= WEB_MAX_PER_SESSION) return;
+    const now = Date.now();
+    const key = `${context}|${message}`;
+    const last = lastSent.get(key);
+    if (last !== undefined && now - last < WEB_DEDUP_MS) return;
+    lastSent.set(key, now);
+    sent++;
+    logError(error, context);
+  };
+  window.addEventListener('error', (ev: ErrorEvent) => report(ev.error ?? ev.message, 'web:error'));
+  window.addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) => report(ev.reason, 'web:unhandledrejection'));
 }

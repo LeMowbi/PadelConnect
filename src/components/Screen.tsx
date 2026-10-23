@@ -94,8 +94,10 @@ export function Screen({
     </>
   );
 
+  // Clavier : 'padding' sur iOS ET Android — Android est désormais « edge-to-edge » (obligatoire) :
+  // la fenêtre n'est plus redimensionnée par l'OS, le clavier masquait champs et boutons (R-12).
   return (
-    <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top }]} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
       {scroll ? (
         <ScrollView
           ref={scrollTarget}
@@ -118,8 +120,9 @@ export function Screen({
 }
 
 // Largeur de lecture plafonnée : sur iPad (supportsTablet), une colonne pleine largeur
-// devient illisible — on centre le contenu à 640 pt max, sans effet sur iPhone.
-const MAX_CONTENT_WIDTH = 640;
+// devient illisible — on centre le contenu à 640 pt max, sans effet sur iPhone. Exporté : la
+// barre collante (StickyBar) s'aligne sur la même colonne (web sur ordinateur, iPad).
+export const MAX_CONTENT_WIDTH = 640;
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },

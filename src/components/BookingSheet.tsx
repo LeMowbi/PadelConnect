@@ -18,7 +18,7 @@ import { dateKeyLabel, slotTimestamp, type DayOption } from '@/lib/days';
 import { fcfa, perPlayerOf } from '@/lib/format';
 import { snapLevel, type LevelRange } from '@/lib/levelRange';
 import { priceForSlot } from '@/lib/pricing';
-import { useApp } from '@/store/AppContext';
+import { MAX_UPCOMING, useApp } from '@/store/AppContext';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 // Réservation rapide « en place » : une fiche qui monte du bas, sans changer de page.
@@ -183,15 +183,18 @@ export function BookingSheet({
     if (res.ok) {
       hapticSuccess();
       setDone(true);
-      // Résa créée mais rattachement des amis invités échoué : sans ce toast, la carte
-      // affiche « Avec X » alors que X n'a reçu ni push ni la résa chez lui.
+      // Résa créée mais au moins un ami invité non rattaché (réseau, numéro changé… — la cause n'est
+      // jamais précisée) : sans ce toast, la carte afficherait « Avec X » alors que X n'a reçu ni
+      // push ni la résa chez lui.
       if (res.partnersNotified === false) {
-        toast.show('Tes partenaires n’ont pas pu être prévenus dans l’app — envoie-leur le récap WhatsApp.', { icon: 'alert-circle' });
+        toast.show('Un ou plusieurs partenaires n’ont pas pu être prévenus dans l’app — envoie-leur le récap WhatsApp.', {
+          icon: 'alert-circle',
+        });
       }
     } else if (res.reason === 'limit') {
       // Même barrière anti-blocage que la fiche club (règle centralisée dans addReservation).
       hapticWarning();
-      toast.show('Tu as déjà trop de réservations à venir — joue-les d’abord 😊', { icon: 'alert-circle' });
+      toast.show(`Tu as déjà ${MAX_UPCOMING} réservations à venir (le maximum) — joue-les d’abord 😊`, { icon: 'alert-circle' });
     } else if (res.reason === 'network') {
       // Échec réseau/serveur : le terrain n’est PAS pris — réessayer suffit, on garde le choix.
       hapticWarning();
@@ -262,7 +265,8 @@ export function BookingSheet({
       {/* Scrim masqué des lecteurs d'écran (même règle que BottomSheet) : la fermeture
           accessible passe par le bouton « Fermer » libellé + onRequestClose. */}
       <Pressable style={styles.backdrop} onPress={requestClose} accessible={false} importantForAccessibility="no-hide-descendants" />
-      <KeyboardAvoidingView style={styles.wrapper} pointerEvents="box-none" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Clavier : 'padding' aussi sur Android (edge-to-edge : l'OS ne redimensionne plus — R-12). */}
+      <KeyboardAvoidingView style={styles.wrapper} pointerEvents="box-none" behavior={Platform.OS === 'web' ? undefined : 'padding'}>
         {/* accessibilityViewIsModal (même règle que BottomSheet) : le lecteur d'écran reste
             PIÉGÉ dans la feuille au lieu de balayer l'arrière-plan. */}
         <View accessibilityViewIsModal style={[styles.sheet, { paddingBottom: spacing.xxl + insets.bottom }]}>

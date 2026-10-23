@@ -14,18 +14,28 @@
 //      (garde du store avant ses lectures réseau) lit sans jamais rien ouvrir ;
 //  (4) CHEVAUCHEMENT : les 3 rappels d'une résa ont des identifiants STABLES (cancel-/soon-/score-)
 //      et toutes les écritures passent par une file unique → deux resyncs qui se chevauchent ne
-//      dupliquent rien, seule la dernière demandée s'applique, l'ordre des appels est respecté.
+//      dupliquent rien, seule la dernière demandée s'applique, l'ordre des appels est respecté ;
+//  (5) CANAL Android « default » sur les rappels locaux (R-88) ; texte et marge iOS de l'annulation
+//      gratuite (R-90 : la variante Android, 45 min, dépend de Platform au chargement du module) ;
+//  (6) PUSH « partie annulée » reçu au premier plan → rappels de la partie retirés (R-26) ; routage
+//      gérant multi-clubs vers l'Espace Club du BON club (R-47) ;
+//  (7) RESYNC D'AGENDA (R-83) : événement reporté → rappel reposé à la nouvelle veille ; plus
+//      rappelable → retiré ; inchangé → intact ; jamais de fenêtre de permission.
 
 import * as Notifications from 'expo-notifications';
 import {
   cancelEventReminder,
   cancelMatchReminder,
   canRemindEvent,
+  eventReminderAt,
   hasNotificationPermission,
   IOS_LOCAL_NOTIFICATION_LIMIT,
   MAX_EVENT_REMINDERS,
   MAX_SCHEDULED_RESERVATIONS,
+  onPushReceivedInForeground,
   REMINDERS_PER_RESERVATION,
+  resyncEventReminders,
+  routeForNotification,
   scheduleEventReminder,
   scheduleMatchReminder,
   scoreReminderAt,
@@ -34,10 +44,11 @@ import {
 } from '@/lib/notifications';
 import { registerPushToken, requestPushPermission } from '@/lib/push';
 import { dayKey, DAY_MS, HOUR_MS, MINUTE_MS } from '@/lib/days';
+import { CANCEL_DEADLINE_MS } from '@/lib/reservations';
 import { SESSION_MIN } from '@/lib/slots';
 
 // État des doublures (cf. tests/notifications.test.mjs).
-type Stub = { permission: { granted: boolean; canAskAgain: boolean }; prompts: number };
+type Stub = { permission: { granted: boolean; canAskAgain: boolean }; prompts: number; received: ((n: unknown) => void)[] };
 const stub = (globalThis as unknown as { __notifs: Stub }).__notifs;
 const serverStub = (globalThis as unknown as { __supabase: { tokenWrites: number } }).__supabase;
 
@@ -87,6 +98,24 @@ const SCORE_TEXT = 'Saisis le score — il compte pour le classement et, une foi
 await scheduleMatchReminder(reminder('r1', now + 10 * HOUR_MS, { isOwner: true, scorable: true }));
 eq(await kindsOf('r1'), ['match-reminder', 'match-reminder', 'score-reminder'], 'auteur scorable : annulation + approche + score');
 const score1 = (await scheduled()).find((n) => n.identifier === 'score-r1');
+const cancel1 = (await scheduled()).find((n) => n.identifier === 'cancel-r1');
+const triggerOf = (n: Notifications.NotificationRequest | undefined) =>
+  n?.trigger as { date?: Date; channelId?: string } | null | undefined;
+eq(
+  (await scheduled()).filter((n) => n.identifier.endsWith('-r1')).map((n) => triggerOf(n)?.channelId),
+  ['default', 'default', 'default'],
+  'canal Android : les 3 rappels de match vont dans « Rappels & alertes » (default), jamais « Miscellaneous »',
+);
+eq(
+  triggerOf(cancel1)?.date?.getTime(),
+  now + 10 * HOUR_MS - CANCEL_DEADLINE_MS - 15 * MINUTE_MS,
+  'annulation gratuite (iOS, heure exacte) : 15 min avant la limite des 5 h',
+);
+eq(
+  cancel1?.content.body,
+  'Padelta à 18:00 · Terrain 1. Dans 15 min, l’annulation gratuite ne sera plus possible.',
+  'annulation gratuite (iOS) : « Dans 15 min » reste vrai (rappel à l’heure exacte)',
+);
 check(!!score1, 'score : identifiant STABLE score-{id}');
 eq(score1?.content.body, SCORE_TEXT, 'score : texte décidé par le porteur');
 eq(score1?.content.title, 'Alors, ce match ? 🎾', 'score : titre « Alors, ce match ? »');
@@ -201,7 +230,7 @@ eq((await scheduled()).length, 8, 'sans permission : la resync ne pose rien');
 eq(stub.prompts, 0, 'sans permission : la resync n’ouvre JAMAIS la fenêtre système (muette)');
 check(!(await hasNotificationPermission()), 'sans permission : hasNotificationPermission → false (le store saute ses lectures réseau)');
 eq(stub.prompts, 0, 'hasNotificationPermission : lit sans jamais ouvrir la fenêtre système');
-await registerPushToken('user-1');
+await registerPushToken();
 eq(serverStub.tokenWrites, 0, 'sans permission : registerPushToken n’enregistre rien et ne demande rien');
 eq(stub.prompts, 0, 'registerPushToken : muet');
 
@@ -211,7 +240,7 @@ check(await hasNotificationPermission(), 'permission accordée : hasNotification
 eq(stub.prompts, 1, 'requestPushPermission : la fenêtre système s’est ouverte UNE fois');
 check(await requestPushPermission(), 'requestPushPermission : déjà accordée → true');
 eq(stub.prompts, 1, 'requestPushPermission : déjà accordée → sans rouvrir la fenêtre');
-await registerPushToken('user-1');
+await registerPushToken();
 eq(serverStub.tokenWrites, 1, 'permission accordée : le jeton est enregistré');
 
 // Refus définitif : rien ne s'ouvre, false honnête (l'écran mène aux Réglages).
@@ -229,6 +258,62 @@ eq(stub.prompts, 2, 'agenda : la fenêtre s’est ouverte via requestPushPermiss
 await cancelEventReminder('e8');
 eq(await scheduleEventReminder(ev), true, 'agenda : une place libérée → rappel posé');
 eq(stub.prompts, 2, 'agenda : permission déjà accordée → la fenêtre ne se rouvre pas');
+
+// ── (6) Push « partie annulée » au premier plan → rappels retirés (R-26) ─────
+await scheduleMatchReminder(reminder('rc', now + 10 * HOUR_MS, { isOwner: true, scorable: true }));
+await scheduleMatchReminder(reminder('rk', now + 10 * HOUR_MS, { isOwner: true, scorable: true }));
+let refreshed = 0;
+const unsubscribe = onPushReceivedInForeground(() => refreshed++);
+const deliver = (data: Record<string, unknown>) => stub.received.forEach((cb) => cb({ request: { content: { data } } }));
+deliver({ kind: 'reservation', id: 'rk' }); // push ordinaire sur une partie (confirmation…) : rien à retirer
+deliver({ kind: 'reservation', id: 'rc', event: 'cancelled' });
+await cancelMatchReminder('aucune'); // file unique : attend la fin du retrait déclenché par le push
+eq(await kindsOf('rc'), [], 'push « partie annulée » reçu : les rappels de la partie sont retirés');
+eq((await kindsOf('rk')).length, 3, 'push ordinaire : les rappels de la partie restent');
+eq(refreshed, 2, 'push reçu : le store est toujours prévenu (resync du miroir)');
+unsubscribe();
+await cancelMatchReminder('rk');
+
+// Routage du tap (R-47) : un gérant multi-clubs atterrit sur l'Espace Club du club CONCERNÉ.
+eq(
+  routeForNotification({ kind: 'club_reservation', clubId: 'district club' }),
+  '/club-admin?clubId=district%20club',
+  'tap gérant : clubId transmis (encodé)',
+);
+eq(routeForNotification({ kind: 'club_tournament' }), '/club-admin', 'tap gérant : ancien push sans clubId → Espace Club (inchangé)');
+eq(
+  routeForNotification({ kind: 'reservation', id: 'rc', event: 'cancelled' }),
+  '/reservations',
+  'tap « partie annulée » : Mes réservations',
+);
+
+// ── (7) Resync des rappels d'agenda (R-83) ────────────────────────────────────
+const inThreeDays = dayKey(new Date(now + 3 * DAY_MS));
+const inFiveDays = dayKey(new Date(now + 5 * DAY_MS));
+const today = dayKey(new Date(now));
+const evTrigger = async (id: string) => triggerOf((await scheduled()).find((n) => n.identifier === `event-${id}`));
+await cancelEventReminder('e7'); // place libre dans le budget d'agenda
+eq(await scheduleEventReminder({ id: 'rep', title: 'Open', dateKey: inThreeDays, place: 'Padelta' }), true, 'agenda : rappel posé');
+eq((await evTrigger('rep'))?.channelId, 'default', 'agenda : canal Android « default »');
+const prompts = stub.prompts;
+await resyncEventReminders([{ id: 'rep', title: 'Open', dateKey: inThreeDays, place: 'Padelta' }]);
+eq((await evTrigger('rep'))?.date?.getTime(), eventReminderAt(inThreeDays), 'resync : événement inchangé → rappel intact');
+await resyncEventReminders([{ id: 'rep', title: 'Open', dateKey: inFiveDays, place: 'Padelta' }]);
+eq(
+  (await evTrigger('rep'))?.date?.getTime(),
+  eventReminderAt(inFiveDays),
+  'resync : événement REPORTÉ → rappel reposé à la nouvelle veille 18 h',
+);
+await resyncEventReminders([{ id: 'rep', title: 'Open de Cocody', dateKey: inFiveDays, place: 'Padelta' }]);
+eq(
+  (await scheduled()).find((n) => n.identifier === 'event-rep')?.content.body,
+  'Open de Cocody — Padelta',
+  'resync : titre corrigé → texte du rappel mis à jour',
+);
+await resyncEventReminders([{ id: 'rep', title: 'Open de Cocody', dateKey: today, place: 'Padelta' }]);
+eq(await evTrigger('rep'), undefined, 'resync : avancé à aujourd’hui (veille passée) → rappel retiré, jamais à l’ancienne date');
+check(!!(await evTrigger('e1')), 'resync : un événement absent de la liste n’est pas touché (relève du balayage)');
+eq(stub.prompts, prompts, 'resync : n’ouvre jamais la fenêtre de permission');
 
 if (failed) {
   console.error(`\n${failed} test(s) en échec`);

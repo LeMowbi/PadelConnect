@@ -31,6 +31,12 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
+      "blockedPermissions": [
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -81,11 +87,18 @@
         "expo-image-picker",
         {
           "photosPermission": "PadelConnect accède à tes photos pour ta photo de profil et, côté gérant, les photos de ton club.",
-          "cameraPermission": false
+          "cameraPermission": false,
+          "microphonePermission": false
         }
       ],
       "expo-image",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#0C6A57"
+        }
+      ],
       [
         "expo-calendar",
         {

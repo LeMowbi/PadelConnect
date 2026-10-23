@@ -86,7 +86,7 @@ export function usePushPermission() {
     askingRef.current = true;
     setAsking(true);
     const ok = await requestPushPermission(); // unique point de demande (E1) — ne rejette jamais
-    if (ok && userId) await registerPushToken(userId);
+    if (ok && userId) await registerPushToken();
     const fresh = await readPushStatus();
     askingRef.current = false;
     setAsking(false);

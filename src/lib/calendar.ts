@@ -2,16 +2,26 @@
 // événement » pré-remplie (createEventInCalendarAsync) : AUCUNE permission requise — sur
 // iOS 17+, l’ancienne voie programmatique (requestCalendarPermissionsAsync + création
 // directe) échouait, l’accès « complet » au calendrier n’étant plus accordé pareil.
-// No-op silencieux sur le web. Renvoie un statut pour que l’UI affiche un retour clair.
-
-import * as Calendar from 'expo-calendar';
+// Indisponible sur le web (`calendarAvailable` = false → l’UI masque le bouton). Renvoie un
+// statut pour que l’UI affiche un retour clair.
+//
+// ⚠️ SDK 56 : l’API historique a été DÉPLACÉE. Importée depuis « expo-calendar » (racine), elle
+// LÈVE une erreur (stub de dépréciation) → « Calendrier indisponible » à CHAQUE tap, iPhone
+// compris (R-10). La vraie implémentation vit dans « expo-calendar/legacy » (même remède que
+// contactsPicker.ts).
+import * as Calendar from 'expo-calendar/legacy';
 import { Platform } from 'react-native';
 import { MINUTE_MS } from './days';
+import { logError } from './diagnostics';
 import { SESSION_MIN } from './slots';
 
-const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
+// Le calendrier ne s’ouvre qu’en natif : sur le web, aucun bouton ne doit le promettre (R-73).
+export const calendarAvailable = Platform.OS === 'ios' || Platform.OS === 'android';
 
-export type CalendarResult = 'added' | 'canceled' | 'unavailable';
+// 'added' = enregistré (iOS le dit) ; 'opened' = fiche ouverte sans savoir si elle a été
+// enregistrée (Android ne renvoie jamais le choix de l’utilisateur) → message NEUTRE ;
+// 'canceled' = fiche refermée par l’utilisateur ; 'unavailable' = web ou échec.
+export type CalendarResult = 'added' | 'opened' | 'canceled' | 'unavailable';
 
 export async function addReservationToCalendar(input: {
   clubName: string;
@@ -22,7 +32,7 @@ export async function addReservationToCalendar(input: {
   // appelants historiques — l'événement agenda doit refléter la vraie durée (un 1h ≠ un bloc 1h30).
   durationMin?: number;
 }): Promise<CalendarResult> {
-  if (!isNative) return 'unavailable';
+  if (!calendarAvailable) return 'unavailable';
   try {
     const res = await Calendar.createEventInCalendarAsync({
       title: `Padel · ${input.clubName}`,
@@ -36,11 +46,13 @@ export async function addReservationToCalendar(input: {
       notes: `Terrain : ${input.court}. Réservé via PadelConnect (heure d’Abidjan).`,
       alarms: [{ relativeOffset: -120 }], // rappel 2h avant (pré-rempli, modifiable dans la fiche)
     });
-    // iOS distingue « saved »/« canceled » ; Android renvoie « done » sans détail (le calendrier
-    // système s’est ouvert pré-rempli — l’utilisateur a enregistré ou non, on reste neutre).
-    if (res.action === 'canceled') return 'canceled';
-    return 'added';
-  } catch {
+    // Android renvoie TOUJOURS « done » (le calendrier système s’est ouvert pré-rempli, l’OS ne
+    // dit pas si l’événement a été enregistré) → 'opened', message neutre. iOS distingue
+    // « saved » de « canceled » / « done » (fiche simplement refermée).
+    if (Platform.OS === 'android') return 'opened';
+    return res.action === 'saved' ? 'added' : 'canceled';
+  } catch (e) {
+    logError(e, 'calendar.addReservation');
     return 'unavailable';
   }
 }

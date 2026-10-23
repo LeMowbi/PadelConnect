@@ -15,13 +15,18 @@ type RawContact = { name?: string | null; phoneNumbers?: { number?: string | nul
 
 export const contactsSupported = Platform.OS === 'ios' || Platform.OS === 'android';
 
-// Ouvre le sélecteur de contacts natif. Renvoie { name, phone } ou null (annulation / refus /
-// contact sans numéro / plateforme non supportée). Ne lève jamais : tout échec = null.
-export async function pickContact(): Promise<PickedContact | null> {
+// Ouvre le sélecteur de contacts natif. Renvoie { name, phone }, 'denied' (Android : accès aux
+// contacts refusé → l'écran invite à l'autoriser ou à taper le numéro), ou null (annulation /
+// contact sans numéro / plateforme non supportée / échec). Ne lève jamais.
+export async function pickContact(): Promise<PickedContact | 'denied' | null> {
   if (!contactsSupported) return null;
   try {
-    // Le sélecteur système gère lui-même l’autorisation ponctuelle sur iOS (accès limité à la
+    // iOS : le sélecteur système gère lui-même l’autorisation ponctuelle (accès limité à la
     // sélection choisie), plus respectueux de la vie privée qu’une lecture du carnet entier.
+    // Android (R-11) : au retour du sélecteur, le module RELIT le contact choisi dans le carnet —
+    // sans READ_CONTACTS accordée, cette lecture lève (plantage probable). On demande donc la
+    // permission AVANT d'ouvrir le sélecteur (fenêtre système seulement si jamais accordée).
+    if (Platform.OS === 'android' && !(await Contacts.requestPermissionsAsync()).granted) return 'denied';
     const picker = (Contacts as { presentContactPickerAsync?: () => Promise<RawContact | null> }).presentContactPickerAsync;
     if (typeof picker !== 'function') return null;
     const contact = await picker();

@@ -22,6 +22,14 @@ export function dayKey(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+// Délai (ms) jusqu’au PROCHAIN minuit d’Abidjan (UTC) + 1 s de marge : la minuterie de
+// useTodayKey se réveille alors à coup sûr APRÈS la bascule (une horloge en avance d’un poil ne
+// recalcule pas la veille). Pile minuit → le minuit SUIVANT (jamais 0, pas de boucle serrée).
+export function msUntilNextUtcMidnight(now: number): number {
+  const d = new Date(now);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1) - now + 1000;
+}
+
 // `from` permet d’injecter une date de référence (tests déterministes) ; par défaut,
 // maintenant. Génère n jours consécutifs SANS trou — les deux premiers portent un
 // libellé amical AVEC le numéro du jour (« Aujourd’hui 12 », « Demain 13 »), les suivants

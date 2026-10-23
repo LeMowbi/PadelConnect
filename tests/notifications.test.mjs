@@ -20,6 +20,7 @@ const stubs = {
       permission: { granted: true, canAskAgain: true },
       prompts: 0,
       seq: 0,
+      received: [], // écouteurs « push reçu au premier plan » (déclenchables par le test)
     });
     export const SchedulableTriggerInputTypes = { DATE: 'date' };
     export const AndroidImportance = { HIGH: 4 };
@@ -43,7 +44,10 @@ const stubs = {
     export async function cancelScheduledNotificationAsync(id) {
       S.scheduled = S.scheduled.filter((n) => n.identifier !== id);
     }
-    export function addNotificationReceivedListener() { return { remove() {} }; }
+    export function addNotificationReceivedListener(cb) {
+      S.received.push(cb);
+      return { remove() { S.received = S.received.filter((x) => x !== cb); } };
+    }
     export function addNotificationResponseReceivedListener() { return { remove() {} }; }
     export async function getLastNotificationResponseAsync() { return null; }
     export async function getExpoPushTokenAsync() { return { data: 'ExponentPushToken[test]' }; }
@@ -57,7 +61,6 @@ const stubs = {
     const S = (globalThis.__supabase = { tokenWrites: 0 });
     export const supabase = {
       async rpc() { S.tokenWrites++; return { error: null }; },
-      from() { return { update() { return { eq: async () => ({ error: null }) }; } }; },
     };
   `,
 };

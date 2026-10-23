@@ -64,7 +64,8 @@ export function BottomSheet({
             accessible passe par le bouton « Fermer » libellé + onRequestClose. */}
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessible={false} importantForAccessibility="no-hide-descendants" />
       </Animated.View>
-      <KeyboardAvoidingView style={styles.wrapper} pointerEvents="box-none" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Clavier : 'padding' aussi sur Android (edge-to-edge : l'OS ne redimensionne plus — R-12). */}
+      <KeyboardAvoidingView style={styles.wrapper} pointerEvents="box-none" behavior={Platform.OS === 'web' ? undefined : 'padding'}>
         {/* accessibilityViewIsModal : le lecteur d'écran reste PIÉGÉ dans la feuille (il ne
             balaye pas le contenu d'arrière-plan derrière elle). Le titre porte le rôle « header ». */}
         <Animated.View

@@ -30,7 +30,7 @@ function weeklyRows(reservations: Resa[], week: string) {
 
 // Semaine du lundi 8 juin 2026. Bornes : dimanche 14 23:59 dedans, lundi 15 00:00 dehors.
 const WEEK = '2026-06-08';
-const ts = (d: number, h: number, m = 0) => new Date(2026, 5, d, h, m).getTime();
+const ts = (d: number, h: number, m = 0) => Date.UTC(2026, 5, d, h, m); // heure d'Abidjan = UTC, quel que soit le fuseau
 const resas: Resa[] = [
   { id: 'r1', clubId: 'padelta', startsAt: ts(9, 18, 0), price: 30000, played: true }, // mardi prime
   { id: 'r2', clubId: 'padelta', startsAt: ts(10, 10, 30), price: 10000, played: true }, // mercredi creuse
