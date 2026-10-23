@@ -65,6 +65,15 @@
 - [x] iOS `bundleIdentifier` = `ci.padelco.app` (IMMUABLE : l'app est publiée sous cet identifiant). ✅
 - [ ] Android `package` = `ci.padelco.app` (IMMUABLE dès le premier envoi Play).
 - [ ] `version` = **1.0.3** pour le build #69 (passer `expo.version` AVANT le build — la 1.0.2 est publiée, App Store Connect refuse un binaire 1.0.2 ; `docs/STORE-LISTING.md` §0) ; `ios.buildNumber` s'auto-incrémente à chaque build (profil `production` d'eas.json — valeur courante : voir `app.json`) ; `android.versionCode` vaut 1 dans `app.json` et `autoIncrement` le monte AVANT chaque build de production : le **premier `.aab` porte le versionCode 2** (commiter le bump).
+- [ ] **Chronométrage sur le binaire installé** (`docs/STORE-LISTING.md` §0) : parcours rapide (app
+      connectée → onglet Réserver → réservation confirmée) en moins de 2 minutes sur le #69, AVANT de
+      pousser le sous-titre « en 2 min » et de laisser le site promettre « réservé en 2 minutes ».
+      Sinon : sous-titre de repli (STORE-LISTING §1.2 — le sous-titre ne change qu'avec une nouvelle
+      version : à trancher AVANT la soumission) et site passé à « en quelques gestes » (EN : « in a
+      few taps », le titre anglais « booked in 2 minutes » compris) — `site/og.svg` corrigé PUIS
+      `site/og.png` régénéré depuis lui (seule image d'aperçu servie aux liens partagés ; commande
+      dans STORE-LISTING §0) —, puis redéployé. Les textes de
+      l'app, eux, ne portent plus de durée (« en quelques gestes » dès le #69).
 
 ## 5. Fabriquer et envoyer (commandes EAS, depuis un ordinateur)
 

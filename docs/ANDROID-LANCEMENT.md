@@ -56,25 +56,18 @@ prend effet qu'au **prochain build Android** (l'APK de test actuel ouvre encore 
 lancement Play : le lien de l'e-mail passe d'abord par Supabase (`/verify`) puis redirige vers
 `padelconnectci.com/auth-callback` — si Chrome garde la main, la page web reste un repli honnête.
 
-## 5) Fiche Play Store — textes prêts à coller
+## 5) Fiche Play Store — textes et formulaires
 
-- **Nom** : PadelConnect CI
-- **Description courte (80 car. max)** :
-  « Réserve ton terrain de padel à Abidjan, rejoins des matchs et des tournois. »
-- **Description longue** :
-  « PadelConnect, c'est le padel à Abidjan dans ta poche :
-  • Réserve un terrain en quelques secondes dans les meilleurs clubs de la ville.
-  • Rejoins des matchs ouverts à ton niveau, ou crée le tien et partage les frais.
-  • Inscris-toi aux tournois, suis ton classement et fais évoluer ton niveau match après match.
-  • Trouve un coach, réserve un cours, suis les annonces de ton club.
-  Les clubs partenaires gèrent leurs terrains, leurs horaires et leurs réservations depuis le
-  même outil. Rejoins la communauté du padel ivoirien ! 🎾 »
+- **Titre, description courte et description longue** : SOURCE UNIQUE `docs/STORE-LISTING.md`
+  §2.1-2.3 (comptées, sans emoji, conditions du §0 à cocher avant de pousser). Ne pas les recopier
+  ici : une seconde version finirait par diverger.
 - **Catégorie** : Sports. **Contact** : contact@padelconnectci.com ·
   site `https://padelconnectci.com` · confidentialité `https://padelconnectci.com/privacy` ·
   **suppression de compte** (champ « URL de suppression du compte », obligatoire) :
   `https://padelconnectci.com/supprimer-mon-compte`.
-- **Captures d'écran** : à prendre sur l'APK de test (accueil, réservation, tournois, classement,
-  fiche club) — minimum 2, idéal 6-8, format téléphone.
+- **Captures d'écran et image de présentation** : plan, légendes et formats dans
+  `docs/STORE-LISTING.md` §3 (source unique — pas de capture du Classement : aucun nom de vrai
+  joueur à l'écran). À prendre sur l'APK de test.
 - **Questionnaire « Sécurité des données »** (Play Console → Contenu de l'application) — miroir de
   l'App Privacy iOS (`docs/APP-STORE-CONFORMITE.md` §2) :
   - **Collecte** : oui. **Partage** avec des tiers : **non** — les prestataires (Supabase, Expo,

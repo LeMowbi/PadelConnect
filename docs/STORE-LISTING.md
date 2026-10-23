@@ -50,29 +50,54 @@ Ces textes décrivent le **binaire #69**. Ils ne doivent partir qu'une fois ces 
       espaces insécables).
 - [ ] `app.json` → `expo.version` passé à **`1.0.3`** AVANT le build #69 (la 1.0.2 est publiée :
       App Store Connect refuse un binaire 1.0.2). `autoIncrement` ne touche que `buildNumber`.
-- [ ] Le parcours rapide tient réellement en **moins de 2 minutes** sur le #69 (chronométré : ouvrir
-      l'app connectée → onglet Réserver → réservation confirmée). Sinon le sous-titre « en 2 min » est
-      une promesse invérifiable (Apple 2.3.7) : prendre le sous-titre de repli du §1.2. C'est la
-      SEULE promesse de durée de la fiche : les légendes des captures (§3) n'en portent aucune, et
-      la capture 3 montre le tunnel guidé, pas ce parcours rapide. Le **site** porte la même promesse
-      (« réservé en 2 minutes » : `site/index.html` titre et description, `site/get.html`,
-      `site/invite.html`, `site/og.svg`) : même chronométrage, sinon la remplacer partout par « en
-      quelques gestes » et redéployer `site/`. ⚠️ L'**app** la porte aussi, et ces textes-là sont
-      FIGÉS dans le binaire : message WhatsApp de parrainage (`src/app/parrainage.tsx`) et
-      d'invitation d'un ami (`src/app/(tabs)/amis.tsx`), tous deux envoyés à des non-utilisateurs,
-      et pied de page du profil (`src/app/(tabs)/profil.tsx`) — « en 2 minutes ». Leur sort se
-      décide **AVANT de lancer le #69** : chronométrer le même parcours sur un build de
-      préproduction (natif, compte joueur connecté), sinon passer d'office ces trois textes à « en
-      quelques gestes » avant le build. Un chronométrage raté APRÈS le build laisse ces trois
-      promesses en circulation jusqu'au build suivant : le noter alors dans ce fichier et les
-      corriger au #70. (« Découvrir les règles en 2 minutes » de l'accueil et de
-      `decouvrir.tsx` est un temps de LECTURE, hors de cette condition.)
+- [ ] Le parcours rapide tient réellement en **moins de 2 minutes** sur le **#69 installé**
+      (chronométré : ouvrir l'app connectée → onglet Réserver → réservation confirmée). La promesse
+      de durée ne vit plus que dans deux textes hors du binaire : le sous-titre App Store « en 2 min »
+      (§1.2 — modifiable **seulement avec une nouvelle version**, comme le nom : son sort se décide
+      AVANT la soumission du #69, sinon il reste en ligne jusqu'à la version suivante) et le **site**
+      (modifiable sans build — « réservé en 2 minutes » : `site/index.html` titre FR **et EN**
+      « booked in 2 minutes » et description, `site/get.html` description et accroche,
+      `site/invite.html` description, aperçus `og:`/`twitter:` et accroche, `site/og.svg` et
+      **`site/og.png`**). Sinon le sous-titre est une promesse invérifiable (Apple 2.3.7) : prendre
+      le sous-titre de repli du §1.2, remplacer la promesse du site partout (FR : « en quelques
+      gestes », EN : « in a few taps », comme `hero.mockup.tournoisLigne`) et redéployer `site/`.
+      ⚠️ `site/og.png` est la SEULE image d'aperçu réellement servie (`og:image` et `twitter:image`
+      de `index`, `get` et `invite` — WhatsApp et iMessage ne lisent pas le SVG) : c'est un RENDU de
+      `site/og.svg`, que corriger le SVG ne change pas. Le régénérer après la correction (commande
+      en fin de section), sinon chaque lien partagé affiche encore « réservé en 2 minutes ». C'est
+      la SEULE promesse de durée de la fiche : les légendes des captures (§3) n'en portent aucune,
+      et la capture 3 montre le tunnel guidé, pas ce parcours rapide.
+- [x] Textes de l'app FIGÉS dans le binaire : **TRAITÉS avant le #69**. Aucun appareil n'étant
+      disponible pour chronométrer un build de préproduction, les textes qui promettaient une durée
+      (« en 2 minutes », « en quelques secondes ») sont passés d'office à « en quelques gestes » :
+      message WhatsApp de parrainage (`src/app/parrainage.tsx`), d'invitation d'un ami
+      (`src/app/(tabs)/amis.tsx`) et de partage d'une fiche club (`src/lib/share.ts`), tous trois
+      envoyés à des non-utilisateurs, pied de page du profil (`src/app/(tabs)/profil.tsx`) et
+      argumentaire gérant (`src/app/pourquoi.tsx`). `tests/promessesTextes.test.ts` verrouille la
+      règle : plus aucune promesse de durée de réservation dans `src/`. Les variantes navigateur de
+      `site/get.html` et de `site/invite.html` (parcours web jamais chronométré) ont aussi perdu la
+      leur. (« Découvrir les règles en 2 minutes » de l'accueil et de `decouvrir.tsx` est un temps
+      de LECTURE, hors de cette condition.)
 - [ ] Mots-clés de quartier (`cocody`, `marcory`) et phrase de quartiers de la description Play :
       au moins un club **actif** (ni « Bientôt » ni masqué) dans chaque quartier cité, vérifié dans
       l'app le jour de la soumission. Sinon prendre la variante « sans quartiers » (§1.4) et retirer
       le quartier de la phrase Play.
 - [ ] Fiche Play seulement : identifiants **FCM** posés (sinon aucune alerte n'arrive sur Android et
       les phrases sur les alertes seraient fausses).
+
+**Régénérer l'image d'aperçu `site/og.png`** (rendu 1200×630 de `site/og.svg`, même moteur que
+`scripts/gen-icons.cjs`, installé hors dépôt : `package.json` intact ; depuis la racine du dépôt,
+puis redéployer `site/`) :
+
+```bash
+T=$(mktemp -d) && npm i --prefix "$T" --no-audit --no-fund @resvg/resvg-js@2.6.2 &&
+  NODE_PATH="$T/node_modules" node -e "const{Resvg}=require('@resvg/resvg-js');const fs=require('fs');fs.writeFileSync(process.argv[1],new Resvg(fs.readFileSync('site/og.svg','utf8'),{fitTo:{mode:'width',value:1200}}).render().asPng())" site/og.png
+file site/og.png   # PNG image data, 1200 x 630
+```
+
+Le `og.png` actuel est décalé d'environ 40 px vers le haut, avec une bande unie en bas : ce rendu,
+fidèle au SVG, le répare au passage. Un aperçu déjà mis en cache par une messagerie peut garder un
+temps l'ancienne image après le redéploiement.
 
 ---
 
@@ -107,7 +132,7 @@ Réserve ton terrain de padel
 <!-- champ:ios.promo -->
 
 ```text
-Nouveau : 10 réservations créées et jouées = −50 % sur ton prochain match, jusqu’à 5 000 FCFA, offert par PadelConnect. Montre ton code au club.
+Nouveau : 10 réservations créées et jouées (hors cours) = −50 % sur ton prochain match, jusqu’à 5 000 FCFA, offert par PadelConnect. Montre ton code au club.
 ```
 
 ### 1.4 Mots-clés (100 OCTETS max, virgules sans espaces)
@@ -152,12 +177,12 @@ Pour les joueurs
 • Ajoute ton match au calendrier de ton téléphone en un geste, et un rappel te prévient avant de jouer.
 • Créneau complet ? Mets-toi sur la liste d’attente : tu es prévenu dès qu’un terrain se libère.
 • Annulation possible jusqu’à 5h avant le match.
-• Fidélité : 10 réservations créées et jouées = −50 % sur ton prochain match, jusqu’à 5 000 FCFA, offert par PadelConnect. Tu montres ton code au club, il applique la remise.
+• Fidélité : 10 réservations créées et jouées (hors cours) = −50 % sur ton prochain match, jusqu’à 5 000 FCFA, offert par PadelConnect. Tu montres ton code au club, il applique la remise.
 • Cours avec un coach du club : le terrain n’est réservé que si le coach accepte, puis le club confirme. Des cours collectifs sont aussi à rejoindre.
 
 Matchs ouverts et niveau
 • Ouvre ton match en 1 contre 1 ou en 2 contre 2, avec la fourchette de niveau que tu veux : les joueurs concernés le rejoignent.
-• Rejoins les matchs ouverts des autres, avec la fiabilité de l’organisateur dès qu’il a assez de parties jouées.
+• Rejoins les matchs ouverts des autres, avec la fiabilité de l’organisateur dès qu’il a assez de matchs ou de cours individuels joués.
 • Un court quiz fixe ton niveau de départ, puis ton niveau évolue avec les matchs dont l’adversaire a confirmé le score, et avec les tournois officiels.
 • Suis tes clubs et tes partenaires habituels : active les alertes et tu es prévenu quand un match à ton niveau s’ouvre dans un de tes clubs, ou quand un de tes partenaires ouvre un match.
 • Amis par demande et acceptation, ajout depuis tes contacts. Tu peux signaler un avis ou un match, et bloquer son auteur.
@@ -187,7 +212,7 @@ Ton prochain match commence ici : ouvre l’onglet Réserver et choisis ton cr�
 <!-- champ:ios.whatsnew -->
 
 ```text
-• Fidélité : 10 réservations créées et jouées = −50 % sur ton prochain match, jusqu’à 5 000 FCFA, offert par PadelConnect.
+• Fidélité : 10 réservations créées et jouées (hors cours) = −50 % sur ton prochain match, jusqu’à 5 000 FCFA, offert par PadelConnect.
 • Bienvenue : dès l’inscription, choisis tes clubs, active les alertes de matchs à ton niveau et les notifications.
 • Après un match avec un partenaire inscrit, un rappel t’invite à saisir le score.
 • Clubs : le planning se consulte et se bloque jusqu’à 60 jours à l’avance.
@@ -247,12 +272,12 @@ Pour les joueurs
 • Ajoute ton match au calendrier de ton téléphone en un geste, et un rappel te prévient avant de jouer.
 • Créneau complet ? Mets-toi sur la liste d’attente : tu es prévenu dès qu’un terrain se libère.
 • Annulation possible jusqu’à 5h avant le match.
-• Fidélité : 10 réservations créées et jouées = −50 % sur ton prochain match, jusqu’à 5 000 FCFA, offert par PadelConnect. Tu montres ton code au club, il applique la remise.
+• Fidélité : 10 réservations créées et jouées (hors cours) = −50 % sur ton prochain match, jusqu’à 5 000 FCFA, offert par PadelConnect. Tu montres ton code au club, il applique la remise.
 • Cours de padel avec un coach du club : le terrain n’est réservé que si le coach accepte, puis le club confirme. Des cours collectifs sont aussi à rejoindre.
 
 Matchs ouverts et niveau
 • Ouvre ton match en 1 contre 1 ou en 2 contre 2, avec la fourchette de niveau que tu veux : les joueurs concernés le rejoignent.
-• Rejoins les matchs ouverts des autres, avec la fiabilité de l’organisateur dès qu’il a assez de parties jouées.
+• Rejoins les matchs ouverts des autres, avec la fiabilité de l’organisateur dès qu’il a assez de matchs ou de cours individuels joués.
 • Un court quiz fixe ton niveau de départ, puis ton niveau évolue avec les matchs dont l’adversaire a confirmé le score, et avec les tournois officiels.
 • Suis tes clubs et tes partenaires habituels : active les alertes et tu es prévenu quand un match à ton niveau s’ouvre dans un de tes clubs, ou quand un de tes partenaires ouvre un match.
 • Amis par demande et acceptation, ajout depuis tes contacts. Tu peux signaler un avis ou un match, et bloquer son auteur.
@@ -358,7 +383,9 @@ dépôt**, un commit, un message ou ce fichier. JWT ES256 et fonction `asc` : co
 
 1. Version : `GET /v1/apps/6785261310/appStoreVersions?filter[versionString]=1.0.3&filter[platform]=IOS`,
    sinon `POST /v1/appStoreVersions` (`versionString: "1.0.3"`, `releaseType: "AFTER_APPROVAL"`).
-2. Nom et sous-titre : `GET /v1/apps/6785261310/appInfos` → l’appInfo à l’état modifiable →
+2. Nom et sous-titre, seulement APRÈS le chronométrage du §0 sur le #69 installé (compétence
+   `padel-sortie-ios` §2 étape 4 : sous-titre du §1.2 ou son repli) :
+   `GET /v1/apps/6785261310/appInfos` → l’appInfo à l’état modifiable →
    `GET /v1/appInfos/{id}/appInfoLocalizations` → locale `fr-FR` →
    `PATCH /v1/appInfoLocalizations/{id}` avec `name` et `subtitle`.
 3. Textes de la version : `GET /v1/appStoreVersions/{VERSION_ID}/appStoreVersionLocalizations` →
@@ -369,7 +396,7 @@ dépôt**, un commit, un message ou ce fichier. JWT ES256 et fonction `asc` : co
 4. Relire : `GET` de chaque localisation et comparer octet par octet avec ce fichier.
 5. Captures : à la main (§4.1 étape 5) — par l’API il faut réserver, téléverser puis valider chaque
    image (`appScreenshotSets`, `appScreenshots`), sans gain ici.
-6. Build, puis soumission en revue : compétence `padel-sortie-ios` §2, étapes 3 et 5 à 8.
+6. Build, puis soumission en revue : compétence `padel-sortie-ios` §2, étapes 3 et 6 à 9.
 
 ### 4.3 Google Play (au lancement Android)
 
@@ -425,14 +452,14 @@ JS
 | App Store — nom                      |         30 |           30 | 30 caractères   | OK (reste 0)    |
 | App Store — sous-titre               |         28 |           29 | 30 caractères   | OK (reste 2)    |
 | App Store — sous-titre de repli      |         28 |           29 | 30 caractères   | OK (reste 2)    |
-| App Store — texte promotionnel       |        144 |          157 | 170 caractères  | OK (reste 26)   |
+| App Store — texte promotionnel       |        157 |          170 | 170 caractères  | OK (reste 13)   |
 | App Store — mots-clés                |         95 |           95 | 100 octets      | OK (reste 5)    |
 | App Store — mots-clés sans quartiers |         93 |           93 | 100 octets      | OK (reste 7)    |
-| App Store — description              |       3640 |         3852 | 4000 caractères | OK (reste 360)  |
-| App Store — nouveautés 1.0.3         |        532 |          581 | 4000 caractères | OK (reste 3468) |
+| App Store — description              |       3675 |         3887 | 4000 caractères | OK (reste 325)  |
+| App Store — nouveautés 1.0.3         |        545 |          594 | 4000 caractères | OK (reste 3455) |
 | Play — titre                         |         30 |           30 | 30 caractères   | OK (reste 0)    |
 | Play — description courte            |         78 |           80 | 80 caractères   | OK (reste 2)    |
-| Play — description longue            |       3731 |         3947 | 4000 caractères | OK (reste 269)  |
+| Play — description longue            |       3766 |         3982 | 4000 caractères | OK (reste 234)  |
 
 Contrôles automatiques du même script (tous passés au dernier calcul) : aucun « android »/« google »
 dans la fiche iOS ; aucun « iphone »/« app store »/« apple » dans la fiche Play ; aucun nom de club

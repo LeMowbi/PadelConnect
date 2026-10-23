@@ -24,6 +24,10 @@ s'applique pas), tout correctif part avec un build.
 - Version : `autoIncrement` ne bumpe QUE `ios.buildNumber`. Si `expo.version` est déjà publiée (ou si
   on ouvre une nouvelle version store), bumper `expo.version` (ex. 1.0.2 → 1.0.3) AVANT le build,
   commit `chore(release): version X.Y.Z (…)`.
+- Promesse de durée (`docs/STORE-LISTING.md` §0) : les textes FIGÉS dans le binaire n'en portent
+  plus (« en quelques gestes » depuis le #69, verrouillé par `tests/promessesTextes.test.ts`). Le
+  sous-titre App Store « en 2 min » et le site, eux, se tranchent sur le binaire INSTALLÉ : rien à
+  faire ici, c'est l'étape 4 du §2 (chronométrage + nom et sous-titre), AVANT la soumission.
 - Secrets fournis par le porteur pour la session, en variables d'environnement seulement :
   `EXPO_TOKEN` (compte CI `padelconnect-ci`), clé App Store Connect (`ASC_KEY_PATH` vers un `.p8` HORS
   dépôt, `ASC_KEY_ID`, `ASC_ISSUER_ID`), jeton Cloudflare. L'état du shell ne persiste pas d'un appel
@@ -74,15 +78,33 @@ asc() { curl -sS -X "$1" "https://api.appstoreconnect.apple.com$2" -H "Authoriza
    → `VERSION_ID` (`AFTER_APPROVAL` = publication automatique, choix du porteur).
 3. Rattacher le build :
    `asc PATCH /v1/appStoreVersions/$VERSION_ID/relationships/build '{"data":{"type":"builds","id":"'$BUILD_ID'"}}'` (204).
-4. Notes de version : `asc GET /v1/appStoreVersions/$VERSION_ID/appStoreVersionLocalizations` → id de la
+4. Chronométrage puis nom et sous-titre (`docs/STORE-LISTING.md` §0) — le nom et le sous-titre ne
+   changent qu'avec une nouvelle version : décidés ICI, sinon ils restent en ligne jusqu'à la
+   suivante. Installer le build depuis TestFlight, chronométrer le parcours rapide (app connectée →
+   onglet Réserver → réservation confirmée) :
+   - ≤ 2 minutes → nom et sous-titre de STORE-LISTING §1.1 / §1.2 ;
+   - au-delà → sous-titre de REPLI (§1.2), et site passé à « en quelques gestes » (EN : « in a few
+     taps », titre anglais « booked in 2 minutes » compris) puis redéployé (§4 ci-dessous) — sans
+     oublier `site/og.png` (seule image servie en `og:image`, WhatsApp ne lit pas le SVG) : c'est un
+     RENDU de `site/og.svg`, corriger le SVG puis régénérer le PNG (commande `@resvg/resvg-js` de
+     STORE-LISTING §0), sinon chaque lien partagé promet encore « réservé en 2 minutes ».
+
+   Pousser le nom et le sous-titre retenus : `asc GET /v1/apps/6785261310/appInfos` → l'appInfo à
+   l'état modifiable (`INFO_ID`) → `asc GET /v1/appInfos/$INFO_ID/appInfoLocalizations` → locale
+   `fr-FR` (`INFO_LOC_ID`) →
+   `asc PATCH /v1/appInfoLocalizations/$INFO_LOC_ID '{"data":{"type":"appInfoLocalizations","id":"'$INFO_LOC_ID'","attributes":{"name":"…","subtitle":"…"}}}'`.
+   Fiche complète d'une version (description, mots-clés, texte promotionnel, nouveautés) :
+   STORE-LISTING §4.2 étape 3, qui couvre aussi l'étape 5.
+
+5. Notes de version : `asc GET /v1/appStoreVersions/$VERSION_ID/appStoreVersionLocalizations` → id de la
    locale `fr-FR` →
    `asc PATCH /v1/appStoreVersionLocalizations/$LOC_ID '{"data":{"type":"appStoreVersionLocalizations","id":"'$LOC_ID'","attributes":{"whatsNew":"…"}}}'`.
    Texte FR, tutoiement, 3 à 6 puces vues du joueur / du club, aucun jargon (SQL, audit, build).
-5. Soumission : `asc POST /v1/reviewSubmissions '{"data":{"type":"reviewSubmissions","attributes":{"platform":"IOS"},"relationships":{"app":{"data":{"type":"apps","id":"6785261310"}}}}}'`
+6. Soumission : `asc POST /v1/reviewSubmissions '{"data":{"type":"reviewSubmissions","attributes":{"platform":"IOS"},"relationships":{"app":{"data":{"type":"apps","id":"6785261310"}}}}}'`
    → `SUB_ID` (une soumission déjà ouverte : `asc GET "/v1/reviewSubmissions?filter[app]=6785261310&filter[state]=READY_FOR_REVIEW"`, la réutiliser).
-6. Élément : `asc POST /v1/reviewSubmissionItems '{"data":{"type":"reviewSubmissionItems","relationships":{"reviewSubmission":{"data":{"type":"reviewSubmissions","id":"'$SUB_ID'"}},"appStoreVersion":{"data":{"type":"appStoreVersions","id":"'$VERSION_ID'"}}}}}'`.
-7. Envoi : `asc PATCH /v1/reviewSubmissions/$SUB_ID '{"data":{"type":"reviewSubmissions","id":"'$SUB_ID'","attributes":{"submitted":true}}}'`.
-8. Contrôle : `asc GET /v1/appStoreVersions/$VERSION_ID` → `appStoreState = WAITING_FOR_REVIEW`.
+7. Élément : `asc POST /v1/reviewSubmissionItems '{"data":{"type":"reviewSubmissionItems","relationships":{"reviewSubmission":{"data":{"type":"reviewSubmissions","id":"'$SUB_ID'"}},"appStoreVersion":{"data":{"type":"appStoreVersions","id":"'$VERSION_ID'"}}}}}'`.
+8. Envoi : `asc PATCH /v1/reviewSubmissions/$SUB_ID '{"data":{"type":"reviewSubmissions","id":"'$SUB_ID'","attributes":{"submitted":true}}}'`.
+9. Contrôle : `asc GET /v1/appStoreVersions/$VERSION_ID` → `appStoreState = WAITING_FOR_REVIEW`.
 
 Erreurs fréquentes : `409 ENTITY_ERROR…` = métadonnée manquante (whatsNew, captures, compte démo de
 revue — `docs/CHECKLIST-STORES.md` §b-bis) ; build pas encore `VALID` → attendre ; le chiffrement est
@@ -143,7 +165,8 @@ de clé.
   une clé de compte de service et un bloc `android` dans `submit.production` d'`eas.json`. FCM
   obligatoire (`google-services.json` + clé de service sur expo.dev), sinon aucun push Android.
 - Fiche Play : « Sécurité des données » et URL de suppression de compte
-  (`https://padelconnectci.com/supprimer-mon-compte`) — réponses dans `docs/ANDROID-LANCEMENT.md` §5.
+  (`https://padelconnectci.com/supprimer-mon-compte`) — réponses dans `docs/ANDROID-LANCEMENT.md` §5 ;
+  titre et descriptions : `docs/STORE-LISTING.md` §2 (source unique).
 - Play App Signing : Google re-signe → AJOUTER son empreinte SHA-256 dans `site/assetlinks.json` à côté
   de celle d'EAS, puis redéployer `site/`.
 - `site/get.html` : activer la redirection Android le jour où la fiche Play existe.
