@@ -70,21 +70,30 @@ Dashboard Supabase → **Database → Webhooks** → _Create a new hook_ :
 - **Réservation → club** ET **Confirmation → joueur** ET **Annulation → club** : table
   `reservations`, événements **INSERT _et_ UPDATE** (coche les deux) → appelle la fonction
   `notify-club`.
-  - INSERT = nouvelle réservation → notifie le **gérant** du club.
+  - INSERT = nouvelle réservation → notifie le **gérant** du club (statut relu d'abord, v49 : une
+    résa déjà annulée à l'arrivée du webhook ne pousse plus rien).
   - UPDATE = le gérant confirme (case `club_confirmed`) → notifie le **joueur** (« Réservation
     confirmée ✅ »).
   - UPDATE = la résa n'a plus lieu (`status → cancelled`, depuis `booked` — annulation joueur,
-    mais aussi `delete_club` ou disparition d'un coach : textes NEUTRES) → notifie le **gérant**
-    du club (« Réservation annulée ») et les **participants** (« Match annulé ») — et alerte la
-    **liste d'attente** du créneau libéré (81) ; pas sur une annulation CLUB (`club_cancelled`),
-    qui re-bloque le créneau.
+    mais aussi `delete_club` : textes NEUTRES) → notifie le **gérant** du club (« Réservation
+    annulée ») et les **participants** (« Match annulé ») — et alerte la **liste d'attente** du
+    créneau libéré (81). Club retiré de PadelConnect (marqueur `cancel_reason = 'club_deleted'`, 97) → l'**auteur** reçoit aussi « Ton créneau … n'a plus lieu ». Créateur qui supprime son
+    compte (participants déjà effacés par la cascade) → les joueurs sont retrouvés dans
+    `invited` (v49).
   - UPDATE `no_show → booked` (87, un « pas venu » dé-marqué) → notifie le **joueur**
     (« Réservation rétablie ✅ ») — résa SIMPLE seulement : un cours rattaché passe par la branche
     `lessons` (pas de doublon). Transition produite par le bouton gérant « Annuler l’absence »
     (Espace Club → Réservations → Absences, confirmation « Rétablir la réservation »).
-  - UPDATE = le **club** annule pour chevauchement hors app (`status → club_cancelled`, depuis
-    `booked`, 75) → notifie le **joueur** ET les participants (« Créneau annulé par le club »,
-    avec motif + proposition d'alternative).
+  - UPDATE = le **club** annule (`status → club_cancelled`, depuis `booked`, 75 — pluie, panne,
+    chevauchement hors app…) → notifie le **joueur** (« {club} a dû annuler ton créneau », motif +
+    proposition d'alternative) ET les participants (texte neutre, sans motif). Pour un **cours** :
+    jamais de proposition (« redemande un créneau à ton coach ») ; cours annulé **par le coach**
+    (96, `lessons.cancelled_by = 'coach'`) → push dédié à l'élève « Cours annulé par ton coach » ;
+    cours d'un **coach supprimé** (97) → élèves des cours collectifs relus dans
+    `lesson_cancel_notices`. Si le créneau est réellement **libéré** (aucune fermeture posée —
+    voies coach), le gérant et la liste d'attente sont prévenus.
+  - UPDATE `booked → no_show` (le club marque « pas venu », borné au créneau + 48 h, 96) →
+    notifie le **créateur** (« Absence signalée par le club — une erreur ? Contacte le club »).
   - ⚠️ Si tu avais déjà créé le hook `reservations` en INSERT seul, **édite-le** pour cocher
     aussi **UPDATE** (sinon les notifs de confirmation et d'annulation ne partiront pas).
     ✅ Corrigé en base le 2026-07-16 : le hook `reservations` écoutait INSERT SEUL (confirmation
@@ -99,9 +108,11 @@ Dashboard Supabase → **Database → Webhooks** → _Create a new hook_ :
     match (« Un joueur a rejoint ton match 🎾 »).
   - UPDATE `→ accepted` → notifie l'**auteur** de la réservation : « Un joueur a rejoint ton
     match 🎾 » si c'est un match ouvert (re-rejoint après un départ), sinon « Invitation
-    acceptée ✅ ».
-  - UPDATE `accepted → declined` (`leave_open_match`, match ouvert seulement) → notifie le
-    **créateur** (« Un joueur a quitté ton match » — une place se libère).
+    acceptée ✅ » en NOMMANT l'ami (v49). Rien si la résa n'est plus active.
+  - UPDATE `accepted → declined` → notifie le **créateur** : « Un joueur a quitté ton match »
+    (match ouvert — une place se libère) ou « Un joueur s'est retiré » (partie privée).
+  - UPDATE `invited → declined` (partie privée encore active) → notifie le **créateur**
+    (« Invitation déclinée », v49).
   - ⚠️ Si tu avais créé ce hook en UPDATE seul, **édite-le** pour cocher aussi **INSERT**
     (sinon l'invité ne reçoit jamais rien).
 - **Tournois** : table `competitions`, événements **INSERT _et_ UPDATE** (coche les deux) →
@@ -113,6 +124,11 @@ Dashboard Supabase → **Database → Webhooks** → _Create a new hook_ :
     que les tournois réellement confirmés.
   - UPDATE `pending → rejected` (le club refuse) → notifie l'**organisateur** (« Tournoi non
     retenu »).
+  - UPDATE `published → cancelled` (97 : `cancel_competition` ou club retiré) → notifie
+    l'**organisateur** et les **inscrits** (« Tournoi annulé », motif joint ; inscrits bloqués
+    avec l'organisateur exclus). Annulé par le **club** ou l'**opérateur** alors que les frais
+    PadelConnect étaient déjà encaissés (98 : `payment_status = 'refund_due'`) → notifie aussi
+    l'**opérateur** (« Frais de tournoi à rembourser », montant — remboursement Wave à faire).
 - **Demandes d'ami** (notif sociale) : table `friend_requests`, événements **INSERT _et_
   UPDATE** (coche les deux) → même fonction `notify-club`.
   - INSERT d'une demande (`pending`) → notifie le **destinataire** (« Nouvelle demande d'ami »).
@@ -129,7 +145,9 @@ Dashboard Supabase → **Database → Webhooks** → _Create a new hook_ :
     attente, refusées d'office) → notifie l'**élève** (« Cours non disponible »).
   - UPDATE `→ cancelled` → notifie le **coach** (cours annulé par l'élève / demande retirée —
     formulation neutre, le « pas venu » marqué par le club passe aussi par là) ; pour un cours
-    COLLECTIF (capacity > 1), les **élèves inscrits** aussi (« Cours collectif annulé »).
+    COLLECTIF (capacity > 1), les **élèves inscrits** aussi (« Cours collectif annulé »). Rien
+    quand c'est le coach lui-même qui annule (`cancelled_by = 'coach'`, 96) : l'élève est prévenu
+    par la branche `reservations`.
   - UPDATE `cancelled → accepted` (85 C3, un « pas venu » dé-marqué) → notifie le **coach**
     (« Cours rétabli ») et l'**élève** (« Cours rétabli ✅ ») ou les **élèves inscrits**
     (« Cours collectif rétabli »).
@@ -139,18 +157,50 @@ Dashboard Supabase → **Database → Webhooks** → _Create a new hook_ :
     **joueur promu** (« Tu es maintenant coach 🎾 » — le tap ouvre son Espace Coach).
 - **Scores de match** : table `match_results`, événements **INSERT _et_ UPDATE** (coche les
   deux) → même fonction `notify-club`.
-  - INSERT d'une première saisie → notifie les **autres joueurs** du match (score à confirmer).
+  - INSERT de la première saisie (la plus ancienne : deux saisies simultanées n'envoient qu'une
+    fois) → notifie les joueurs **sans saisie** (« Si tu étais dans l'autre camp, confirme-le ;
+    coéquipiers : inutile, il sera validé sous 48 h » — la confirmation d'un coéquipier du
+    gagnant bloquerait la validation).
   - UPDATE qui valide le match (la règle du serveur est atteinte) → notifie **les joueurs**
     (« Match validé »).
   - UPDATE avec des saisies **en désaccord** → notifie les joueurs (le score est à revoir).
 - **Actu opérateur** : table `operator_news`, événements **INSERT _et_ UPDATE** (coche les
   deux) → même fonction `notify-club`.
   - INSERT ou UPDATE d'une actu dont la case **« Envoyer aussi en notification »** était cochée
-    (colonne `push`) → push d'actu à tous les joueurs. Case décochée = aucun push.
+    (colonne `push`) → push d'actu à tous les comptes qui ont laissé **« Actus et agenda »**
+    activé (`profiles.news_push`, 98 — activé par défaut, désactivable dans Profil →
+    Notifications). Case décochée = aucun push.
   - Garde **anti-doublon** sur `news_id` : la même actu ne part jamais deux fois.
 
 La fonction lit la table + le type d'événement et envoie au bon destinataire (gérant du club,
 joueur, auteur de la réservation, opérateur, organisateur du tournoi, ami invité, coach ou élève).
+
+> 🆕 **v50 (2026-10-22, décisions du porteur — SQL 98)** — sans nouveau webhook. ⚠️ Coller la
+> **98 AVANT** de déployer la v50 : la v50 lit `profiles.news_push` (sans la colonne, chaque
+> diffusion d'actu ou d'agenda échoue et est journalisée — rien n'est envoyé).
+>
+> - **actus et agenda** : envoyés seulement aux comptes `news_push = true` (réglage « Actus et
+>   agenda PadelConnect » du profil, activé par défaut — exigence Apple 4.5.4) ;
+> - **tournoi annulé** par le club ou l'opérateur avec des frais déjà encaissés → push à
+>   l'opérateur « Frais de tournoi à rembourser » ;
+> - **compte supprimé** : ses places dans les matchs passés deviennent anonymes (`user_id` NULL,
+>   « Ancien joueur ») — jamais une cible de push ; la reprise d'une résa passée par un partenaire
+>   et l'anonymisation ne changent ni statut ni confirmation → **aucun push**.
+
+> **v49 (2026-10-22, audit des règles métier)** — comportement d'envoi, sans nouveau webhook :
+>
+> - la fonction **répond 202 tout de suite** (après le contrôle du secret) et travaille en
+>   arrière-plan (`EdgeRuntime.waitUntil`) : une grosse diffusion ne dépasse plus le délai du
+>   déclencheur. Dans les journaux de `net._http_response`, **202 = normal** (avant : 200) ;
+> - push transactionnels en **priorité haute**, canal Android `default`, durée de vie jusqu'au
+>   début de la partie (rien n'est envoyé si elle a commencé) ; actus, agenda et annonces club :
+>   priorité normale, 72 h ;
+> - push d'un gérant avec `clubId` (multi-clubs) ; push d'annulation avec `event: 'cancelled'`
+>   (l'app retire ses rappels locaux) ;
+> - lots Expo réessayés (429/5xx : 2 fois ; réseau : 1 fois) ; lectures en échec, diffusion
+>   partielle, lot perdu ou instance coupée → journal `app_errors` (contexte `notify-club`, carte
+>   « Santé de l'app » de l'opérateur) ;
+> - `supabase-js` épinglé à la version exacte de l'app.
 
 > 🆕 Chantier v3 (2026-08-14) : le webhook `reservations` alimente AUSSI, sans configuration
 > supplémentaire, les push « partenaire suivi a créé un match » + « un match à ton niveau vient
@@ -162,7 +212,8 @@ joueur, auteur de la réservation, opérateur, organisateur du tournoi, ami invi
 > clonés avec le même en-tête secret :
 >
 > - **`events`** (INSERT + UPDATE) → push d'un événement de l'AGENDA publié avec la case « push »
->   (anti-doublon + anti-phishing par relecture en base, notify-club v35).
+>   (anti-doublon + anti-phishing par relecture en base, notify-club v35 ; depuis la v50, aux seuls
+>   comptes `news_push`).
 > - **`club_news`** (INSERT **seul**, décision assumée : le push ne part qu'à la création d'une
 >   annonce) → annonce d'un club à ses SUIVEURS (cœur favori), notify-club v38.
 > - **`share_payments`** (INSERT + UPDATE) → « part déclarée payée » au créateur du match partagé,
@@ -196,7 +247,9 @@ plus tard, pense à lui mettre l'en-tête, sinon ses push seront bloqués.
 ## 5. Tester
 
 1. Installe un **build EAS** sur un vrai téléphone (les push ne marchent pas dans le
-   simulateur ni dans Expo Go).
+   simulateur ni dans Expo Go). Depuis la v49, un appel de test direct à la fonction répond
+   **202 « accepted »** : le résultat de l'envoi se lit dans les journaux de la fonction (et dans
+   `app_errors` en cas d'incident), plus dans la réponse HTTP.
 2. Connecte-toi avec un compte **gérant** d'un club, accepte la permission notifications.
 3. Avec un autre compte joueur, réserve un créneau dans ce club → le gérant reçoit le push.
 

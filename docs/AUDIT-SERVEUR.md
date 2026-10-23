@@ -1,16 +1,13 @@
 # Audit — actions serveur (sans terminal)
 
-> ✅ **À JOUR au 2026-10-21.** Le SQL `02`→`90` est **appliqué en base** (Management API ; la `90`
-> depuis le 2026-08-21 — état des migrations plus récentes : `CLAUDE.md` §8), `notify-club` est
-> déployée (version en ligne : `CLAUDE.md` §7 ; le dépôt porte la **v48** — à redéployer par le
-> coordinateur) et les 11 Database Webhooks sont en place, protégés par un secret partagé
-> (`x-webhook-secret`, comparé à temps constant — §3).
-> **`91`** (pré-lancement 2026-10) : ÉCRITE + prouvée en local 29/29 (contre-épreuve 6/6 sur
-> les anciennes définitions), **À APPLIQUER en prod** (coordinateur) — ne pas la noter « appliquée »
-> avant la preuve en base.
+> ✅ **À JOUR au 2026-10-22.** Le SQL `02`→`91` et la **`95`** (vue `slot_occupancy` en lecture
+> seule, R-01) sont **appliqués en base** (Management API — état détaillé : `CLAUDE.md` §8),
+> `notify-club` est déployée (version en ligne : `CLAUDE.md` §7 ; le dépôt porte la **v49** — à
+> redéployer par le coordinateur APRÈS la 97, cf. ci-dessous) et les 11 Database Webhooks sont en
+> place, protégés par un secret partagé (`x-webhook-secret`, comparé à temps constant — §3).
 > **`92`** (fidélité cible), **`93`** (index) et **`94`** (anti-abus) — vague 3 du 2026-10-22 :
 > ÉCRITES + prouvées en LOCAL (Postgres 16), **PAS appliquées en prod**. À coller DANS L'ORDRE après
-> la 91, puis recaler ici et dans `CLAUDE.md` §8 (« SQL 02 → 94 »). Au passage : la **92 corrige la
+> la 91, puis recaler ici et dans `CLAUDE.md` §8. Au passage : la **92 corrige la
 > 82** (`fetch_loyalty_claims` levait 42702 « column reference id is ambiguous » → la liste « Fidélité
 > à servir » de l'opérateur ne se chargeait jamais) et la **94 corrige la définition LIVE de
 > `send_friend_request`** (42702 « friend_id is ambiguous » dès que le numéro correspond à un vrai
@@ -19,6 +16,20 @@
 > puis `select * from public.send_friend_request('<numéro du compte B>');` puis `rollback;` —
 > avant la 94 : erreur 42702 attendue ; après : 'sent'). Les compteurs vivent dans `rate_counters`
 > (vidée par le RESET).
+> **`96`** (réservations, invitations, cours, score, niveau, classement, accès directs) et **`97`**
+> (tournois, clubs, comptes) — audit des règles métier du 2026-10-22, lot M2 : ÉCRITES + prouvées
+> en LOCAL sur un rejeu complet du dépôt (Postgres 16 : **46/46** cas, contre-épreuve sur les
+> anciennes définitions, **4 courses à 2 sessions** — annulation joueur/club, blocage/acceptation,
+> niveau tardif, annulation/inscription de tournoi), **PAS appliquées en prod**. Ordre : 92 → 93 →
+> 94 → 96 → 97, PUIS `notify-club` v49 (elle lit `lessons.cancelled_by`, `lesson_cancel_notices`
+> et `competitions.cancel_reason`, créés par la 96/97). Compatibles avec la v1.0.2 publiée : aucun
+> type de retour changé, seule `fetch_open_matches` gagne une colonne `price` en dernier.
+> ⚠️ Avant la 96, relire en prod les droits `anon` des tables (R-79, lecture seule) :
+> `select table_name, privilege_type from information_schema.role_table_grants where grantee = 'anon'
+and table_schema = 'public' order by 1;` — la 96 retire SELECT à `anon` sur `reviews`, `coaches`,
+> `blocked_slots`, `club_news`, `events`, `club_boost` et le GARDE sur `clubs`, `club_overrides`,
+> `club_status`, `club_config` (site vitrine). Depuis la v49, notify-club répond **202** (travail en
+> arrière-plan) : un 202 dans `net._http_response` est normal.
 > Les sections datées ci-dessous (« ⏳ À FAIRE ») sont un HISTORIQUE conservé pour la
 > trace — elles ne sont plus des actions en attente. Reste au porteur (hors SQL) : lien Wave,
 > FCM Android + empreinte SHA-256 d'assetlinks.
@@ -29,7 +40,7 @@
 > (`submit_match_score`, `fetch_leaderboard`, et surtout `delete_account`/`delete_club`, qui
 > retomberaient sur des versions qui ÉCHOUENT contre `storage.protect_delete` — la suppression
 > de compte, exigence App Store, casserait). S'il faut VRAIMENT recoller le fichier N, recoller
-> ENSUITE tous les fichiers N+1 → 89 dans l'ordre. Dans le doute : ne rien coller, demander.
+> ENSUITE tous les fichiers N+1 → 97 dans l'ordre. Dans le doute : ne rien coller, demander.
 
 ## 0-OCTIES) MULTI-CLUBS (2026-07-03) — coller SQL `55` (1 min) — ⏳ À FAIRE
 
@@ -308,7 +319,8 @@ couper sa famille de push EN SILENCE (le secret est obligatoire dès qu'il est p
    `operator_news`, `events`, `club_news`, `share_payments` :
    **Edit** → **HTTP Headers** → **`x-webhook-secret`** = **le même secret** → **Save**.
 4. Vérifie : une action qui envoie un push (ex. réservation de test) → la notification arrive
-   toujours. Si plus rien n'arrive, un webhook n'a pas le bon en-tête.
+   toujours. Si plus rien n'arrive, un webhook n'a pas le bon en-tête (réponse **401** dans
+   `net._http_response` ; un **202** y est normal depuis la v49 — travail en arrière-plan).
 
 > Astuce : garde le secret en lieu sûr (le même sur la fonction ET sur tous les webhooks).
 
