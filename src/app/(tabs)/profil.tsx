@@ -658,7 +658,7 @@ export default function ProfilScreen() {
 
       {/* À propos — version de l’app (utile pour le support et les stores). */}
       <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center', marginTop: spacing.lg }}>
-        PadelConnect v{Constants.expoConfig?.version ?? '1.0.0'} · Abidjan 🇨🇮{'\n'}Réserve ton terrain de padel en 2 minutes.
+        PadelConnect v{Constants.expoConfig?.version ?? '1.0.0'} · Abidjan 🇨🇮{'\n'}Réserve ton terrain de padel en quelques gestes.
       </Txt>
 
       {/* Photo de profil : changer (recadrée + compressée) ou revenir aux initiales */}

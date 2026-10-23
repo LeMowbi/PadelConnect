@@ -54,7 +54,7 @@ export default function ParrainageScreen() {
   // téléchargement qui envoie l’ami vers le bon store selon son appareil (iOS ou Android).
   const link = myCode ? inviteUrl(myCode) : DOWNLOAD_URL;
   const message =
-    `Rejoins-moi sur PadelConnect 🎾 — on réserve un terrain de padel à Abidjan en 2 minutes.` +
+    `Rejoins-moi sur PadelConnect 🎾 — on réserve un terrain de padel à Abidjan en quelques gestes.` +
     (myCode ? `\nMon code de parrainage : ${myCode}` : '') +
     `\n${link}`;
 

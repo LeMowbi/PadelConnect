@@ -33,7 +33,7 @@ export function shareText(message: string): Promise<ShareResult> {
 // Partage la fiche d’un club — Universal Link /club/ID (déclaré dans l’AASA) : ouvre
 // directement la fiche dans l’app si elle est installée, sinon la page renvoie à l’App Store.
 export function shareClub(club: { id: string; name: string; area: string }): Promise<ShareResult> {
-  const message = `Découvre ${club.name} (${club.area}) sur PadelConnect — réserve ton terrain en quelques secondes 🎾\n${APP_DOMAIN}/club/${club.id}`;
+  const message = `Découvre ${club.name} (${club.area}) sur PadelConnect — réserve ton terrain en quelques gestes 🎾\n${APP_DOMAIN}/club/${club.id}`;
   return shareMessage(message);
 }
 

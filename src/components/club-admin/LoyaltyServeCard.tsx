@@ -111,7 +111,7 @@ export function LoyaltyServeCard({ clubId, clubName, connected }: { clubId: stri
   return (
     <Card>
       <Txt variant="muted">
-        10 réservations créées et jouées = −50 % sur le prochain match du joueur
+        10 réservations créées et jouées (hors cours de coach) = −50 % sur le prochain match du joueur
         {capValue !== null ? ` (jusqu’à ${fcfa(capValue)})` : ''}, offert par PadelConnect. Il te montre son code : saisis-le avec le prix
         du match, la remise est déduite de ton décompte de la semaine.
       </Txt>

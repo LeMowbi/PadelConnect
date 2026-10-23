@@ -160,7 +160,7 @@ export default function AmisScreen() {
   };
 
   const invite = () =>
-    openWhatsApp(phone, `Rejoins-moi sur PadelConnect 🎾 — on réserve un terrain de padel à Abidjan en 2 minutes. ${DOWNLOAD_URL}`);
+    openWhatsApp(phone, `Rejoins-moi sur PadelConnect 🎾 — on réserve un terrain de padel à Abidjan en quelques gestes. ${DOWNLOAD_URL}`);
 
   // Le numéro change → la recherche précédente n’est plus valable.
   const onPhone = (t: string) => {

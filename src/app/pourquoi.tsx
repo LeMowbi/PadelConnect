@@ -12,7 +12,7 @@ const ARGS: { icon: keyof typeof Ionicons.glyphMap; tint: string; bg: string; ti
     tint: colors.green,
     bg: colors.greenSoft,
     title: 'Des réservations en plus, sans effort',
-    text: 'Les joueurs de toute la ville voient tes terrains libres et réservent en quelques secondes — même la nuit, même quand personne ne répond au téléphone.',
+    text: 'Les joueurs de toute la ville voient tes terrains libres et réservent en quelques gestes — même la nuit, même quand personne ne répond au téléphone.',
   },
   {
     icon: 'lock-closed',
@@ -62,8 +62,8 @@ export default function Pourquoi() {
         </Card>
       ))}
       <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm, textAlign: 'center' }}>
-        Commission à partir de 10 %, uniquement sur les parties jouées réservées via l’app (taux convenu avec chaque club). Pas
-        d’abonnement, pas de paiement en ligne.
+        Commission à partir de 10 % (taux convenu avec chaque club), uniquement sur les créneaux joués réservés via l’app (parties et cours
+        avec un coach ; rien sur une absence ni une annulation). Pas d’abonnement, pas de paiement en ligne.
       </Txt>
       <View style={{ marginTop: spacing.lg }}>
         <Button label="Inscrire mon club" icon="business" onPress={() => router.push('/inscrire-club')} full />

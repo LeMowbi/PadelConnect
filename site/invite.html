@@ -68,7 +68,7 @@
     <main class="card">
       <div class="logo" aria-hidden="true">P</div>
       <h1 id="titre">Rejoins PadelConnect</h1>
-      <p>Réserve un terrain de padel à Abidjan en 2 minutes, trouve des partenaires et joue des tournois.</p>
+      <p id="accroche">Réserve un terrain de padel à Abidjan en 2 minutes, trouve des partenaires et joue des tournois.</p>
       <!-- Bloc du code : affiché seulement si l'adresse porte un code au bon format (script). -->
       <div class="code-bloc" id="code-bloc" hidden>
         <p class="code-libelle">Ton code de parrainage</p>
@@ -121,6 +121,9 @@
           webLien.className = 'btn principal';
           bouton.className = 'btn secondaire';
           bouton.textContent = 'Télécharger sur iPhone';
+          // Parcours navigateur jamais chronométré : pas de promesse de durée (même règle que get.html).
+          document.getElementById('accroche').textContent =
+            'Réserve un terrain de padel à Abidjan, trouve des partenaires et joue des tournois, directement dans ton navigateur.';
         }
         if (!code) return; // pas de code lisible : page d'accueil simple, lien direct vers /get
 
