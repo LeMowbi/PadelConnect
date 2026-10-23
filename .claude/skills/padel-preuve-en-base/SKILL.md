@@ -43,7 +43,8 @@ do $$ declare r text; begin foreach r in array array['anon', 'authenticated', 's
 end loop; end $$;
 create schema if not exists auth;
 create table if not exists auth.users (id uuid primary key default gen_random_uuid(), email text,
-  raw_user_meta_data jsonb default '{}'::jsonb, email_confirmed_at timestamptz, created_at timestamptz default now());
+  raw_user_meta_data jsonb default '{}'::jsonb, email_confirmed_at timestamptz, phone_confirmed_at timestamptz,
+  created_at timestamptz default now());   -- phone_confirmed_at : lu par approve_club_request (97)
 create or replace function auth.uid() returns uuid language sql stable as $$
   select nullif(coalesce(current_setting('request.jwt.claim.sub', true),
     (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')), '')::uuid $$;
@@ -125,6 +126,35 @@ where n.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtyp
   and has_function_privilege('anon', p.oid, 'execute');
 ```
 
+**Vues — droits d'ÉCRITURE ; tables — RLS** (angle mort du balayage des fonctions : faille R-01, la
+vue `slot_occupancy` gardait les droits par défaut de Supabase, donc DELETE/UPDATE pour `anon` et
+`authenticated`). Une vue tourne avec les droits de son propriétaire : la RLS des tables ne la protège
+pas. Une table, elle, garde les droits par défaut de Supabase et n'est protégée QUE par sa RLS. Un
+`drop view` + `create view` remet les droits par défaut → `revoke all … from public, anon,
+authenticated` puis `grant select … to authenticated` dans la MÊME migration (patron 95). Attendu :
+aucune ligne aux deux requêtes.
+
+```sql
+-- vues : lecture seule pour les rôles clients
+select c.relname, g.grantee, g.privilege_type
+from information_schema.role_table_grants g
+join pg_namespace n on n.nspname = g.table_schema
+join pg_class c on c.relnamespace = n.oid and c.relname = g.table_name
+where g.table_schema = 'public' and c.relkind in ('v', 'm')
+  and g.grantee in ('PUBLIC', 'anon', 'authenticated') and g.privilege_type <> 'SELECT'
+order by 1, 2, 3;
+-- tables : RLS activée partout
+select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity;
+-- tables : droits laissés à anon (R-79, 96) — chaque table lisible sans compte doit être VOULUE
+-- (le site vitrine lit clubs, club_overrides, club_status et club_config sans compte)
+select table_name, privilege_type from information_schema.role_table_grants
+where grantee = 'anon' and table_schema = 'public' order by 1, 2;
+```
+
+Contrôle complémentaire, lecture seule, à faire AVANT et APRÈS une migration qui touche une vue :
+`select grantee, privilege_type from information_schema.role_table_grants where table_schema = 'public' and table_name = '<vue>' order by 1, 2;`
+
 ## 3. Les 11 webhooks
 
 ```sql
@@ -133,6 +163,13 @@ select c.relname as tbl, t.tgname, (t.tgtype & 4) > 0 as ins, (t.tgtype & 16) > 
 from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_proc p on p.oid = t.tgfoid
 where p.proname = 'http_request' and not t.tgisinternal order by 1;
 ```
+
+**Migration de masse sur une table à webhook** (UPDATE/INSERT de nombreuses lignes de `reservations`,
+`competitions`, `lessons`… hors d'une action d'un joueur) : chaque ligne déclenche un VRAI push. Couper
+le SEUL trigger concerné le temps du lot, dans la même transaction, puis le rétablir et le vérifier :
+`alter table public.<t> disable trigger <tgname>;` … `alter table public.<t> enable trigger <tgname>;`
+(nom lu par la requête ci-dessous, sans afficher sa définition) ; jamais `disable trigger all` ni
+`user` hors d'une preuve en transaction annulée (§2).
 
 Attendu : 11 lignes, `secret = t` partout ; INSERT+UPDATE sur `reservations`, `reservation_participants`,
 `competitions`, `friend_requests`, `lessons`, `coaches`, `match_results`, `operator_news`, `events`,
@@ -152,7 +189,9 @@ curl -sS -X POST "$F/deploy?slug=notify-club" -H "Authorization: Bearer $SUPABAS
   -F 'file=@supabase/functions/notify-club/index.ts;filename=index.ts'
 ```
 
-Contrôle : relire → `version` = précédente + 1, `status = ACTIVE`, `verify_jwt` inchangé. Le compteur
+Contrôle : relire → `version` = précédente + 1, `status = ACTIVE`, `verify_jwt` inchangé. Depuis la v49,
+notify-club répond **202** (« accepted ») juste après le contrôle du secret et travaille en arrière-plan :
+un smoke test attend 202, plus 200 « no targets » ; le résultat se lit dans les journaux. Le compteur
 plateforme diffère du libellé « vNN » du dépôt (plateforme 44 = dépôt v45) : noter les deux.
 Sans PAT : Dashboard → Edge Functions → notify-club → Edit → tout remplacer → Deploy.
 

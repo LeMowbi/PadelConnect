@@ -1,11 +1,11 @@
 # Checklist — Publier PadelConnect sur l'App Store (iPhone) et Google Play (Android)
 
-> ✅ **État au 2026-10-21 :** `app.json` fait foi = **version 1.0.2**, `buildNumber` incrémenté par
+> ✅ **État au 2026-10-22 :** `app.json` fait foi = **version 1.0.2**, `buildNumber` incrémenté par
 > EAS à chaque build (`autoIncrement`). L'app est **EN LIGNE** sur les stores CI/SN/US. Le SQL
-> `02`→`90` est **appliqué en base** (migrations plus récentes : voir `CLAUDE.md` §8), les
-> **11 webhooks** sont créés et **`WEBHOOK_SECRET` EST POSÉ** (secret Edge Functions + en-tête
-> `x-webhook-secret` sur chaque webhook, depuis le 2026-07-06) — les cases « WEBHOOK_SECRET à faire »
-> plus bas sont **périmées**. Builds en cours et version déployée de `notify-club` : **`CLAUDE.md` §7**.
+> `02`→`91` et la `95` sont **appliqués en base** ; `92`→`94` et `96`→`97` s'appliquent AVANT le
+> build #69 (état exact : `CLAUDE.md` §8). Les **11 webhooks** sont créés et **`WEBHOOK_SECRET` EST
+> POSÉ** (secret Edge Functions + en-tête `x-webhook-secret` sur chaque webhook, depuis le
+> 2026-07-06). Builds en cours et version déployée de `notify-club` : **`CLAUDE.md` §7**.
 
 > Document pratique pour le porteur. Le projet est **déjà lié à Expo** (compte `padelconnect-ci`,
 > projet `padelconnect`) et **`eas.json` est prêt** (profils `development` / `preview` / `production`).
@@ -18,8 +18,8 @@
 
 ## 1. Comptes à créer (par le porteur — identité + carte bancaire)
 
-- [ ] **Compte Expo** — déjà créé (`padelconnect-ci`). ✅
-- [ ] **Apple Developer Program** — ~99 USD/an — https://developer.apple.com/programs/ (obligatoire pour l'iPhone : TestFlight + App Store).
+- [x] **Compte Expo** — déjà créé (`padelconnect-ci`). ✅
+- [x] **Apple Developer Program** — ~99 USD/an — actif (l'app est publiée sur l'App Store). ✅
 - [ ] **Google Play Console** — 25 USD une fois — https://play.google.com/console (obligatoire pour Android sur le Play Store).
 - [x] **Supabase** — en production ✅ (l'éventuel fournisseur **SMS** reste une note post-lancement — voir docs/archive/GUIDE-LANCEMENT.md).
 
@@ -27,12 +27,19 @@
 
 - [x] **Politique de confidentialité** rédigée : `site/privacy.html` (page autonome, reflète le
       fonctionnement réel — compte, photos, contacts, notifications). ✅
-- [ ] **L'héberger** (dossier `site/` sur Cloudflare Pages → `https://padelconnectci.com/privacy.html`)
-      et la coller dans App Store Connect + Play Console → détails dans **`docs/APP-STORE-CONFORMITE.md`**.
-- [x] **CGU / Mentions légales** : dans l'app (écran « Mentions légales & CGU »), à jour. ✅
-- [ ] Étiquettes **App Privacy** (déclaration des données) : réponses exactes prêtes dans
+- [x] **L'héberger** : en ligne sur `https://padelconnectci.com/privacy` et collée dans App Store
+      Connect. ✅ (Play Console : à coller à la création de la fiche.)
+- [x] **CGU / Mentions légales** : dans l'app (écran « Mentions légales & CGU ») et sur le site. ✅
+- [x] Étiquettes **App Privacy** remplies à la v1.0. ✅
+- [ ] Étiquettes **App Privacy** : ajouter les 4 lignes d'octobre 2026 (Customer Support, Gameplay
+      Content, Purchase History, Other Financial Info) avant la version du build #69 →
       **`docs/APP-STORE-CONFORMITE.md`** §2.
-- [ ] (Recommandé) faire relire par un juriste pour la conformité **ARTCI** (Côte d'Ivoire).
+- [ ] **Redéployer `site/`** (politique, CGU, nouvelle page `supprimer-mon-compte`) le jour où les
+      SQL `94` et `97` sont en production (**`docs/APP-STORE-CONFORMITE.md`** §1).
+- [ ] **Identité juridique de l'éditeur** (nom ou raison sociale, RCCM, adresse) et **récépissé de
+      déclaration ARTCI** : à fournir par le porteur, puis à reporter aux endroits marqués
+      « À COMPLÉTER » des trois textes (décision n° 22 de `docs/AUDIT-REGLES-METIER-2026-10.md` §7).
+- [ ] (Recommandé) faire relire par un juriste pour la conformité à la loi n° 2013-450 (ARTCI).
 
 ## 3. Éléments marketing (à préparer)
 
@@ -55,28 +62,31 @@
 
 ## 4. Identité technique (déjà figée dans app.json)
 
-- [ ] iOS `bundleIdentifier` = `ci.padelco.app` (IMMUABLE après publication — confirmer avant le 1er envoi).
-- [ ] Android `package` = `ci.padelco.app`.
-- [ ] `version` = 1.0.2 ; `ios.buildNumber` s'auto-incrémente à chaque build (profil `production` d'eas.json — valeur courante : voir `app.json`) ; `android.versionCode` = 1 au premier envoi Android.
+- [x] iOS `bundleIdentifier` = `ci.padelco.app` (IMMUABLE : l'app est publiée sous cet identifiant). ✅
+- [ ] Android `package` = `ci.padelco.app` (IMMUABLE dès le premier envoi Play).
+- [ ] `version` = 1.0.2 ; `ios.buildNumber` s'auto-incrémente à chaque build (profil `production` d'eas.json — valeur courante : voir `app.json`) ; `android.versionCode` vaut 1 dans `app.json` et `autoIncrement` le monte AVANT chaque build de production : le **premier `.aab` porte le versionCode 2** (commiter le bump).
 
 ## 5. Fabriquer et envoyer (commandes EAS, depuis un ordinateur)
 
+Version d'`eas-cli` **figée** (la même que `padel-sortie-ios`) : une nouvelle version ne change
+pas un build de sortie à notre insu. On la monte volontairement, en une fois, dans tous les docs.
+
 ```bash
 # Se connecter (une fois)
-npx eas-cli login
+npx eas-cli@24.12.1 login
 
 # Android — version de production (.aab pour le Play Store)
-npx eas-cli build --platform android --profile production
+npx eas-cli@24.12.1 build --platform android --profile production
 
-# iOS — version de production (nécessite le compte Apple Developer)
-npx eas-cli build --platform ios --profile production
-
-# Envoyer aux stores (EAS gère la signature et l'upload)
-npx eas-cli submit --platform android --profile production
-npx eas-cli submit --platform ios --profile production
+# iOS — version de production + envoi TestFlight (procédure complète : padel-sortie-ios)
+npx eas-cli@24.12.1 build --platform ios --profile production --auto-submit
 ```
 
-> Astuce iPhone sans publier tout de suite : `--profile production` puis `eas submit` vers **TestFlight** pour tester sur de vrais iPhones avant la mise en vente.
+> **Android, premier envoi** : le **premier** `.aab` se dépose **à la main** dans la Play Console
+> (Google refuse un premier envoi par API) — étapes dans `docs/ANDROID-LANCEMENT.md` §6. Les envois
+> suivants peuvent passer par `npx eas-cli@24.12.1 submit --platform android --profile production`,
+> une fois la clé de compte de service Google fournie et un bloc `android` ajouté à
+> `submit.production` d'`eas.json` (aujourd'hui seul le bloc `ios` existe).
 
 ## 6. Avant d'ouvrir au public (rappels du projet)
 
@@ -104,8 +114,8 @@ npx eas-cli submit --platform ios --profile production
       (`reject_club_request` + branche tournoi officiel opérateur), `61` diagnostics anonymes,
       `62` téléphone organisateur privé, `63` `with check` sur les policies UPDATE de Storage,
       `64` cycle de vie compte/tournoi. **Plus rien à coller côté SQL avant le prochain build.**
-- [ ] Dans l'app, **Espace opérateur → Finances → coller ton lien de paiement Wave** (`pay.wave.com/…`)
-      pour que les organisateurs de tournois puissent régler leurs frais. ⚠️ (seule action serveur restante)
+- [x] Dans l'app, **Espace opérateur → Finances → coller ton lien de paiement Wave** (`pay.wave.com/…`)
+      — FAIT (lien configuré en base, vérifié le 2026-10-21).
 - [x] **Edge Function `notify-club`** → **Edit** → recoller tout `supabase/functions/notify-club/index.ts`
       → **Deploy** — FAIT (confirmé 2026-07-03, voir AUDIT-SERVEUR §0-SEXIES).
 
@@ -150,9 +160,15 @@ créé côté serveur (e-mail déjà validé) — **ses identifiants te sont com
 
 ### d. Sécuriser les notifications (recommandé fort avant lancement)
 
-- [ ] Poser un **`WEBHOOK_SECRET`** sur `notify-club` et sur **tous** les webhooks — étapes exactes
-      dans `docs/AUDIT-SERVEUR.md` §3. Sans lui, n'importe qui connaissant l'URL peut déclencher des
-      notifications. À faire une fois, avant d'ouvrir au public.
+- [x] **`WEBHOOK_SECRET`** posé sur `notify-club` et sur les **11** webhooks — FAIT depuis le
+      2026-07-06 (rotation : `docs/AUDIT-SERVEUR.md` §3).
+
+### e. Google Play — conformité (avant le premier `.aab`)
+
+- [ ] Questionnaire **« Sécurité des données »** : réponses prêtes dans `docs/ANDROID-LANCEMENT.md` §5.
+- [ ] **URL de suppression de compte** : `https://padelconnectci.com/supprimer-mon-compte` (page en
+      ligne après le redéploiement de `site/`).
+- [ ] Questionnaire **IARC** : mêmes réponses que l'Age Rating Apple (`docs/APP-STORE-CONFORMITE.md` §5).
 
 ## 7. Note importante — Expo Go
 

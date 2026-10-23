@@ -39,17 +39,27 @@
           réservation de créneaux, recherche de partenaires, tournois et avis. Le règlement d'une session se fait
           directement au club — aucun paiement n'est effectué dans l'application.
         </p>
+        <!-- À COMPLÉTER (porteur, décision n° 22 du docs/AUDIT-REGLES-METIER-2026-10.md §7) :
+             identité juridique de l'éditeur et responsable du traitement (nom ou raison sociale,
+             forme, n° RCCM, adresse) et n° de récépissé de la déclaration ARTCI. Ne rien inventer :
+             remplacer cette ligne « Responsable du traitement » le jour où le porteur les fournit,
+             ET la même ligne dans site/cgu.html et src/app/legal.tsx. -->
+        <p>
+          <strong>Responsable du traitement</strong> : PadelConnect, Abidjan, Côte d'Ivoire —
+          <a href="mailto:contact@padelconnectci.com">contact@padelconnectci.com</a>.
+        </p>
       </div>
 
       <div class="card">
         <h2>Les données que nous collectons</h2>
         <ul>
           <li><strong>Compte</strong> : adresse e-mail, mot de passe (chiffré), prénom, nom, numéro de téléphone, date de naissance et sexe (facultatifs), niveau de jeu.</li>
-          <li><strong>Activité</strong> : réservations, participations, tournois, avis publiés (note globale et, en option, notes détaillées terrains/accueil/vestiaires), amis, joueurs favoris, clubs suivis, parrainage, matchs ouverts, alertes de créneau (liste d'attente), scores de match saisis, points et niveau de classement, fidélité (parties jouées, récompenses réclamées), demandes de cours et cours collectifs avec un coach (et fiche coach si un club t'a promu), carnets de séances d'un club.</li>
+          <li><strong>Activité</strong> : réservations, participations, tournois, avis publiés (note globale et, en option, notes détaillées terrains/accueil/vestiaires), amis, joueurs favoris, clubs suivis, parrainage, matchs ouverts, alertes de créneau (liste d'attente), scores de match saisis, points et niveau de classement, fidélité (réservations créées et jouées, remises réclamées avec leur code, et pour une remise servie : club, prix du match, montant et date), demandes de cours et cours collectifs avec un coach (et fiche coach si un club t'a promu), carnets de séances d'un club.</li>
           <li><strong>Partage de la note (parts Wave)</strong> : pour un match partagé, le créateur peut coller un lien de paiement <em>Wave</em> et chaque joueur peut indiquer qu'il a réglé sa part. Aucun paiement ne transite par PadelConnect : le règlement se fait dans Wave (application tierce). Nous conservons uniquement le statut « déclaré / confirmé » de chaque part.</li>
           <li><strong>Photo</strong> (facultative, avec ton accord) : photo de profil, et pour les gérants, photos du club.</li>
           <li><strong>Contacts</strong> (facultatif, avec ton accord) : lorsque tu choisis d'ajouter un ami depuis tes contacts, nous lisons uniquement le contact que <em>tu</em> sélectionnes (nom et numéro) pour t'aider à l'inviter. Nous ne copions jamais ton carnet d'adresses.</li>
-          <li><strong>Notifications</strong> : un identifiant technique d'appareil (jeton de notification) pour t'envoyer les alertes liées à tes réservations, invitations et tournois.</li>
+          <li><strong>Notifications</strong> : un identifiant technique d'appareil (jeton de notification) pour t'envoyer les alertes liées à tes réservations, invitations, scores, cours et tournois, les annonces des clubs que tu suis, les matchs ouverts à ton niveau et les actus et l'agenda PadelConnect (activés par défaut, désactivables dans Profil → Notifications).</li>
+          <li><strong>Support et demandes de club</strong> : les messages que tu nous envoies et, si tu inscris un club, ta demande (nom, téléphone de contact, message).</li>
           <li><strong>Diagnostics techniques</strong> : rapports d'erreur/plantage et événements d'usage (écrans consultés, actions), enregistrés <em>sans identifiant personnel</em> (jamais rattachés à ton compte), uniquement pour corriger les bugs et améliorer le service.</li>
         </ul>
         <p>Nous n'utilisons aucune donnée de localisation GPS. Les liens vers Google Maps se contentent d'ouvrir une recherche par nom.</p>
@@ -60,7 +70,8 @@
         <ul>
           <li>Faire fonctionner ton compte et synchroniser tes informations entre tes appareils.</li>
           <li>Permettre aux clubs de gérer les réservations qui les concernent et de te recontacter à leur sujet.</li>
-          <li>T'envoyer des notifications utiles (rappels de match, invitations, validation de tournoi).</li>
+          <li>T'envoyer des notifications utiles (rappels de match, invitations, validation de tournoi) et, sauf si tu les désactives, les actus et l'agenda PadelConnect.</li>
+          <li>Faire fonctionner la fidélité : compter tes réservations créées et jouées et permettre au club d'appliquer ta remise, que PadelConnect lui rembourse ensuite.</li>
         </ul>
         <p>
           <strong>Nous ne vendons pas tes données</strong> et nous ne les utilisons pas pour te suivre (pister) à travers
@@ -69,29 +80,58 @@
       </div>
 
       <div class="card">
-        <h2>Où sont stockées tes données — et qui voit quoi</h2>
+        <h2>Qui voit quoi</h2>
         <p>
-          Tes données sont hébergées sur un serveur sécurisé fourni par <strong>Supabase</strong> ; les notifications
-          sont acheminées via le service push d'<strong>Expo</strong> (un jeton technique d'appareil, sans donnée personnelle). Tes
-          <strong> coordonnées</strong> (e-mail, téléphone) ne sont jamais montrées aux autres joueurs. En revanche,
-          certaines informations sont <strong>visibles par la communauté</strong>, car c'est le but de ces
-          fonctionnalités : ton nom sur les avis que tu publies, ton prénom (et l'initiale de ton nom) au classement
-          avec tes points, ton prénom sur les matchs ouverts que tu crées ou rejoins, ton niveau, ton club favori, ta
+          Ton <strong>e-mail</strong> n'est jamais montré ; ton <strong>téléphone</strong> n'est pas affiché
+          publiquement. Exception : si tu organises un tournoi, il est communiqué au club hôte et aux équipes inscrites
+          pour le règlement des frais. En revanche, certaines informations sont <strong>visibles par la communauté</strong>,
+          car c'est le but de ces fonctionnalités : ton nom sur les avis que tu publies, ton prénom (et l'initiale de ton
+          nom) au classement avec tes points, ton prénom et l'initiale de ton nom dans la liste publique des matchs
+          ouverts (ton nom complet est visible des joueurs du même match), ton niveau, ton club favori, ta
           fiche coach si un club t'a promu et, à partir de 5 parties jouées, ton taux de présence (badge « Fiable · N % »,
-          jamais le détail de tes absences). Un club ne voit que les réservations qui le concernent ; l'opérateur de
+          jamais le détail de tes absences). Un club ne voit que les réservations qui le concernent (et les remises fidélité qu'il t'a servies) ; l'opérateur de
           PadelConnect n'accède qu'au strict nécessaire au suivi du service. Tu peux signaler tout avis inapproprié et
           bloquer son auteur directement dans l'app (traitement sous 24 h).
         </p>
       </div>
 
       <div class="card">
+        <h2>Nos prestataires</h2>
+        <p>Pour faire fonctionner le service, nous faisons appel à des prestataires qui traitent tes données pour notre compte :</p>
+        <ul>
+          <li><strong>Supabase</strong> : hébergement de la base de données, des comptes et des photos.</li>
+          <li><strong>Expo</strong>, puis <strong>Apple</strong> et <strong>Google</strong> : acheminement des notifications vers ton téléphone (leur texte contient par exemple le nom du club, la date et parfois le prénom d'un joueur).</li>
+          <li><strong>Brevo</strong> : envoi des e-mails de compte (confirmation d'adresse, mot de passe oublié).</li>
+          <li><strong>Cloudflare</strong> : hébergement du site et de la version web, réception des e-mails envoyés à notre adresse de contact.</li>
+          <li><strong>Google</strong> (Gmail) : boîte où nous lisons les e-mails envoyés à notre adresse de contact.</li>
+        </ul>
+        <p>Ces prestataires sont situés ou hébergent leurs serveurs hors de Côte d'Ivoire : tes données peuvent donc être transférées à l'étranger, uniquement pour ces usages.</p>
+      </div>
+
+      <div class="card">
+        <h2>Durées de conservation</h2>
+        <ul>
+          <li><strong>Compte, profil et activité</strong> : tant que ton compte existe ; supprimés dès que tu supprimes ton compte.</li>
+          <li><strong>Ce qui subsiste après la suppression</strong> : les tournois publiés ou clôturés que tu as organisés (organisateur affiché « Compte supprimé », sans téléphone) et les noms d'équipes du palmarès ; les matchs passés joués avec tes partenaires, qui restent dans leur historique (ton nom y figure là où tu étais invité, « Ancien joueur » sur ceux que tu avais réservés) ; les remises fidélité déjà servies par un club (montant, prix du match et date, sans ton nom), qui servent à son décompte ; tes messages au support, sans ton nom ni ton numéro ; tes demandes de club déjà traitées, sans ton numéro. Tes tournois en attente ou refusés et tes demandes de club non traitées sont supprimés.</li>
+          <li><strong>Messages au support</strong> : jusqu'à leur traitement, puis supprimés 7 jours après leur résolution.</li>
+          <li><strong>Diagnostics techniques</strong> (anonymes) : supprimés au-delà de 30 jours.</li>
+          <li><strong>Compteurs techniques anti-abus</strong> (nombre d'envois récents) : 2 jours.</li>
+          <li><strong>E-mails de compte</strong> : journaux d'envoi conservés par Brevo selon sa propre politique.</li>
+        </ul>
+      </div>
+
+      <div class="card">
         <h2>Tes droits & la suppression de compte</h2>
         <p>
-          Tu peux supprimer ton compte et l'ensemble de tes données (photo de profil comprise) à tout moment,
+          Tu peux supprimer ton compte et tes données (photo de profil comprise) à tout moment,
           directement dans l'application : <strong>Profil → « Supprimer mon compte »</strong> (action définitive et
-          immédiate — tes réservations à venir sont annulées et les clubs concernés prévenus). Tu peux aussi nous écrire
-          pour exercer tes droits d'accès, de rectification ou de suppression. Le traitement respecte la réglementation
-          ivoirienne (ARTCI) sur les données personnelles. L'application est réservée aux personnes de 13 ans ou plus
+          immédiate — tes réservations à venir sont annulées et les clubs concernés prévenus ; ce qui subsiste est listé
+          ci-dessus). Sans l'application, suis la procédure de la page
+          <a href="/supprimer-mon-compte">Supprimer mon compte</a>. Tu peux aussi nous écrire pour exercer tes droits
+          d'accès, de rectification, d'opposition ou de suppression. Tes données sont traitées dans le cadre de la loi
+          ivoirienne n° 2013-450 du 19 juin 2013 relative à la protection des données à caractère personnel ; tu peux
+          saisir l'Autorité de Régulation des Télécommunications/TIC de Côte d'Ivoire (ARTCI,
+          <a href="https://www.artci.ci">artci.ci</a>). L'application est réservée aux personnes de 13 ans ou plus
           (accord d'un parent ou tuteur pour les mineurs).
         </p>
       </div>

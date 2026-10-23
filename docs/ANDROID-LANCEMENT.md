@@ -70,16 +70,49 @@ lancement Play : le lien de l'e-mail passe d'abord par Supabase (`/verify`) puis
   Les clubs partenaires gèrent leurs terrains, leurs horaires et leurs réservations depuis le
   même outil. Rejoins la communauté du padel ivoirien ! 🎾 »
 - **Catégorie** : Sports. **Contact** : contact@padelconnectci.com ·
-  site `https://padelconnectci.com` · confidentialité `https://padelconnectci.com/privacy`.
+  site `https://padelconnectci.com` · confidentialité `https://padelconnectci.com/privacy` ·
+  **suppression de compte** (champ « URL de suppression du compte », obligatoire) :
+  `https://padelconnectci.com/supprimer-mon-compte`.
 - **Captures d'écran** : à prendre sur l'APK de test (accueil, réservation, tournois, classement,
   fiche club) — minimum 2, idéal 6-8, format téléphone.
-- **Questionnaire « Sécurité des données »** : mêmes réponses que l'App Privacy iOS
-  (cf. `docs/APP-STORE-CONFORMITE.md`) — données collectées : e-mail, téléphone, nom, niveau ;
-  liées à l'identité ; pas de partage à des tiers ; suppression de compte disponible dans l'app.
+- **Questionnaire « Sécurité des données »** (Play Console → Contenu de l'application) — miroir de
+  l'App Privacy iOS (`docs/APP-STORE-CONFORMITE.md` §2) :
+  - **Collecte** : oui. **Partage** avec des tiers : **non** — les prestataires (Supabase, Expo,
+    Google/Apple pour les push, Brevo, Cloudflare) traitent pour notre compte, et la transmission
+    de la réservation au club est demandée par le joueur lui-même (deux exceptions prévues par Google).
+  - **Chiffrement en transit** : oui (HTTPS). **Suppression** : oui, dans l'app (Profil → Supprimer
+    mon compte) ET via l'URL publique ci-dessus.
+  - Données à cocher (toutes « Fonctionnement de l'application », traitées pour le compte) :
+
+  | Catégorie Play                   | Donnée                                    | Facultative ?        |
+  | -------------------------------- | ----------------------------------------- | -------------------- |
+  | Informations personnelles        | Nom                                       | non                  |
+  | Informations personnelles        | Adresse e-mail                            | non                  |
+  | Informations personnelles        | Numéro de téléphone                       | non                  |
+  | Informations personnelles        | ID utilisateur                            | non                  |
+  | Informations personnelles        | Autres infos (date de naissance, sexe)    | oui                  |
+  | Photos et vidéos                 | Photos (profil, photos du club)           | oui                  |
+  | Messages                         | Autres messages (support, annonces club)  | oui                  |
+  | Activité dans l'appli            | Autre contenu généré (avis, scores)       | oui                  |
+  | Activité dans l'appli            | Interactions avec l'appli (diagnostics)   | non (anonymes)       |
+  | Infos financières                | Historique d'achats (réservations, prix)  | non                  |
+  | Infos financières                | Autres infos financières (lien Wave)      | oui                  |
+  | Contacts                         | Contacts (le seul contact choisi, numéro) | oui                  |
+  | Infos et performances de l'appli | Journaux de plantage, diagnostics         | non (anonymes)       |
+  | Identifiants de l'appareil       | Jeton de notification                     | oui (si push refusé) |
+  - **Rien** en localisation, santé, fichiers, agenda (l'ajout au calendrier ouvre la fiche système
+    sans lire l'agenda), navigation web.
 
 ## 6) Le jour du lancement (avec l'assistant)
 
-1. Build **production Android** (`.aab`) via EAS + envoi sur Play Console.
+1. Build **production Android** (`.aab`) :
+   `npx eas-cli@24.12.1 build --platform android --profile production --non-interactive --no-wait`.
+   `autoIncrement` monte `android.versionCode` dans `app.json` AVANT le build : le 1ᵉʳ `.aab` porte le
+   **versionCode 2** (commiter le bump). Le **premier** `.aab` se dépose **à la main** dans la Play
+   Console (Test et publication → Tests fermés → Créer une version → importer le fichier téléchargé
+   depuis expo.dev) : Google refuse un premier envoi par API. Ensuite seulement, `eas submit` peut
+   prendre le relais, avec une clé de compte de service Google (à créer dans la Play Console, à
+   fournir hors dépôt) et un bloc `android` dans `submit.production` d'`eas.json`.
 2. Ajout de l'empreinte Google au `assetlinks.json` (cf. §4).
 3. Compléter `site/get.html` ET `site/invite.html` : remettre le bouton Google Play (et la redirection
    Android de get.html) en action PRINCIPALE sur Android, et reléguer ou retirer le bloc `#web`

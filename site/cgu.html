@@ -93,10 +93,27 @@
           tu es prévenu avec le motif et, si possible, une proposition de report — sans aucun impact sur ta fiabilité.
         </p>
         <p data-i18n="reservations.texte2">
-          Après un match, chaque joueur peut saisir le score : le match est validé quand un adversaire confirme (ou, pour une
-          saisie restée seule, après 48 h), et alimente le classement par points. Le niveau est initialisé par le quiz
-          d'inscription puis ajusté automatiquement côté serveur par les matchs validés et les tournois officiels. Le parrainage
-          permet d'inviter des amis, sans contrepartie monétaire.
+          Après un match, chaque joueur peut saisir le score de son point de vue : le match est validé quand un joueur
+          du camp perdant le reconnaît ou, pour une saisie gagnante restée seule sans réponse, au bout de 48 h ; des
+          saisies contradictoires bloquent la validation. Un match validé alimente le classement par points. Le niveau
+          est initialisé par le quiz d'inscription puis ajusté automatiquement côté serveur, par les matchs dont le
+          score est reconnu par le camp perdant (pour les joueurs qui l'ont saisi) et par les tournois officiels : un
+          match validé au bout de 48 h compte pour les points, pas pour le niveau. Un cours avec un coach n'est pas une
+          partie : il ne rapporte pas de points et ne compte ni pour ta présence ni pour la fidélité. Le parrainage sert
+          à inviter des amis : chaque inscription avec ton code apparaît dans ton compteur « Amis rejoints », sans
+          contrepartie monétaire.
+        </p>
+      </div>
+
+      <div class="carte-legale reveal">
+        <h2 data-i18n="fidelite.titre">Fidélité</h2>
+        <p data-i18n="fidelite.texte1">
+          Chaque réservation que tu as créée et qui a été jouée compte pour ta carte de fidélité (Profil → Fidélité) ;
+          les invitations, les cours avec un coach, les réservations annulées et les absences ne comptent pas. Toutes
+          les 10 réservations, tu obtiens −50 % sur ton prochain match, plafonné à 5 000 FCFA à ce jour (le plafond en
+          vigueur est affiché sur ta carte), offert par PadelConnect : tu réclames ta remise dans l'app, tu montres ton
+          code au club, qui l'applique sur le prix du match ; PadelConnect rembourse ensuite cette remise au club. Une
+          remise ne s'échange pas contre de l'argent.
         </p>
       </div>
 
@@ -106,7 +123,7 @@
           Un joueur peut proposer un tournoi ; il n'est publié qu'après validation du club hôte, qui peut refuser en indiquant
           un motif. Des <strong>frais d'organisation PadelConnect</strong> (montant affiché AVANT la création) peuvent s'appliquer
           aux tournois créés par les joueurs : ils ne sont dus que si le club valide le tournoi — rien n'est dû si le tournoi est
-          refusé. Les éventuels frais d'inscription des participants sont fixés et encaissés par l'organisateur, sous sa
+          refusé, ni s'il est ensuite annulé par le club hôte. Les éventuels frais d'inscription des participants sont fixés et encaissés par l'organisateur, sous sa
           responsabilité.
         </p>
       </div>
@@ -115,43 +132,69 @@
         <h2 data-i18n="moderation.titre">Contenu publié &amp; modération</h2>
         <p data-i18n-html="moderation.texte1">
           Les avis, scores et matchs ouverts que tu publies sont visibles par les autres utilisateurs.
-          <strong>Tolérance zéro</strong> pour les contenus injurieux, discriminatoires, diffamatoires ou hors sujet : ils
-          peuvent être retirés sans préavis et le compte fautif suspendu. Chaque avis d'un autre joueur porte un bouton
-          <strong>« Signaler »</strong> (traité sous 24 h) et un bouton <strong>« Bloquer »</strong> — bloquer un joueur masque
-          ses contenus et l'empêche de t'envoyer des demandes d'ami ou de rejoindre tes matchs ouverts.
+          <strong>Tolérance zéro</strong> pour les contenus injurieux, discriminatoires, diffamatoires ou hors sujet :
+          ils peuvent être retirés sans préavis ; en cas de récidive, le compte peut être supprimé par PadelConnect.
+          Chaque avis d'un autre joueur porte un bouton <strong>« Signaler »</strong> (traité sous 24 h) et un bouton
+          <strong>« Bloquer »</strong> — bloquer un joueur masque ses contenus, le retire de tes amis et de tes
+          joueurs favoris (dans les deux sens) et l'empêche de t'envoyer des demandes d'ami ou de rejoindre tes matchs
+          ouverts.
         </p>
       </div>
 
       <div class="carte-legale reveal">
         <h2 data-i18n="donnees.titre">Tes données</h2>
         <p data-i18n-html="donnees.texte1">
-          Pour faire fonctionner ton compte, tes informations (profil, niveau, réservations, parrainage) sont enregistrées sur
-          un serveur sécurisé (hébergé par Supabase) et synchronisées entre tes appareils. Tes <strong>coordonnées</strong>
-          (e-mail, téléphone) ne sont jamais montrées aux autres joueurs. En revanche, certaines informations sont
-          <strong>visibles par la communauté</strong> : ton nom sur les avis que tu publies, ton prénom (et l'initiale de ton
-          nom) au classement avec tes points, ton prénom sur les matchs ouverts que tu crées ou rejoins, ton niveau, ton club
-          favori, ta fiche coach si un club t'a promu et, à partir de 5 parties jouées, ton taux de présence
-          (badge « Fiable · N % », jamais le détail de tes absences). Un club ne voit que les réservations le concernant, et
-          l'opérateur de PadelConnect le strict nécessaire au suivi du service.
+          Pour faire fonctionner ton compte, tes informations (profil, niveau, réservations, parrainage) sont
+          enregistrées sur un serveur sécurisé (hébergé par Supabase) et synchronisées entre tes appareils. Ton
+          <strong>e-mail</strong> n'est jamais montré ; ton <strong>téléphone</strong> n'est pas affiché publiquement.
+          Exception : si tu organises un tournoi, il est communiqué au club hôte et aux équipes inscrites pour le
+          règlement des frais. En revanche, certaines informations sont <strong>visibles par la communauté</strong> :
+          ton nom sur les avis que tu publies, ton prénom (et l'initiale de ton nom) au classement avec tes points,
+          ton prénom et l'initiale de ton nom dans la liste publique des matchs ouverts (ton nom complet est visible
+          des joueurs du même match), ton niveau, ton club favori, ta fiche coach si un club t'a promu et, à partir de
+          5 parties jouées, ton taux de présence (badge « Fiable · N % », jamais le détail de tes absences). Un club
+          ne voit que les réservations le concernant (et les remises fidélité qu'il t'a servies), et l'opérateur de PadelConnect le strict nécessaire au suivi du
+          service.
         </p>
         <p data-i18n-html="donnees.texte2">
-          Avec ton accord uniquement : ta <strong>photo</strong> de profil ou de club est stockée pour l'affichage ; l'accès à
-          tes <strong>contacts</strong> sert seulement à retrouver un ami par son numéro au moment où tu le choisis (on ne copie
-          jamais ton carnet d'adresses) ; les <strong>notifications</strong> t'informent de tes réservations, invitations et
-          tournois. L'app envoie aussi des <strong>diagnostics techniques anonymes</strong> (rapports d'erreur et statistiques
-          d'usage, sans identifiant personnel) pour corriger les bugs. PadelConnect ne vend pas tes données et ne les utilise
-          pas pour te pister entre applications.
+          Avec ton accord uniquement : ta <strong>photo</strong> de profil ou de club est stockée pour l'affichage ;
+          l'accès à tes <strong>contacts</strong> sert seulement à retrouver un ami par son numéro au moment où tu le
+          choisis (on ne copie jamais ton carnet d'adresses) ; les <strong>notifications</strong> t'informent de tes
+          réservations, invitations, scores, cours et tournois, des annonces des clubs que tu suis, des matchs ouverts
+          à ton niveau et des actus et de l'agenda PadelConnect (activés par défaut, désactivables dans Profil →
+          Notifications). L'app envoie aussi des <strong>diagnostics techniques
+          anonymes</strong> (rapports d'erreur et statistiques d'usage, sans identifiant personnel) pour corriger les
+          bugs. PadelConnect ne vend pas tes données et ne les utilise pas pour te pister entre applications. Nos
+          prestataires (Supabase, Expo, Apple, Google, Brevo, Cloudflare), situés hors de Côte d'Ivoire, et les durées
+          de conservation sont détaillés dans la <a href="/privacy">politique de confidentialité</a>.
         </p>
-        <p data-i18n="donnees.texte3">
-          Tu peux supprimer ton compte et toutes tes données (photo comprise) à tout moment depuis Profil → « Supprimer mon
-          compte » (action définitive — tes réservations à venir sont annulées et les clubs prévenus), ou en nous écrivant à
-          l'adresse ci-dessous. Le traitement respecte la réglementation ivoirienne (ARTCI) sur les données personnelles.
+        <p data-i18n-html="donnees.texte3">
+          Tu peux supprimer ton compte et tes données (photo comprise) à tout moment depuis Profil → « Supprimer mon
+          compte » (action définitive — tes réservations à venir sont annulées et les clubs prévenus), ou sans
+          l'application en suivant la page <a href="/supprimer-mon-compte">Supprimer mon compte</a>. Subsistent
+          seulement : les tournois publiés ou clôturés que tu as organisés (organisateur affiché « Compte supprimé »,
+          sans téléphone) et les noms d'équipes du palmarès, les matchs passés joués avec tes partenaires, qui restent
+          dans leur historique (ton nom y figure là où tu étais invité, « Ancien joueur » sur ceux que tu avais
+          réservés), les remises fidélité déjà servies par un club (montant, prix du match et date, sans ton nom), qui
+          servent à son décompte, tes messages au support (sans ton nom ni ton numéro) et tes demandes de club déjà
+          traitées (sans ton numéro). Tu peux aussi nous écrire pour exercer
+          tes droits d'accès, de rectification, d'opposition ou de suppression. Tes données sont traitées dans le
+          cadre de la loi ivoirienne n° 2013-450 du 19 juin 2013 relative à la protection des données à caractère
+          personnel ; tu peux saisir l'ARTCI (<a href="https://www.artci.ci">artci.ci</a>).
         </p>
       </div>
 
       <div class="carte-legale reveal">
         <h2 data-i18n="contact.titre">Contact</h2>
         <p data-i18n="contact.texte1">PadelConnect · Abidjan, Côte d'Ivoire</p>
+        <!-- À COMPLÉTER (porteur, décision n° 22 du docs/AUDIT-REGLES-METIER-2026-10.md §7) : identité
+             juridique de l'éditeur (nom ou raison sociale, forme, n° RCCM, adresse) et n° de récépissé
+             ARTCI — à ajouter à « contact.texte2 » (FR et EN) le jour où le porteur les fournit, comme
+             dans site/privacy.html et src/app/legal.tsx. Ne rien inventer. -->
+        <p data-i18n="contact.texte2">
+          Responsable du traitement : PadelConnect, Abidjan, Côte d'Ivoire. Hébergement : Cloudflare (site et version
+          web) et Supabase (données de l'application).
+        </p>
         <!-- Adresse de contact publique du site (routée vers la boîte opérationnelle du porteur). -->
         <p><a href="mailto:contact@padelconnectci.com">contact@padelconnectci.com</a></p>
       </div>
@@ -210,38 +253,48 @@
           en: 'A club may exceptionally cancel your slot if it was already booked outside the app (phone, walk-in): you are notified with the reason and, when possible, an alternative slot — with no impact on your reliability.',
         },
         'reservations.texte2': {
-          fr: "Après un match, chaque joueur peut saisir le score : le match est validé quand un adversaire confirme (ou, pour une saisie restée seule, après 48 h), et alimente le classement par points. Le niveau est initialisé par le quiz d'inscription puis ajusté automatiquement côté serveur par les matchs validés et les tournois officiels. Le parrainage permet d'inviter des amis, sans contrepartie monétaire.",
-          en: 'After a match, each player can enter the score: the match is validated once an opponent confirms it (or, for a lone entry, after 48h), feeding the points leaderboard. Your level starts from the sign-up quiz and is then adjusted automatically server-side by validated matches and official tournaments. Referrals let you invite friends, with no monetary reward.',
+          fr: "Après un match, chaque joueur peut saisir le score de son point de vue : le match est validé quand un joueur du camp perdant le reconnaît ou, pour une saisie gagnante restée seule sans réponse, au bout de 48 h ; des saisies contradictoires bloquent la validation. Un match validé alimente le classement par points. Le niveau est initialisé par le quiz d'inscription puis ajusté automatiquement côté serveur, par les matchs dont le score est reconnu par le camp perdant (pour les joueurs qui l'ont saisi) et par les tournois officiels : un match validé au bout de 48 h compte pour les points, pas pour le niveau. Un cours avec un coach n'est pas une partie : il ne rapporte pas de points et ne compte ni pour ta présence ni pour la fidélité. Le parrainage sert à inviter des amis : chaque inscription avec ton code apparaît dans ton compteur « Amis rejoints », sans contrepartie monétaire.",
+          en: "After a match, each player can enter the score from their own point of view: the match is validated once a player from the losing side acknowledges it or, for a lone winning entry left unanswered, after 48h; contradictory entries block validation. A validated match feeds the points leaderboard. Your level starts from the sign-up quiz and is then adjusted automatically server-side, by matches whose score the losing side acknowledged (for the players who entered it) and by official tournaments: a match validated after 48h counts for points, not for level. A coaching lesson is not a game: it earns no points and counts towards neither your attendance nor loyalty. Referrals let you invite friends: each sign-up with your code shows in your “Friends joined” counter, with no monetary reward.",
+        },
+
+        'fidelite.titre': { fr: 'Fidélité', en: 'Loyalty' },
+        'fidelite.texte1': {
+          fr: "Chaque réservation que tu as créée et qui a été jouée compte pour ta carte de fidélité (Profil → Fidélité) ; les invitations, les cours avec un coach, les réservations annulées et les absences ne comptent pas. Toutes les 10 réservations, tu obtiens −50 % sur ton prochain match, plafonné à 5 000 FCFA à ce jour (le plafond en vigueur est affiché sur ta carte), offert par PadelConnect : tu réclames ta remise dans l'app, tu montres ton code au club, qui l'applique sur le prix du match ; PadelConnect rembourse ensuite cette remise au club. Une remise ne s'échange pas contre de l'argent.",
+          en: 'Each booking you created that has been played counts towards your loyalty card (Profile → Loyalty); invitations, coaching lessons, cancelled bookings and no-shows do not count. Every 10 bookings, you get 50% off your next match, capped at 5,000 FCFA at present (the current cap is shown on your card), offered by PadelConnect: you claim your discount in the app and show your code to the club, which applies it to the match price; PadelConnect then reimburses the club for it. A discount cannot be exchanged for cash.',
         },
 
         'tournois.titre': { fr: "Tournois & frais d'organisation", en: 'Tournaments & organisation fees' },
         'tournois.texte1': {
-          fr: "Un joueur peut proposer un tournoi ; il n'est publié qu'après validation du club hôte, qui peut refuser en indiquant un motif. Des <strong>frais d'organisation PadelConnect</strong> (montant affiché AVANT la création) peuvent s'appliquer aux tournois créés par les joueurs : ils ne sont dus que si le club valide le tournoi — rien n'est dû si le tournoi est refusé. Les éventuels frais d'inscription des participants sont fixés et encaissés par l'organisateur, sous sa responsabilité.",
-          en: "A player can propose a tournament; it is only published once the host club approves it, and the club may decline with a reason. <strong>PadelConnect organisation fees</strong> (amount shown BEFORE creation) may apply to player-created tournaments: they are only due if the club approves the tournament — nothing is due if declined. Any participant entry fees are set and collected by the organiser, under their responsibility.",
+          fr: "Un joueur peut proposer un tournoi ; il n'est publié qu'après validation du club hôte, qui peut refuser en indiquant un motif. Des <strong>frais d'organisation PadelConnect</strong> (montant affiché AVANT la création) peuvent s'appliquer aux tournois créés par les joueurs : ils ne sont dus que si le club valide le tournoi — rien n'est dû si le tournoi est refusé, ni s'il est ensuite annulé par le club hôte. Les éventuels frais d'inscription des participants sont fixés et encaissés par l'organisateur, sous sa responsabilité.",
+          en: "A player can propose a tournament; it is only published once the host club approves it, and the club may decline with a reason. <strong>PadelConnect organisation fees</strong> (amount shown BEFORE creation) may apply to player-created tournaments: they are only due if the club approves the tournament — nothing is due if declined, or if the host club later cancels it. Any participant entry fees are set and collected by the organiser, under their responsibility.",
         },
 
         'moderation.titre': { fr: 'Contenu publié & modération', en: 'Published content & moderation' },
         'moderation.texte1': {
-          fr: "Les avis, scores et matchs ouverts que tu publies sont visibles par les autres utilisateurs. <strong>Tolérance zéro</strong> pour les contenus injurieux, discriminatoires, diffamatoires ou hors sujet : ils peuvent être retirés sans préavis et le compte fautif suspendu. Chaque avis d'un autre joueur porte un bouton <strong>« Signaler »</strong> (traité sous 24 h) et un bouton <strong>« Bloquer »</strong> — bloquer un joueur masque ses contenus et l'empêche de t'envoyer des demandes d'ami ou de rejoindre tes matchs ouverts.",
-          en: 'Reviews, scores and open matches you publish are visible to other users. <strong>Zero tolerance</strong> for abusive, discriminatory, defamatory or off-topic content: it may be removed without notice and the offending account suspended. Every other player’s review has a <strong>"Report"</strong> button (handled within 24h) and a <strong>"Block"</strong> button — blocking a player hides their content and stops them sending you friend requests or joining your open matches.',
+          fr: "Les avis, scores et matchs ouverts que tu publies sont visibles par les autres utilisateurs. <strong>Tolérance zéro</strong> pour les contenus injurieux, discriminatoires, diffamatoires ou hors sujet : ils peuvent être retirés sans préavis ; en cas de récidive, le compte peut être supprimé par PadelConnect. Chaque avis d'un autre joueur porte un bouton <strong>« Signaler »</strong> (traité sous 24 h) et un bouton <strong>« Bloquer »</strong> — bloquer un joueur masque ses contenus, le retire de tes amis et de tes joueurs favoris (dans les deux sens) et l'empêche de t'envoyer des demandes d'ami ou de rejoindre tes matchs ouverts.",
+          en: "Reviews, scores and open matches you publish are visible to other users. <strong>Zero tolerance</strong> for abusive, discriminatory, defamatory or off-topic content: it may be removed without notice; repeat offenders’ accounts may be deleted by PadelConnect. Every other player’s review has a <strong>\"Report\"</strong> button (handled within 24h) and a <strong>\"Block\"</strong> button — blocking a player hides their content, removes them from your friends and favourite players (both ways) and stops them sending you friend requests or joining your open matches.",
         },
 
         'donnees.titre': { fr: 'Tes données', en: 'Your data' },
         'donnees.texte1': {
-          fr: "Pour faire fonctionner ton compte, tes informations (profil, niveau, réservations, parrainage) sont enregistrées sur un serveur sécurisé (hébergé par Supabase) et synchronisées entre tes appareils. Tes <strong>coordonnées</strong> (e-mail, téléphone) ne sont jamais montrées aux autres joueurs. En revanche, certaines informations sont <strong>visibles par la communauté</strong> : ton nom sur les avis que tu publies, ton prénom (et l'initiale de ton nom) au classement avec tes points, ton prénom sur les matchs ouverts que tu crées ou rejoins, ton niveau, ton club favori, ta fiche coach si un club t'a promu et, à partir de 5 parties jouées, ton taux de présence (badge « Fiable · N % », jamais le détail de tes absences). Un club ne voit que les réservations le concernant, et l'opérateur de PadelConnect le strict nécessaire au suivi du service.",
-          en: "To run your account, your information (profile, level, bookings, referrals) is stored on a secure server (hosted by Supabase) and synced across your devices. Your <strong>contact details</strong> (email, phone) are never shown to other players. However, some information is <strong>visible to the community</strong>: your name on reviews you publish, your first name (and last initial) on the leaderboard with your points, your first name on open matches you create or join, your level, your favourite club, your coach profile if a club promoted you and, from 5 games played, your attendance rate (the “Fiable · N %” reliability badge, never the details of your no-shows). A club only sees bookings that concern it, and the PadelConnect operator only what's strictly necessary to run the service.",
+          fr: "Pour faire fonctionner ton compte, tes informations (profil, niveau, réservations, parrainage) sont enregistrées sur un serveur sécurisé (hébergé par Supabase) et synchronisées entre tes appareils. Ton <strong>e-mail</strong> n'est jamais montré ; ton <strong>téléphone</strong> n'est pas affiché publiquement. Exception : si tu organises un tournoi, il est communiqué au club hôte et aux équipes inscrites pour le règlement des frais. En revanche, certaines informations sont <strong>visibles par la communauté</strong> : ton nom sur les avis que tu publies, ton prénom (et l'initiale de ton nom) au classement avec tes points, ton prénom et l'initiale de ton nom dans la liste publique des matchs ouverts (ton nom complet est visible des joueurs du même match), ton niveau, ton club favori, ta fiche coach si un club t'a promu et, à partir de 5 parties jouées, ton taux de présence (badge « Fiable · N % », jamais le détail de tes absences). Un club ne voit que les réservations le concernant (et les remises fidélité qu'il t'a servies), et l'opérateur de PadelConnect le strict nécessaire au suivi du service.",
+          en: "To run your account, your information (profile, level, bookings, referrals) is stored on a secure server (hosted by Supabase) and synced across your devices. Your <strong>email</strong> is never shown; your <strong>phone number</strong> is not displayed publicly. Exception: if you organise a tournament, it is shared with the host club and the registered teams to settle fees. However, some information is <strong>visible to the community</strong>: your name on reviews you publish, your first name (and last initial) on the leaderboard with your points, your first name and last initial in the public list of open matches (your full name is visible to the players of the same match), your level, your favourite club, your coach profile if a club promoted you and, from 5 games played, your attendance rate (the “Fiable · N %” reliability badge, never the details of your no-shows). A club only sees bookings that concern it (and the loyalty discounts it served you), and the PadelConnect operator only what's strictly necessary to run the service.",
         },
         'donnees.texte2': {
-          fr: "Avec ton accord uniquement : ta <strong>photo</strong> de profil ou de club est stockée pour l'affichage ; l'accès à tes <strong>contacts</strong> sert seulement à retrouver un ami par son numéro au moment où tu le choisis (on ne copie jamais ton carnet d'adresses) ; les <strong>notifications</strong> t'informent de tes réservations, invitations et tournois. L'app envoie aussi des <strong>diagnostics techniques anonymes</strong> (rapports d'erreur et statistiques d'usage, sans identifiant personnel) pour corriger les bugs. PadelConnect ne vend pas tes données et ne les utilise pas pour te pister entre applications.",
-          en: "With your consent only: your profile or club <strong>photo</strong> is stored for display; access to your <strong>contacts</strong> only helps find a friend by number at the moment you choose one (we never copy your address book); <strong>notifications</strong> inform you about your bookings, invitations and tournaments. The app also sends <strong>anonymous technical diagnostics</strong> (crash reports and usage stats, with no personal identifier) to fix bugs. PadelConnect does not sell your data or use it to track you across other apps.",
+          fr: "Avec ton accord uniquement : ta <strong>photo</strong> de profil ou de club est stockée pour l'affichage ; l'accès à tes <strong>contacts</strong> sert seulement à retrouver un ami par son numéro au moment où tu le choisis (on ne copie jamais ton carnet d'adresses) ; les <strong>notifications</strong> t'informent de tes réservations, invitations, scores, cours et tournois, des annonces des clubs que tu suis, des matchs ouverts à ton niveau et des actus et de l'agenda PadelConnect (activés par défaut, désactivables dans Profil → Notifications). L'app envoie aussi des <strong>diagnostics techniques anonymes</strong> (rapports d'erreur et statistiques d'usage, sans identifiant personnel) pour corriger les bugs. PadelConnect ne vend pas tes données et ne les utilise pas pour te pister entre applications. Nos prestataires (Supabase, Expo, Apple, Google, Brevo, Cloudflare), situés hors de Côte d'Ivoire, et les durées de conservation sont détaillés dans la <a href=\"/privacy\">politique de confidentialité</a>.",
+          en: "With your consent only: your profile or club <strong>photo</strong> is stored for display; access to your <strong>contacts</strong> only helps find a friend by number at the moment you choose one (we never copy your address book); <strong>notifications</strong> inform you about your bookings, invitations, scores, lessons and tournaments, announcements from clubs you follow, open matches at your level and PadelConnect news and events (on by default, can be turned off in Profile → Notifications). The app also sends <strong>anonymous technical diagnostics</strong> (crash reports and usage stats, with no personal identifier) to fix bugs. PadelConnect does not sell your data or use it to track you across other apps. Our service providers (Supabase, Expo, Apple, Google, Brevo, Cloudflare), located outside Côte d’Ivoire, and retention periods are detailed in the <a href=\"/privacy\">privacy policy</a>.",
         },
         'donnees.texte3': {
-          fr: "Tu peux supprimer ton compte et toutes tes données (photo comprise) à tout moment depuis Profil → « Supprimer mon compte » (action définitive — tes réservations à venir sont annulées et les clubs prévenus), ou en nous écrivant à l'adresse ci-dessous. Le traitement respecte la réglementation ivoirienne (ARTCI) sur les données personnelles.",
-          en: 'You can delete your account and all your data (including your photo) at any time from Profile → "Delete my account" (a final action — your upcoming bookings are cancelled and clubs notified), or by writing to us at the address below. Processing complies with Ivorian (ARTCI) personal data regulations.',
+          fr: "Tu peux supprimer ton compte et tes données (photo comprise) à tout moment depuis Profil → « Supprimer mon compte » (action définitive — tes réservations à venir sont annulées et les clubs prévenus), ou sans l'application en suivant la page <a href=\"/supprimer-mon-compte\">Supprimer mon compte</a>. Subsistent seulement : les tournois publiés ou clôturés que tu as organisés (organisateur affiché « Compte supprimé », sans téléphone) et les noms d'équipes du palmarès, les matchs passés joués avec tes partenaires, qui restent dans leur historique (ton nom y figure là où tu étais invité, « Ancien joueur » sur ceux que tu avais réservés), les remises fidélité déjà servies par un club (montant, prix du match et date, sans ton nom), qui servent à son décompte, tes messages au support (sans ton nom ni ton numéro) et tes demandes de club déjà traitées (sans ton numéro). Tu peux aussi nous écrire pour exercer tes droits d'accès, de rectification, d'opposition ou de suppression. Tes données sont traitées dans le cadre de la loi ivoirienne n° 2013-450 du 19 juin 2013 relative à la protection des données à caractère personnel ; tu peux saisir l'ARTCI (<a href=\"https://www.artci.ci\">artci.ci</a>).",
+          en: "You can delete your account and your data (including your photo) at any time from Profile → \"Delete my account\" (a final action — your upcoming bookings are cancelled and clubs notified), or without the app by following the <a href=\"/supprimer-mon-compte\">Delete my account</a> page. Only the following remains: tournaments you organised that were published or closed (organiser shown as “Deleted account”, without phone number) and team names in the results, the past matches played with your partners, which stay in their history (your name appears where you were invited, “Former player” on those you had booked), loyalty discounts already served by a club (amount, match price and date, without your name), which are part of its statement, your support messages (without your name or number) and your club requests already processed (without your number). You can also write to us to exercise your rights of access, rectification, objection or erasure. Your data is processed under Ivorian law no. 2013-450 of 19 June 2013 on the protection of personal data; you may refer a complaint to the ARTCI (<a href=\"https://www.artci.ci\">artci.ci</a>).",
         },
 
         'contact.titre': { fr: 'Contact', en: 'Contact' },
         'contact.texte1': { fr: "PadelConnect · Abidjan, Côte d'Ivoire", en: 'PadelConnect · Abidjan, Côte d’Ivoire' },
+        'contact.texte2': {
+          fr: "Responsable du traitement : PadelConnect, Abidjan, Côte d'Ivoire. Hébergement : Cloudflare (site et version web) et Supabase (données de l'application).",
+          en: "Data controller: PadelConnect, Abidjan, Côte d’Ivoire. Hosting: Cloudflare (website and web version) and Supabase (app data).",
+        },
 
         pied: {
           fr: "Pour toute question sur tes données ou le service, écris-nous à l'adresse ci-dessus.",

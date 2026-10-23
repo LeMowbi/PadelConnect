@@ -1,8 +1,10 @@
-# Déploiement AUTOMATIQUE de l'Espace Club / Espace opérateur sur le web.
-# But : le site web (club.padelconnectci.com) reste TOUJOURS synchro avec le dernier
-# code de l'app — même code, mêmes écrans, mêmes règles. À chaque push (donc à chaque
-# build), on ré-exporte le web et on redéploie sur Cloudflare Pages. Plus de « re-déposer
-# dist/ à la main ».
+# Vérification + déploiement de l'Espace Club / Espace opérateur sur le web.
+# But : le site web (club.padelconnectci.com) reste synchro avec le code de l'app — même code,
+# mêmes écrans, mêmes règles — SANS qu'un push non vérifié parte en production :
+#   - à chaque push : job `verify` SEUL (tsc, lint, typecheck:tests, test:logic — la cadence §6
+#     de CLAUDE.md, hors bundle natif) ;
+#   - le DÉPLOIEMENT en production ne part que sur demande (onglet Actions → « Run workflow »,
+#     branche de dev ou main), et seulement si `verify` est vert sur ce même commit.
 #
 # Secrets à créer UNE fois dans GitHub (Settings → Secrets and variables → Actions) :
 #   - CLOUDFLARE_API_TOKEN     (jeton Cloudflare avec la permission « Cloudflare Pages: Edit »)
@@ -16,32 +18,78 @@ on:
     branches:
       - main
       - claude/padelconnect-v4-17-4zblgh
-    # On ne redéploie que si du code qui change le web a bougé (évite les runs inutiles).
+    # On ne vérifie que si du code qui change le web (ou ses tests) a bougé (évite les runs inutiles).
     paths:
       - 'src/**'
+      - 'tests/**'
       - 'assets/**'
       - 'app.json'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig.json'
+      - 'tsconfig.tests.json'
+      - 'eslint.config.js'
       # public/ (_headers, _redirects) est copié dans dist/ par l'export ; le correctif de polices
       # est exécuté par ce job. Les autres scripts/ ne changent pas le web publié.
       - 'public/**'
       - 'scripts/fix-web-assets.sh'
       - '.github/workflows/deploy-web.yml'
-  workflow_dispatch: {} # bouton « Run workflow » dans l'onglet Actions (déclenchement manuel)
+  workflow_dispatch: {} # bouton « Run workflow » dans l'onglet Actions = seul déclencheur du déploiement
 
-# Un seul déploiement à la fois ; un nouveau push annule le précédent en cours.
-concurrency:
-  group: deploy-web
-  cancel-in-progress: true
+# Jeton GitHub du workflow en LECTURE seule (rien n'est écrit dans le dépôt).
+permissions:
+  contents: read
 
 jobs:
-  deploy:
+  verify:
     runs-on: ubuntu-latest
+    # Une vérification par branche ; un nouveau push annule celle en cours (devenue périmée).
+    concurrency:
+      group: verify-web-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - name: Récupérer le code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false # le jeton n'est pas laissé dans .git/config
+
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22 # test:logic exige --experimental-strip-types (Node >= 22.6)
+          cache: npm
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Types de l'app
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Types des tests
+        run: npm run typecheck:tests
+
+      - name: Tests de logique
+        run: TZ=UTC npm run test:logic
+
+  deploy:
+    needs: verify
+    # Production uniquement sur demande explicite, depuis main ou la branche de dev.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/padelconnect-v4-17-4zblgh')
+    runs-on: ubuntu-latest
+    # Un seul déploiement à la fois, JAMAIS interrompu en plein envoi (le suivant attend).
+    concurrency:
+      group: deploy-web
+      cancel-in-progress: false
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Installer Node
         uses: actions/setup-node@v4

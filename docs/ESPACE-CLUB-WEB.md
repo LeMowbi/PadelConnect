@@ -39,7 +39,7 @@ npm run build:web
 
 Le document HTML du web (langue `fr`, titre, description, couleur de thème, message sans
 JavaScript) vit dans `public/index.html` : avec `web.output: "single"`, c'est CE fichier que
-l'export reprend (`src/app/+html.tsx` ne sert qu'au rendu statique). `public/_headers` et
+l'export reprend. `public/_headers` et
 `public/_redirects` sont copiés à la racine de `dist/` par l'export.
 
 ## Déployer sur Cloudflare Pages (sans terminal, glisser-déposer)

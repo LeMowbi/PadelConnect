@@ -15,6 +15,10 @@ s'applique pas), tout correctif part avec un build.
 - HEAD vert à la cadence, commité, poussé, `git status` propre (`padel-cadence-verification`).
 - Tout SQL dont dépend le build est appliqué ET prouvé en base (`padel-preuve-en-base`) : une RPC
   dont la signature a changé sans sa migration = fonctionnalité cassée dès l'installation.
+- **Conseiller de sécurité Supabase** relu juste avant le build : Dashboard → Advisors → Security
+  Advisor (ou API Management `GET /v1/projects/$REF/advisors/security`, PAT du porteur). Toute alerte
+  `ERROR` nouvelle (table sans RLS, vue `SECURITY DEFINER` exposée, fonction ouverte à `anon` hors
+  `phone_available`) bloque la sortie jusqu'à sa correction ou une décision écrite.
 - Nouveau module natif depuis le dernier build → config plugin dans `app.json` (chaîne de permission
   en français) ; sinon crash au lancement.
 - Version : `autoIncrement` ne bumpe QUE `ios.buildNumber`. Si `expo.version` est déjà publiée (ou si
@@ -27,16 +31,20 @@ s'applique pas), tout correctif part avec un build.
 
 ## 1. Build + suivi
 
+`eas-cli` en version EXACTE (jamais `@latest` : une nouvelle version peut casser un build de sortie),
+la même dans CLAUDE.md §7, `docs/CHECKLIST-STORES.md` et `docs/ANDROID-LANCEMENT.md` ; on la monte
+volontairement, partout à la fois, après lecture de son changelog.
+
 ```bash
-npx eas-cli@latest build --platform ios --profile production --auto-submit --non-interactive --no-wait
-npx eas-cli@latest build:list --platform ios --limit 3 --json --non-interactive \
+npx eas-cli@24.12.1 build --platform ios --profile production --auto-submit --non-interactive --no-wait
+npx eas-cli@24.12.1 build:list --platform ios --limit 3 --json --non-interactive \
   | jq '.[] | {id, status, appVersion, appBuildVersion, createdAt}'
 ```
 
 - `app.json` vient d'être modifié localement (buildNumber + 1) : commit immédiat
   `Build #NN : bump buildNumber (EAS autoIncrement)` puis push.
 - `status` : `NEW` / `IN_QUEUE` / `IN_PROGRESS` → `FINISHED` ; `ERRORED` → lire les logs
-  (`npx eas-cli@latest build:view <id>` ou la page expo.dev du build). Attente : outil Monitor ou
+  (`npx eas-cli@24.12.1 build:view <id>` ou la page expo.dev du build). Attente : outil Monitor ou
   relance espacée, jamais de `sleep` long en avant-plan.
 - L'auto-submit envoie le binaire à App Store Connect (TestFlight, traitement Apple ~10-30 min). Ce
   n'est PAS une soumission en revue.
@@ -93,17 +101,19 @@ Cache iTunes : quelques heures de retard possibles. Stores CI/SN/US ; l'UE dépe
 ## 4. Redéploiement web (Cloudflare Pages)
 
 `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` en variables d'environnement ; wrangler exige Node ≥ 22.
-(`deploy-web.yml` échoue tant que les secrets GitHub sont vides : déploiement manuel.)
+`deploy-web.yml` ne déploie plus à chaque push (job `verify` seul) : l'Espace Club part en production
+par « Run workflow » (onglet Actions), après un `verify` vert, une fois les secrets GitHub créés par le
+porteur ; en attendant, déploiement manuel ci-dessous. Même version de wrangler que le workflow.
 
 ```bash
 # Espace Club / opérateur — club.padelconnectci.com (ou scripts/deploy-web.sh qui enchaîne tout)
 npm run build:web && ./scripts/fix-web-assets.sh dist      # sans le correctif : icônes en carrés vides
-npx wrangler@latest pages deploy dist --project-name=padelconnect-club --branch=main --commit-dirty=true
+npx wrangler@4.148.0 pages deploy dist --project-name=padelconnect-club --branch=main --commit-dirty=true
 # Site vitrine — padelconnectci.com : le dossier site/ TEL QUEL et EN ENTIER
-npx wrangler@latest pages deploy site --project-name=padelconnect-site --branch=main --commit-dirty=true
+npx wrangler@4.148.0 pages deploy site --project-name=padelconnect-site --branch=main --commit-dirty=true
 ```
 
-Nom de projet refusé → `npx wrangler@latest pages project list`. Contrôle en ligne (le CDN met en cache,
+Nom de projet refusé → `npx wrangler@4.148.0 pages project list`. Contrôle en ligne (le CDN met en cache,
 toujours un `?v=`) :
 
 ```bash
@@ -113,6 +123,8 @@ curl -s -o /dev/null -w "%{http_code}\n" "https://padelconnectci.com/get?v=$(dat
 ```
 
 Un texte légal in-app (`src/app/legal.tsx`) ne part qu'avec le PROCHAIN build : le dire au porteur.
+Un texte légal du site qui décrit un comportement serveur (durées, anonymisation à la suppression) ne
+se déploie qu'une fois la migration correspondante en production (`docs/APP-STORE-CONFORMITE.md` §1).
 
 ## 5. CLAUDE.md §7 après la sortie
 
@@ -123,10 +135,15 @@ de clé.
 
 ## 6. Android (repères — `docs/ANDROID-LANCEMENT.md`)
 
-- APK de test : `npx eas-cli@latest build --platform android --profile preview --non-interactive --no-wait`
+- APK de test : `npx eas-cli@24.12.1 build --platform android --profile preview --non-interactive --no-wait`
   (`preview` = `buildType: apk`, signé par la clé EAS ; artefacts ~30 jours).
-- Production Play : profil `production` (`.aab`) ; bumper `android.versionCode` (1 au premier envoi) ;
-  FCM obligatoire (`google-services.json` + clé de service sur expo.dev), sinon aucun push Android.
+- Production Play : profil `production` (`.aab`) ; `autoIncrement` monte `android.versionCode` avant le
+  build (1 dans `app.json` → **2** au premier `.aab`, bump à commiter). Le **premier** `.aab` se dépose
+  à la main dans la Play Console (Google refuse un premier envoi par API) ; `eas submit` ensuite, avec
+  une clé de compte de service et un bloc `android` dans `submit.production` d'`eas.json`. FCM
+  obligatoire (`google-services.json` + clé de service sur expo.dev), sinon aucun push Android.
+- Fiche Play : « Sécurité des données » et URL de suppression de compte
+  (`https://padelconnectci.com/supprimer-mon-compte`) — réponses dans `docs/ANDROID-LANCEMENT.md` §5.
 - Play App Signing : Google re-signe → AJOUTER son empreinte SHA-256 dans `site/assetlinks.json` à côté
   de celle d'EAS, puis redéployer `site/`.
 - `site/get.html` : activer la redirection Android le jour où la fiche Play existe.

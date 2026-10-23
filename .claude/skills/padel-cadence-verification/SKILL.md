@@ -9,12 +9,13 @@ Complète `verification-before-completion` (preuve avant affirmation) avec les c
 dépôt. Rien n'est « fait », « vert » ni commité tant que les 5 étapes n'ont pas tourné DANS CETTE
 SESSION et que leur sortie n'a pas été lue.
 
-## 1. Les 5 commandes (racine du dépôt, dans cet ordre)
+## 1. Les commandes (racine du dépôt, dans cet ordre)
 
 ```bash
 npx tsc --noEmit                    # types de l'app (tests/ et supabase/functions sont exclus)
 npm run lint                        # eslint src tests — règles React Compiler comprises
 TZ=UTC npm run test:logic           # libs pures (chaque fichier fixe déjà TZ=UTC)
+npm run test:logic:tz               # rejoue test:logic sous 3 fuseaux non-UTC (tests/logicTz.mjs)
 npx expo export:embed --eager --platform ios --dev false \
   --entry-file node_modules/expo-router/entry.js \
   --bundle-output <scratchpad>/ios.jsbundle   # JAMAIS dans le dépôt
@@ -65,7 +66,9 @@ Ligne attendue en fin de message de commit : `tsc 0 · lint 0 · test:logic vert
   `TZ=UTC node --experimental-strip-types tests/<nom>.test.ts`.
 - La chaîne `&&` s'arrête au premier échec : après correction, relancer TOUT `test:logic`.
 - Échec qui disparaît sans `TZ=UTC` (ou l'inverse) = bug de fuseau : la logique des jours est en UTC
-  (Abidjan = UTC+0) via `dayKey` / `slotTimestamp` de `src/lib/days.ts`.
+  (Abidjan = UTC+0) via `dayKey` / `slotTimestamp` de `src/lib/days.ts`. `npm run test:logic:tz`
+  rejoue toute la suite (lue dans `package.json`) sous Los Angeles, Tokyo et Kiritimati : une fixture
+  écrite en heure LOCALE (`new Date(2026, 5, 12)` au lieu de `Date.UTC(...)`) y casse.
 - `ERR_MODULE_NOT_FOUND` : import relatif avec extension (`../src/lib/x.ts`), pas d'alias `@/` ; la lib
   testée ne doit importer ni React Native ni Expo (sinon patron `tests/seeds.test.mjs` + esbuild).
 
@@ -73,8 +76,11 @@ Ligne attendue en fin de message de commit : `tsc 0 · lint 0 · test:logic vert
 
 Attrape ce que tsc ne voit pas : module introuvable au runtime, dépendance native absente, cycle.
 `Unable to resolve module X from Y` → import faux ou dépendance manquante. Rappel :
-`react-native-reanimated` n'est PAS câblé (aucun plugin Babel) — le bundle passe mais l'app plante :
-`grep -rn "react-native-reanimated" src` doit rester vide.
+`react-native-reanimated` / `react-native-worklets` sont dans les dépendances, chargés au démarrage
+par `react-native-gesture-handler` et compilés par le plugin que `babel-preset-expo` ajoute de
+lui-même ; aucune ligne de `src/` ne les utilise (animations = API `Animated`). Leur retrait est la
+décision porteur n° 19 (T-20) : en attendant, `grep -rn "react-native-reanimated\|react-native-worklets" src`
+doit rester vide.
 
 ## 3. Ajouter un test à `test:logic`
 
@@ -132,8 +138,9 @@ done
   re-cadence si conflit, puis push. Jamais `--force`.
 - Jamais une autre branche, jamais de Pull Request (ni `gh pr create`), même si une compétence
   vendorisée le suggère : CLAUDE.md §4 l'emporte.
-- Le push déclenche `deploy-web.yml`, qui échoue tant que les secrets GitHub `CLOUDFLARE_*` sont
-  vides : connu, pas une régression du lot.
+- Le push déclenche le job `verify` de `deploy-web.yml` (tsc, lint, typecheck:tests, test:logic) :
+  il DOIT passer au vert — un échec est une régression du lot. Le déploiement web, lui, ne part que
+  par « Run workflow » (et échoue tant que les secrets GitHub `CLOUDFLARE_*` sont vides : connu).
 
 ## Pièges connus
 
@@ -145,7 +152,7 @@ done
 
 ## Fait quand
 
-- Les 5 commandes ont tourné dans cette session, sortie lue, toutes vertes (citer le résultat).
+- Les commandes du §1 ont tourné dans cette session, sortie lue, toutes vertes (citer le résultat).
 - `git status` → `nothing to commit, working tree clean` et `git log origin/claude/padelconnect-v4-17-4zblgh -1`
   = HEAD local.
 - Message FR + les 2 trailers de la session ; scan secrets vide ; CLAUDE.md à jour si l'état a changé.

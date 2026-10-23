@@ -50,10 +50,14 @@ shipper sur TestFlight.
   - **jamais** de `setState` synchrone dans le corps d'un effet (utiliser un callback après
     `await`, ou un initialiseur `useState`).
 - **Animations** via l'API `Animated` du cœur React Native (composants réutilisables :
-  `src/components/Reveal.tsx` = fondu, `src/components/PopIn.tsx` = ressort). ⚠️ `react-native-reanimated`
-  est dans les deps mais **PAS câblé** (aucun `babel.config.js` avec le plugin worklets, jamais
-  importé dans `src/`) : ne PAS l'importer tel quel — il faudrait d'abord ajouter le plugin Babel.
-  Suppression des deps `react-native-reanimated`/`react-native-worklets` à décider post-lancement.
+  `src/components/Reveal.tsx` = fondu, `src/components/PopIn.tsx` = ressort). ⚠️ `react-native-reanimated`/
+  `react-native-worklets` ne sont importés nulle part dans `src/`, mais ils SONT chargés : `babel-preset-expo`
+  ajoute d'office le plugin worklets, `react-native-gesture-handler` les résout par try/require (≈ 350
+  modules, ≈ 1 Mo de source dans le bundle) et l'autolinking les lie en natif. Les retirer de
+  `package.json` ne change RIEN (npm les réinstalle comme pairs optionnels de `@expo/ui`, tiré par
+  expo-router, et sans épinglage → 4.7.1/0.13.0 hors SDK 56) : ils restent épinglés (4.3.1/0.8.3). La
+  régression mémoire Hermes signalée par expo-doctor se corrige par le SDK 57, pas par ce retrait
+  (décision 19 re-soumise au porteur, 2026-10-22).
 - État global : Context + `AsyncStorage` (`src/store/AppContext.tsx`, ~1700 lignes ; helpers purs
   et testables dans `src/store/helpers.ts`).
 - Deep links : **scheme `padelco`** (choix assumé). `reset-password` routé vers
@@ -72,6 +76,7 @@ npx tsc --noEmit
 npm run lint
 npm run typecheck:tests          # le tsc principal EXCLUT tests/ (tsconfig.tests.json)
 TZ=UTC npm run test:logic
+npm run test:logic:tz            # rejoue test:logic sous 3 fuseaux non-UTC (fixtures en heure locale)
 # bundle « eager » pour détecter un souci d'empaquetage runtime :
 npx expo export:embed --eager --platform ios --dev false \
   --entry-file node_modules/expo-router/entry.js \
@@ -90,8 +95,10 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser. Dét
   bump automatique de `buildNumber` dans `app.json`). Auto-submit vers l'App ID `6785261310`.
 - Compte CI EAS : **padelconnect-ci** (le token EAS est fourni au moment du build ; ne pas
   l'écrire dans le dépôt).
-- Lancer : `EXPO_TOKEN=… npx eas-cli@latest build --platform ios --profile production
---auto-submit --non-interactive --no-wait`.
+- Lancer : `EXPO_TOKEN=… npx eas-cli@24.12.1 build --platform ios --profile production
+--auto-submit --non-interactive --no-wait` (version EXACTE, la même partout : `padel-sortie-ios`,
+  `docs/CHECKLIST-STORES.md`, `docs/ANDROID-LANCEMENT.md`). Node figé à **22.22.0** (`.nvmrc`,
+  `eas.json`). `expo-system-ui` est un module natif ajouté pour le #69 (build requis).
 - **`app.json` : version 1.0.2, `buildNumber` courant : 68** (EAS `autoIncrement` le bump à chaque
   build — ne PAS s'en remettre au suivi manuel ci-dessous, c'est `app.json` qui fait foi).
   🆕 **Build #68 (v1.0.2)** lancé et TERMINÉ sur EAS le 2026-08-17 **AVEC auto-submit** (App
@@ -108,9 +115,10 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser. Dét
   l'audit pré-lancement du 2026-10-21 (179 correctifs, §10). Web `club.padelconnectci.com`
   **redéployé le 2026-10-21** (la police d'icônes était servie en HTML → toutes les icônes vides ;
   réparé + bundle à jour ; wrangler avec `CLOUDFLARE_ACCOUNT_ID` lu via l'API zones). (Les secrets GitHub
-  `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` restent VIDES dans le dépôt → `deploy-web.yml`
-  échoue à chaque push ; le porteur peut les créer dans GitHub → Settings → Secrets pour
-  automatiser.) Le build #67 du 2026-08-13 est SUPPLANTÉ par le #68.
+  `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` restent VIDES dans le dépôt. `deploy-web.yml` :
+  à chaque push, job `verify` seul (tsc, lint, typecheck:tests, test:logic) ; le déploiement de
+  l'Espace Club se lance par « Run workflow » une fois ces secrets créés par le porteur dans
+  GitHub → Settings → Secrets.) Le build #67 du 2026-08-13 est SUPPLANTÉ par le #68.
   🚀 **L'app est EN LIGNE (v1.0) depuis le 2026-07-10** sur les stores CI/SN/US ; l'UE attend la
   vérification « commerçant » DSA d'Apple (bloque UNIQUEMENT les stores européens, rien d'autre).
   La **v1.0.1** (build #63 = correctifs de l'audit complet) a été mise en revue par le porteur le
@@ -132,6 +140,11 @@ type` (`mark_no_show`, `confirm_share_paid`) — échec BRUYANT, jamais silencie
   Reste au porteur : FCM Android (compte Google Play à créer, guide `docs/ANDROID-LANCEMENT.md`) —
   le lien Wave des frais de tournoi EST configuré en base (vérifié 2026-10-21) et l'empreinte EAS
   d'assetlinks est posée (celle de Play App Signing s'ajoutera au lancement Play).
+  🆕 **À coller ENSEMBLE avant le build #69** : SQL `92`, `93`, `94`, `96`, `97`, `98` (écrites et
+  prouvées en local / transaction annulée, PAS encore en prod — la `95` y est déjà), puis déployer
+  **notify-club v50** APRÈS la 98 (elle lit `profiles.news_push`). ⚠️ Après la 98, ne JAMAIS recoller
+  seules la `80` ni la `96` (place anonyme d'un compte supprimé : leur ancienne `submit_match_score` /
+  `apply_match_level` laisserait un TIERS saisir et valider le score).
   (`notify-club` est déployée — **v48** du dépôt le 2026-10-21, compteur plateforme 47 : push gérant
   avec nom du club, favoris/alertes de niveau plafonnées à la source, liste d'attente one-shot
   honnête, agenda, annonces club jusqu'à 500 suiveurs, parts Wave, cours collectifs ; exclusion
@@ -149,8 +162,10 @@ type` (`mark_no_show`, `confirm_share_paid`) — échec BRUYANT, jamais silencie
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `91` (voir dossier `supabase/`) — **toutes
-  appliquées en base** (`91` durcissements pré-lancement posée + **prouvée 8/8 en transaction
+  **SQL Editor → Run**. Migrations actuelles : `02` → `98` (voir dossier `supabase/`) — `02` → `91`
+  et `95` **appliquées en base** ; `92`→`94`, `96`→`98` écrites et prouvées en local, **à coller
+  ensemble avant le #69** (98 = décisions porteur du 2026-10-22, puis notify-club v50 ; ⚠️ ne jamais
+  recoller seules la `80` ni la `96` après la 98) (`91` durcissements pré-lancement posée + **prouvée 8/8 en transaction
   annulée** le 2026-10-21 : contrainte de fourchette relâchée hors `open_match`, garde jour J de
   `register_competition`, `block_user` rompt amitié/demandes/suivi, `create_group_lesson` à 10
   paramètres — ⚠️ ne jamais recoller la 81 ni la 83 seules —, purge waitlist par chevauchement ;
@@ -206,11 +221,12 @@ type` (`mark_no_show`, `confirm_share_paid`) — échec BRUYANT, jamais silencie
   le club valide, rien s'il refuse).
 - **Clubs fondateurs** : les **9 clubs seed** portent `partner: true` → badge **« Partenaire »**
   (carte + fiche). Les clubs inscrits ensuite ne l'ont pas.
-- **Coachs** : annuaire de coachs partenaires (`src/data/coaches.ts` : type `Coach`, `getCoach`,
-  `coachClubName`). Écrans `src/app/coachs/index.tsx` (liste, tri par `levelValue`) et
-  `src/app/coachs/[id].tsx` (fiche + contact WhatsApp/appel direct). Accès depuis la fiche club et
-  l'accueil. **Aucun profil fictif** : `coaches: Coach[] = []` au lancement (comme les tournois),
-  les vrais coachs sont ajoutés par les gérants (`clubCoaches`) ou en dur ici quand ils existent.
+- **Coachs — un seul annuaire (T-19, décision porteur 2026-10-22)** : l'annuaire statique
+  (`src/data/coaches.ts`, `src/app/coachs/[id].tsx`, fiches « réserve par téléphone ») est SUPPRIMÉ ;
+  `/coachs` renvoie vers `/cours` (« Réserver un cours » : coachs RÉSERVABLES de tous les clubs). Accès
+  depuis l'accueil et la fiche club. Retrait d'un coach par le club (T-16) : simple avertissement
+  « N cours à venir — préviens ses élèves » avant confirmation, ses cours acceptés restent réservés
+  (aucune annulation automatique).
 - **Coachs & cours (serveur, 38)** : le club **promeut un compte joueur** en coach (par téléphone,
   `club_add_coach`) → le compte gagne son **Espace Coach** (`src/app/coach-admin.tsx` : demandes,
   cours à venir, fiche/dispos). L'élève demande un cours (`src/app/cours/[coachId].tsx`,
@@ -250,7 +266,7 @@ type` (`mark_no_show`, `confirm_share_paid`) — échec BRUYANT, jamais silencie
   `{ 'Terrain 1': [{ t:'08:00', d:90 }, { t:'09:30', d:60, x?:true }] }`) — durée 60 ou 90 par créneau,
   mélangeables, modifiables à tout moment, sans chevauchement sur un terrain. Chaque **réservation FIGE
   sa durée** (`reservations.duration_min`) comme son prix. Le gérant règle **DEUX prix par plage**
-  (`price_tiers[].price` = 1h30, `price60` = 1h ; 1h dérive à 2/3 si vide). Logique PURE
+  (`price_tiers[].price` = 1h30, `price60` = 1h ; 1h dérive à ⅔ ARRONDI À LA CENTAINE si vide — T-10, app et site, le serveur ne dérive rien). Logique PURE
   `src/lib/courtSchedule.ts` (types + `overlaps` demi-ouvert strict `[t,t+d)`, `canAddCourtSlot`,
   `resolveCourtSlots` rétrocompatible : `court_slots` null ⇒ dérive de l'ancienne grille `slots`@90, les
   fermetures héritées `'!'`/`court_closed` RESTENT fermées). Anti double-vente = **contrainte d'exclusion
@@ -275,7 +291,8 @@ type` (`mark_no_show`, `confirm_share_paid`) — échec BRUYANT, jamais silencie
   l'application. Plus d'annuaire de contact sans compte dans l'Espace Club (`clubCoaches`
   supprimé du store/`ClubConfig` ; `upsert_club_config` omet `p_coaches`, defaulted côté SQL).
   Seuls restent les coachs RÉSERVABLES (comptes promus, table `coaches`) — dont le CLUB fixe le
-  tarif de la session via `club_set_coach_price` — et l'annuaire statique `src/data/coaches.ts`.
+  tarif de la session via `club_set_coach_price` (l'annuaire statique `src/data/coaches.ts` a été
+  supprimé en 2026-10, T-19).
 - **Position Google Maps éditable (50)** : `mapsQuery` devient surchargeable par le gérant pour
   TOUS les clubs, fondateurs compris (le porteur peut renommer les fondateurs). Colonne
   `club_overrides.maps_query` + `upsert_club_override` (9ᵉ paramètre) ; `ClubInfo.mapsQuery` fusionné
@@ -293,7 +310,18 @@ type` (`mark_no_show`, `confirm_share_paid`) — échec BRUYANT, jamais silencie
 - **Classement (46, remplace la 44)** : par **POINTS** gagnés dans l'app (modèle « Race » FIP —
   le niveau, plafonné à 7 et auto-déclaré, ne peut pas servir de rang) : 100 = tournoi officiel
   gagné (winner_user_id ancré), 10 = tournoi officiel joué, 3 = victoire de match confirmée,
-  2 = partie jouée. `fetch_leaderboard`/`my_leaderboard_rank`, écran `/classement`.
+  2 = partie jouée. `fetch_leaderboard`/`my_leaderboard_rank`, écran `/classement`. **Ex æquo
+  (98, T-8)** : rang partagé au standard sportif « 1, 1, 3 » (`rank()`, colonne `rank` de
+  `fetch_leaderboard`, `tied` côté client — repli sur la position avant la 98) ; mêmes médailles
+  sur l'accueil et `/classement`.
+- **Cours ≠ partie (98, décision 3)** : une résa portant `coach_name` (cours privé ou collectif)
+  ne compte ni au classement (+2/+3), ni pour la fidélité, ni pour la présence/fiabilité, ni pour
+  le niveau ; côté client `isLesson`/`playedMatchTimes` (helpers.ts) excluent les cours des
+  stats, séries et trophées « parties ».
+- **Compte supprimé (98, décision 9)** : ses partenaires GARDENT les matchs passés — sa place
+  devient une entrée anonyme « Ancien joueur » (`x-…` dans `invited`, `user_id` NULL sur
+  participants/scores) ; une résa passée qu'il avait créée est reprise par son plus ancien
+  partenaire (`reservations.owner_deleted`, « Match repris d'un ancien joueur »).
 - **Score de match (46, durci en 48, réglé en 49/audits 6-7)** : CHAQUE joueur du match saisit les
   sets de SON point de vue (`submit_match_score`) ; l'app calcule la forme CANONIQUE (score vu du
   vainqueur) et **désigne le vainqueur automatiquement**. RÈGLE ANTI-TRICHE : un match n'est validé
@@ -822,8 +850,9 @@ Expo, Supabase, Anthropic, superpowers vendorisées, Markdown seul) et `.claude/
   carnet, aucune sur une absence ; tournoi annulé par le club → frais PadelConnect annulés ; coach
   retiré → simple avertissement au gérant ; annuaire statique des coachs supprimé (`/coachs` →
   `/cours`) ; notifications « actus et agenda » activées par défaut, désactivables dans le profil ;
-  badge « annulations » du gérant limité aux annulations à moins de 24 h ; Reanimated/Worklets
-  RETIRÉS dans le #69 (recette TestFlight des gestes). APRÈS le #69 : « pas venu » par joueur,
+  badge « annulations » du gérant limité aux annulations à moins de 24 h ; Reanimated/Worklets :
+  retrait IMPOSSIBLE en l'état (décision 19 re-soumise, cf. §5). Volet serveur = SQL **98** +
+  notify-club **v50** (écrites + prouvées en local, à coller avec 92→97 avant le #69). APRÈS le #69 : « pas venu » par joueur,
   départ < 5 h visible du créateur, contestation fermée à J+7, partenaire de tournoi lié à un
   compte (avec garde-fou « tournoi bidon »). Prix recalculé par le serveur : seulement après la
   saisie des tarifs des 9 fondateurs. À fournir par le porteur : identité juridique + récépissé
@@ -841,5 +870,4 @@ Expo, Supabase, Anthropic, superpowers vendorisées, Markdown seul) et `.claude/
 - `docs/SERVEUR-*.md` — notes serveur (clubs, amis/boosts/fiabilité…).
 - `src/store/AppContext.tsx` — cœur de l'état + tous les appels serveur.
 - `src/data/clubs.ts` — les 9 clubs fondateurs + modèle Club.
-- `src/data/coaches.ts` — annuaire des coachs (modèle `Coach`, vide au lancement) + écrans `src/app/coachs/`.
 - `supabase/` — toutes les migrations (numérotées) et l'Edge Function.
