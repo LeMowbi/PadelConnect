@@ -704,9 +704,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // JETTE sa tranche club_config (le miroir local, plus frais, est conservé).
   const clubCfgWriteRef = useRef(0);
   // Écriture club_config traçée : tout succès invalide les relectures en vol (voir ci-dessus).
-  const writeClubConfig = async (clubId: string, patch: Parameters<typeof upsertClubConfig>[1]) => {
+  // `epoch` = époque capturée par l'APPELANT au début de son geste (avant un éventuel upload) :
+  // une écriture de l'époque précédente (club actif changé, compte sorti) ne doit pas faire jeter
+  // sa tranche club_config au premier chargement de la nouvelle époque.
+  const writeClubConfig = async (clubId: string, patch: Parameters<typeof upsertClubConfig>[1], epoch: number) => {
     const ok = await upsertClubConfig(clubId, patch);
-    if (ok) clubCfgWriteRef.current += 1;
+    if (ok && sessionEpochRef.current === epoch) clubCfgWriteRef.current += 1;
     return ok;
   };
   // Même course pour club_overrides (fiche club : blurb, WhatsApp, plages tarifaires…) : une
@@ -1950,8 +1953,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // le serveur avant de refléter (écriture honnête), puis on met à jour le miroir local.
       setWaveLink: async (link) => {
         const clean = link.trim();
+        const epoch = sessionEpochRef.current; // le compteur ne compte que les écritures de l'époque courante
         const ok = await setWaveLinkRpc(clean);
         if (!ok) return { ok: false };
+        // Garde d'époque (patron setNewsPush) : une réponse tardive ne touche ni le compteur ni le
+        // miroir de l'époque suivante — le lien est global, sa relecture le reprendra du serveur.
+        if (sessionEpochRef.current !== epoch) return { ok: true };
         waveWriteRef.current += 1; // invalide les relectures en vol (voir waveWriteRef)
         setState((s) => ({ ...s, waveLink: clean || null }));
         return { ok: true };
@@ -2075,8 +2082,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return { ok: false, reason: 'network' };
           }
           const created = res.reservation;
-          reservationsWriteRef.current += 1; // invalide les relectures en vol (voir reservationsWriteRef)
           if (sessionEpochRef.current !== epoch) return { ok: false, reason: 'network' }; // déconnexion entre-temps
+          // APRÈS la garde : une écriture de l'époque précédente ne doit pas faire jeter sa tranche
+          // « réservations » au premier chargement de la nouvelle époque.
+          reservationsWriteRef.current += 1; // invalide les relectures en vol (voir reservationsWriteRef)
           setState((s) => ({
             ...s,
             reservations: [created, ...s.reservations.filter((x) => x.id !== created.id)],
@@ -2158,7 +2167,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // temps » et annoncerait une panne réseau pour un refus définitif.
             return 'late';
           }
-          reservationsWriteRef.current += 1; // invalide les relectures en vol (voir reservationsWriteRef)
+          // Époque courante seulement (une écriture du compte sorti ne compte pas — garde juste après).
+          if (sessionEpochRef.current === epoch) reservationsWriteRef.current += 1; // invalide les relectures en vol
         }
         if (sessionEpochRef.current !== epoch) return 'ok'; // annulée côté serveur, compte sorti : miroir intact
         void cancelMatchReminder(id); // on retire son rappel local
@@ -2184,7 +2194,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // l'aller-retour RPC ne doit pas muter le miroir du compte sorti.
         const epoch = sessionEpochRef.current;
         const st = await markNoShowRow(id, true);
-        if (st === 'ok') reservationsWriteRef.current += 1; // invalide les relectures en vol
+        if (st === 'ok' && sessionEpochRef.current === epoch) reservationsWriteRef.current += 1; // invalide les relectures en vol (époque courante)
         // On ne mute le miroir QUE sur 'ok' (les refus métier 'played'/'gone'/'forbidden' et les
         // échecs réseau 'error' laissent l'état intact — l'appelant affiche le message adéquat).
         if (st !== 'ok' || sessionEpochRef.current !== epoch) return st;
@@ -2215,7 +2225,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // doit pas injecter la résa d’un club dans le miroir du compte sorti.
         const epoch = sessionEpochRef.current;
         const st = await markNoShowRow(res.id, false);
-        if (st === 'ok') reservationsWriteRef.current += 1; // invalide les relectures en vol
+        if (st === 'ok' && sessionEpochRef.current === epoch) reservationsWriteRef.current += 1; // invalide les relectures en vol (époque courante)
         // On ne mute le miroir QUE sur 'ok' (les refus 'taken'/'gone'/'forbidden' et 'error'
         // laissent l’état intact — l’appelant affiche le message adéquat).
         if (st !== 'ok' || sessionEpochRef.current !== epoch) return st;
@@ -2254,9 +2264,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         const ok = await clubCancelReservationRow(id, reason, proposal);
         if (!ok) return false;
+        if (sessionEpochRef.current !== epoch) return false;
+        // Compteurs APRÈS la garde : seule une écriture de l'époque courante invalide ses relectures.
         reservationsWriteRef.current += 1; // invalide les relectures en vol (voir reservationsWriteRef)
         blocksWriteRef.current += 1; // invalide les relectures en vol (voir blocksWriteRef) — le créneau d'origine devient un blocked_slot
-        if (sessionEpochRef.current !== epoch) return false;
         void cancelMatchReminder(id); // même motif que markNoShow : un créneau annulé n'a pas de score
         setState((s) => ({
           ...s,
@@ -2373,7 +2384,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (state.serverUserId && res) {
           const ok = await setClubConfirmedRow(id, next);
           if (!ok) return false; // RLS/réseau a refusé → on ne bascule pas l’affichage
-          reservationsWriteRef.current += 1; // invalide les relectures en vol (voir reservationsWriteRef)
+          // Époque courante seulement : une écriture lancée sous l'ancien club actif / le compte sorti
+          // ne doit pas faire jeter sa tranche « réservations » au premier chargement de la nouvelle.
+          if (sessionEpochRef.current === epoch) reservationsWriteRef.current += 1; // invalide les relectures en vol
         }
         if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps
         setState((s) => ({
@@ -2555,7 +2568,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (existing.includes(finalUrl)) return true;
         const next = [...existing, finalUrl];
         if (state.serverUserId) {
-          const ok = await writeClubConfig(clubId, { photos: next });
+          const ok = await writeClubConfig(clubId, { photos: next }, epoch);
           if (!ok) return false;
         }
         if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps
@@ -2567,7 +2580,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         const next = (state.clubPhotos[clubId] ?? []).filter((x) => x !== uri);
         if (state.serverUserId) {
-          const ok = await writeClubConfig(clubId, { photos: next });
+          const ok = await writeClubConfig(clubId, { photos: next }, epoch);
           if (!ok) return false;
           void removeClubPhotoFile(uri); // best-effort : retire aussi le fichier du Storage
         }
@@ -2582,7 +2595,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         const next = [{ id: uid(), kind, title: t, detail: detail.trim() }, ...(state.clubOffers[clubId] ?? [])];
         if (state.serverUserId) {
-          const ok = await writeClubConfig(clubId, { offers: next });
+          const ok = await writeClubConfig(clubId, { offers: next }, epoch);
           if (!ok) return false;
         }
         if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps
@@ -2594,7 +2607,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         const next = (state.clubOffers[clubId] ?? []).filter((o) => o.id !== id);
         if (state.serverUserId) {
-          const ok = await writeClubConfig(clubId, { offers: next });
+          const ok = await writeClubConfig(clubId, { offers: next }, epoch);
           if (!ok) return false;
         }
         if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps
@@ -2613,7 +2626,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (!finalUrl) return false; // échec d’upload : on n’enregistre JAMAIS une URI locale
         }
         if (state.serverUserId) {
-          const ok = await writeClubConfig(clubId, { coverUrl: finalUrl ?? '' });
+          const ok = await writeClubConfig(clubId, { coverUrl: finalUrl ?? '' }, epoch);
           if (!ok) return false;
           // L’ancienne cover uploadée ne sert plus à rien → suppression best-effort du fichier.
           if (previous && previous !== finalUrl) void removeClubPhotoFile(previous);
@@ -2643,7 +2656,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (finalUrl) next[court] = finalUrl;
         else delete next[court];
         if (state.serverUserId) {
-          const ok = await writeClubConfig(clubId, { courtPhotos: next });
+          const ok = await writeClubConfig(clubId, { courtPhotos: next }, epoch);
           if (!ok) return false;
           if (previous && previous !== finalUrl) void removeClubPhotoFile(previous);
         }
@@ -2714,7 +2727,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (state.serverUserId) {
           const ok = await upsertClubOverride(clubId, merged);
           if (!ok) return { ok: false };
-          clubOvrWriteRef.current += 1; // invalide les relectures en vol (voir clubOvrWriteRef)
+          if (sessionEpochRef.current === epoch) clubOvrWriteRef.current += 1; // invalide les relectures en vol (époque courante)
         }
         if (sessionEpochRef.current !== epoch) return { ok: false }; // déconnexion entre-temps (comme setBoost)
         setState((s) => ({ ...s, clubInfo: { ...s.clubInfo, [clubId]: { ...s.clubInfo[clubId], ...patch } } }));
@@ -2964,7 +2977,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const next = [...slots].sort();
         const epoch = sessionEpochRef.current;
         if (state.serverUserId) {
-          const ok = await writeClubConfig(clubId, { slots: next });
+          const ok = await writeClubConfig(clubId, { slots: next }, epoch);
           if (ok !== true) return ok === false ? 'denied' : 'offline';
         }
         if (sessionEpochRef.current !== epoch) return 'ok';
@@ -2974,7 +2987,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setClubCourts: async (clubId, courts) => {
         const epoch = sessionEpochRef.current;
         if (state.serverUserId) {
-          const ok = await writeClubConfig(clubId, { courts });
+          const ok = await writeClubConfig(clubId, { courts }, epoch);
           if (ok !== true) return ok === false ? 'denied' : 'offline';
         }
         if (sessionEpochRef.current !== epoch) return 'ok';
@@ -3030,8 +3043,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return taken ? 'taken' : 'error';
           }
         }
-        blocksWriteRef.current += 1; // invalide les relectures en vol (voir blocksWriteRef)
         if (sessionEpochRef.current !== epoch) return 'error'; // déconnexion entre-temps (comme setBoost)
+        blocksWriteRef.current += 1; // invalide les relectures en vol (voir blocksWriteRef) — après la garde d'époque
         // Ajout IDEMPOTENT : sur un double-tap concurrent, le garde d'entrée (lu sur l'état capturé)
         // laisse passer deux appels — on re-teste sur l'état FRAIS pour ne jamais dupliquer le créneau.
         setState((s) => (s.blockedSlots.some(sameSlot) ? s : { ...s, blockedSlots: [...s.blockedSlots, b] }));
@@ -3045,8 +3058,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const ok = await unblockSlotRow(clubId, dateKey, time, court);
           if (!ok) return false;
         }
-        blocksWriteRef.current += 1; // invalide les relectures en vol (voir blocksWriteRef)
         if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps
+        blocksWriteRef.current += 1; // invalide les relectures en vol (voir blocksWriteRef) — après la garde d'époque
         setState((s) => ({
           ...s,
           blockedSlots: s.blockedSlots.filter(
@@ -3065,7 +3078,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         const n = await unblockRecurringRow(clubId, court, time, dow);
         if (n === null || n === 'unsupported') return n;
-        blocksWriteRef.current += 1; // invalide les relectures en vol (voir blocksWriteRef)
+        // AVANT la relecture ci-dessous (elle doit invalider les relectures déjà en vol), mais pour
+        // l'époque courante seulement : une écriture du compte sorti ne compte pas.
+        if (sessionEpochRef.current === epoch) blocksWriteRef.current += 1; // invalide les relectures en vol (voir blocksWriteRef)
         // Relue même à 0 : une série arrêtée sur un autre appareil quitte aussi ce planning.
         const fresh = await fetchBlockedSlots();
         if (sessionEpochRef.current !== epoch) return n;
@@ -3097,7 +3112,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         const { status, id } = await blockRangeRow(input);
         if (status !== 'ok') return status;
-        blocksWriteRef.current += 1; // invalide les relectures en vol (voir blocksWriteRef)
+        if (sessionEpochRef.current === epoch) blocksWriteRef.current += 1; // invalide les relectures en vol — époque courante seulement (motif unblockRecurring)
         const fresh = await fetchBlockedRanges();
         if (sessionEpochRef.current === epoch) {
           // Relecture ratée juste après un succès serveur ? On insère quand même la ligne créée
@@ -3141,7 +3156,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCourtClosed: async (clubId, closed) => {
         const epoch = sessionEpochRef.current;
         if (state.serverUserId) {
-          const ok = await writeClubConfig(clubId, { courtClosed: closed });
+          const ok = await writeClubConfig(clubId, { courtClosed: closed }, epoch);
           if (!ok) return false;
         }
         if (sessionEpochRef.current !== epoch) return true;
@@ -3156,7 +3171,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         const cleared = Object.keys(grid).length === 0;
         if (state.serverUserId) {
-          const ok = await writeClubConfig(clubId, { courtSlots: grid });
+          const ok = await writeClubConfig(clubId, { courtSlots: grid }, epoch);
           if (ok !== true) return ok === false ? 'denied' : 'offline';
         }
         if (sessionEpochRef.current !== epoch) return 'ok';
@@ -3255,8 +3270,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         const ok = await setNewsPushRpc(on);
         if (!ok) return false;
-        newsPushWriteRef.current += 1;
-        if (sessionEpochRef.current === epoch) setState((s) => ({ ...s, newsPush: on }));
+        if (sessionEpochRef.current !== epoch) return true;
+        newsPushWriteRef.current += 1; // après la garde : une écriture du compte sorti ne compte pas
+        setState((s) => ({ ...s, newsPush: on }));
         return true;
       },
     }),
