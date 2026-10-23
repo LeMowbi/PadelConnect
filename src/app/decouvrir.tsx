@@ -53,9 +53,9 @@ export default function DecouvrirScreen() {
         ))}
       </Card>
 
-      {/* CTA principal → écran de réservation */}
+      {/* CTA principal → écran de réservation (aucune géolocalisation : on ne promet pas « près de moi »). */}
       <View style={styles.cta}>
-        <Button label="Trouver un terrain près de moi" icon="location-outline" pill full onPress={() => router.push('/reserver')} />
+        <Button label="Voir les clubs d’Abidjan" icon="business-outline" pill full onPress={() => router.push('/reserver')} />
       </View>
     </Screen>
   );

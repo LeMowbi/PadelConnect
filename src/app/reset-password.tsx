@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { isAuthPKCECodeVerifierMissingError } from '@supabase/supabase-js';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
@@ -14,17 +15,26 @@ import { colors, font, radius, spacing } from '@/theme';
 // « padelco://reset-password?code=… »). On échange le code contre une session, puis on laisse
 // l’utilisateur saisir un NOUVEAU mot de passe (supabase.auth.updateUser). Sans cet écran, le
 // bouton « Mot de passe oublié ? » ne permettait jamais de définir un nouveau mot de passe.
+// Deux formats de lien : `?code=` (PKCE — lié à l’appareil ET au navigateur de la demande) et
+// `?token_hash=…&type=recovery` (verifyOtp — valable partout, pour le futur modèle d’e-mail).
+// Un lien PKCE ouvert AILLEURS (demande sur l’ordinateur, mail ouvert sur le téléphone) n’est pas
+// « expiré » : on le dit, et on permet de redemander un lien DEPUIS cet appareil (sinon boucle).
+type Status = 'exchanging' | 'ready' | 'elsewhere' | 'error';
+
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+
 export default function ResetPasswordScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ code?: string }>();
+  const params = useLocalSearchParams<{ code?: string; token_hash?: string; type?: string }>();
   const toast = useToast();
   const { state, refreshSession } = useApp();
   // E-mail du compte réinitialisé : adopté par refreshSession AVANT le passage à « ready »
   // (session.user.email fait foi, cf. AppContext) — sert d’identifiant au trousseau iOS.
   const accountEmail = state.account?.email;
-  const code = Array.isArray(params.code) ? params.code[0] : params.code;
-  // Sans code dans le lien → « error » d’emblée (évite un setState synchrone dans l’effet).
-  const [status, setStatus] = useState<'exchanging' | 'ready' | 'error'>(code ? 'exchanging' : 'error');
+  const code = one(params.code);
+  const tokenHash = one(params.type) === 'recovery' ? one(params.token_hash) : undefined;
+  // Sans code ni jeton dans le lien → « error » d’emblée (évite un setState synchrone dans l’effet).
+  const [status, setStatus] = useState<Status>(code || tokenHash ? 'exchanging' : 'error');
   const [pwd, setPwd] = useState('');
   const [pwd2, setPwd2] = useState('');
   const [hidden, setHidden] = useState(true);
@@ -32,14 +42,14 @@ export default function ResetPasswordScreen() {
   const exchanged = useRef(false);
 
   useEffect(() => {
-    if (!code || exchanged.current) return;
+    if ((!code && !tokenHash) || exchanged.current) return;
     exchanged.current = true;
     // L'échange BASCULE la session Supabase (potentiellement sur un AUTRE compte — lien d'un
     // proche ouvert sur ce téléphone) : le store l'adopte tout de suite (refreshSession purge
     // le périmètre de l'ancien compte). Sinon, un abandon en cours de flux laissait l'identité
     // affichée A sur une session serveur B — miroirs mélangés au retour au premier plan.
     let done = false;
-    const finish = (s: 'ready' | 'error') => {
+    const finish = (s: Exclude<Status, 'exchanging'>) => {
       if (!done) {
         done = true;
         setStatus(s);
@@ -49,17 +59,19 @@ export default function ResetPasswordScreen() {
     // ne revient jamais (réseau coupé), on ne laisse pas l'utilisateur bloqué sur « Vérification
     // du lien… » dans ce parcours critique — on bascule en « lien invalide/expiré » avec une
     // issue (même filet que auth-callback.tsx).
-    void supabase.auth
-      .exchangeCodeForSession(code)
+    const verify = tokenHash
+      ? supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' })
+      : supabase.auth.exchangeCodeForSession(code!);
+    void verify
       .then(async ({ error }) => {
         if (!error) await refreshSession();
-        finish(error ? 'error' : 'ready');
+        finish(!error ? 'ready' : isAuthPKCECodeVerifierMissingError(error) ? 'elsewhere' : 'error');
       })
       .catch(() => finish('error'));
     const t = setTimeout(() => finish('error'), 12000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code]);
+  }, [code, tokenHash]);
 
   const submit = async () => {
     if (submitting) return;
@@ -99,12 +111,15 @@ export default function ResetPasswordScreen() {
         <Txt variant="muted" style={{ marginTop: spacing.lg }}>
           Vérification du lien…
         </Txt>
-      ) : status === 'error' ? (
+      ) : status === 'error' || status === 'elsewhere' ? (
         <View style={{ marginTop: spacing.lg, gap: spacing.md }}>
           <Txt variant="body" color={colors.textMuted}>
-            Ce lien de réinitialisation est invalide ou a expiré. Redemande un e-mail depuis « Mot de passe oublié ? ».
+            {status === 'elsewhere'
+              ? 'Ce lien doit s’ouvrir sur l’appareil et dans le navigateur où tu as demandé la réinitialisation. Ouvre-le là-bas, ou redemande un lien ici : il marchera sur cet appareil.'
+              : 'Ce lien de réinitialisation est invalide ou a expiré. Redemande un lien ci-dessous.'}
           </Txt>
-          <Button label="Retour à la connexion" onPress={() => router.replace('/onboarding')} full />
+          <ResendLink />
+          <Button label="Retour à la connexion" variant="ghost" onPress={() => router.replace('/onboarding')} full />
         </View>
       ) : (
         <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
@@ -167,6 +182,61 @@ export default function ResetPasswordScreen() {
         </View>
       )}
     </Screen>
+  );
+}
+
+// Redemande d’un lien de réinitialisation DEPUIS cet appareil (le nouveau lien s’ouvrira ici).
+// Même action que « Mot de passe oublié ? » (anti-énumération : aucun indice si l’e-mail n’existe pas).
+function ResendLink() {
+  const { resetPassword } = useApp();
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const send = async () => {
+    if (busy) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setMsg({ ok: false, text: 'Saisis ton e-mail pour recevoir un nouveau lien.' });
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    const res = await resetPassword(email);
+    setBusy(false);
+    setMsg(
+      res.ok
+        ? { ok: true, text: 'Lien envoyé ! Ouvre-le sur cet appareil (pense aux spams).' }
+        : { ok: false, text: res.error ?? 'Envoi impossible — réessaie.' },
+    );
+  };
+
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <TextInput
+        value={email}
+        onChangeText={(t) => {
+          setEmail(t);
+          setMsg(null);
+        }}
+        placeholder="ton@email.com"
+        placeholderTextColor={colors.textMuted}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="username"
+        autoComplete="email"
+        returnKeyType="send"
+        onSubmitEditing={send}
+        accessibilityLabel="Adresse e-mail du compte"
+        style={styles.input}
+      />
+      {msg ? (
+        <Txt variant="small" color={msg.ok ? colors.signature : colors.danger}>
+          {msg.text}
+        </Txt>
+      ) : null}
+      <Button label={busy ? 'Envoi…' : 'Recevoir un nouveau lien'} icon="mail" onPress={send} disabled={busy} full />
+    </View>
   );
 }
 

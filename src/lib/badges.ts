@@ -8,11 +8,15 @@
 
 export type Badge = { id: string; icon: string; title: string; desc: string };
 
+// Seuil « amis » UNIQUE (décision porteur n° 11) : le badge « Esprit d'équipe » et le trophée
+// « Cercle d'amis » du Profil (palier Argent, « Prochain trophée : 5 amis ») partagent ce chiffre.
+export const FRIENDS_GOAL = 5;
+
 // Chiffres d'entrée, tous EXPLICITES (aucune dépendance au store) : l'appelant décide d'où ils
 // viennent. Une valeur inconnue (échec réseau, convention §8) doit être passée à 0 par
 // l'appelant, qui reste responsable de le dire honnêtement à l'écran.
 export type BadgeInput = {
-  playedCount: number; // parties réellement jouées (réservations passées)
+  playedCount: number; // parties réellement jouées (réservations passées, hors cours de coach)
   tournamentsPlayed: number; // tournois clôturés joués (officiels et amicaux)
   tournamentsWon: number; // tournois clôturés gagnés (officiels et amicaux)
   points: number; // points de classement gagnés dans l'app
@@ -34,7 +38,14 @@ const RULES: BadgeRule[] = [
   { id: 'first_win', icon: '✅', title: 'Première victoire', desc: '1 victoire de match validée', earned: (i) => i.validatedWins >= 1 },
   { id: 'points_100', icon: '💯', title: 'Cap des 100', desc: '100 points gagnés dans l’app', earned: (i) => i.points >= 100 },
   { id: 'streak_3', icon: '📅', title: 'Régulier', desc: '3 semaines d’affilée avec une partie', earned: (i) => i.weekStreak >= 3 },
-  { id: 'social_3', icon: '🤝', title: 'Esprit d’équipe', desc: '3 amis', earned: (i) => i.friendsCount >= 3 },
+  // Identifiant historique `social_3` GARDÉ (clé stable) : seul le seuil est passé de 3 à FRIENDS_GOAL.
+  {
+    id: 'social_3',
+    icon: '🤝',
+    title: 'Esprit d’équipe',
+    desc: `${FRIENDS_GOAL} amis`,
+    earned: (i) => i.friendsCount >= FRIENDS_GOAL,
+  },
 ];
 
 // Catalogue complet, dans l'ordre canonique (du plus facile au plus social).

@@ -34,6 +34,10 @@ type FieldKey = 'firstName' | 'lastName' | 'email' | 'phone' | 'password' | 'bir
 // vérification, c’est le clic sur le lien de confirmation reçu par mail.
 const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
+// Âge minimal des CGU (§ Accès au service) : une date de naissance SAISIE qui donne moins de 13 ans
+// est refusée (la date reste facultative ; la phrase de consentement fait attester l’âge).
+const MIN_AGE = 13;
+
 // Inscription en 3 étapes (Stepper du kit). Chaque étape ne valide QUE ses propres champs
 // (cf. goNext) — la liste sert aussi de filet de sécurité pour retrouver l’étape d’un champ.
 const STEP_LABELS = ['Compte', 'Profil', 'Parrainage'];
@@ -162,8 +166,9 @@ export default function Onboarding() {
     if (!isValidPhone(phone)) e.phone = PHONE_INCOMPLETE;
     if (firstName.trim().length < 2) e.firstName = 'Indique ton prénom (2 lettres minimum).';
     if (lastName.trim().length < 1) e.lastName = 'Indique ton nom.';
-    // Date de naissance optionnelle : on ne signale une erreur QUE si elle est mal saisie.
+    // Date de naissance optionnelle : erreur seulement si elle est mal saisie ou sous l’âge minimal.
     if (birth.trim().length > 0 && !birthDate) e.birth = 'Date invalide — vérifie le jour, le mois et l’année.';
+    else if (birthDate && ageFrom(birthDate) < MIN_AGE) e.birth = `PadelConnect est réservé aux ${MIN_AGE} ans et plus.`;
     if (!gender) e.gender = 'Choisis une option.';
     // Les 4 questions du quiz sont obligatoires : sans elles, pas de niveau de départ.
     if (quizLevel === null) e.quiz = 'Réponds aux 4 questions pour connaître ton niveau.';
@@ -300,6 +305,12 @@ export default function Onboarding() {
     if (res.ok) {
       setSignInOpen(false);
       router.replace('/');
+    } else if (byEmail && 'unconfirmed' in res && res.unconfirmed) {
+      // E-mail jamais confirmé (lien non ouvert ou expiré) : plutôt qu’un cul-de-sac, l’écran
+      // « Vérifie ta boîte mail » et son bouton « Renvoyer l’e-mail » pour cette adresse.
+      setSignInOpen(false);
+      setResendMsg('Ton adresse n’est pas encore confirmée — ouvre le lien reçu ou renvoie-le.');
+      setSentTo(siEmail.trim().toLowerCase());
     } else setSiError(res.error ?? 'Connexion impossible.');
   };
 
@@ -402,10 +413,11 @@ export default function Onboarding() {
               {sentTo}
             </Txt>
           </Txt>
-          {/* Clin d’œil parrainage : confirme que le code saisi a bien accompagné l’inscription. */}
+          {/* Clin d’œil parrainage : le code a accompagné l’inscription (le serveur ne relie qu’un code
+              existant — on n’annonce donc pas un lien qu’on ne peut pas garantir). */}
           {referralCode.trim().length > 0 ? (
             <Txt variant="small" color={colors.signature} style={{ textAlign: 'center', marginTop: spacing.sm }}>
-              Tu rejoins PadelConnect grâce à un ami 🎾
+              Code de parrainage transmis avec ton inscription 🎾
             </Txt>
           ) : null}
           <View style={styles.confirmHint}>
@@ -720,6 +732,7 @@ export default function Onboarding() {
                 <Button label={busy ? 'Création…' : 'Créer mon compte club'} icon="checkmark" onPress={createClub} disabled={busy} full />
               </View>
             </View>
+            <LegalConsent onPress={() => router.push('/legal')} />
 
             <Pressable
               onPress={() => setSignInOpen(true)}
@@ -1077,7 +1090,7 @@ export default function Onboarding() {
                   <View ref={referralHintRef} style={styles.referralHint} accessible tabIndex={Platform.OS === 'web' ? -1 : undefined}>
                     <Ionicons name="checkmark-circle" size={14} color={colors.green} />
                     <Txt variant="small" color={colors.signature}>
-                      Code de parrainage détecté ✓ — ton ami sera crédité
+                      Code au bon format — il sera relié à ton ami s’il existe
                     </Txt>
                   </View>
                 ) : (
@@ -1152,21 +1165,7 @@ export default function Onboarding() {
                 </Txt>
               </Pressable>
 
-              <Pressable
-                onPress={() => router.push('/legal')}
-                style={{ marginTop: spacing.md }}
-                accessibilityRole="button"
-                accessibilityLabel="Lire nos CGU et notre politique de confidentialité"
-                hitSlop={8}
-              >
-                <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center' }}>
-                  En continuant, tu acceptes nos{' '}
-                  <Txt variant="small" color={colors.signature}>
-                    CGU & confidentialité
-                  </Txt>
-                  .
-                </Txt>
-              </Pressable>
+              <LegalConsent onPress={() => router.push('/legal')} />
             </>
           ) : null}
         </View>
@@ -1291,6 +1290,7 @@ function SignInSheet({
             clearError();
           }}
           placeholder="Mot de passe"
+          onSubmitEditing={onSubmit} // signIn garde déjà le double envoi (siBusy)
         />
         {error ? (
           <Txt variant="small" color={colors.danger}>
@@ -1339,7 +1339,9 @@ function SignInSheet({
 
 // Champ mot de passe avec œil pour révéler/masquer (évite les fautes de frappe invisibles).
 // Réutilisé par le formulaire d’inscription et la feuille de connexion. `newPassword` (inscription) :
-// iOS propose un mot de passe fort et l’enregistre dans le trousseau ; sinon il remplit l’existant.
+// iOS propose un mot de passe fort et l’enregistre dans le trousseau ; sinon il remplit l’existant
+// (jetons `new-password` / `current-password` : « password » seul n’est pas un jeton HTML valide
+// pour les gestionnaires de mots de passe du web). `onSubmitEditing` : Entrée valide (connexion).
 function PasswordInput({
   value,
   onChangeText,
@@ -1347,6 +1349,7 @@ function PasswordInput({
   error,
   autoFocus,
   newPassword,
+  onSubmitEditing,
 }: {
   value: string;
   onChangeText: (t: string) => void;
@@ -1354,6 +1357,7 @@ function PasswordInput({
   error?: boolean;
   autoFocus?: boolean;
   newPassword?: boolean;
+  onSubmitEditing?: () => void;
 }) {
   const [hidden, setHidden] = useState(true);
   return (
@@ -1367,9 +1371,10 @@ function PasswordInput({
         autoCapitalize="none"
         autoCorrect={false}
         autoFocus={autoFocus}
-        returnKeyType="done"
+        returnKeyType={onSubmitEditing ? 'go' : 'done'}
+        onSubmitEditing={onSubmitEditing}
         textContentType={newPassword ? 'newPassword' : 'password'}
-        autoComplete={newPassword ? 'new-password' : 'password'}
+        autoComplete={newPassword ? 'new-password' : 'current-password'}
         accessibilityLabel={placeholder}
         style={[styles.input, styles.pwInput, error ? { borderColor: colors.danger } : null]}
       />
@@ -1383,6 +1388,28 @@ function PasswordInput({
         <Ionicons name={hidden ? 'eye-outline' : 'eye-off-outline'} size={20} color={colors.textMuted} />
       </Pressable>
     </View>
+  );
+}
+
+// Consentement à l’inscription (joueur ET club) : l’utilisateur atteste son âge minimal (CGU) et
+// accepte les CGU ; le lien ouvre les textes complets.
+function LegalConsent({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{ marginTop: spacing.md }}
+      accessibilityRole="button"
+      accessibilityLabel="Lire nos CGU et notre politique de confidentialité"
+      hitSlop={8}
+    >
+      <Txt variant="small" color={colors.textFaint} style={{ textAlign: 'center' }}>
+        En continuant, tu confirmes avoir {MIN_AGE} ans ou plus et tu acceptes nos{' '}
+        <Txt variant="small" color={colors.signature}>
+          CGU & confidentialité
+        </Txt>
+        .
+      </Txt>
+    </Pressable>
   );
 }
 

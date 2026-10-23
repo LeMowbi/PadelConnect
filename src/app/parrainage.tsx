@@ -63,11 +63,14 @@ export default function ParrainageScreen() {
     void shareText(message).then((r) => {
       if (r === 'copied') toast.show('Copié dans le presse-papiers ✅');
     });
-  // Copie RÉELLE du code dans le presse-papiers (le bouton le promettait sans le faire).
+  // Copie RÉELLE du code dans le presse-papiers (le bouton le promettait sans le faire). Elle peut
+  // échouer sur le web (rejet, ou `false` quand même le repli `execCommand` est refusé) → on le
+  // dit et on montre le code à noter.
   const copyCode = async () => {
     if (!myCode) return;
-    await Clipboard.setStringAsync(myCode);
-    toast.show('Code copié ✓');
+    const copied = await Clipboard.setStringAsync(myCode).catch(() => false);
+    if (copied) toast.show('Code copié ✓');
+    else toast.show(`Copie impossible — note ton code : ${myCode}`, { icon: 'alert-circle' });
   };
 
   return (

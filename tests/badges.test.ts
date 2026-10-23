@@ -4,7 +4,7 @@
 // affiché « gagné » à tort serait un écran menteur), et (2) les identifiants sont STABLES
 // (ils serviront de clé à une éventuelle persistance) — un renommage casse le test.
 
-import { ALL_BADGES, badgeBoard, earnedBadges, type BadgeInput } from '../src/lib/badges.ts';
+import { ALL_BADGES, FRIENDS_GOAL, badgeBoard, earnedBadges, type BadgeInput } from '../src/lib/badges.ts';
 
 let failed = 0;
 const check = (cond: boolean, msg: string) => {
@@ -65,15 +65,20 @@ check(!has({ ...ZERO, points: 99 }, 'points_100'), '99 points : « Cap des 100 �
 check(has({ ...ZERO, points: 100 }, 'points_100'), '100 points : « Cap des 100 » gagné');
 check(!has({ ...ZERO, weekStreak: 2 }, 'streak_3'), 'série de 2 semaines : « Régulier » encore verrouillé');
 check(has({ ...ZERO, weekStreak: 3 }, 'streak_3'), 'série de 3 semaines : « Régulier » gagné');
-check(!has({ ...ZERO, friendsCount: 2 }, 'social_3'), '2 amis : « Esprit d’équipe » encore verrouillé');
-check(has({ ...ZERO, friendsCount: 3 }, 'social_3'), '3 amis : « Esprit d’équipe » gagné');
+// Seuil « amis » UNIQUE (décision porteur n° 11) : badge et trophée du Profil à 5, même constante ;
+// l'identifiant `social_3` reste (clé stable), seul le seuil et la description changent.
+eq(FRIENDS_GOAL, 5, 'seuil « amis » partagé badge/trophée : 5');
+check(!has({ ...ZERO, friendsCount: 3 }, 'social_3'), '3 amis : « Esprit d’équipe » encore verrouillé (ancien seuil)');
+check(!has({ ...ZERO, friendsCount: 4 }, 'social_3'), '4 amis : « Esprit d’équipe » encore verrouillé');
+check(has({ ...ZERO, friendsCount: 5 }, 'social_3'), '5 amis : « Esprit d’équipe » gagné');
+eq(ALL_BADGES.find((b) => b.id === 'social_3')?.desc, '5 amis', 'badge social : la description annonce le vrai seuil');
 
 // Chaque critère est INDÉPENDANT : un seul chiffre ne débloque qu'un seul badge.
 eq(ids({ ...ZERO, points: 100 }), ['points_100'], 'les points seuls ne débloquent pas les badges de parties');
 eq(ids({ ...ZERO, friendsCount: 12 }), ['social_3'], 'les amis seuls ne débloquent que le badge social');
 
 // ── badgeBoard : tous les badges, gagnés d'abord, ordre canonique conservé ─────
-const board = badgeBoard({ ...ZERO, playedCount: 5, friendsCount: 3 });
+const board = badgeBoard({ ...ZERO, playedCount: 5, friendsCount: 5 });
 eq(board.length, ALL_BADGES.length, 'tableau : tous les badges sont rendus (gagnés + à débloquer)');
 eq(
   board.filter((b) => b.earned).map((b) => b.badge.id),

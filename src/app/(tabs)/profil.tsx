@@ -17,6 +17,7 @@ import { Button, Card, Divider, IconCircle, SectionHeader, StatTile, Tag, Txt, t
 import { isPlayed, useApp } from '@/store/AppContext';
 import { findClub } from '@/data/clubs';
 import { canAccessOperator, canSeeClubSpace } from '@/lib/access';
+import { FRIENDS_GOAL } from '@/lib/badges';
 import { fcfa, levelLabel, levelText } from '@/lib/format';
 import { hapticSuccess } from '@/lib/haptics';
 import { LOYALTY_CYCLE, loyaltyProgress } from '@/lib/loyalty';
@@ -30,6 +31,9 @@ import { colors, gradients, radius, spacing } from '@/theme';
 // « Noter PadelConnect » (E3) : lien DIRECT vers l'écriture d'un avis sur la fiche App Store
 // (aucun module natif). iOS seulement : sur Android et le web, la fiche Apple n'a pas de sens.
 const APP_STORE_REVIEW_URL = 'https://apps.apple.com/app/id6785261310?action=write-review';
+
+// Âge minimal des CGU — même règle qu’à l’inscription (onboarding) : une date saisie sous ce seuil est refusée.
+const MIN_AGE = 13;
 
 // Un trophée évolue par paliers : chaque seuil franchi monte d’un rang.
 type Trophy = { label: string; icon: IconName; value: number; steps: number[] };
@@ -127,12 +131,13 @@ export default function ProfilScreen() {
   };
 
   // Trophées ÉVOLUTIFs : chaque trophée monte en paliers (Bronze → Argent → Or → Platine)
-  // selon une valeur RÉELLE (parties jouées auto, tournois, victoires, amis, niveau).
+  // selon une valeur RÉELLE (parties jouées auto — hors cours de coach —, tournois, victoires,
+  // amis, niveau). Palier Argent des amis = FRIENDS_GOAL, le seuil du badge « Esprit d’équipe ».
   const trophies: Trophy[] = [
     { label: 'Parties jouées', icon: 'tennisball', value: stats.played, steps: [1, 5, 20, 50] },
     { label: 'Tournois joués', icon: 'flag', value: stats.tournamentsPlayed, steps: [1, 3, 10] },
     { label: 'Tournois gagnés', icon: 'trophy', value: stats.tournamentsWon, steps: [1, 3, 5] },
-    { label: 'Cercle d’amis', icon: 'people', value: friends.length, steps: [1, 5, 15] },
+    { label: 'Cercle d’amis', icon: 'people', value: friends.length, steps: [1, FRIENDS_GOAL, 15] },
     { label: 'Niveau de jeu', icon: 'trending-up', value: Math.floor(level), steps: [3, 4, 5, 6] },
   ];
 
@@ -144,7 +149,7 @@ export default function ProfilScreen() {
       { label: '5 parties', current: stats.played, target: 5 },
       { label: '20 parties', current: stats.played, target: 20 },
       { label: 'Premier tournoi', current: stats.tournamentsPlayed, target: 1 },
-      { label: '5 amis', current: friends.length, target: 5 },
+      { label: `${FRIENDS_GOAL} amis`, current: friends.length, target: FRIENDS_GOAL },
     ];
     const pending = candidates.filter((t) => t.current < t.target);
     if (pending.length === 0) return null;
@@ -309,7 +314,7 @@ export default function ProfilScreen() {
           </View>
         ) : null}
         <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-          Les parties jouées se comptent toutes seules : une réservation passée = une partie.
+          Les parties jouées se comptent toutes seules : une réservation passée = une partie (un cours avec un coach n’en est pas une).
         </Txt>
         {/* Détail complet : points, rang, victoires de match, activité mensuelle (Chantier 6). */}
         <Card onPress={() => router.push('/statistiques')} style={styles.statsLink}>
@@ -449,36 +454,41 @@ export default function ProfilScreen() {
             <Txt variant="body" style={{ fontWeight: '600' }}>
               Rappels de match
             </Txt>
+            {/* Web : aucune notification locale n’existe dans le navigateur — on ne promet rien
+                (pas d’interrupteur trompeur), on dit où les rappels fonctionnent. */}
             <Txt variant="small" color={colors.textMuted}>
-              Avant la fin de l’annulation gratuite, ~2 h avant, puis 20 min après la fin pour saisir le score. Désactivable ici.
+              {push.status === 'unsupported'
+                ? 'Disponibles dans l’app mobile (iPhone et Android) : avant la fin de l’annulation gratuite, ~2 h avant le match, puis pour saisir le score.'
+                : 'Avant la fin de l’annulation gratuite, ~2 h avant, puis 20 min après la fin pour saisir le score. Désactivable ici.'}
             </Txt>
           </View>
           {/* L’interrupteur montre l’état RÉEL : ON seulement si des rappels peuvent vraiment partir
-              (permission accordée, ou web). Jamais demandée / pas encore lue : OFF — le basculer ouvre
-              la fenêtre. Bloquée : verrouillé, la carte ci-dessus mène aux Réglages. La préférence,
+              (permission accordée). Jamais demandée / pas encore lue : OFF — le basculer ouvre la
+              fenêtre. Bloquée : verrouillé, la carte ci-dessus mène aux Réglages. La préférence,
               elle, est gardée. */}
-          <Switch
-            value={state.remindersOn && (push.status === 'granted' || push.status === 'unsupported')}
-            onValueChange={(v) => {
-              if (!v || Platform.OS === 'web') {
-                // Sur le web, la permission est toujours « refusée » : le message serait faux.
-                setRemindersOn(v);
-                return;
-              }
-              // La permission D'ABORD (syncMatchReminders est muet : sans accord, rien ne serait posé),
-              // puis la préférence — l'interrupteur ne reste ON qu'avec de vrais rappels armés. Refus
-              // iOS/Android : sans ce mot, il restait ON en promettant des rappels qui ne partiront jamais.
-              void push.ask().then((ok) => {
-                if (ok) setRemindersOn(true);
-                else toast.show('Autorise les notifications dans les réglages pour recevoir tes rappels.', { icon: 'alert-circle' });
-              });
-            }}
-            disabled={push.status === 'blocked' || push.asking}
-            trackColor={{ true: colors.signature, false: colors.border }}
-            thumbColor={colors.white}
-            accessibilityRole="switch"
-            accessibilityLabel="Rappels de match"
-          />
+          {push.status === 'unsupported' ? null : (
+            <Switch
+              value={state.remindersOn && push.status === 'granted'}
+              onValueChange={(v) => {
+                if (!v) {
+                  setRemindersOn(false);
+                  return;
+                }
+                // La permission D'ABORD (syncMatchReminders est muet : sans accord, rien ne serait posé),
+                // puis la préférence — l'interrupteur ne reste ON qu'avec de vrais rappels armés. Refus
+                // iOS/Android : sans ce mot, il restait ON en promettant des rappels qui ne partiront jamais.
+                void push.ask().then((ok) => {
+                  if (ok) setRemindersOn(true);
+                  else toast.show('Autorise les notifications dans les réglages pour recevoir tes rappels.', { icon: 'alert-circle' });
+                });
+              }}
+              disabled={push.status === 'blocked' || push.asking}
+              trackColor={{ true: colors.signature, false: colors.border }}
+              thumbColor={colors.white}
+              accessibilityRole="switch"
+              accessibilityLabel="Rappels de match"
+            />
+          )}
         </Card>
         {/* Alerte « un match à ton niveau vient d’ouvrir » (81) — préférence serveur : visible
             seulement une fois connecté (un compte local n’a rien à régler côté ciblage). */}
@@ -510,6 +520,7 @@ export default function ProfilScreen() {
             />
           </Card>
         ) : null}
+        <NewsPushCard />
       </View>
 
       {/* Espaces pro — affichés UNIQUEMENT selon le rôle vérifié côté serveur (state.role) :
@@ -693,31 +704,53 @@ export default function ProfilScreen() {
         </View>
       </BottomSheet>
 
-      {/* Suppression définitive — irréversible : on prévient clairement avant de confirmer. */}
+      {/* Suppression définitive — irréversible : on prévient clairement avant de confirmer. Le compte
+          OPÉRATEUR, lui, est refusé par le serveur (l’Espace opérateur resterait sans propriétaire) :
+          on le dit d’emblée au lieu d’offrir un bouton voué à l’échec. Les matchs PASSÉS restent chez
+          les partenaires, auteur anonymisé (décision porteur n° 9, R-30) : on le dit aussi. */}
       <BottomSheet
         visible={deleteSheet}
-        title="Supprimer mon compte ?"
-        subtitle="Cette action est définitive. Ton profil, tes réservations et tes données seront effacés. On ne peut pas les récupérer."
+        title={showOperator ? 'Compte opérateur' : 'Supprimer mon compte ?'}
+        subtitle={
+          showOperator
+            ? 'Le compte opérateur ne peut pas être supprimé depuis l’app : il porte l’Espace opérateur de PadelConnect. Contacte le support.'
+            : 'Cette action est définitive. Ton profil et tes données seront effacés, tes réservations à venir annulées. Tes matchs passés restent seulement dans l’historique de tes partenaires (« Ancien joueur » sur ceux que tu avais réservés). On ne peut rien récupérer.'
+        }
         onClose={() => {
           if (!deleting) setDeleteSheet(false);
         }}
       >
-        <View style={{ gap: spacing.sm }}>
-          {deleteError ? (
-            <Txt variant="small" color={colors.danger}>
-              {deleteError}
-            </Txt>
-          ) : null}
-          <Button
-            label={deleting ? 'Suppression…' : 'Supprimer définitivement'}
-            icon="trash-outline"
-            variant="danger"
-            onPress={confirmDelete}
-            disabled={deleting}
-            full
-          />
-          <Button label="Annuler" variant="ghost" onPress={() => setDeleteSheet(false)} disabled={deleting} full />
-        </View>
+        {showOperator ? (
+          <View style={{ gap: spacing.sm }}>
+            <Button
+              label="Aide & support"
+              icon="help-buoy-outline"
+              onPress={() => {
+                setDeleteSheet(false);
+                router.push('/support');
+              }}
+              full
+            />
+            <Button label="Fermer" variant="ghost" onPress={() => setDeleteSheet(false)} full />
+          </View>
+        ) : (
+          <View style={{ gap: spacing.sm }}>
+            {deleteError ? (
+              <Txt variant="small" color={colors.danger}>
+                {deleteError}
+              </Txt>
+            ) : null}
+            <Button
+              label={deleting ? 'Suppression…' : 'Supprimer définitivement'}
+              icon="trash-outline"
+              variant="danger"
+              onPress={confirmDelete}
+              disabled={deleting}
+              full
+            />
+            <Button label="Annuler" variant="ghost" onPress={() => setDeleteSheet(false)} disabled={deleting} full />
+          </View>
+        )}
       </BottomSheet>
 
       {/* Ajouter / changer l’e-mail — un lien de confirmation est envoyé à la nouvelle adresse. */}
@@ -856,9 +889,10 @@ function LoyaltyCard() {
         ))}
       </View>
 
-      {/* Règle cible (décision porteur) : seules TES réservations comptent, pas les invitations. */}
+      {/* Règle cible (décision porteur) : seules TES réservations comptent, pas les invitations ni
+          les cours (décision n° 3 : un cours n’est pas une partie). */}
       <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.md }}>
-        🎁 {LOYALTY_CYCLE} réservations créées et jouées = {reward}.
+        🎁 {LOYALTY_CYCLE} réservations créées et jouées (hors cours de coach) = {reward}.
       </Txt>
 
       {/* Cycles réclamés PAS ENCORE SERVIS (état serveur, permanent) : le justificatif reste
@@ -919,6 +953,52 @@ function LoyaltyCard() {
   );
 }
 
+// Push « Actus et agenda PadelConnect » (98, décision porteur n° 17 — Apple 4.5.4) : préférence
+// SERVEUR (`profiles.news_push`), ACTIVÉE par défaut, désactivable ici. Tant qu’elle n’est pas lue
+// (chargement, hors session, serveur d’avant la 98), la carte ne s’affiche pas : jamais une valeur
+// inventée sous l’interrupteur (§8). Écriture honnête : le miroir ne bouge qu’au succès serveur.
+function NewsPushCard() {
+  const { state, setNewsPush } = useApp();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false); // garde anti double-tap (même frame : l’état n’est pas encore rendu)
+  if (state.newsPush === null) return null;
+
+  const toggle = async (next: boolean) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    const ok = await setNewsPush(next);
+    busyRef.current = false;
+    setBusy(false);
+    // Refus (hors-ligne) : rien d’enregistré, le miroir garde sa valeur → l’interrupteur y revient.
+    if (!ok) toast.show('Réglage non enregistré — vérifie ta connexion', { icon: 'alert-circle' });
+  };
+
+  return (
+    <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm }}>
+      <IconCircle icon="megaphone" color={colors.green} bg={colors.greenSoft} />
+      <View style={{ flex: 1 }}>
+        <Txt variant="body" style={{ fontWeight: '600' }}>
+          Actus et agenda PadelConnect
+        </Txt>
+        <Txt variant="small" color={colors.textMuted}>
+          Les actus de PadelConnect et l’agenda du padel (événements, tournois). Activées par défaut, désactivables ici.
+        </Txt>
+      </View>
+      <Switch
+        value={state.newsPush}
+        onValueChange={(v) => void toggle(v)}
+        disabled={busy}
+        trackColor={{ true: colors.signature, false: colors.border }}
+        thumbColor={colors.white}
+        accessibilityRole="switch"
+        accessibilityLabel="Actus et agenda PadelConnect"
+      />
+    </Card>
+  );
+}
+
 function EditAccount({ onDone }: { onDone: () => void }) {
   const { state, updateAccount } = useApp();
   const toast = useToast();
@@ -954,8 +1034,13 @@ function EditAccount({ onDone }: { onDone: () => void }) {
     }
     // Date facultative : vide = retrait ('' → null côté serveur) ; saisie invalide = refus avec le
     // même message qu'à l'inscription (avant, elle était ignorée puis « Profil mis à jour ✓ »).
-    if (birth.trim() && !parseBirthDate(birth)) {
+    const bd = birth.trim() ? parseBirthDate(birth) : null;
+    if (birth.trim() && !bd) {
       setError('Date invalide — vérifie le jour, le mois et l’année.');
+      return;
+    }
+    if (bd && ageFrom(bd) < MIN_AGE) {
+      setError(`PadelConnect est réservé aux ${MIN_AGE} ans et plus.`);
       return;
     }
     setError(null);
@@ -1035,6 +1120,7 @@ function EditAccount({ onDone }: { onDone: () => void }) {
         keyboardType="phone-pad"
         autoCorrect={false}
         textContentType="telephoneNumber"
+        autoComplete="tel"
         maxLength={20}
         accessibilityLabel="Numéro de téléphone"
         style={styles.input}

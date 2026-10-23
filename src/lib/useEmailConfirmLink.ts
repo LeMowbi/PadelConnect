@@ -10,8 +10,13 @@
 //   3) OTP moderne          padelco://auth-callback?token_hash=…&type=…→ verifyOtp
 // L’ancienne version ne lisait que le `code` (?code=) → le lien réel (jetons dans le #) n’était
 // jamais traité → « on n’arrive pas à confirmer ».
+//
+// Lien PKCE ouvert sur un AUTRE appareil (inscription sur l’ordinateur, mail ouvert sur le
+// téléphone) : /auth/v1/verify a DÉJÀ confirmé l’adresse avant de rediriger, seul l’échange du
+// `code` échoue faute de `code_verifier` local (pkce_code_verifier_not_found, sans appel réseau).
+// Ce n’est PAS un lien expiré → `onConfirmedElsewhere` (« adresse confirmée — connecte-toi »).
 
-import type { EmailOtpType } from '@supabase/supabase-js';
+import { isAuthPKCECodeVerifierMissingError, type EmailOtpType } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 import { useEffect, useRef } from 'react';
 import { supabase } from './supabase';
@@ -38,7 +43,9 @@ function paramsFrom(url: string): Record<string, string> {
   return out;
 }
 
-export function useEmailConfirmLink(onResult: (r: Result) => void) {
+// `onConfirmedElsewhere` (facultatif) : adresse confirmée mais session impossible à ouvrir ICI.
+// Sans lui, l’appelant reçoit 'error' comme avant (repli prudent, jamais un faux succès).
+export function useEmailConfirmLink(onResult: (r: Result) => void, onConfirmedElsewhere?: () => void) {
   // Clés déjà traitées (les jetons/code sont consommés au 1er usage) : garde d’idempotence pour
   // éviter un 2ᵉ traitement (getInitialURL stable + ré-run de l’effet) qui échouerait et
   // afficherait un faux « lien expiré » alors que la confirmation a RÉUSSI.
@@ -52,6 +59,8 @@ export function useEmailConfirmLink(onResult: (r: Result) => void) {
   // `onConfirm` le plus frais (kind correct, comportement « rester connecté » préservé).
   const cb = useRef(onResult);
   cb.current = onResult;
+  const elsewhereCb = useRef(onConfirmedElsewhere);
+  elsewhereCb.current = onConfirmedElsewhere;
   useEffect(() => {
     let active = true;
 
@@ -72,7 +81,7 @@ export function useEmailConfirmLink(onResult: (r: Result) => void) {
       const key = p.access_token || p.code || p.token_hash;
       if (!key || handled.current.has(key)) return;
 
-      let error = null as { message: string } | null;
+      let error = null as unknown;
       if (p.access_token && p.refresh_token) {
         handled.current.add(key);
         ({ error } = await supabase.auth.setSession({ access_token: p.access_token, refresh_token: p.refresh_token }));
@@ -91,7 +100,8 @@ export function useEmailConfirmLink(onResult: (r: Result) => void) {
         return;
       }
       if (!active) return;
-      cb.current(error ? 'error' : 'confirmed');
+      if (isAuthPKCECodeVerifierMissingError(error) && elsewhereCb.current) elsewhereCb.current();
+      else cb.current(error ? 'error' : 'confirmed');
     };
 
     // 1) App ouverte « à froid » directement par le lien.
@@ -104,7 +114,7 @@ export function useEmailConfirmLink(onResult: (r: Result) => void) {
       sub.remove();
     };
     // Effet monté UNE seule fois : la livraison passe par `cb.current` (toujours le onConfirm
-    // le plus frais), donc aucun re-abonnement en cours d'échange réseau. `cb`/`handled` sont
+    // le plus frais), donc aucun re-abonnement en cours d'échange réseau. `cb`/`elsewhereCb`/`handled` sont
     // des refs stables ; `supabase`/`paramsFrom` sont au niveau module → deps vides correctes.
   }, []);
 }

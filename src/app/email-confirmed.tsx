@@ -5,15 +5,18 @@ import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PopIn } from '@/components/PopIn';
 import { Button, Txt } from '@/components/ui';
+import { useApp } from '@/store/AppContext';
 import { colors, gradients, radius, spacing } from '@/theme';
 
 // Écran de confirmation d'e-mail DÉDIÉ (remplace le simple toast) : rassure le nouvel inscrit avec
 // un vrai « ✅ E-mail validé ! », et surtout NE le renvoie JAMAIS vers l'écran de connexion — la
 // session est déjà posée (il est CONNECTÉ), un tap l'amène droit dans l'app. `kind` distingue les
-// cas : inscription / changement d'e-mail / bascule de compte / lien expiré.
-type Kind = 'signup' | 'change' | 'switch' | 'error';
+// cas : inscription (joueur ou club) / changement d'e-mail / bascule de compte / adresse confirmée
+// sur un AUTRE appareil (session impossible à ouvrir ici) / lien expiré.
+type Kind = 'signup' | 'change' | 'switch' | 'elsewhere' | 'error';
+type Copy = { icon: keyof typeof Ionicons.glyphMap; title: string; sub: string; cta: string };
 
-const COPY: Record<Kind, { icon: keyof typeof Ionicons.glyphMap; title: string; sub: string; cta: string }> = {
+const COPY: Record<Kind, Copy> = {
   signup: {
     icon: 'checkmark-circle',
     title: 'E-mail validé !',
@@ -32,22 +35,41 @@ const COPY: Record<Kind, { icon: keyof typeof Ionicons.glyphMap; title: string; 
     sub: 'Tu es maintenant connecté avec un autre compte.',
     cta: 'Continuer',
   },
+  // Lien ouvert sur un autre appareil ou navigateur que celui de l'inscription : l'adresse EST
+  // confirmée (le serveur l'a validée avant de rediriger), il ne reste qu'à se connecter.
+  elsewhere: {
+    icon: 'checkmark-circle',
+    title: 'Adresse confirmée ✓',
+    sub: 'Ton adresse e-mail est bien confirmée. Connecte-toi avec ton e-mail et ton mot de passe pour entrer dans l’app.',
+    cta: 'Se connecter',
+  },
+  // La connexion d'un compte non confirmé ouvre « Vérifie ta boîte mail » avec « Renvoyer l'e-mail ».
   error: {
     icon: 'alert-circle',
     title: 'Lien expiré',
-    sub: 'Ce lien de confirmation n’est plus valide. Reconnecte-toi pour en recevoir un nouveau.',
-    cta: 'Se reconnecter',
+    sub: 'Ce lien de confirmation n’est plus valide. Connecte-toi : on te proposera de renvoyer un nouveau lien.',
+    cta: 'Se connecter',
   },
+};
+
+// Compte CLUB tout juste confirmé : aucun terrain à réserver, sa demande attend la validation de
+// PadelConnect (le profil affiche « Club en cours de validation » jusque-là).
+const CLUB_SIGNUP: Copy = {
+  icon: 'checkmark-circle',
+  title: 'E-mail validé !',
+  sub: 'Ta demande de club est transmise ✓ PadelConnect la vérifie et ouvre ton Espace Club dès la validation.',
+  cta: 'Entrer dans l’app',
 };
 
 export default function EmailConfirmed() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { state } = useApp();
   const { kind } = useLocalSearchParams<{ kind?: string }>();
-  const k: Kind = kind === 'change' || kind === 'switch' || kind === 'error' ? kind : 'signup';
-  const c = COPY[k];
-  // Succès → accueil (déjà connecté, aucune connexion à refaire) ; erreur → reconnexion.
-  const go = () => router.replace(k === 'error' ? '/onboarding' : '/');
+  const k: Kind = kind === 'change' || kind === 'switch' || kind === 'elsewhere' || kind === 'error' ? kind : 'signup';
+  const c = k === 'signup' && state.accountType === 'club' ? CLUB_SIGNUP : COPY[k];
+  // Succès → accueil (déjà connecté, aucune connexion à refaire) ; sans session ici → connexion.
+  const go = () => router.replace(k === 'error' || k === 'elsewhere' ? '/onboarding' : '/');
 
   return (
     <LinearGradient
