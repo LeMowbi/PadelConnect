@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
 import { AppState, Linking, Pressable, StyleSheet, View } from 'react-native';
 import { Card, SectionHeader, Txt } from '@/components/ui';

@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Constants from 'expo-constants';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -714,7 +714,7 @@ export default function ProfilScreen() {
         subtitle={
           showOperator
             ? 'Le compte opérateur ne peut pas être supprimé depuis l’app : il porte l’Espace opérateur de PadelConnect. Contacte le support.'
-            : 'Cette action est définitive. Ton profil et tes données seront effacés, tes réservations à venir annulées. Tes matchs passés restent seulement dans l’historique de tes partenaires (« Ancien joueur » sur ceux que tu avais réservés). On ne peut rien récupérer.'
+            : 'Cette action est définitive. Ton profil et tes données seront effacés, tes réservations à venir annulées. Tes matchs passés restent seulement dans l’historique de tes partenaires (ta place y apparaît « Ancien joueur », sans ton nom). On ne peut rien récupérer.'
         }
         onClose={() => {
           if (!deleting) setDeleteSheet(false);
@@ -807,6 +807,9 @@ function LoyaltyCard() {
   // (ou échec réseau), jamais inventé (§8).
   const { state, refreshLoyalty } = useApp();
   const loyalty = state.loyalty;
+  // Serveur d’avant la 92 (cap null) : ni règle cible ni service des codes — « bientôt disponible »,
+  // jamais une règle chiffrée ni un bouton « Réclamer » qu’aucun club ne peut servir.
+  const legacy = loyalty !== null && loyalty.cap === null;
   const [claiming, setClaiming] = useState(false); // libellé « Envoi… » + bouton grisé
   const claimingRef = useRef(false); // garde anti double-tap (même frame : l’état n’est pas encore rendu)
   // Mes cycles réclamés, lus du SERVEUR : le justificatif « montre cet écran au club » doit
@@ -833,7 +836,7 @@ function LoyaltyCard() {
   // Plafond RÉEL (réglé par l’opérateur, lu avec le compteur). Tant qu’il n’est pas lu (ou
   // échec réseau), la règle s’affiche SANS montant : jamais un plafond inventé (§8).
   const reward =
-    loyalty === null
+    loyalty === null || loyalty.cap === null
       ? '−50 % sur ton prochain match (plafonné), offert par PadelConnect'
       : `−50 % sur ton prochain match (jusqu’à ${fcfa(loyalty.cap)}), offert par PadelConnect`;
   const lastServed = myClaims?.find((c) => c.served) ?? null;
@@ -869,31 +872,39 @@ function LoyaltyCard() {
           <Txt variant="muted">
             {loyalty === null
               ? 'Chargement de ton compteur…'
-              : pending > 0
-                ? 'Carte complète 🎉 — ta remise t’attend.'
-                : `${filled}/${LOYALTY_CYCLE} réservations jouées vers ta prochaine remise.`}
+              : legacy
+                ? 'Fidélité bientôt disponible — ta carte s’activera dès la mise à jour du serveur.'
+                : pending > 0
+                  ? 'Carte complète 🎉 — ta remise t’attend.'
+                  : `${filled}/${LOYALTY_CYCLE} réservations jouées vers ta prochaine remise.`}
           </Txt>
         </View>
       </View>
 
-      {/* Les 10 tampons : une pastille pleine = une réservation créée par toi et jouée, comptée par le serveur. */}
-      <View
-        style={styles.stamps}
-        accessible
-        accessibilityLabel={loyalty === null ? 'Carte de fidélité en cours de chargement' : `${filled} tampons sur ${LOYALTY_CYCLE}`}
-      >
-        {Array.from({ length: LOYALTY_CYCLE }, (_, i) => (
-          <View key={i} style={[styles.stamp, i < filled ? styles.stampOn : null]}>
-            <Ionicons name="tennisball" size={13} color={i < filled ? colors.amberDark : colors.textFaint} />
+      {/* Serveur d’avant la 92 : ni tampons ni règle chiffrée — le compte de la 82 inclut
+          invitations et cours, il ne correspond pas à la règle annoncée. */}
+      {legacy ? null : (
+        <>
+          {/* Les 10 tampons : une pastille pleine = une réservation créée par toi et jouée, comptée par le serveur. */}
+          <View
+            style={styles.stamps}
+            accessible
+            accessibilityLabel={loyalty === null ? 'Carte de fidélité en cours de chargement' : `${filled} tampons sur ${LOYALTY_CYCLE}`}
+          >
+            {Array.from({ length: LOYALTY_CYCLE }, (_, i) => (
+              <View key={i} style={[styles.stamp, i < filled ? styles.stampOn : null]}>
+                <Ionicons name="tennisball" size={13} color={i < filled ? colors.amberDark : colors.textFaint} />
+              </View>
+            ))}
           </View>
-        ))}
-      </View>
 
-      {/* Règle cible (décision porteur) : seules TES réservations comptent, pas les invitations ni
-          les cours (décision n° 3 : un cours n’est pas une partie). */}
-      <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.md }}>
-        🎁 {LOYALTY_CYCLE} réservations créées et jouées (hors cours de coach) = {reward}.
-      </Txt>
+          {/* Règle cible (décision porteur) : seules TES réservations comptent, pas les invitations ni
+              les cours (décision n° 3 : un cours n’est pas une partie). */}
+          <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.md }}>
+            🎁 {LOYALTY_CYCLE} réservations créées et jouées (hors cours de coach) = {reward}.
+          </Txt>
+        </>
+      )}
 
       {/* Cycles réclamés PAS ENCORE SERVIS (état serveur, permanent) : le justificatif reste
           affiché tant que le club n’a pas marqué la remise « servie ». */}
@@ -909,7 +920,7 @@ function LoyaltyCard() {
                 </Txt>
                 {/* Justificatif (92) : code court que le gérant saisit dans son Espace Club. Lu
                     lettre par lettre par le lecteur d’écran (sinon prononcé comme un mot). Absent
-                    (serveur d’avant la 92) : bloc omis plutôt qu’un plantage de l’onglet. */}
+                    (serveur d’avant la 92) : consigne honnête à la place, jamais « code undefined ». */}
                 {c.code ? (
                   <>
                     <View accessible accessibilityLabel={`Code ${c.code.split('').join(' ')}`}>
@@ -921,7 +932,11 @@ function LoyaltyCard() {
                       Montre ce code au club en réglant ton prochain match : il applique la remise.
                     </Txt>
                   </>
-                ) : null}
+                ) : (
+                  <Txt variant="small" color={colors.textMuted}>
+                    Le service des remises arrive avec la prochaine mise à jour du serveur.
+                  </Txt>
+                )}
               </View>
             </View>
           </PopIn>
@@ -939,7 +954,7 @@ function LoyaltyCard() {
         </Txt>
       ) : null}
 
-      {pending > 0 ? (
+      {pending > 0 && !legacy ? (
         <View style={{ marginTop: spacing.md }}>
           <Button label={claiming ? 'Envoi…' : 'Réclamer ma remise 🎁'} onPress={claim} disabled={claiming} full />
           {pending > 1 ? (

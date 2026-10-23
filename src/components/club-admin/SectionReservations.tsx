@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { BarChart } from '@/components/BarChart';
@@ -20,7 +20,7 @@ import {
   type ScheduleCtx,
 } from '@/lib/availability';
 import { durationLabel, overlaps, toMin, type CourtSlot } from '@/lib/courtSchedule';
-import { DAY_MS, HOUR_MS, dateKeyLabel, nextDays, slotTimestamp, weekKeyOf, weekLabel } from '@/lib/days';
+import { DAY_MS, HOUR_MS, addWeeks, dateKeyLabel, dowOfKey, nextDays, slotTimestamp, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa } from '@/lib/format';
 import { openWhatsApp } from '@/lib/contact';
 import { confirmAsync } from '@/lib/confirm';
@@ -34,6 +34,7 @@ import {
   fetchClubBlockedReasons,
   fetchNoShowReservations,
   fetchReliability,
+  mirrorPartialWeek,
   purgeOldBlockedRanges,
   RECURRING_REASON,
   type Reliability,
@@ -71,6 +72,11 @@ function resaWhatsAppText(r: Reservation, clubName: string): string {
 // résa (51) : il est lu dans son profil AU TAP (club_reservation_phone, 96) et jamais mis en miroir.
 export async function contactBooker(r: Reservation, clubName: string, toast: ReturnType<typeof useToast>): Promise<void> {
   const phone = r.bookedBy?.phone || (await clubReservationPhone(r.id));
+  if (phone === 'unsupported') {
+    // Serveur d'avant la 96 : ni la connexion ni le joueur n'y sont pour rien.
+    toast.show('Contact du créateur d’un match ouvert bientôt disponible.', { icon: 'information-circle' });
+    return;
+  }
   if (!phone) {
     toast.show('Numéro du joueur indisponible — vérifie ta connexion, ou il n’a pas renseigné de numéro', {
       icon: 'alert-circle',
@@ -80,23 +86,66 @@ export async function contactBooker(r: Reservation, clubName: string, toast: Ret
   openWhatsApp(phone, resaWhatsAppText(r, clubName));
 }
 
-// Séries d'HABITUÉS (créneaux « Récurrent ») encore À VENIR, regroupées par terrain + heure — la clé
-// même d'unblock_recurring (97). Dates triées (la première porte la note privée affichée).
-export function upcomingSeries(blocked: BlockedSlot[], now: number): { court: string; time: string; dateKeys: string[] }[] {
-  const byKey = new Map<string, { court: string; time: string; dateKeys: string[] }>();
+export type HabitueSeries = {
+  court: string;
+  time: string;
+  // Jour de la semaine de la série (0 = dimanche … 6 = samedi, UTC — même convention que
+  // `extract(dow …)` côté SQL) : deux habitués au même terrain et à la même heure, des jours
+  // différents (mardi Ali, jeudi Bob), sont DEUX séries distinctes.
+  dow: number;
+  dateKeys: string[];
+  // Miroir tronqué (state.blockedSlotsCoveredUntil) et la série atteint sa limite : d'autres dates
+  // peuvent exister au-delà de la dernière connue → « au moins N », jamais un compte ferme.
+  maybeMore: boolean;
+};
+
+// « 14 semaines à venir » / « au moins 14 semaines à venir » (miroir tronqué) — libellé partagé par
+// la liste « Habitués » et la fiche d'un créneau : jamais un chiffre plus petit que la réalité
+// présenté comme exact.
+export function seriesWeeksLabel(s: HabitueSeries): string {
+  const n = s.dateKeys.length;
+  return `${s.maybeMore ? 'au moins ' : ''}${n} semaine${n > 1 ? 's' : ''} à venir`;
+}
+
+const DOW_LONG = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+
+// Identifiant d'une série d'habitué : terrain + heure + JOUR DE LA SEMAINE — la clé même
+// d'unblock_recurring (97). Sert aussi de marqueur « arrêt en cours » (`stoppingSeries`).
+export function habitueSeriesKey(s: Pick<HabitueSeries, 'court' | 'time' | 'dow'>): string {
+  return `${s.court}|${s.time}|${s.dow}`;
+}
+
+// « les mardis à 18:00 » — dit QUELLE série on montre ou on arrête.
+export function seriesWhenLabel(s: Pick<HabitueSeries, 'time' | 'dow'>): string {
+  return `les ${DOW_LONG[s.dow]}s à ${s.time}`;
+}
+
+// Séries d'HABITUÉS (créneaux « Récurrent ») encore À VENIR, regroupées par terrain + heure + jour
+// de la semaine (habitueSeriesKey). Dates triées (la première porte la note privée affichée).
+// `coveredUntil` (state.blockedSlotsCoveredUntil) : jour de COUPURE du miroir tronqué — lui-même
+// possiblement partiel (le fetch ne trie que par jour). Une série dont la semaine SUIVANT sa
+// dernière date tombe ce jour-là ou après peut continuer hors du miroir → `maybeMore`.
+export function upcomingSeries(blocked: BlockedSlot[], now: number, coveredUntil: string | null = null): HabitueSeries[] {
+  const byKey = new Map<string, { court: string; time: string; dow: number; dateKeys: string[] }>();
   for (const b of blocked) {
     if (b.reason !== RECURRING_REASON || slotTimestamp(b.dateKey, b.time) <= now) continue;
-    const k = `${b.court}|${b.time}`;
+    const dow = dowOfKey(b.dateKey);
+    const k = habitueSeriesKey({ court: b.court, time: b.time, dow });
     let s = byKey.get(k);
     if (!s) {
-      s = { court: b.court, time: b.time, dateKeys: [] };
+      s = { court: b.court, time: b.time, dow, dateKeys: [] };
       byKey.set(k, s);
     }
     s.dateKeys.push(b.dateKey);
   }
+  // Ordre de lecture : terrain, heure, puis jour de la semaine (lundi d'abord).
   return [...byKey.values()]
-    .map((s) => ({ ...s, dateKeys: s.dateKeys.sort() }))
-    .sort((a, b) => a.court.localeCompare(b.court) || a.time.localeCompare(b.time));
+    .map((s) => {
+      const dateKeys = s.dateKeys.sort();
+      const maybeMore = coveredUntil !== null && addWeeks(dateKeys[dateKeys.length - 1], 1) >= coveredUntil;
+      return { ...s, dateKeys, maybeMore };
+    })
+    .sort((a, b) => a.court.localeCompare(b.court) || a.time.localeCompare(b.time) || ((a.dow + 6) % 7) - ((b.dow + 6) % 7));
 }
 
 export function SectionReservations({
@@ -116,9 +165,9 @@ export function SectionReservations({
   slotNotes: Record<string, string>;
   onNotesChanged: () => void;
   // « Arrêter la série » d'un habitué — action tenue par le parent (partagée avec la fiche d'un
-  // créneau) ; `stoppingSeries` = série en cours d'arrêt (`terrain|heure`) ou null.
+  // créneau) ; `stoppingSeries` = série en cours d'arrêt (habitueSeriesKey) ou null.
   stoppingSeries: string | null;
-  onStopSeries: (court: string, time: string, count: number, who: string) => void;
+  onStopSeries: (court: string, time: string, who: string, dow: number) => void;
 }) {
   const {
     state,
@@ -224,13 +273,24 @@ export function SectionReservations({
     };
   }, [playerIdsKey]);
 
-  // Badge d’alerte sous le nom d’un joueur peu fiable (≥1 annulation tardive ou absence). Depuis la
-  // 98 (décision n° 18), `cancelled` ne compte plus que les annulations faites à MOINS DE 24 H du match.
+  // Badge d’alerte sous le nom d’un joueur peu fiable (≥1 annulation ou absence). Depuis la 98
+  // (décision n° 18), `cancelled` ne compte plus que les annulations faites à MOINS DE 24 H du match.
+  // Ce sens n'est garanti QUE sur un serveur à la 98 : son marqueur est la préférence `newsPush`
+  // (colonne `profiles.news_push` de la même migration, relue en session — null = serveur d'avant
+  // la 98, ou pas encore lue). Sans lui, `cancelled` compte TOUTES les annulations des 14 derniers
+  // jours (même faites des jours à l'avance, que la règle des 5 h autorise) → libellé NEUTRE, jamais
+  // « tardive » sur un joueur qui a respecté la règle.
+  const lateCancelSemantics = state.newsPush !== null;
   const reliabilityNote = (userId?: string) => {
     const rel = userId ? reliability[userId] : undefined;
     if (!rel || (rel.cancelled === 0 && rel.noShow === 0)) return null;
     const parts: string[] = [];
-    if (rel.cancelled > 0) parts.push(`${rel.cancelled} annulation${rel.cancelled > 1 ? 's tardives' : ' tardive'} (< 24 h)`);
+    if (rel.cancelled > 0)
+      parts.push(
+        lateCancelSemantics
+          ? `${rel.cancelled} annulation${rel.cancelled > 1 ? 's tardives' : ' tardive'} (< 24 h)`
+          : `${rel.cancelled} annulation${rel.cancelled > 1 ? 's' : ''} (14 j)`,
+      );
     if (rel.noShow > 0) parts.push(`${rel.noShow} absence${rel.noShow > 1 ? 's' : ''}`);
     return (
       <View style={styles.relNote}>
@@ -401,12 +461,13 @@ export function SectionReservations({
     };
   }, [shownUpcomingKey]);
   const pastRes = clubRes.filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt);
-  // Miroir TRONQUÉ au plafond de lignes (reservationsCoveredFrom) : la semaine qui contient le plus
-  // ancien créneau reçu, et toutes les précédentes, peuvent manquer de réservations — leur revenu
-  // serait faux (base de la commission). On ne les affiche pas et on le DIT (bandeau), au lieu
-  // de laisser croire à des semaines creuses.
+  // Semaines INCOMPLÈTES du miroir (mirrorPartialWeek) : celle que coupe le bord de la fenêtre de
+  // 180 jours, ou — miroir TRONQUÉ au plafond de lignes (reservationsCoveredFrom) — celle du plus
+  // ancien créneau reçu, et toutes les précédentes. Leur revenu serait faux (base de la
+  // commission) : on ne les affiche pas. La troncature se DIT (bandeau), au lieu de laisser croire
+  // à des semaines creuses ; la fenêtre, elle, est annoncée sous l'historique (« 6 derniers mois »).
   const coveredFrom = state.reservationsCoveredFrom;
-  const partialWeek = coveredFrom !== null ? weekKeyOf(coveredFrom) : null;
+  const partialWeek = mirrorPartialWeek(coveredFrom, now);
   // Historique regroupé PAR SEMAINE (le décompte de la commission est hebdomadaire). Groupage en
   // O(n) via une Map d'index (au lieu d'un `.find` par item = O(n²)) : un club actif accumule des
   // centaines de résas passées, et cette section se recalcule à chaque tap (confirmer/bloquer).
@@ -414,7 +475,7 @@ export function SectionReservations({
   const weekIndex = new Map<string, { week: string; items: Reservation[] }>();
   for (const r of pastRes) {
     const wk = weekKeyOf(r.startsAt);
-    if (partialWeek !== null && wk <= partialWeek) continue; // semaine incomplète (clés AAAA-MM-JJ comparables)
+    if (wk <= partialWeek) continue; // semaine incomplète (clés AAAA-MM-JJ comparables)
     let g = weekIndex.get(wk);
     if (!g) {
       g = { week: wk, items: [] };
@@ -426,8 +487,12 @@ export function SectionReservations({
   const pastShown = pastByWeek.reduce((n, g) => n + g.items.length, 0);
   // Blocages hors app de ce club.
   const clubBlocked = state.blockedSlots.filter((b) => b.clubId === club.id);
-  // Séries d'habitués encore à venir (liste « Habitués » : qui, quand, jusqu'à quand).
-  const habitues = upcomingSeries(clubBlocked, now);
+  // Séries d'habitués encore à venir (liste « Habitués » : qui, quand, jusqu'à quand). Miroir
+  // tronqué (plafond partagé par tous les clubs) → « au moins N » et la liste se dit partielle.
+  // La coupure vient du DERNIER fetch complet (jamais déduite de la forme du miroir, que les
+  // blocages/déblocages locaux déforment jusqu'à la relecture suivante).
+  const blockedCoveredUntil = state.blockedSlotsCoveredUntil;
+  const habitues = upcomingSeries(clubBlocked, now, blockedCoveredUntil);
   // Fermetures sur PÉRIODE (54) de ce club, triées par date de début (les plus proches d’abord).
   const clubRanges = state.blockedRanges.filter((r) => r.clubId === club.id).sort((a, b) => a.dateFrom.localeCompare(b.dateFrom));
 
@@ -751,7 +816,7 @@ export function SectionReservations({
         />
       ) : null}
 
-      {/* Habitués : une ligne par série À VENIR (terrain + heure), arrêtable d'un tap — sans
+      {/* Habitués : une ligne par série À VENIR (terrain + heure + jour), arrêtable d'un tap — sans
           elle, une série de 26 semaines ne se retirait que case par case. */}
       {habitues.length > 0 ? (
         <View style={{ marginTop: spacing.xl }}>
@@ -762,20 +827,27 @@ export function SectionReservations({
               const first = s.dateKeys[0];
               const last = s.dateKeys[n - 1];
               const who = slotNotes[`${first}|${s.time}|${s.court}`] ?? '';
-              const busy = stoppingSeries === `${s.court}|${s.time}`;
+              const key = habitueSeriesKey(s);
+              const busy = stoppingSeries === key;
+              const weeks = seriesWeeksLabel(s);
+              const when = seriesWhenLabel(s);
               return (
-                <View key={`${s.court}|${s.time}`}>
+                <View key={key}>
                   {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                     <View style={{ flex: 1 }}>
                       <Txt variant="body" style={{ fontWeight: '600' }} numberOfLines={1}>
-                        {who || RECURRING_REASON} · {s.court} à {s.time}
+                        {who || RECURRING_REASON} · {s.court}, {when}
                         {/* Un terrain retiré depuis : la série reste arrêtable, on le signale. */}
                         {!courts.includes(s.court) ? ' (terrain retiré)' : ''}
                       </Txt>
                       <Txt variant="small" color={colors.textFaint}>
-                        {n} semaine{n > 1 ? 's' : ''} à venir ·{' '}
-                        {first === last ? `le ${dateKeyLabel(first)}` : `jusqu’au ${dateKeyLabel(last)}`}
+                        {weeks} ·{' '}
+                        {s.maybeMore
+                          ? `jusqu’au ${dateKeyLabel(last)} ou plus tard`
+                          : first === last
+                            ? `le ${dateKeyLabel(first)}`
+                            : `jusqu’au ${dateKeyLabel(last)}`}
                       </Txt>
                     </View>
                     <Button
@@ -784,13 +856,18 @@ export function SectionReservations({
                       icon="stop-circle-outline"
                       variant="ghost"
                       disabled={!!stoppingSeries}
-                      accessibilityLabel={`Arrêter la série ${who || RECURRING_REASON} sur ${s.court} à ${s.time} (${n} semaine${n > 1 ? 's' : ''} à venir)`}
-                      onPress={() => onStopSeries(s.court, s.time, n, who)}
+                      accessibilityLabel={`Arrêter la série ${who || RECURRING_REASON} sur ${s.court}, ${when} (${weeks})`}
+                      onPress={() => onStopSeries(s.court, s.time, who, s.dow)}
                     />
                   </View>
                 </View>
               );
             })}
+            {blockedCoveredUntil !== null ? (
+              <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+                Liste partielle : les créneaux bloqués à partir du {dateKeyLabel(blockedCoveredUntil)} ne sont pas tous chargés.
+              </Txt>
+            ) : null}
           </Card>
         </View>
       ) : null}
@@ -1385,7 +1462,8 @@ export function SectionReservations({
           />
         ) : null}
         <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-          La commission PadelConnect se calcule sur cet historique — décompte transmis chaque fin de semaine, règlement par Wave.
+          La commission PadelConnect se calcule sur cet historique (semaines complètes des 6 derniers mois) — décompte transmis chaque fin
+          de semaine, règlement par Wave.
         </Txt>
       </View>
     </>

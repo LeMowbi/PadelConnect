@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useMemo, useState } from 'react';
 import { AppState as RNAppState, StyleSheet, TextInput, View } from 'react-native';
 import { Chip } from '@/components/Chip';
@@ -274,6 +274,8 @@ export default function CoachAdmin() {
     } else if (res === 'forbidden') {
       hapticWarning();
       toast.show('Tu n’es plus le coach de ce cours — impossible de l’annuler', { icon: 'alert-circle' });
+    } else if (res === 'unsupported') {
+      toast.show('Annulation de cours bientôt disponible — demande au club d’annuler en attendant', { icon: 'alert-circle' });
     } else {
       hapticWarning();
       toast.show('Connexion impossible — vérifie ton réseau et réessaie', { icon: 'cloud-offline-outline' });

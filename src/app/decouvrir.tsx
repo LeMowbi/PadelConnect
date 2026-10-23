@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Txt } from '@/components/ui';
+import { useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
 // Les 3 règles essentielles présentées dans la maquette (éditorial débutants).
@@ -14,6 +15,9 @@ const RULES = [
 
 export default function DecouvrirScreen() {
   const router = useRouter();
+  const { state } = useApp();
+  // Même définition que la garde du RootNav : une session OU un profil = connecté.
+  const signedIn = !!state.account || !!state.serverUserId;
 
   return (
     <Screen back title="Découvrir le padel">
@@ -53,9 +57,21 @@ export default function DecouvrirScreen() {
         ))}
       </Card>
 
-      {/* CTA principal → écran de réservation (aucune géolocalisation : on ne promet pas « près de moi »). */}
+      {/* CTA principal (aucune géolocalisation : on ne promet pas « près de moi »). Page PUBLIQUE ouverte
+          depuis l'onboarding : sans compte, /reserver (protégé) renverrait aussitôt à l'onboarding sans
+          rien montrer — on dit donc la vérité et on y retourne ; connecté → écran de réservation. */}
       <View style={styles.cta}>
-        <Button label="Voir les clubs d’Abidjan" icon="business-outline" pill full onPress={() => router.push('/reserver')} />
+        {signedIn ? (
+          <Button label="Voir les clubs d’Abidjan" icon="business-outline" pill full onPress={() => router.push('/reserver')} />
+        ) : (
+          <Button
+            label="Créer mon compte pour réserver"
+            icon="person-add-outline"
+            pill
+            full
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/onboarding'))}
+          />
+        )}
       </View>
     </Screen>
   );

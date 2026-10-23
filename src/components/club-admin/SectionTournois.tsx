@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
@@ -114,9 +114,17 @@ export function SectionTournois({ club, comps, onCloseComp }: { club: Club; comp
             ? 'Tu n’as pas les droits pour annuler ce tournoi.'
             : res === 'reason'
               ? 'Indique un motif : il est montré aux inscrits.'
-              : 'Annulation impossible — vérifie ta connexion puis réessaie.',
+              : // Refus DÉFINITIFS (jamais « réessaie ») : 'fees' (98) = annulation tentée en tant
+                // qu'organisateur avec des frais encore dus (accès gérant retiré entre-temps) ;
+                // 'unsupported' = serveur d'avant la 97 (fonction absente).
+                res === 'fees'
+                ? 'Des frais PadelConnect restent dus sur ce tournoi : règle-les, ou demande au club de l’annuler.'
+                : res === 'unsupported'
+                  ? 'L’annulation n’est pas encore disponible : le serveur PadelConnect doit d’abord être mis à jour.'
+                  : 'Annulation impossible — vérifie ta connexion puis réessaie.',
       { icon: 'alert-circle' },
     );
+    if (res === 'unsupported') setCancellingId(null); // refus définitif : le formulaire se referme
   };
 
   return (

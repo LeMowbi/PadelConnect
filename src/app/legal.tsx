@@ -54,8 +54,9 @@ export default function Legal() {
           validation. Un match validé alimente le classement par points. Le niveau est initialisé par le quiz d’inscription puis ajusté
           automatiquement côté serveur, par les matchs dont le score est reconnu par le camp perdant (pour les joueurs qui l’ont saisi) et
           par les tournois officiels : un match validé au bout de 48 h compte pour les points, pas pour le niveau. Un cours avec un coach
-          n’est pas une partie : il ne rapporte pas de points et ne compte ni pour ta présence ni pour la fidélité. Le parrainage sert à
-          inviter des amis : chaque inscription avec ton code apparaît dans ton compteur « Amis rejoints », sans contrepartie monétaire.
+          n’est pas une partie : il ne rapporte pas de points et ne compte pas pour la fidélité (un cours individuel reste compté dans ta
+          présence ; un cours collectif où tu es élève n’y compte pas). Le parrainage sert à inviter des amis : chaque inscription avec ton
+          code apparaît dans ton compteur « Amis rejoints », sans contrepartie monétaire.
         </Txt>
       </Card>
 
@@ -103,9 +104,9 @@ export default function Legal() {
           informations sont <Txt style={{ fontWeight: '700' }}>visibles par la communauté</Txt> : ton nom sur les avis que tu publies, ton
           prénom (et l’initiale de ton nom) au classement avec tes points, ton prénom et l’initiale de ton nom dans la liste publique des
           matchs ouverts (ton nom complet est visible des joueurs du même match), ton niveau, ton club favori, ta fiche coach si un club t’a
-          promu et, à partir de 5 parties jouées, ton taux de présence (badge « Fiable · N % », jamais le détail de tes absences). Un club
-          ne voit que les réservations le concernant (et les remises fidélité qu’il t’a servies), et l’opérateur de PadelConnect le strict
-          nécessaire au suivi du service.
+          promu et, à partir de 5 matchs ou cours individuels joués, ton taux de présence (badge « Fiable · N % », jamais le détail de tes
+          absences). Un club ne voit que les réservations le concernant (et les remises fidélité qu’il t’a servies), et l’opérateur de
+          PadelConnect le strict nécessaire au suivi du service.
         </Txt>
         <Txt variant="body" style={{ marginTop: spacing.sm }}>
           Avec ton accord uniquement : ta <Txt style={{ fontWeight: '700' }}>photo</Txt> de profil ou de club est stockée pour l’affichage ;
@@ -132,10 +133,10 @@ export default function Legal() {
           Tu peux supprimer ton compte et tes données (photo comprise) à tout moment depuis Profil → « Supprimer mon compte » (action
           définitive — tes réservations à venir sont annulées et les clubs prévenus), ou en nous écrivant à l’adresse ci-dessous. Subsistent
           seulement : les tournois publiés ou clôturés que tu as organisés (organisateur affiché « Compte supprimé », sans téléphone) et les
-          noms d’équipes du palmarès, les matchs passés joués avec tes partenaires, qui restent dans leur historique (ton nom y figure là où
-          tu étais invité, « Ancien joueur » sur ceux que tu avais réservés), les remises fidélité déjà servies par un club (montant, prix
-          du match et date, sans ton nom), qui servent à son décompte, tes messages au support (sans ton nom ni ton numéro) et tes demandes
-          de club déjà traitées (sans ton numéro).
+          noms d’équipes du palmarès, les matchs passés joués avec tes partenaires, qui restent dans leur historique (ta place y apparaît «
+          Ancien joueur », sans ton nom), les remises fidélité déjà servies par un club (montant, prix du match et date, sans ton nom), qui
+          servent à son décompte, tes messages au support (sans ton nom ni ton numéro), tes demandes de club déjà traitées (sans ton numéro)
+          et, si tu gérais un club, la fiche du club, ses photos et ses annonces, qui restent en ligne (écris-nous pour la retirer).
         </Txt>
         <Txt variant="body" style={{ marginTop: spacing.sm }}>
           Tu peux aussi nous écrire pour exercer tes droits d’accès, de rectification, d’opposition ou de suppression. Tes données sont

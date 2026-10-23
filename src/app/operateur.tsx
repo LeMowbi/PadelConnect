@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -11,7 +11,7 @@ import { SkeletonLines } from '@/components/Skeleton';
 import { CommissionRates } from '@/components/operator/CommissionRates';
 import { ManagerAccess } from '@/components/operator/ManagerAccess';
 import { TournamentFee } from '@/components/operator/TournamentFee';
-import { TournamentFees } from '@/components/operator/TournamentFees';
+import { RefundsDue, TournamentFees } from '@/components/operator/TournamentFees';
 import { LoyaltySettings } from '@/components/operator/LoyaltySettings';
 import { WaveLink } from '@/components/operator/WaveLink';
 import { DiagnosticsCard } from '@/components/operator/DiagnosticsCard';
@@ -28,6 +28,7 @@ import { loyaltyByClubForWeek, loyaltyServedByWeek, loyaltyWeekKey } from '@/lib
 import { COMMISSION_RATE, isPlayed, useApp, type ServerClubRequest, type ServerSupportMessage } from '@/store/AppContext';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { DAY_MS, addWeeks, dateKeyLabel, dayKey, weekKeyOf, weekLabel } from '@/lib/days';
+import { mirrorPartialWeek } from '@/lib/reservations';
 import { fcfa, pctLabel } from '@/lib/format';
 import { commissionOf } from '@/lib/pricing';
 import { openWhatsApp } from '@/lib/contact';
@@ -371,10 +372,11 @@ export default function Operateur() {
   // Placé APRÈS loadRequests (règle React Compiler : pas d'accès avant déclaration).
   // `loadRequests` inclus : sans lui, « Demandes reçues » restait figé pendant que les trois
   // autres blocs de l'onglet se rafraîchissaient (seule l'icône ↻ dédiée la rechargeait).
-  // Relecture du plafond et du coût total de la fidélité (LoyaltySettings) au pull-to-refresh.
-  const [loyaltyRefresh, setLoyaltyRefresh] = useState(0);
+  // Relecture, au pull-to-refresh, des cartes de Finances qui lisent elles-mêmes le serveur :
+  // plafond et coût total de la fidélité (LoyaltySettings), frais à rembourser (RefundsDue).
+  const [financeRefresh, setFinanceRefresh] = useState(0);
   const { refreshControl, webRefreshButton } = usePullToRefresh(async () => {
-    setLoyaltyRefresh((k) => k + 1);
+    setFinanceRefresh((k) => k + 1);
     await Promise.all([loadSupport(), loadReports(), loadClaims(), loadRequests(), loadLoyaltyServed()]);
   });
   // Chargement initial : on n’appelle setState que DANS le callback async (après await),
@@ -482,15 +484,18 @@ export default function Operateur() {
   const thisWeek = weekKeyOf(Date.now());
   const [week, setWeek] = useState(thisWeek);
 
-  // Miroir des résas TRONQUÉ au plafond de lignes (R-61) : la semaine qui contient le plus ancien
-  // créneau reçu, et toutes les précédentes, peuvent manquer de parties — leurs montants seraient
-  // sous-évalués. Elles sortent de la relance, leur décompte ne part pas au club et l'écran le DIT
-  // (« Historique incomplet avant le … » = lundi de la première semaine COMPLÈTE, comme l'historique
-  // de l'Espace Club).
+  // Semaines INCOMPLÈTES du miroir des résas (mirrorPartialWeek, même règle que l'historique de
+  // l'Espace Club) : celle que coupe le BORD de la fenêtre de 180 jours (coupure en milieu de
+  // semaine), ou — miroir TRONQUÉ au plafond de lignes (R-61) — celle du plus ancien créneau reçu,
+  // et toutes les précédentes. Leurs montants seraient sous-évalués : elles sortent de la relance et
+  // des cumuls, leur décompte ne part pas au club et l'écran le DIT (« … à partir du » = lundi de la
+  // première semaine COMPLÈTE, `fullFromLabel` plus bas). `truncatedWeek` = la seule troncature par le PLAFOND (le cumul
+  // « 6 derniers mois » de l'Aperçu est alors sous-estimé ; la fenêtre, elle, est dans son titre).
   const coveredFrom = state.reservationsCoveredFrom;
-  const partialWeek = coveredFrom !== null ? weekKeyOf(coveredFrom) : null;
-  const fullFromLabel = partialWeek !== null ? dateKeyLabel(addWeeks(partialWeek, 1)) : null;
-  const weekIncomplete = partialWeek !== null && week <= partialWeek;
+  const truncatedWeek = coveredFrom !== null ? weekKeyOf(coveredFrom) : null;
+  const partialWeek = mirrorPartialWeek(coveredFrom, Date.now());
+  const truncatedFromLabel = truncatedWeek !== null ? dateKeyLabel(addWeeks(truncatedWeek, 1)) : null;
+  const weekIncomplete = week <= partialWeek;
 
   // La commission se calcule UNIQUEMENT sur les parties JOUÉES
   // (une résa à venir peut encore être annulée — le club contesterait).
@@ -549,16 +554,20 @@ export default function Operateur() {
     // Commission cumulée sur la fenêtre du miroir (~6 derniers mois, MIRROR_WINDOW_MS) — chiffre
     // vitrine — et celle de la semaine EN COURS (indépendante du sélecteur ‹ › des Finances, un
     // aperçu stable). Chaque unité au taux de SON club (pas un taux global), pour rester exact.
+    // Parties ET remises fidélité sur les MÊMES semaines complètes (> partialWeek) : les remises
+    // sont lues sur 183 jours, une remise d'une semaine coupée ne se déduit plus d'une commission
+    // dont les parties ne sont pas toutes chargées.
     let allTimePlayed = 0;
     let allTimeGross = 0;
     let thisWeekGross = 0;
     for (const u of billing.values()) {
+      if (u.wk <= partialWeek) continue;
       const commission = commissionOf(u.revenue, rateFor(clubCommission, u.clubId));
       allTimePlayed += u.count;
       allTimeGross += commission;
       if (u.wk === thisWeek) thisWeekGross += commission;
     }
-    const servedTotal = Object.values(servedByKey).reduce((s, v) => s + v, 0);
+    const servedTotal = Object.entries(servedByKey).reduce((s, [k, v]) => (k.slice(k.lastIndexOf(':') + 1) > partialWeek ? s + v : s), 0);
     const servedThisWeek = Object.entries(servedByKey).reduce((s, [k, v]) => (k.endsWith(`:${thisWeek}`) ? s + v : s), 0);
     return {
       weekUpcoming: reservations.filter((r) => weekKeyOf(r.startsAt) === week && !isPlayed(r)).length,
@@ -575,7 +584,7 @@ export default function Operateur() {
       thisWeekCommission: thisWeekGross - servedThisWeek,
       servedTotal,
     };
-  }, [billing, reservations, clubCommission, customClubs, clubInfo, week, thisWeek, servedByKey]);
+  }, [billing, reservations, clubCommission, customClubs, clubInfo, week, thisWeek, servedByKey, partialWeek]);
 
   // Tournois JOUEURS publiés avec un frais fixe → à encaisser (Wave). Non réglés d’abord,
   // puis par date décroissante. On garde les réglés visibles (historique récent).
@@ -607,7 +616,8 @@ export default function Operateur() {
   // Relance : impayés des semaines passées PRÉSENTES DANS LE MIROIR (~6 derniers mois, cf.
   // MIRROR_WINDOW_MS) — au-delà, les résas ne sont plus rapatriées, donc un impayé de plus de
   // 6 mois n'apparaît pas ici (à traiter par une vraie RPC d'agrégat serveur si le volume grandit).
-  // Les semaines du miroir TRONQUÉ (R-61) en sortent aussi : leur montant serait sous-évalué.
+  // Les semaines INCOMPLÈTES du miroir (bord de la fenêtre, troncature R-61) en sortent aussi :
+  // leur montant serait sous-évalué (et une remise fidélité pourrait le faire passer « À reverser »).
   // Total au taux de chaque club + semaine la plus ancienne à traiter (le tap y amène
   // directement). La semaine EN COURS est exclue : elle se facture à sa clôture.
   // Dans l'AUTRE sens aussi : `owed` = ce que PadelConnect doit REVERSER aux clubs (remises
@@ -623,7 +633,7 @@ export default function Operateur() {
     const weeks = new Set<string>();
     for (const key of new Set([...billing.keys(), ...Object.keys(servedByKey)])) {
       const wk = key.slice(key.lastIndexOf(':') + 1);
-      if (wk >= thisWeek || (partialWeek !== null && wk <= partialWeek) || state.operatorPayments[key] === 'paid') continue;
+      if (wk >= thisWeek || wk <= partialWeek || state.operatorPayments[key] === 'paid') continue;
       const u = billing.get(key);
       const net = (u ? commissionOf(u.revenue, rateFor(state.clubCommission, u.clubId)) : 0) - (servedByKey[key] ?? 0);
       if (net === 0) continue;
@@ -633,6 +643,10 @@ export default function Operateur() {
     }
     return { total, owed, weeksCount: weeks.size, oldest: [...weeks].sort()[0] ?? null };
   }, [billing, servedByKey, state.operatorPayments, state.clubCommission, thisWeek, partialWeek]);
+  // Lundi de la première semaine COMPLÈTE du miroir. Calculé APRÈS les useMemo qui lisent
+  // `partialWeek` : le compilateur React ne peut pas préserver ces mémoïsations si une valeur de leurs
+  // dépendances passe AVANT eux dans un appel de fonction (règle preserve-manual-memoization).
+  const fullFromLabel = dateKeyLabel(addWeeks(partialWeek, 1));
   // Libellé de la relance (pastille hors Finances + rappel en Finances) : les DEUX sens.
   const unpaidLabel =
     [unpaid.total > 0 ? `Reste à encaisser : ${fcfa(unpaid.total)}` : null, unpaid.owed > 0 ? `À reverser : ${fcfa(unpaid.owed)}` : null]
@@ -687,8 +701,8 @@ export default function Operateur() {
   // Message Wave formaté, prêt à envoyer au club.
   const sendHistory = async (row: (typeof rows)[number]) => {
     if (finBusy) return;
-    // Semaine du miroir tronqué (R-61) : ses parties ne sont pas toutes chargées — le club
-    // recevrait un montant sous-évalué.
+    // Semaine incomplète du miroir (bord de la fenêtre, troncature R-61) : ses parties ne sont pas
+    // toutes chargées — le club recevrait un montant sous-évalué.
     if (weekIncomplete) {
       toast.show(`Semaine incomplète (historique chargé à partir du ${fullFromLabel}) : décompte non envoyable d’ici`, {
         icon: 'alert-circle',
@@ -759,7 +773,7 @@ export default function Operateur() {
       })
       .join('\n');
     const total = `TOTAL;${totalCount};${totalRevenue};;${totalCommission};${totalLoyalty};${totalCommission - totalLoyalty};`;
-    // Semaine du miroir tronqué (R-61) : le tableau le DIT en tête (montants sous-évalués).
+    // Semaine incomplète du miroir (bord de la fenêtre, troncature R-61) : le tableau le DIT en tête.
     const warning = weekIncomplete ? `⚠️ Historique incomplet : seuls les créneaux à partir du ${fullFromLabel} sont tous chargés.\n` : '';
     const message = `PadelConnect — Décompte semaine ${weekLabel(week)}\n${warning}\n${header}\n${body}\n${total}`;
     // Via lib/share : feuille native sur mobile, repli presse-papiers sur le web de bureau
@@ -859,11 +873,11 @@ export default function Operateur() {
         </View>
       ) : null}
       {/* Miroir tronqué (R-61) : dit AVANT tout montant que les semaines anciennes sont incomplètes. */}
-      {section === 'Finances' && fullFromLabel ? (
+      {section === 'Finances' && truncatedFromLabel ? (
         <View style={styles.infoBanner}>
           <Ionicons name="alert-circle-outline" size={17} color={colors.amberDark} />
           <Txt variant="small" color={colors.amberDark} style={{ flex: 1 }}>
-            Historique incomplet avant le {fullFromLabel} : trop de réservations à charger d’un coup. Les semaines plus anciennes sont
+            Historique incomplet avant le {truncatedFromLabel} : trop de réservations à charger d’un coup. Les semaines plus anciennes sont
             exclues de la relance et leur décompte ne s’envoie pas d’ici.
           </Txt>
         </View>
@@ -927,7 +941,7 @@ export default function Operateur() {
               {allTimePlayed} créneau{allTimePlayed > 1 ? 'x' : ''} joué{allTimePlayed > 1 ? 's' : ''} · commission réglée par Wave (hors
               app)
               {servedTotal > 0 ? ` · remises fidélité déduites (${fcfa(servedTotal)})` : ''}
-              {fullFromLabel ? ` · historique incomplet avant le ${fullFromLabel} (cumul sous-estimé)` : ''}
+              {truncatedFromLabel ? ` · historique incomplet avant le ${truncatedFromLabel} (cumul sous-estimé)` : ''}
             </Txt>
           </Card>
 
@@ -987,7 +1001,7 @@ export default function Operateur() {
             <View style={styles.totals}>
               <StatTile value={totalCount} label="Créneaux joués" color={colors.green} bg={colors.greenSoft} />
               <StatTile value={fcfa(totalRevenue)} label="Volume" color={colors.green} bg={colors.greenSoft} />
-              {/* Semaine du miroir tronqué (R-61) : aucun « reste à encaisser » chiffré, il serait faux. */}
+              {/* Semaine incomplète du miroir : aucun « reste à encaisser » chiffré, il serait faux. */}
               <StatTile
                 value={weekIncomplete ? '—' : fcfa(totalDue)}
                 label="Reste à encaisser"
@@ -1194,7 +1208,7 @@ export default function Operateur() {
             <LoyaltySettings
               week={week}
               weekCost={Array.isArray(loyaltyServed) ? totalLoyalty : loyaltyServed}
-              refreshKey={loyaltyRefresh}
+              refreshKey={financeRefresh}
               toast={toast}
             />
           </View>
@@ -1218,15 +1232,24 @@ export default function Operateur() {
               }}
               onUnconfirm={async (id) => {
                 // 97 (R-68) : false = refus (déjà « à régler », tournoi sans frais) ou échec réseau.
-                const { ok } = await unconfirmTournamentPayment(id);
+                const { ok, unsupported } = await unconfirmTournamentPayment(id);
                 toast.show(
                   ok
                     ? 'Paiement annulé — le tournoi repasse « à régler »'
-                    : 'Annulation impossible (connexion, ou tournoi déjà « à régler ») — la liste se met à jour au prochain chargement',
+                    : unsupported
+                      ? 'Fonction bientôt disponible — la base n’est pas encore à jour (SQL 97)'
+                      : 'Annulation impossible (connexion, ou tournoi déjà « à régler ») — la liste se met à jour au prochain chargement',
                   ok ? undefined : { icon: 'alert-circle' },
                 );
               }}
             />
+          </View>
+
+          {/* Frais À REMBOURSER (98) : tournois annulés dont les frais étaient déjà encaissés —
+              remboursement Wave puis « Remboursé ✓ ». Relus au pull-to-refresh (financeRefresh). */}
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionHeader title="À rembourser" />
+            <RefundsDue refreshKey={financeRefresh} toast={toast} />
           </View>
         </>
       ) : null}
@@ -1685,7 +1708,8 @@ export default function Operateur() {
                       </Txt>
                       <Txt variant="muted">
                         {/* Date formatée en UTC (même motif que le reste du fichier). */}
-                        Cycle n°{c.cycle} · code {c.code} · réclamée le {dateKeyLabel(dayKey(new Date(c.claimedAt)))}
+                        Cycle n°{c.cycle}
+                        {c.code ? ` · code ${c.code}` : ''} · réclamée le {dateKeyLabel(dayKey(new Date(c.claimedAt)))}
                       </Txt>
                       {c.served ? (
                         <Txt variant="small" color={colors.textMuted}>

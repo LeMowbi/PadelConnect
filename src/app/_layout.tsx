@@ -33,7 +33,10 @@ const WELCOME_MAX_AGE_MS = 7 * DAY_MS;
 // l’onboarding lui-même y renvoie (lien « CGU & confidentialité », aperçu des clubs) ; auth-callback
 // (échange du code PKCE d'e-mail) parce qu'un cold-start déconnecté via `padelco://auth-callback?code=`
 // rebondissait sinon brièvement vers /onboarding avant que useEmailConfirmLink ne pose le compte.
-const PUBLIC_ROUTES = ['onboarding', 'reset-password', 'auth-callback', 'email-confirmed', 'legal', 'decouvrir'];
+// invite : la route doit RESTER montée jusqu'à l'hydratation pour mettre le code de parrainage de
+// côté (son public, ce sont justement les visiteurs déconnectés) ; elle redirige ensuite elle-même
+// vers « / », où la garde renvoie à l'onboarding (code pré-rempli).
+const PUBLIC_ROUTES = ['onboarding', 'reset-password', 'auth-callback', 'email-confirmed', 'legal', 'decouvrir', 'invite'];
 const isPublicRoute = (segment: string | undefined) => PUBLIC_ROUTES.includes(segment ?? '');
 
 // Journalise les erreurs JS non rattrapées (crashs) dans nos diagnostics (self-hosted Supabase).
@@ -198,9 +201,11 @@ function RootNav() {
         }}
         // Écran PROTÉGÉ ouvert sans compte (lien direct, F5 sur le web) : le renvoi vers /onboarding
         // part d'un effet, APRÈS un premier rendu — l'écran se montait une frame et lançait ses
-        // lectures serveur (401 en console). On rend un fond nu à sa place jusqu'au renvoi (C-09).
+        // lectures serveur (401 en console). On rend un fond nu à sa place jusqu'au renvoi (C-09),
+        // y compris AVANT l'hydratation (on ne sait pas encore s'il y a un compte : une seule
+        // lecture AsyncStorage). Les routes publiques, elles, restent montées dès le départ.
         screenLayout={({ route, children }) =>
-          hydrated && !signedIn && !isPublicRoute(route.name.split('/')[0]) ? (
+          (!hydrated || !signedIn) && !isPublicRoute(route.name.split('/')[0]) ? (
             <View style={{ flex: 1, backgroundColor: colors.bg }} />
           ) : (
             children

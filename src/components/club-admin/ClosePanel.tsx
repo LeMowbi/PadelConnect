@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button, Tag, Txt } from '@/components/ui';
 import { teamsToShow, type Competition } from '@/data/competitions';
 import { colors, radius, spacing } from '@/theme';

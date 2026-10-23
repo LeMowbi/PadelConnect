@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -842,22 +842,32 @@ export default function HomeScreen() {
             <SectionHeader title="Classement des joueurs" actionLabel="Voir tout" onAction={() => go('/classement')} />
             <Card onPress={() => go('/classement')}>
               {top3 && top3.length > 0 ? (
-                top3.map((r, i) => (
-                  <View key={r.userId}>
-                    {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
-                    <View style={styles.podiumRow}>
-                      {/* Médaille du RANG serveur (98, ex æquo « 1, 1, 3 ») — même règle que /classement. */}
-                      <Txt variant="h3" style={styles.podiumMedal}>
-                        {['🥇', '🥈', '🥉'][r.rank - 1]}
-                      </Txt>
-                      <Txt variant="body" numberOfLines={1} style={{ flex: 1, fontWeight: r.rank === 1 ? '800' : '600' }}>
-                        {r.name}
-                        {r.userId === state.serverUserId ? ' (toi)' : ''}
-                      </Txt>
-                      <Tag label={`${r.points} pts`} tone={r.rank === 1 ? 'amber' : 'neutral'} />
+                top3.map((r, i) => {
+                  // Compte bloqué : nom masqué — même règle que /classement, les avis et les matchs ouverts.
+                  const isMe = r.userId === state.serverUserId;
+                  const blocked = !isMe && state.blockedUserIds.includes(r.userId);
+                  return (
+                    <View key={r.userId}>
+                      {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
+                      <View style={styles.podiumRow}>
+                        {/* Médaille du RANG serveur (98, ex æquo « 1, 1, 3 ») — même règle que /classement. */}
+                        <Txt variant="h3" style={styles.podiumMedal}>
+                          {['🥇', '🥈', '🥉'][r.rank - 1]}
+                        </Txt>
+                        <Txt
+                          variant="body"
+                          numberOfLines={1}
+                          color={blocked ? colors.textMuted : undefined}
+                          style={{ flex: 1, fontWeight: r.rank === 1 ? '800' : '600' }}
+                        >
+                          {blocked ? 'Joueur bloqué' : r.name}
+                          {isMe ? ' (toi)' : ''}
+                        </Txt>
+                        <Tag label={`${r.points} pts`} tone={r.rank === 1 ? 'amber' : 'neutral'} />
+                      </View>
                     </View>
-                  </View>
-                ))
+                  );
+                })
               ) : (
                 <View style={styles.podiumRow}>
                   <Txt variant="h3" style={styles.podiumMedal}>

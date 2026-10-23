@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen } from '@/components/Screen';
 import { OpenMatches } from '@/components/OpenMatches';
 import { Card, Txt } from '@/components/ui';

@@ -30,6 +30,7 @@ export function LoyaltySettings({
   // Plafond SERVEUR : null = pas encore lu (ou échec réseau) — jamais une valeur inventée (§8).
   const [server, setServer] = useState<number | null>(null);
   const [capError, setCapError] = useState(false); // dernière lecture du plafond en échec
+  const [unsupported, setUnsupported] = useState(false); // serveur d'avant la 92 (fonction absente)
   const [value, setValue] = useState('');
   const [saving, setSaving] = useState(false);
   // Resynchronise le champ quand la valeur serveur arrive/change, SEULEMENT si l'opérateur n'a
@@ -48,8 +49,9 @@ export function LoyaltySettings({
     let alive = true;
     void fetchLoyaltyCap().then((c) => {
       if (!alive) return;
+      setUnsupported(c === 'unsupported');
       setCapError(c === null);
-      if (c !== null) setServer(c);
+      if (typeof c === 'number') setServer(c);
     });
     void fetchOperatorLoyaltyCost(0, Date.now() + 86400000).then((c) => alive && setTotal((cur) => c ?? (cur === undefined ? null : cur)));
     return () => {
@@ -65,6 +67,11 @@ export function LoyaltySettings({
     setSaving(true);
     const ok = await setLoyaltyCap(cap);
     setSaving(false);
+    if (ok === 'unsupported') {
+      setUnsupported(true);
+      toast.show('Fidélité bientôt disponible — le plafond se réglera dès la mise à jour du serveur.', { icon: 'information-circle' });
+      return;
+    }
     if (ok) setServer(cap);
     toast.show(ok ? `Plafond fixé à ${fcfa(cap)} ✅` : 'Enregistrement impossible — réessaie', ok ? undefined : { icon: 'alert-circle' });
   };
@@ -94,6 +101,11 @@ export function LoyaltySettings({
         accessibilityLabel="Plafond de la remise fidélité, en FCFA"
         style={[opStyles.clubInput, { marginTop: 0 }]}
       />
+      {unsupported ? (
+        <Txt variant="small" color={colors.textMuted}>
+          Fidélité bientôt disponible — le plafond se réglera dès la mise à jour du serveur.
+        </Txt>
+      ) : null}
       {server === null && capError ? (
         <Txt variant="small" color={colors.textMuted}>
           Plafond actuel non lu — vérifie ta connexion, puis tire pour rafraîchir.
@@ -108,7 +120,7 @@ export function LoyaltySettings({
         label={saving ? 'Enregistrement…' : 'Enregistrer le plafond'}
         icon="save-outline"
         onPress={save}
-        disabled={saving || !dirty || !capOk}
+        disabled={saving || !dirty || !capOk || unsupported}
         full
       />
 

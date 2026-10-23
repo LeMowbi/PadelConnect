@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -11,7 +11,15 @@ import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, SectionHeader, Tag, Txt } from '@/components/ui';
 import { ClosePanel } from '@/components/club-admin/ClosePanel';
 import { SectionMonClub } from '@/components/club-admin/SectionMonClub';
-import { contactBooker, resaDetailLabel, SectionReservations, upcomingSeries } from '@/components/club-admin/SectionReservations';
+import {
+  contactBooker,
+  habitueSeriesKey,
+  resaDetailLabel,
+  SectionReservations,
+  seriesWeeksLabel,
+  seriesWhenLabel,
+  upcomingSeries,
+} from '@/components/club-admin/SectionReservations';
 import { SectionTournois } from '@/components/club-admin/SectionTournois';
 import { clubsByName, findClub, manageableClubs, type Club } from '@/data/clubs';
 import { canSeeClubSpace } from '@/lib/access';
@@ -64,12 +72,15 @@ export default function ClubAdmin() {
   } = useApp();
   const toast = useToast();
   const navigation = useNavigation();
-  // Push « nouvelle réservation » d'un gérant multi-clubs : `clubId` = club concerné (peut ne pas
-  // être le club ACTIF → bandeau « Basculer » plus bas). Absent d'un ancien push : rien ne change.
-  const { clubId: pushClubId } = useLocalSearchParams<{ clubId?: string }>();
+  // Push GÉRANT (nouvelle réservation, annulation, demande de tournoi) d'un gérant multi-clubs :
+  // `clubId` = club concerné (peut ne pas être le club ACTIF → bandeau « Basculer » plus bas) ;
+  // `section=Tournois` = demande de tournoi (le bon onglet s'ouvre). Absents d'un ancien push : rien
+  // ne change. `dismissedPushClubId` = push TRAITÉ (croix, ou club atteint) : le bandeau ne revient pas.
+  const { clubId: pushClubId, section: pushSection } = useLocalSearchParams<{ clubId?: string; section?: string }>();
+  const pushIsTournament = pushSection === 'Tournois';
   const [dismissedPushClubId, setDismissedPushClubId] = useState<string | null>(null);
 
-  const [section, setSection] = useState<(typeof SECTIONS)[number]>('Réservations');
+  const [section, setSection] = useState<(typeof SECTIONS)[number]>(() => (pushIsTournament ? 'Tournois' : 'Réservations'));
   // Guide de démarrage : null = drapeau pas encore lu (on n'affiche rien pour éviter un flash).
   const [guideSeen, setGuideSeen] = useState<boolean | null>(null);
   useEffect(() => {
@@ -269,28 +280,40 @@ export default function ClubAdmin() {
   };
 
   // Tirer-pour-rafraîchir (+ bouton web) et rafraîchissement AUTOMATIQUE web toutes les 2 min,
-  // suspendu pendant un envoi ou une feuille ouverte (une relecture ne croise pas une écriture).
+  // suspendu pendant les envois tenus PAR CET ÉCRAN (bascule, inscription, arrêt de série) et quand
+  // une feuille est ouverte. Les écritures lancées depuis une section sont couvertes par les
+  // compteurs d'écriture du store : une relecture partie AVANT elles jette sa tranche au retour —
+  // `reservationsWriteRef` (confirmer, « pas venu », annulation club) et `blocksWriteRef` pour les
+  // BLOCAGES (bloquer/débloquer un créneau, fermer/rouvrir une période, arrêter une série). Sans ce
+  // dernier, une période fraîchement fermée pouvait disparaître de l'écran et être recréée :
+  // block_range INSÈRE une ligne à chaque appel (doublon serveur). La pose d'une série d'habitué
+  // (RPC directe + relecture) reste hors compteur : la reposer est sans doublon (97, « déjà bloqué »).
   const { refreshControl, webRefreshButton } = usePullToRefresh(reloadMyClubs, {
     everyMs: WEB_AUTO_REFRESH_MS,
     paused: switching || sendingSignup || !!stoppingSeries || !!selectedCell || !!closingId,
   });
 
   // « Arrêter la série » d'un habitué (97) : retire les créneaux « Récurrent » À VENIR de ce
-  // terrain à cette heure (jamais le passé). Écriture qui attend le serveur ; les notes privées
+  // terrain, à cette heure, CE jour de la semaine (jamais le passé). Écriture qui attend le serveur ; les notes privées
   // (nom de l'habitué) sont relues ensuite. Partagée par la fiche d'un créneau et « Habitués ».
-  const stopSeries = (court: string, time: string, count: number, who: string) => {
+  // Confirmation SANS chiffre : le miroir des blocages (plafonné, tous clubs) peut ne pas porter les
+  // dates lointaines, alors que le serveur retire TOUTES les dates à venir — le toast final donne le
+  // nombre réel renvoyé par le serveur.
+  const stopSeries = (court: string, time: string, who: string, dow: number) => {
     if (stoppingSeries) return;
     void confirmAsync(
       'Arrêter la série ?',
-      `${count} créneau${count > 1 ? 'x' : ''} à venir${who ? ` (${who})` : ''} sur ${court} à ${time} redeviendr${
-        count > 1 ? 'ont' : 'a'
-      } réservable${count > 1 ? 's' : ''}. Les dates passées ne changent pas.`,
+      `Toutes les dates à venir de cette série${who ? ` (${who})` : ''} sur ${court}, ${seriesWhenLabel({ time, dow })}, redeviendront réservables. Les autres jours et les dates passées ne changent pas.`,
       { confirmLabel: 'Arrêter la série', destructive: true },
     ).then(async (ok) => {
       if (!ok) return;
-      setStoppingSeries(`${court}|${time}`);
-      const n = await unblockRecurring(club.id, court, time);
+      setStoppingSeries(habitueSeriesKey({ court, time, dow }));
+      const n = await unblockRecurring(club.id, court, time, dow);
       setStoppingSeries(null);
+      if (n === 'unsupported') {
+        toast.show('Arrêt de série bientôt disponible — la base n’est pas encore à jour', { icon: 'alert-circle' });
+        return;
+      }
       if (n === null) {
         toast.show('Série non arrêtée — vérifie ta connexion', { icon: 'cloud-offline-outline' });
         return;
@@ -310,6 +333,14 @@ export default function ClubAdmin() {
       ? pushClubId
       : null;
   const pushClubName = pushTarget ? (findClub(pushTarget, state.customClubs, state.clubInfo)?.name ?? 'un autre club') : '';
+  // Club du push ATTEINT (bandeau « Basculer », puces « Club géré », ou déjà actif à l'ouverture) :
+  // le push est traité — le bandeau ne revient plus quand le gérant repasse sur un autre club, et une
+  // demande de tournoi ouvre l'onglet Tournois. Mise à jour pendant le rendu (motif « valeur du
+  // rendu précédent », comme `seenReservations`), sur le club VRAIMENT chargé (jamais le repli).
+  if (pushClubId && resolvedClub?.id === pushClubId && dismissedPushClubId !== pushClubId) {
+    setDismissedPushClubId(pushClubId);
+    if (pushIsTournament) setSection('Tournois');
+  }
 
   const header = (
     <View style={styles.note}>
@@ -388,7 +419,7 @@ export default function ClubAdmin() {
         <View style={styles.switchBanner}>
           <Ionicons name="swap-horizontal" size={16} color={colors.amberDark} />
           <Txt variant="small" color={colors.amberDark} style={{ flex: 1, fontWeight: '600' }}>
-            Cette réservation concerne {pushClubName}.
+            {pushIsTournament ? 'Cette demande de tournoi concerne' : 'Cette notification concerne'} {pushClubName}.
           </Txt>
           <Button
             size="sm"
@@ -803,19 +834,22 @@ export default function ClubAdmin() {
                     {/* Case d'une série d'HABITUÉ : l'arrêter d'ici (toutes ses dates À VENIR). */}
                     {!isTournoi && !resa && blk?.reason === RECURRING_REASON
                       ? (() => {
-                          const series = upcomingSeries(clubBlocked, now).find((s) => s.court === c && s.time === blk.time);
+                          const series = upcomingSeries(clubBlocked, now, state.blockedSlotsCoveredUntil).find(
+                            (s) => s.court === c && s.time === blk.time && s.dateKeys.includes(blk.dateKey),
+                          );
                           if (!series) return null;
-                          const n = series.dateKeys.length;
-                          const busy = stoppingSeries === `${c}|${blk.time}`;
+                          const busy = stoppingSeries === habitueSeriesKey(series);
                           return (
                             <View style={{ marginTop: spacing.sm, alignItems: 'flex-start' }}>
                               <Button
                                 size="sm"
-                                label={busy ? 'Arrêt…' : `Arrêter la série (${n} semaine${n > 1 ? 's' : ''} à venir)`}
+                                label={busy ? 'Arrêt…' : `Arrêter la série (${seriesWeeksLabel(series)})`}
                                 icon="stop-circle-outline"
                                 variant="ghost"
                                 disabled={!!stoppingSeries}
-                                onPress={() => stopSeries(c, blk.time, n, slotNotes[`${series.dateKeys[0]}|${blk.time}|${c}`] ?? '')}
+                                onPress={() =>
+                                  stopSeries(c, blk.time, slotNotes[`${series.dateKeys[0]}|${blk.time}|${c}`] ?? '', series.dow)
+                                }
                               />
                             </View>
                           );

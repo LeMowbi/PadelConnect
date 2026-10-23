@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -230,10 +230,12 @@ export default function CompetitionDetail() {
               ? 'Indique un motif : il est montré aux inscrits.'
               : res === 'fees'
                 ? 'Règle d’abord les frais PadelConnect, ou demande au club d’annuler.'
-                : 'Annulation impossible — vérifie ta connexion puis réessaie.',
+                : res === 'unsupported'
+                  ? 'L’annulation en ligne arrive avec la prochaine mise à jour — contacte PadelConnect pour annuler ce tournoi.'
+                  : 'Annulation impossible — vérifie ta connexion puis réessaie.',
       { icon: 'alert-circle' },
     );
-    if (res === 'gone' || res === 'played' || res === 'forbidden' || res === 'fees') setCancelOpen(false);
+    if (res === 'gone' || res === 'played' || res === 'forbidden' || res === 'fees' || res === 'unsupported') setCancelOpen(false);
   };
 
   const byClub = comp.organizerType === 'club';
@@ -472,8 +474,11 @@ export default function CompetitionDetail() {
         </View>
         {/* Ce que « Officiel » veut dire, en clair — sinon le badge reste abstrait pour le joueur. */}
         <Txt variant="small" color={colors.white} style={{ marginTop: spacing.sm, opacity: 0.85 }}>
+          {/* Même règle que ClosePanel : la fin de tableau (−0,25) n'existe qu'à l'élimination. */}
           {comp.official
-            ? 'Tournoi officiel : le joueur qui a inscrit l’équipe vainqueure gagne +0,50 de niveau.'
+            ? isAmericano
+              ? 'Tournoi officiel : le joueur qui a inscrit l’équipe vainqueure gagne +0,50 de niveau.'
+              : 'Tournoi officiel : le joueur qui a inscrit l’équipe vainqueure gagne +0,50 de niveau, celui de la fin de tableau perd 0,25.'
             : 'Tournoi entre joueurs : amical — le résultat ne change pas ton niveau.'}
         </Txt>
       </LinearGradient>

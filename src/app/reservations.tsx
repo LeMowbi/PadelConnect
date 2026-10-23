@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { AppState as RNAppState, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -16,7 +16,7 @@ import { isCompFinished, seedCompetitions } from '@/data/competitions';
 import { durationLabel } from '@/lib/courtSchedule';
 import { useToast } from '@/components/Toast';
 import { isPlayed, useApp, type Reservation } from '@/store/AppContext';
-import { isReservationOwner } from '@/store/helpers';
+import { isLesson, isReservationOwner } from '@/store/helpers';
 import { addReservationToCalendar, calendarAvailable } from '@/lib/calendar';
 import { confirmAsync } from '@/lib/confirm';
 import { openWhatsApp } from '@/lib/contact';
@@ -339,12 +339,18 @@ export default function ReservationsScreen() {
       return;
     }
     setRespondingId(r.id);
-    const ok = await respondInvitation(r.id, accept);
+    const res = await respondInvitation(r.id, accept);
     setRespondingId(null);
-    if (ok) {
+    if (res === 'ok') {
       if (accept) hapticSuccess();
       toast.show(accept ? 'Invitation acceptée ✓' : 'Invitation refusée');
-    } else toast.show('Action impossible — réessaie', { icon: 'alert-circle' });
+    } else if (res === 'gone') {
+      // Refus DÉFINITIF (match annulé, invitation retirée) : « réessaie » mentirait.
+      toast.show('Cette invitation n’est plus valable — le match a été annulé ou l’invitation retirée.', { icon: 'information-circle' });
+    } else if (res === 'started') {
+      // Refus serveur au coup d'envoi (l'horloge du téléphone peut retarder) : définitif.
+      toast.show('Le match a commencé — l’invitation est close.', { icon: 'alert-circle' });
+    } else toast.show('Action impossible — vérifie ta connexion et réessaie', { icon: 'cloud-offline-outline' });
   };
 
   // Synchronise une résa À VENIR dans le calendrier du téléphone (même helper que l’écran de
@@ -360,6 +366,11 @@ export default function ReservationsScreen() {
     });
     // « canceled » = l'utilisateur a refermé la fiche système lui-même : pas de toast d'erreur.
     if (res === 'canceled') return;
+    if (res === 'denied') {
+      // iOS 16 : accès déjà refusé, iOS ne redemande plus — on dit où l'autoriser (jamais un tap muet).
+      toast.show('Autorise l’accès au calendrier dans Réglages › PadelConnect pour ajouter ton match.', { icon: 'alert-circle' });
+      return;
+    }
     if (res === 'unavailable') {
       toast.show('Calendrier indisponible sur cet appareil.', { icon: 'alert-circle' });
       return;
@@ -425,11 +436,14 @@ export default function ReservationsScreen() {
       // Victoire « en attente » alors que d'autres avaient saisi : ces saisies concordent et sont
       // forcément gagnantes (une défaite en miroir aurait validé) — la mienne n'est donc plus seule,
       // la validation automatique à 48 h ne s'appliquera pas (deux « je gagne » ne valident jamais).
+      // Le client ne sait PAS de quel camp venait l'autre victoire (le serveur ne rend que le score
+      // canonique) : en 2v2, l'adversaire peut aussi avoir déclaré gagner au même score — on n'attribue
+      // donc aucun camp.
       toast.show(
         !iWin
           ? 'Score enregistré — validé dès qu’un joueur du camp gagnant saisit le même score.'
           : othersEntered > 0
-            ? 'Score enregistré — ton camp l’avait déjà saisi : il sera validé dès qu’un adversaire confirme (plus de validation automatique à 48 h).'
+            ? 'Score enregistré — une autre victoire était déjà déclarée : il sera validé dès qu’un joueur du camp perdant confirme (plus de validation automatique à 48 h).'
             : 'Score enregistré — validé dès qu’un adversaire confirme (ou automatiquement sous 48 h si ta saisie reste la seule).',
       );
     } else if (res === 'conflict') {
@@ -469,7 +483,11 @@ export default function ReservationsScreen() {
     const who = s.enteredNames || 'l’autre joueur';
     const yes = await confirmAsync(
       iWin ? `Ton équipe a gagné ${s.score} ?` : `Ton équipe a perdu ${s.score} ?`,
-      `Seulement si tu jouais CONTRE ${who} : ta confirmation valide le match. Si tu étais dans son équipe, ne saisis rien — deux saisies du même camp ne le valident jamais.`,
+      // Victoire confirmée : le client ignore si l'autre saisie déclarait une défaite (elle validerait
+      // le match) ou une victoire (les deux restent en attente) — promesse conditionnelle.
+      iWin
+        ? `Seulement si tu jouais CONTRE ${who} : ta confirmation valide le match si ${who} a déclaré sa défaite. Si tu étais dans son équipe, ne saisis rien — deux saisies du même camp ne le valident jamais.`
+        : `Seulement si tu jouais CONTRE ${who} : ta confirmation valide le match. Si tu étais dans son équipe, ne saisis rien — deux saisies du même camp ne le valident jamais.`,
       { confirmLabel: 'Je confirme', cancelLabel: 'Annuler' },
     );
     if (yes) await submitScore(r, sets, iWin);
@@ -1201,8 +1219,10 @@ export default function ReservationsScreen() {
       </View>
 
       {/* Absences (« pas venu », R-44) : le club a marqué la réservation — elle ne compte pas comme
-          une partie jouée et, pour son auteur, pèse dans sa fiabilité. Jamais en silence : la trace
-          reste 30 jours, avec le moyen de joindre le club en cas d'erreur. */}
+          une partie jouée et, pour son auteur, pèse dans sa fiabilité. Un COURS n'est jamais une partie
+          (98, décision 3) : texte dédié — son absence reste comptée dans la présence (T-3), donc
+          son auteur en est prévenu comme pour une partie.
+          Jamais en silence : la trace reste 30 jours, avec le moyen de joindre le club en cas d'erreur. */}
       {absences.length > 0 ? (
         <View style={{ marginTop: spacing.xl }}>
           <SectionHeader title={`Absences signalées · ${absences.length}`} />
@@ -1226,8 +1246,12 @@ export default function ReservationsScreen() {
                   <View style={styles.clubCancelBox}>
                     <Txt variant="small" color={colors.coralDark}>
                       {isOwner(r)
-                        ? `${r.clubName} a marqué ta réservation comme « pas venu » : elle ne compte pas comme partie jouée et pèse dans ta fiabilité.`
-                        : `${r.clubName} a marqué cette réservation comme « pas venu » : la partie ne compte pas.`}{' '}
+                        ? isLesson(r)
+                          ? `${r.clubName} a marqué ce cours comme « pas venu » : il pèse dans ta fiabilité.`
+                          : `${r.clubName} a marqué ta réservation comme « pas venu » : elle ne compte pas comme partie jouée et pèse dans ta fiabilité.`
+                        : isLesson(r)
+                          ? `${r.clubName} a marqué ce cours comme « pas venu ».`
+                          : `${r.clubName} a marqué cette réservation comme « pas venu » : la partie ne compte pas.`}{' '}
                       Une erreur ? Contacte le club.
                     </Txt>
                     <View style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}>
@@ -1240,7 +1264,7 @@ export default function ReservationsScreen() {
                           clubPhone
                             ? openWhatsApp(
                                 clubPhone,
-                                `Bonjour, ma réservation du ${dateKeyLabel(r.dateKey)} à ${r.time} (${r.court}) a été marquée « pas venu » dans PadelConnect. Je pense qu’il s’agit d’une erreur : `,
+                                `Bonjour, ${isLesson(r) ? 'mon cours' : 'ma réservation'} du ${dateKeyLabel(r.dateKey)} à ${r.time} (${r.court}) a été ${isLesson(r) ? 'marqué' : 'marquée'} « pas venu » dans PadelConnect. Je pense qu’il s’agit d’une erreur : `,
                               )
                             : router.push(`/club/${r.clubId}`)
                         }

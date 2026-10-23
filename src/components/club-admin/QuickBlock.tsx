@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { CalendarPicker } from '@/components/CalendarPicker';
 import { Chip } from '@/components/Chip';
 import { Button, Card, Txt } from '@/components/ui';

@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Modal, StyleSheet, View } from 'react-native';
@@ -55,6 +55,11 @@ export function BookingConfirmation({
     const res = await addReservationToCalendar({ clubName, startsAt, court, area, durationMin });
     // « canceled » = l'utilisateur a refermé la fiche système lui-même : pas de toast d'erreur.
     if (res === 'canceled') return;
+    if (res === 'denied') {
+      // iOS 16 : accès déjà refusé, iOS ne redemande plus — on dit où l'autoriser (jamais un tap muet).
+      toast.show('Autorise l’accès au calendrier dans Réglages › PadelConnect pour ajouter ton match.', { icon: 'alert-circle' });
+      return;
+    }
     if (res === 'unavailable') {
       toast.show('Calendrier indisponible sur cet appareil.', { icon: 'alert-circle' });
       return;

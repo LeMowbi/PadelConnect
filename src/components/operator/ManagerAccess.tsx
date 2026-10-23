@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';

@@ -37,7 +37,8 @@ export function LoyaltyServeCard({ clubId, clubName, connected }: { clubId: stri
   // Plafond RÉEL (opérateur) : undefined = lecture en cours ; null = échec réseau (§8). Tant qu'il
   // n'est pas lu, AUCUNE remise n'est calculée ni servie — jamais un plafond inventé (un défaut
   // ferait servir moins que ce que la carte du joueur promet si l'opérateur l'a relevé).
-  const [cap, setCap] = useState<number | null | undefined>(undefined);
+  // 'unsupported' = serveur d'avant la 92 : fidélité « bientôt disponible », jamais « connexion ».
+  const [cap, setCap] = useState<number | 'unsupported' | null | undefined>(undefined);
   // undefined = chargement ; null = échec réseau (≠ [] = aucune remise servie), convention §8.
   const [served, setServed] = useState<ClubLoyaltyServed[] | null | undefined>(undefined);
 
@@ -99,6 +100,7 @@ export function LoyaltyServeCard({ clubId, clubName, connected }: { clubId: stri
       invalid: 'Montant invalide — saisis le prix du match.',
       forbidden: `Action réservée au gérant de ${clubName}.`,
       rate_limited: 'Trop de codes essayés en une heure — réessaie plus tard (protection contre les codes devinés).',
+      unsupported: 'Fidélité bientôt disponible — tu pourras servir les remises dès la mise à jour du serveur.',
       error: 'Connexion impossible — réessaie',
     };
     toast.show(messages[res], { icon: res === 'error' ? 'cloud-offline-outline' : 'alert-circle' });
@@ -151,6 +153,10 @@ export function LoyaltyServeCard({ clubId, clubName, connected }: { clubId: stri
           {cap === undefined ? (
             <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
               Lecture du plafond de la remise…
+            </Txt>
+          ) : cap === 'unsupported' ? (
+            <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
+              Fidélité bientôt disponible — tu pourras servir les remises dès la mise à jour du serveur.
             </Txt>
           ) : cap === null ? (
             <View style={[styles.listRow, { marginTop: spacing.sm }]}>
