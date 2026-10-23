@@ -54,13 +54,13 @@
         <h2>Les données que nous collectons</h2>
         <ul>
           <li><strong>Compte</strong> : adresse e-mail, mot de passe (chiffré), prénom, nom, numéro de téléphone, date de naissance et sexe (facultatifs), niveau de jeu.</li>
-          <li><strong>Activité</strong> : réservations, participations, tournois, avis publiés (note globale et, en option, notes détaillées terrains/accueil/vestiaires), amis, joueurs favoris, clubs suivis, parrainage, matchs ouverts, alertes de créneau (liste d'attente), scores de match saisis, points et niveau de classement, fidélité (réservations créées et jouées, remises réclamées avec leur code, et pour une remise servie : club, prix du match, montant et date), demandes de cours et cours collectifs avec un coach (et fiche coach si un club t'a promu), carnets de séances d'un club.</li>
+          <li><strong>Activité</strong> : réservations, participations, tournois, avis publiés (note globale et, en option, notes détaillées terrains/accueil/vestiaires), amis, joueurs favoris, clubs suivis, parrainage, matchs ouverts, alertes de créneau (liste d'attente), scores de match saisis, points et niveau de classement, fidélité (réservations créées et jouées, remises réclamées avec leur code, et pour une remise servie : club, prix du match, montant et date), demandes de cours et cours collectifs avec un coach (et fiche coach si un club t'a promu), carnets de séances d'un club, joueurs que tu as bloqués, avis que tu as signalés (avec ton motif).</li>
           <li><strong>Partage de la note (parts Wave)</strong> : pour un match partagé, le créateur peut coller un lien de paiement <em>Wave</em> et chaque joueur peut indiquer qu'il a réglé sa part. Aucun paiement ne transite par PadelConnect : le règlement se fait dans Wave (application tierce). Nous conservons uniquement le statut « déclaré / confirmé » de chaque part.</li>
           <li><strong>Photo</strong> (facultative, avec ton accord) : photo de profil, et pour les gérants, photos du club.</li>
           <li><strong>Contacts</strong> (facultatif, avec ton accord) : lorsque tu choisis d'ajouter un ami depuis tes contacts, nous lisons uniquement le contact que <em>tu</em> sélectionnes (nom et numéro) pour t'aider à l'inviter. Nous ne copions jamais ton carnet d'adresses.</li>
           <li><strong>Notifications</strong> : un identifiant technique d'appareil (jeton de notification) pour t'envoyer les alertes liées à tes réservations, invitations, scores, cours et tournois, les annonces des clubs que tu suis, les matchs ouverts à ton niveau et les actus et l'agenda PadelConnect (activés par défaut, désactivables dans Profil → Notifications).</li>
           <li><strong>Support et demandes de club</strong> : les messages que tu nous envoies et, si tu inscris un club, ta demande (nom, téléphone de contact, message).</li>
-          <li><strong>Diagnostics techniques</strong> : rapports d'erreur/plantage et événements d'usage (écrans consultés, actions), enregistrés <em>sans identifiant personnel</em> (jamais rattachés à ton compte), uniquement pour corriger les bugs et améliorer le service.</li>
+          <li><strong>Diagnostics techniques</strong> : rapports d'erreur/plantage et événements d'usage (inscription terminée, réservation ou tournoi créé), enregistrés <em>sans identifiant personnel</em> (jamais rattachés à ton compte), uniquement pour corriger les bugs et améliorer le service.</li>
         </ul>
         <p>Nous n'utilisons aucune donnée de localisation GPS. Les liens vers Google Maps se contentent d'ouvrir une recherche par nom.</p>
       </div>
@@ -88,7 +88,7 @@
           car c'est le but de ces fonctionnalités : ton nom sur les avis que tu publies, ton prénom (et l'initiale de ton
           nom) au classement avec tes points, ton prénom et l'initiale de ton nom dans la liste publique des matchs
           ouverts (ton nom complet est visible des joueurs du même match), ton niveau, ton club favori, ta
-          fiche coach si un club t'a promu et, à partir de 5 parties jouées, ton taux de présence (badge « Fiable · N % »,
+          fiche coach si un club t'a promu et, à partir de 5 matchs ou cours individuels joués, ton taux de présence (badge « Fiable · N % »,
           jamais le détail de tes absences). Un club ne voit que les réservations qui le concernent (et les remises fidélité qu'il t'a servies) ; l'opérateur de
           PadelConnect n'accède qu'au strict nécessaire au suivi du service. Tu peux signaler tout avis inapproprié et
           bloquer son auteur directement dans l'app (traitement sous 24 h).
@@ -112,7 +112,7 @@
         <h2>Durées de conservation</h2>
         <ul>
           <li><strong>Compte, profil et activité</strong> : tant que ton compte existe ; supprimés dès que tu supprimes ton compte.</li>
-          <li><strong>Ce qui subsiste après la suppression</strong> : les tournois publiés ou clôturés que tu as organisés (organisateur affiché « Compte supprimé », sans téléphone) et les noms d'équipes du palmarès ; les matchs passés joués avec tes partenaires, qui restent dans leur historique (ton nom y figure là où tu étais invité, « Ancien joueur » sur ceux que tu avais réservés) ; les remises fidélité déjà servies par un club (montant, prix du match et date, sans ton nom), qui servent à son décompte ; tes messages au support, sans ton nom ni ton numéro ; tes demandes de club déjà traitées, sans ton numéro. Tes tournois en attente ou refusés et tes demandes de club non traitées sont supprimés.</li>
+          <li><strong>Ce qui subsiste après la suppression</strong> : les tournois publiés ou clôturés que tu as organisés (organisateur affiché « Compte supprimé », sans téléphone) et les noms d'équipes du palmarès ; les matchs passés joués avec tes partenaires, qui restent dans leur historique (ta place y apparaît « Ancien joueur », sans ton nom) ; les remises fidélité déjà servies par un club (montant, prix du match et date, sans ton nom), qui servent à son décompte ; tes messages au support, sans ton nom ni ton numéro ; tes demandes de club déjà traitées, sans ton numéro ; si tu gérais un club, la fiche du club, ses photos et ses annonces, qui restent en ligne (écris-nous pour la retirer). Tes tournois en attente ou refusés et tes demandes de club non traitées sont supprimés.</li>
           <li><strong>Messages au support</strong> : jusqu'à leur traitement, puis supprimés 7 jours après leur résolution.</li>
           <li><strong>Diagnostics techniques</strong> (anonymes) : supprimés au-delà de 30 jours.</li>
           <li><strong>Compteurs techniques anti-abus</strong> (nombre d'envois récents) : 2 jours.</li>

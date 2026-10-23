@@ -37,12 +37,11 @@ Ces textes décrivent le **binaire #69**. Ils ne doivent partir qu'une fois ces 
       (`SectionReservations.tsx`, `PLANNING_HORIZON_DAYS = 60`), app déclarée en français
       (`app.json` : `CFBundleDevelopmentRegion: "fr"`). Si l'un manque dans le binaire, retirer la
       phrase correspondante (description, nouveautés, texte promotionnel).
-      **Bloquant** — constat du 2026-10-22 : la branche `wip/store` (HEAD `bfbbfd2`) ne contient ni
-      `src/app/bienvenue.tsx`, ni `src/lib/loyalty.ts`, ni `supabase/92_*`, et `app.json` y est
-      encore en 1.0.2 ; ces éléments n'existent que dans `b9ee70b` (`wip/vague3b`), où ils ont été
-      relus (fidélité 10 / 50 % / plafond 5 000 FCFA, Bienvenue, « Alors, ce match ? » réservé à un
-      partenaire qui a un compte, planning à 60 jours, `CFBundleDevelopmentRegion: "fr"`). Rien ne
-      se soumet avant la fusion de `wip/vague3b` dans la branche du build.
+      ✅ **Fusionné dans `claude/padelconnect-v4-17-4zblgh`** (vérifié le 2026-10-23 : `b9ee70b` y
+      est contenu ; `src/app/bienvenue.tsx`, `src/lib/loyalty.ts`, `LoyaltyServeCard`,
+      `supabase/92_fidelite_cible.sql`, « Alors, ce match ? », `PLANNING_HORIZON_DAYS = 60` et
+      `CFBundleDevelopmentRegion: "fr"` présents). C'est cette branche qui fait foi pour le build ;
+      la case reste à cocher sur le **binaire #69** lui-même.
 - [ ] **SQL `92` (fidélité) appliquée et prouvée en production** : sans elle, le compteur et le code
       de fidélité ne marchent pas, et la promesse serait fausse.
 - [ ] Le **plafond de fidélité** réglé par l'opérateur vaut toujours **5 000 FCFA** (Espace
@@ -55,7 +54,19 @@ Ces textes décrivent le **binaire #69**. Ils ne doivent partir qu'une fois ces 
       l'app connectée → onglet Réserver → réservation confirmée). Sinon le sous-titre « en 2 min » est
       une promesse invérifiable (Apple 2.3.7) : prendre le sous-titre de repli du §1.2. C'est la
       SEULE promesse de durée de la fiche : les légendes des captures (§3) n'en portent aucune, et
-      la capture 3 montre le tunnel guidé, pas ce parcours rapide.
+      la capture 3 montre le tunnel guidé, pas ce parcours rapide. Le **site** porte la même promesse
+      (« réservé en 2 minutes » : `site/index.html` titre et description, `site/get.html`,
+      `site/invite.html`, `site/og.svg`) : même chronométrage, sinon la remplacer partout par « en
+      quelques gestes » et redéployer `site/`. ⚠️ L'**app** la porte aussi, et ces textes-là sont
+      FIGÉS dans le binaire : message WhatsApp de parrainage (`src/app/parrainage.tsx`) et
+      d'invitation d'un ami (`src/app/(tabs)/amis.tsx`), tous deux envoyés à des non-utilisateurs,
+      et pied de page du profil (`src/app/(tabs)/profil.tsx`) — « en 2 minutes ». Leur sort se
+      décide **AVANT de lancer le #69** : chronométrer le même parcours sur un build de
+      préproduction (natif, compte joueur connecté), sinon passer d'office ces trois textes à « en
+      quelques gestes » avant le build. Un chronométrage raté APRÈS le build laisse ces trois
+      promesses en circulation jusqu'au build suivant : le noter alors dans ce fichier et les
+      corriger au #70. (« Découvrir les règles en 2 minutes » de l'accueil et de
+      `decouvrir.tsx` est un temps de LECTURE, hors de cette condition.)
 - [ ] Mots-clés de quartier (`cocody`, `marcory`) et phrase de quartiers de la description Play :
       au moins un club **actif** (ni « Bientôt » ni masqué) dans chaque quartier cité, vérifié dans
       l'app le jour de la soumission. Sinon prendre la variante « sans quartiers » (§1.4) et retirer

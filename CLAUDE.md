@@ -132,19 +132,28 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser. Dét
   Management le 2026-07-11, table `reservations` vide → risque nul). ⚠️ **NE JAMAIS recoller
   `68_creneaux_duree.sql` SEUL** : ses `create or replace` ÉCRASERAIENT les durcissements `69`→`72`
   (validation `d∈{60,90}`, gardes anti-orphelin, verrou commun, retrait de terrain) ; si on doit
-  recoller la 68, recoller ENSUITE `69`→`90` dans l'ordre (la 68 recrée `fetch_open_matches` et la
-  57 `join_open_match` : recollées seules, elles EFFACERAIENT la fourchette de niveau de la 81).
+  recoller la 68, recoller ENSUITE toute la suite `69`→ dernière migration appliquée (la `98` une
+  fois posée) dans l'ordre (la 68 recrée `fetch_open_matches` et la 57 `join_open_match` : recollées
+  seules, elles EFFACERAIENT la fourchette de niveau de la 81 ; la 68 recrée aussi des fonctions
+  redéfinies en 96→98 — gardes de résa, `submit_match_score`, `mark_no_show`, classement).
   NB : depuis 87/90, recoller `21`/`68`/`83`/`85` s'ARRÊTE net sur `42P13 cannot change return
 type` (`mark_no_show`, `confirm_share_paid`) — échec BRUYANT, jamais silencieux ; il faudrait
-  d'abord `drop function` la fonction concernée, puis recoller la suite dans l'ordre jusqu'à 90.
+  d'abord `drop function` la fonction concernée, puis recoller la suite dans l'ordre jusqu'à la
+  dernière migration appliquée (la `98` une fois posée) — s'arrêter à 90 effacerait la 91 et 92→98.
   Reste au porteur : FCM Android (compte Google Play à créer, guide `docs/ANDROID-LANCEMENT.md`) —
   le lien Wave des frais de tournoi EST configuré en base (vérifié 2026-10-21) et l'empreinte EAS
   d'assetlinks est posée (celle de Play App Signing s'ajoutera au lancement Play).
   🆕 **À coller ENSEMBLE avant le build #69** : SQL `92`, `93`, `94`, `96`, `97`, `98` (écrites et
   prouvées en local / transaction annulée, PAS encore en prod — la `95` y est déjà), puis déployer
-  **notify-club v50** APRÈS la 98 (elle lit `profiles.news_push`). ⚠️ Après la 98, ne JAMAIS recoller
-  seules la `80` ni la `96` (place anonyme d'un compte supprimé : leur ancienne `submit_match_score` /
-  `apply_match_level` laisserait un TIERS saisir et valider le score).
+  **notify-club v50** APRÈS la 98 (elle lit `profiles.news_push` et `competitions.cancelled_by`).
+  ⚠️ Après la 98, ne JAMAIS recoller seules la `80`, la `92`, la `96` ni la `97` (la `80` : sa
+  `submit_match_score` / `apply_match_level` laisserait un TIERS saisir et valider le score à la place
+  anonyme d'un compte supprimé ; la `92` et la `97` passent SANS erreur et annulent en silence les
+  décisions 4, 9 et 14 ; la `96` s'arrête sur 42P13 — pour la recoller :
+  `drop function public.fetch_leaderboard(integer)`, puis `96`, `97`, `98` dans l'ordre). Cette liste
+  n'est qu'un EXEMPLE : la règle est GÉNÉRALE — ne jamais recoller seule une migration antérieure à la
+  dernière appliquée, toujours reprendre la suite jusqu'à la `98` incluse (ex. la `91` seule ramène
+  `block_user` d'avant la 96 ; les `85`/`86` seules ramènent un `delete_account` d'avant la 97/98).
   (`notify-club` est déployée — **v48** du dépôt le 2026-10-21, compteur plateforme 47 : push gérant
   avec nom du club, favoris/alertes de niveau plafonnées à la source, liste d'attente one-shot
   honnête, agenda, annonces club jusqu'à 500 suiveurs, parts Wave, cours collectifs ; exclusion
@@ -164,8 +173,15 @@ type` (`mark_no_show`, `confirm_share_paid`) — échec BRUYANT, jamais silencie
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
   **SQL Editor → Run**. Migrations actuelles : `02` → `98` (voir dossier `supabase/`) — `02` → `91`
   et `95` **appliquées en base** ; `92`→`94`, `96`→`98` écrites et prouvées en local, **à coller
-  ensemble avant le #69** (98 = décisions porteur du 2026-10-22, puis notify-club v50 ; ⚠️ ne jamais
-  recoller seules la `80` ni la `96` après la 98) (`91` durcissements pré-lancement posée + **prouvée 8/8 en transaction
+  ensemble avant le #69** (98 = décisions porteur du 2026-10-22 — avec aussi `operator_refunds_due()` /
+  `operator_mark_refunded(uuid)`, `competitions.cancelled_by`, le `search_path` figé de 8 fonctions
+  (4 trigger + 4 pures, R-80), `delete_competition` sous verrou `'reg:'` et le rattrapage R-16 rejoué —, puis notify-club v50 ; ⚠️ après la 98, ne JAMAIS
+  recoller seules la `80`, la `92`, la `96` ni la `97` (la `92` et la `97` passent SANS erreur et
+  annulent en silence les décisions 4, 9 et 14 ; la `96` s'arrête sur 42P13 — pour la recoller :
+  `drop function public.fetch_leaderboard(integer)`, puis `96`, `97`, `98` dans l'ordre) — liste
+  donnée en EXEMPLE : la règle est générale, ne jamais recoller seule une migration antérieure,
+  toujours reprendre la suite jusqu'à la `98` incluse, cf. §7 : la `91` seule ramène `block_user`
+  d'avant la 96, les `85`/`86` seules un `delete_account` d'avant la 97/98) (`91` durcissements pré-lancement posée + **prouvée 8/8 en transaction
   annulée** le 2026-10-21 : contrainte de fourchette relâchée hors `open_match`, garde jour J de
   `register_competition`, `block_user` rompt amitié/demandes/suivi, `create_group_lesson` à 10
   paramètres — ⚠️ ne jamais recoller la 81 ni la 83 seules —, purge waitlist par chevauchement ;
@@ -315,8 +331,10 @@ type` (`mark_no_show`, `confirm_share_paid`) — échec BRUYANT, jamais silencie
   `fetch_leaderboard`, `tied` côté client — repli sur la position avant la 98) ; mêmes médailles
   sur l'accueil et `/classement`.
 - **Cours ≠ partie (98, décision 3)** : une résa portant `coach_name` (cours privé ou collectif)
-  ne compte ni au classement (+2/+3), ni pour la fidélité, ni pour la présence/fiabilité, ni pour
-  le niveau ; côté client `isLesson`/`playedMatchTimes` (helpers.ts) excluent les cours des
+  ne compte ni au classement (+2/+3), ni pour la fidélité, ni pour le niveau — il RESTE dans la
+  présence publique (`public_reliability` 80 non redéfinie, T-3 : cours individuel compté, cours
+  collectif suivi en élève non, la résa étant au nom du coach) et dans le badge d'absences du
+  gérant ; côté client `isLesson`/`playedMatchTimes` (helpers.ts) excluent les cours des
   stats, séries et trophées « parties ».
 - **Compte supprimé (98, décision 9)** : ses partenaires GARDENT les matchs passés — sa place
   devient une entrée anonyme « Ancien joueur » (`x-…` dans `invited`, `user_id` NULL sur

@@ -40,7 +40,17 @@ and table_schema = 'public' order by 1;` — la 96 retire SELECT à `anon` sur `
 > (`submit_match_score`, `fetch_leaderboard`, et surtout `delete_account`/`delete_club`, qui
 > retomberaient sur des versions qui ÉCHOUENT contre `storage.protect_delete` — la suppression
 > de compte, exigence App Store, casserait). S'il faut VRAIMENT recoller le fichier N, recoller
-> ENSUITE tous les fichiers N+1 → 97 dans l'ordre. Dans le doute : ne rien coller, demander.
+> ENSUITE tous les fichiers N+1 → 98 dans l'ordre. Dans le doute : ne rien coller, demander.
+>
+> **Conseiller de sécurité Supabase — avertissements acceptés** (relu avant chaque build,
+> `padel-sortie-ios` §0 ; toute autre alerte bloque la sortie) :
+>
+> - `btree_gist` dans `public` : accepté (contrainte d'exclusion `reservations_no_overlap`,
+>   anti double-vente — 68).
+> - `function_search_path_mutable` : fermé par la 98 (`alter function … set search_path = public`
+>   sur les 4 fonctions trigger `protect_level`, `reservations_price_guard`, `strip_open_match_phone`,
+>   `support_stamp_resolved` et les 4 fonctions pures `phone10`, `hhmm_to_min`, `durations_60_90`,
+>   `min_to_hhmm` — R-80).
 
 ## 0-OCTIES) MULTI-CLUBS (2026-07-03) — coller SQL `55` (1 min) — ⏳ À FAIRE
 

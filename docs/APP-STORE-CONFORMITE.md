@@ -19,9 +19,12 @@ Même URL côté Google Play (Contenu de l'application → Règles de confidenti
 
 ⚠️ Toute modification de `site/privacy.html`, `site/cgu.html` ou `site/supprimer-mon-compte.html`
 ne compte qu'une fois le dossier `site/` **redéployé en entier**. Les textes d'octobre 2026
-(prestataires, durées, ce qui subsiste après suppression) décrivent l'état APRÈS les SQL `94` (purge
-des diagnostics à 30 jours) et `97` (anonymisation à la suppression de compte) : redéployer le site
-le jour où ces migrations sont appliquées, pas avant.
+(prestataires, durées, ce qui subsiste après suppression) décrivent l'état APRÈS les SQL `92` → `98`,
+collées ENSEMBLE avant le build #69 : `92` (remises fidélité servies conservées pour le décompte du
+club), `94` (purge des diagnostics à 30 jours), `97` (anonymisation à la suppression de compte) et
+`98` (matchs passés gardés par les partenaires, place « Ancien joueur » ; actus et agenda
+désactivables dans Profil → Notifications — cet interrupteur n'apparaît dans l'app qu'une fois la
+`98` en base). Redéployer le site le jour où ces migrations sont appliquées, pas avant.
 
 **Identité juridique (à fournir par le porteur, décision n° 22 de
 `docs/AUDIT-REGLES-METIER-2026-10.md` §7)** : nom ou raison sociale, forme, n° RCCM, adresse, et
@@ -91,11 +94,16 @@ Les textes demandés à l'utilisateur sont déjà rédigés (Réglages → app) 
 ## 4. Suppression de compte (obligatoire Apple ✅)
 
 Déjà dans l'app : **Profil → Supprimer mon compte** (efface le compte et les données côté serveur,
-immédiat et définitif). Depuis la `97` (à appliquer avant le build #69), ce qui ne peut pas disparaître sans casser l'historique des
-autres est **anonymisé** : tournois publiés ou clôturés de l'organisateur (« Compte supprimé », sans
-téléphone ; ceux en attente ou refusés sont supprimés), messages au support (sans nom ni numéro),
-demandes de club (non traitées supprimées, téléphone retiré des autres). Cette liste est reprise mot
-pour mot dans la politique, les CGU et la page publique.
+immédiat et définitif). Depuis les `92`, `97` et `98` (à appliquer ensemble avant le build #69), ce
+qui ne peut pas disparaître sans casser l'historique des autres est **anonymisé** : tournois publiés
+ou clôturés de l'organisateur (« Compte supprimé », sans téléphone ; ceux en attente ou refusés sont
+supprimés), matchs passés joués avec des partenaires (sa place devient « Ancien joueur », ses saisies
+de score restent comptées sans nom — `98`), remises fidélité déjà servies par un club (sans nom —
+`92`), messages au support (sans nom ni numéro), demandes de club (non traitées supprimées, téléphone
+retiré des autres). La fiche d'un club qu'il gérait, ses photos et ses annonces restent en ligne
+(retrait sur demande). La politique, les CGU et l'écran légal de l'app reprennent cette liste ; la
+**page publique de suppression** (ci-dessous) fait référence, car elle seule cite aussi les
+diagnostics anonymes (30 jours).
 
 **Page publique de suppression** (exigée par Google Play, utile aussi pour Apple) :
 `https://padelconnectci.com/supprimer-mon-compte` (`site/supprimer-mon-compte.html`) — suppression
@@ -170,8 +178,8 @@ les signalements sont traités sous 24 h. »_ Rien d'autre à coder — c'est en
 - [x] Étiquettes **App Privacy** remplies à la v1.0 ; Age Rating / Export Compliance répondus.
 - [ ] Ajouter les 4 lignes d'octobre 2026 aux étiquettes **App Privacy** (§2) avant la version du
       build #69.
-- [ ] Redéployer `site/` (politique, CGU, page de suppression) le jour où les SQL `94` et `97` sont
-      en production (§1).
+- [ ] Redéployer `site/` (politique, CGU, page de suppression) le jour où les SQL `92` → `98`
+      (collées ensemble) sont en production (§1).
 - [ ] Fournir l'identité juridique de l'éditeur et le récépissé ARTCI, puis les reporter dans les
       trois textes (§1, décision n° 22).
 - [ ] Google Play : questionnaire « Sécurité des données » et URL de suppression de compte —

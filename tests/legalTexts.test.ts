@@ -94,6 +94,8 @@ for (const [nom, t] of textes) {
   check(t.includes('remises fidélité déjà servies'), `${nom} : remises servies conservées pour le décompte du club (92)`);
   check(t.includes("remises fidélité qu'il t'a servies"), `${nom} : le club voit les remises qu'il a servies (92)`);
   check(!t.includes("ton nom dans l'historique des matchs passés"), `${nom} : plus de « ton nom dans l'historique » seul (R-30)`);
+  check(!t.includes('ton nom y figure'), `${nom} : plus de « ton nom y figure » (98, étape a)`);
+  check(t.includes('la fiche du club, ses photos et ses annonces'), `${nom} : fiche du club géré conservée`);
 }
 for (const [nom, t] of [textes[1], textes[2]]) {
   check(

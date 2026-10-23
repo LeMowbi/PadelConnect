@@ -2,7 +2,7 @@
 
 > ✅ **État au 2026-10-22 :** `app.json` fait foi = **version 1.0.2**, `buildNumber` incrémenté par
 > EAS à chaque build (`autoIncrement`). L'app est **EN LIGNE** sur les stores CI/SN/US. Le SQL
-> `02`→`91` et la `95` sont **appliqués en base** ; `92`→`94` et `96`→`97` s'appliquent AVANT le
+> `02`→`91` et la `95` sont **appliqués en base** ; `92`→`94` et `96`→`98` s'appliquent ENSEMBLE AVANT le
 > build #69 (état exact : `CLAUDE.md` §8). Les **11 webhooks** sont créés et **`WEBHOOK_SECRET` EST
 > POSÉ** (secret Edge Functions + en-tête `x-webhook-secret` sur chaque webhook, depuis le
 > 2026-07-06). Builds en cours et version déployée de `notify-club` : **`CLAUDE.md` §7**.
@@ -35,7 +35,7 @@
       Content, Purchase History, Other Financial Info) avant la version du build #69 →
       **`docs/APP-STORE-CONFORMITE.md`** §2.
 - [ ] **Redéployer `site/`** (politique, CGU, nouvelle page `supprimer-mon-compte`) le jour où les
-      SQL `94` et `97` sont en production (**`docs/APP-STORE-CONFORMITE.md`** §1).
+      SQL `92` → `98` (collées ensemble) sont en production (**`docs/APP-STORE-CONFORMITE.md`** §1).
 - [ ] **Identité juridique de l'éditeur** (nom ou raison sociale, RCCM, adresse) et **récépissé de
       déclaration ARTCI** : à fournir par le porteur, puis à reporter aux endroits marqués
       « À COMPLÉTER » des trois textes (décision n° 22 de `docs/AUDIT-REGLES-METIER-2026-10.md` §7).
@@ -64,7 +64,7 @@
 
 - [x] iOS `bundleIdentifier` = `ci.padelco.app` (IMMUABLE : l'app est publiée sous cet identifiant). ✅
 - [ ] Android `package` = `ci.padelco.app` (IMMUABLE dès le premier envoi Play).
-- [ ] `version` = 1.0.2 ; `ios.buildNumber` s'auto-incrémente à chaque build (profil `production` d'eas.json — valeur courante : voir `app.json`) ; `android.versionCode` vaut 1 dans `app.json` et `autoIncrement` le monte AVANT chaque build de production : le **premier `.aab` porte le versionCode 2** (commiter le bump).
+- [ ] `version` = **1.0.3** pour le build #69 (passer `expo.version` AVANT le build — la 1.0.2 est publiée, App Store Connect refuse un binaire 1.0.2 ; `docs/STORE-LISTING.md` §0) ; `ios.buildNumber` s'auto-incrémente à chaque build (profil `production` d'eas.json — valeur courante : voir `app.json`) ; `android.versionCode` vaut 1 dans `app.json` et `autoIncrement` le monte AVANT chaque build de production : le **premier `.aab` porte le versionCode 2** (commiter le bump).
 
 ## 5. Fabriquer et envoyer (commandes EAS, depuis un ordinateur)
 

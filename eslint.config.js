@@ -18,6 +18,20 @@ module.exports = defineConfig([
       // (2) useRef(new Animated.Value()).current : pattern canonique des animations RN.
       'react-hooks/purity': 'off',
       'react-hooks/refs': 'off',
+      // Icônes : importer la FAMILLE seule — un seul import racine de '@expo/vector-icons' suffit
+      // à embarquer les 19 polices d'icônes (~4,6 Mo) dans le bundle (R-95).
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@expo/vector-icons',
+              message:
+                "Importer la famille seule : import Ionicons from '@expo/vector-icons/Ionicons' (sinon les 19 polices d’icônes partent dans le bundle).",
+            },
+          ],
+        },
+      ],
     },
   },
 ]);
