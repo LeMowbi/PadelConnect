@@ -8,6 +8,7 @@ import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, SectionHeader, Tag, Txt } from '@/components/ui';
 import { durationLabel } from '@/lib/courtSchedule';
 import { dateKeyLabel } from '@/lib/days';
+import { perPlayerOf } from '@/lib/format';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { levelInRange, levelRangeText } from '@/lib/levelRange';
 import { fetchOpenMatches, joinOpenMatch, type OpenMatch } from '@/lib/openMatches';
@@ -290,6 +291,13 @@ export function OpenMatches({ refreshToken, full = false, clubId }: { refreshTok
                       {m.placesLeft > 1 ? ` · ${m.placesLeft} places` : ''}
                     </Txt>
                   </Pressable>
+                  {/* Part AVANT de rejoindre (96) : prix figé du terrain partagé sur la capacité du
+                      match. Prix inconnu (serveur plus ancien) : aucun montant, jamais « 0 ». */}
+                  {m.price ? (
+                    <Txt variant="small" color={colors.signature} style={{ fontWeight: '700', marginTop: 2 }}>
+                      ~{perPlayerOf(m.price, m.capacity)}/joueur à {m.capacity}
+                    </Txt>
+                  ) : null}
                 </View>
                 {mine ? (
                   <Tag label="Ton match" tone="green" />

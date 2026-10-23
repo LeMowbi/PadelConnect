@@ -15,7 +15,7 @@ import { useToast } from '@/components/Toast';
 import { Button, Card, EmptyState, IconCircle, RecapLabel, RecapRow, Txt, type IconName } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
-import { addReservationToCalendar } from '@/lib/calendar';
+import { addReservationToCalendar, calendarAvailable } from '@/lib/calendar';
 import { openWhatsApp } from '@/lib/contact';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import {
@@ -34,7 +34,7 @@ import { snapLevel, type LevelRange } from '@/lib/levelRange';
 import { minPrice, priceForSlot, priceTiersFor } from '@/lib/pricing';
 import { fetchMySlotWaitlist, joinSlotWaitlist, leaveSlotWaitlist } from '@/lib/social';
 import { useTodayKey } from '@/lib/useTodayKey';
-import { useApp } from '@/store/AppContext';
+import { MAX_UPCOMING, useApp } from '@/store/AppContext';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
 // Plafond d'alertes de créneau actives par joueur — MIROIR EXACT de la borne serveur (SQL 81,
@@ -488,15 +488,18 @@ export default function ReserverScreen() {
       });
       setDone(true);
       setCelebrate(true);
-      // Résa créée mais rattachement des amis invités échoué : sans ce toast, la carte
-      // affiche « Avec X » alors que X n'a reçu ni push ni la résa chez lui.
+      // Résa créée mais au moins un ami invité non rattaché (réseau, numéro changé… — la cause n'est
+      // jamais précisée) : sans ce toast, la carte afficherait « Avec X » alors que X n'a reçu ni
+      // push ni la résa chez lui.
       if (res.partnersNotified === false) {
-        toast.show('Tes partenaires n’ont pas pu être prévenus dans l’app — envoie-leur le récap WhatsApp.', { icon: 'alert-circle' });
+        toast.show('Un ou plusieurs partenaires n’ont pas pu être prévenus dans l’app — envoie-leur le récap WhatsApp.', {
+          icon: 'alert-circle',
+        });
       }
     } else if (res.reason === 'limit') {
       // Limite anti-blocage (appliquée dans addReservation) : trop de créneaux à venir.
       hapticWarning();
-      toast.show('Tu as déjà trop de réservations à venir — joue-les d’abord 😊', { icon: 'alert-circle' });
+      toast.show(`Tu as déjà ${MAX_UPCOMING} réservations à venir (le maximum) — joue-les d’abord 😊`, { icon: 'alert-circle' });
     } else if (res.reason === 'network') {
       // Échec réseau/serveur : le terrain n’est PAS pris — on invite à réessayer, sans toucher au choix.
       hapticWarning();
@@ -560,31 +563,38 @@ export default function ReserverScreen() {
             <RecapRow label="Durée" value={durationLabel(booked.durationMin)} />
             <RecapRow label="Participants" value={`Toi${participantCount > 0 ? ` + ${participantCount}` : ''}`} />
             <RecapRow label={`Tarif (session ${durationLabel(booked.durationMin)})`} value={fcfa(booked.price)} />
-            <RecapRow label={`≈ par joueur (à ${recapHeads})`} value={perPlayerOf(booked.price, recapHeads)} />
+            <RecapRow label={`Par joueur (à ${recapHeads})`} value={`~${perPlayerOf(booked.price, recapHeads)}`} />
           </View>
           <View style={{ alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.lg }}>
             <Button label="Voir mes réservations" icon="calendar" onPress={() => router.push('/reservations')} full />
-            <Button
-              label="Ajouter à mon calendrier"
-              icon="calendar-outline"
-              variant="secondary"
-              onPress={async () => {
-                const res = await addReservationToCalendar({
-                  clubName: club.name,
-                  startsAt: booked.startsAt,
-                  court: booked.court,
-                  area: club.area,
-                  durationMin: booked.durationMin, // durée réellement réservée (instantané figé)
-                });
-                // « canceled » = fiche système refermée par l'utilisateur : pas de toast d'erreur.
-                if (res === 'canceled') return;
-                toast.show(
-                  res === 'added' ? 'Ajouté à ton calendrier ✓' : 'Calendrier indisponible sur cet appareil.',
-                  res === 'added' ? undefined : { icon: 'alert-circle' },
-                );
-              }}
-              full
-            />
+            {/* Masqué là où le calendrier ne peut pas s'ouvrir (web) : jamais de promesse vide. */}
+            {calendarAvailable ? (
+              <Button
+                label="Ajouter à mon calendrier"
+                icon="calendar-outline"
+                variant="secondary"
+                onPress={async () => {
+                  const res = await addReservationToCalendar({
+                    clubName: club.name,
+                    startsAt: booked.startsAt,
+                    court: booked.court,
+                    area: club.area,
+                    durationMin: booked.durationMin, // durée réellement réservée (instantané figé)
+                  });
+                  // « canceled » = fiche système refermée par l'utilisateur : pas de toast d'erreur.
+                  if (res === 'canceled') return;
+                  if (res === 'unavailable') {
+                    toast.show('Calendrier indisponible sur cet appareil.', { icon: 'alert-circle' });
+                    return;
+                  }
+                  // Android ouvre la fiche sans dire si elle a été enregistrée : message NEUTRE.
+                  toast.show(
+                    res === 'added' ? 'Ajouté à ton calendrier ✓' : 'Fiche du calendrier ouverte — enregistre-la pour retrouver ton match.',
+                  );
+                }}
+                full
+              />
+            ) : null}
             {participantCount > 0 ? (
               <Button
                 label="Prévenir mes partenaires"
@@ -595,7 +605,7 @@ export default function ReserverScreen() {
                   const who = invitedNames.length ? `\nÉquipe : ${invitedNames.join(', ')}` : '';
                   // Même base que le récap à l'écran (recapHeads) : capacité visée si ouvert, sinon
                   // l'effectif réel — pour ne pas sous-annoncer un match privé à 2 ni sur-annoncer un ouvert.
-                  const share = booked.price ? `\nPrévois ${perPlayerOf(booked.price, recapHeads)} chacun.` : '';
+                  const share = booked.price ? `\nPrévois ~${perPlayerOf(booked.price, recapHeads)} chacun.` : '';
                   openWhatsApp(
                     '',
                     `On joue au padel ! 🎾\n${club.name} — ${booked.dayLabel} à ${booked.time} (session ${durationLabel(booked.durationMin)})\n${booked.court}${who}${share}\nRéservé via PadelConnect.`,

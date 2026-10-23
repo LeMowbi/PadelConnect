@@ -1,6 +1,7 @@
 // Score de match (46, règle anti-triche durcie en 49) : CHAQUE joueur saisit les sets de son
 // point de vue, l'app dérive la forme canonique et désigne le vainqueur AUTOMATIQUEMENT — pas
-// de bouton « confirmer ». Validé UNIQUEMENT si un joueur du camp PERDANT confirme le score
+// de RPC « confirmer » (la confirmation en un tap de « Mes réservations » n'est qu'une saisie
+// pré-remplie, cf. setsFromCanon). Validé UNIQUEMENT si un joueur du camp PERDANT confirme le score
 // (saisie « j'ai perdu » en miroir), OU si une saisie GAGNANTE restée SEULE dépasse 48 h.
 // Deux « je gagne » identiques ne valident donc jamais (invariant §9). Une victoire validée
 // vaut +3 points (seuls les joueurs ayant saisi les marquent). Convention §8 : null = échec réseau.

@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Confetti } from './Confetti';
 import { ToastOutlet, useToast } from './Toast';
 import { Button, Txt } from './ui';
-import { addReservationToCalendar } from '@/lib/calendar';
+import { addReservationToCalendar, calendarAvailable } from '@/lib/calendar';
 import { openWhatsApp } from '@/lib/contact';
 import { durationLabel } from '@/lib/courtSchedule';
 import { perPlayerOf } from '@/lib/format';
@@ -55,10 +55,12 @@ export function BookingConfirmation({
     const res = await addReservationToCalendar({ clubName, startsAt, court, area, durationMin });
     // « canceled » = l'utilisateur a refermé la fiche système lui-même : pas de toast d'erreur.
     if (res === 'canceled') return;
-    toast.show(
-      res === 'added' ? 'Ajouté à ton calendrier ✓' : 'Calendrier indisponible sur cet appareil.',
-      res === 'added' ? undefined : { icon: 'alert-circle' },
-    );
+    if (res === 'unavailable') {
+      toast.show('Calendrier indisponible sur cet appareil.', { icon: 'alert-circle' });
+      return;
+    }
+    // Android ouvre la fiche sans dire si elle a été enregistrée : message NEUTRE (jamais « ajouté ✓ »).
+    toast.show(res === 'added' ? 'Ajouté à ton calendrier ✓' : 'Fiche du calendrier ouverte — enregistre-la pour retrouver ton match.');
   };
 
   const notifyPartners = () => {
@@ -67,7 +69,7 @@ export function BookingConfirmation({
     // d'autres joueurs rejoindront), pas sur les seuls invités du moment ; sinon sur l'effectif RÉEL
     // (toi + invités). Diviser par 4 un match FERMÉ à 2 — ou par 2 un match ouvert à 4 — fausse la part.
     const heads = openMatch && openCapacity ? openCapacity : 1 + invitedNames.length;
-    const share = price ? `\nPrévois ${perPlayerOf(price, heads)} chacun.` : '';
+    const share = price ? `\nPrévois ~${perPlayerOf(price, heads)} chacun.` : '';
     openWhatsApp(
       '',
       `On joue au padel ! 🎾\n${clubName} — ${dayLabel} à ${time} (session ${durationLabel(durationMin)})\n${court}${who}${share}\nRéservé via PadelConnect.`,
@@ -125,7 +127,10 @@ export function BookingConfirmation({
 
         <Animated.View style={[styles.actions, { opacity: fade, paddingBottom: insets.bottom + spacing.xl }]}>
           <Button label="Voir mes réservations" icon="calendar" variant="secondary" onPress={onSeeReservations} full />
-          <Button label="Ajouter à mon calendrier" icon="calendar-outline" variant="secondary" onPress={addToCalendar} full />
+          {/* Masqué là où le calendrier ne peut pas s'ouvrir (web) : jamais de promesse vide. */}
+          {calendarAvailable ? (
+            <Button label="Ajouter à mon calendrier" icon="calendar-outline" variant="secondary" onPress={addToCalendar} full />
+          ) : null}
           {participantCount > 0 ? (
             <Button label="Prévenir mes partenaires" icon="logo-whatsapp" variant="secondary" onPress={notifyPartners} full />
           ) : null}

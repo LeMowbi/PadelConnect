@@ -4,9 +4,12 @@
 // « Mes réservations » — la CAPACITÉ pour un match ouvert (les places libres seront prises),
 // l'effectif RÉEL (moi + invités) sinon. Le modèle « Il manque des joueurs » n'apparaît que
 // s'il reste une place sur MON match (jamais un cours, jamais le match d'un autre), avec le bon
-// nombre de joueurs manquants ; l'équipe annoncée est la même que sur l'accueil.
+// nombre de joueurs manquants ; l'équipe annoncée est la même que sur l'accueil. Moi, je suis
+// toujours retiré PAR ID (jamais par prénom) : la carte de résultat d'un participant ne le compte
+// pas deux fois et n'oublie pas le créateur (R-09). Statut des invités (R-16) et confirmation du
+// score en un tap (R-29) : libellés et sets dérivés sans ambiguïté.
 
-import { matchTeam, matchTemplates } from '../src/lib/matchMessages.ts';
+import { invitedLabel, matchTeam, matchTemplates, setsFromCanon, shareTeamsOf } from '../src/lib/matchMessages.ts';
 import { perPlayerOf } from '../src/lib/format.ts';
 import type { Reservation } from '../src/store/AppContext';
 
@@ -38,19 +41,19 @@ const body = (r: Reservation, key: string, iOwn = true) => matchTemplates(r, URL
 const keys = (r: Reservation, iOwn = true) => matchTemplates(r, URL, iOwn).map((t) => t.key);
 
 // ── Part par joueur (« On joue ! ») ───────────────────────────────────────────
-check(body(resa({ invited: invited(1) }), 'play').includes(`Prévois ${perPlayerOf(20000, 2)} chacun.`), 'privé à 2 : part divisée par 2');
-check(body(resa({ invited: invited(3) }), 'play').includes(`Prévois ${perPlayerOf(20000, 4)} chacun.`), 'privé à 4 : part divisée par 4');
-check(body(resa({}), 'play').includes(`Prévois ${perPlayerOf(20000, 1)} chacun.`), 'privé seul : part entière (jamais ÷ 0)');
+check(body(resa({ invited: invited(1) }), 'play').includes(`Prévois ~${perPlayerOf(20000, 2)} chacun.`), 'privé à 2 : part divisée par 2');
+check(body(resa({ invited: invited(3) }), 'play').includes(`Prévois ~${perPlayerOf(20000, 4)} chacun.`), 'privé à 4 : part divisée par 4');
+check(body(resa({}), 'play').includes(`Prévois ~${perPlayerOf(20000, 1)} chacun.`), 'privé seul : part entière (jamais ÷ 0)');
 check(
-  body(resa({ openMatch: true, openCapacity: 4 }), 'play').includes(`Prévois ${perPlayerOf(20000, 4)} chacun.`),
+  body(resa({ openMatch: true, openCapacity: 4 }), 'play').includes(`Prévois ~${perPlayerOf(20000, 4)} chacun.`),
   'ouvert 2v2 vide : part sur la CAPACITÉ (÷ 4), pas sur 1 + invités',
 );
 check(
-  body(resa({ openMatch: true, openCapacity: 2 }), 'play').includes(`Prévois ${perPlayerOf(20000, 2)} chacun.`),
+  body(resa({ openMatch: true, openCapacity: 2 }), 'play').includes(`Prévois ~${perPlayerOf(20000, 2)} chacun.`),
   'ouvert 1v1 vide : part sur la capacité (÷ 2)',
 );
 check(
-  body(resa({ openMatch: true }), 'play').includes(`Prévois ${perPlayerOf(20000, 4)} chacun.`),
+  body(resa({ openMatch: true }), 'play').includes(`Prévois ~${perPlayerOf(20000, 4)} chacun.`),
   'ouvert sans openCapacity : capacité 4',
 );
 check(!body(resa({ price: 0 }), 'play').includes('Prévois'), 'sans prix : aucune part annoncée');
@@ -97,6 +100,106 @@ check(
 );
 check(matchTeam(resa({}), false).join(',') === 'Organisateur', 'matchTeam organisateur sans nom : libellé générique');
 check(matchTeam(resa({}), true).length === 0, 'matchTeam mon match sans invité : équipe vide (pas de ligne « Équipe »)');
+// Participant : MOI retiré PAR ID (jamais par prénom), l'organisateur gardé.
+const meInvited = [
+  { id: 'me', name: 'Joueur 1', confirmed: true },
+  { id: 'u2', name: 'Joueur 1', confirmed: true },
+];
+check(
+  matchTeam(resa({ userId: 'own', bookedBy: booked, invited: meInvited }), false, 'me').join(',') === 'Awa,Joueur 1',
+  'matchTeam participant : moi retiré par id, homonyme gardé',
+);
+check(
+  matchTeam(resa({ bookedBy: booked, invited: [{ id: 'open-me', name: 'Moi', confirmed: true }] }), false, 'me').join(',') === 'Awa',
+  'matchTeam participant d’un match ouvert : entrée « open-<id> » retirée',
+);
+check(
+  body(resa({ bookedBy: booked, invited: meInvited }), 'play', false).includes('Équipe : Awa, Joueur 1, Joueur 1'),
+  'matchTemplates sans myId : comportement inchangé',
+);
+check(
+  matchTemplates(resa({ bookedBy: booked, invited: meInvited }), URL, false, 'me')[0].body.includes('Équipe : Awa, Joueur 1\n'),
+  'matchTemplates avec myId : je ne figure pas dans l’équipe annoncée',
+);
+
+// ── shareTeamsOf : équipes de la carte de résultat (R-09) ────────────────────────
+const four = invited(3); // u1, u2, u3
+check(
+  JSON.stringify(shareTeamsOf(resa({ invited: four }), 'own', true, 'Moi', 'u2')) ===
+    JSON.stringify({ teamA: ['Moi', 'Joueur 2'], teamB: ['Joueur 1', 'Joueur 3'] }),
+  'créateur 2v2 : partenaire choisi par id, les deux autres en face',
+);
+check(
+  JSON.stringify(shareTeamsOf(resa({ invited: invited(1) }), 'own', true, 'Moi', '')) ===
+    JSON.stringify({ teamA: ['Moi'], teamB: ['Joueur 1'] }),
+  'créateur 1v1 : aucun partenaire',
+);
+const asGuest = resa({
+  userId: 'own',
+  bookedBy: booked,
+  invited: [{ id: 'u1', name: 'Joueur 1', confirmed: true }, ...invited(3).slice(1)],
+});
+check(
+  JSON.stringify(shareTeamsOf(asGuest, 'u1', false, 'Joueur 1', 'own')) ===
+    JSON.stringify({ teamA: ['Joueur 1', 'Awa'], teamB: ['Joueur 2', 'Joueur 3'] }),
+  'participant 2v2 : moi compté UNE fois, le créateur présent (partenaire possible)',
+);
+check(
+  JSON.stringify(
+    shareTeamsOf(
+      resa({ userId: 'own', bookedBy: booked, invited: [{ id: 'open-u1', name: 'Joueur 1', confirmed: true }] }),
+      'u1',
+      false,
+      'Joueur 1',
+      '',
+    ),
+  ) === JSON.stringify({ teamA: ['Joueur 1'], teamB: ['Awa'] }),
+  'participant 1v1 (match ouvert rejoint) : le créateur en face, moi jamais en double',
+);
+check(
+  JSON.stringify(shareTeamsOf(resa({ invited: four }), 'own', true, 'Moi', 'disparu')) ===
+    JSON.stringify({ teamA: ['Moi', 'Joueur 1'], teamB: ['Joueur 2', 'Joueur 3'] }),
+  'partenaire inconnu : repli sur le premier des autres joueurs',
+);
+const twins = resa({
+  invited: [
+    { id: 'a', name: 'Koffi', confirmed: true },
+    { id: 'b', name: 'Koffi', confirmed: true },
+    { id: 'c', name: 'Yao', confirmed: true },
+  ],
+});
+check(
+  JSON.stringify(shareTeamsOf(twins, 'own', true, 'Moi', 'b')) === JSON.stringify({ teamA: ['Moi', 'Koffi'], teamB: ['Koffi', 'Yao'] }),
+  'homonymes : un seul « Koffi » en partenaire, l’autre reste en face',
+);
+
+// ── invitedLabel : statut des invités sur la carte du créateur (R-16) ──────────────
+check(invitedLabel({ id: 'u1', name: 'Awa', confirmed: true }) === 'Awa ✓', 'invité accepté : ✓');
+check(invitedLabel({ id: 'u1', name: 'Awa', confirmed: false }) === 'Awa (en attente)', 'invité sans réponse : en attente');
+check(invitedLabel({ id: 'x-1-0', name: 'Moussa', confirmed: false }) === 'Moussa', 'nom sans compte : jamais « en attente »');
+check(invitedLabel({ id: 'open-u9', name: 'Ali', confirmed: false }) === 'Ali ✓', 'joueur qui a rejoint un match ouvert : place prise');
+
+// ── setsFromCanon : confirmation du score en un tap (R-29) ────────────────────────
+check(
+  JSON.stringify(setsFromCanon('6-3, 6-4', false)) ===
+    JSON.stringify([
+      { me: 3, them: 6 },
+      { me: 4, them: 6 },
+    ]),
+  'perdant : sets inversés (nous – eux)',
+);
+check(
+  JSON.stringify(setsFromCanon('4-6, 6-3, 7-5', true)) ===
+    JSON.stringify([
+      { me: 4, them: 6 },
+      { me: 6, them: 3 },
+      { me: 7, them: 5 },
+    ]),
+  'vainqueur : sets tels quels, set perdu compris',
+);
+check(setsFromCanon('', true) === null, 'score vide : null (saisie manuelle)');
+check(setsFromCanon('6-3, 6-4, 6-2, 6-1', true) === null, 'plus de 3 sets : null');
+check(setsFromCanon('6–3', true) === null, 'format inattendu : null');
 
 if (failed) {
   console.error(`\n${failed} test(s) en échec`);

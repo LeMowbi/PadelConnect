@@ -17,6 +17,9 @@ import { colors, radius, spacing } from '@/theme';
 // joueurs. Le créateur colle SON lien Wave, chaque partenaire paie sa part puis déclare
 // « j’ai payé », le créateur confirme la réception. Écritures HONNÊTES : l’affichage ne bouge
 // qu’après la réponse du serveur (relecture `fetch_share_payments` par l’écran appelant, §8).
+// STRICTEMENT OPTIONNEL (décision porteur) : l’encadré n’apparaît chez l’invité que si le créateur
+// s’en sert (lien Wave posé) ou si une part a déjà été déclarée ; le créateur, lui, le déplie d’un
+// bouton discret — jamais de « Ta part … J’ai payé » imposé d’office.
 
 export function SharePayments({
   reservation: r,
@@ -25,6 +28,7 @@ export function SharePayments({
   meId,
   share,
   onReload,
+  afterMatch = false,
 }: {
   reservation: Reservation;
   owner: boolean; // je suis l’auteur de la réservation (j’encaisse les parts)
@@ -32,9 +36,11 @@ export function SharePayments({
   meId: string;
   share?: ShareState; // état serveur des parts (undefined = pas encore chargé)
   onReload: () => void; // relecture après écriture (l’affichage suit le serveur)
+  afterMatch?: boolean; // match joué : règlement encore ouvert 24 h après la fin (fenêtre serveur 88)
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const [unfolded, setUnfolded] = useState(false); // créateur : encadré déplié à la demande
 
   const part = r.price > 0 ? perPlayerOf(r.price, players) : null;
   const link = share?.waveLink ?? '';
@@ -46,7 +52,7 @@ export function SharePayments({
   const remind = () => {
     const body =
       `Salut ! Pour notre padel : ${r.clubName} — ${dateKeyLabel(r.dateKey)} à ${r.time} (${r.court}).\n` +
-      (part ? `Ta part : ${part}.\n` : '') +
+      (part ? `Ta part : ~${part}.\n` : '') +
       (link ? `Tu peux payer ici : ${link}\n` : '') +
       'Merci 🙏';
     openWhatsApp('', body);
@@ -96,100 +102,130 @@ export function SharePayments({
     );
   };
 
-  return (
-    <View style={styles.box}>
-      <View style={styles.head}>
-        <Ionicons name="wallet-outline" size={16} color={colors.amberDark} />
-        <Txt variant="label" color={colors.amberDark} style={{ flex: 1 }}>
-          Partager la note
-        </Txt>
-      </View>
+  // Partage ACTIVÉ = le créateur a posé son lien Wave, ou une part a déjà été déclarée (on ne
+  // fait jamais disparaître une déclaration). Tant que l'état n'est pas chargé : rien d'activé.
+  const optedIn = !!share && (!!share.waveLink || share.shares.length > 0);
+  const caption = afterMatch ? (
+    <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
+      Règlement d’après-match (jusqu’à 24 h)
+    </Txt>
+  ) : null;
+  if (!optedIn && !(owner && unfolded)) {
+    // Invité : aucune part proposée tant que le créateur ne partage pas la note.
+    if (!owner) return null;
+    return (
+      <>
+        {caption}
+        <View style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}>
+          <Button
+            size="sm"
+            variant="ghost"
+            label="Partager la note (Wave) — optionnel"
+            icon="wallet-outline"
+            onPress={() => setUnfolded(true)}
+          />
+        </View>
+      </>
+    );
+  }
 
-      {owner ? (
-        <>
-          <Txt variant="small" color={colors.textMuted}>
-            Le terrain se règle au club. {part ? `Chaque joueur te rembourse ~${part}. ` : ''}Colle ton lien Wave : tes partenaires paient
-            en un tap.
+  return (
+    <>
+      {caption}
+      <View style={styles.box}>
+        <View style={styles.head}>
+          <Ionicons name="wallet-outline" size={16} color={colors.amberDark} />
+          <Txt variant="label" color={colors.amberDark} style={{ flex: 1 }}>
+            Partager la note
           </Txt>
-          <WaveLinkField reservationId={r.id} serverLink={share?.waveLink ?? null} onSaved={onReload} />
-          {/* État des parts affiché SEULEMENT une fois chargé : annoncer « personne n'a payé »
+        </View>
+
+        {owner ? (
+          <>
+            <Txt variant="small" color={colors.textMuted}>
+              Le terrain se règle au club. {part ? `Chaque joueur te rembourse ~${part}. ` : ''}Colle ton lien Wave : tes partenaires paient
+              en un tap.
+            </Txt>
+            <WaveLinkField reservationId={r.id} serverLink={share?.waveLink ?? null} onSaved={onReload} />
+            {/* État des parts affiché SEULEMENT une fois chargé : annoncer « personne n'a payé »
               avant d'avoir la réponse du serveur serait une information fausse. */}
-          {!share ? null : (
-            <>
-              <Divider style={{ marginVertical: spacing.sm }} />
-              {share.shares.length > 0 ? (
-                share.shares.map((s) => (
-                  <View key={s.userId} style={styles.row}>
-                    <Txt variant="small" style={{ flex: 1 }} numberOfLines={1}>
-                      {firstName(s.name)} — {s.status === 'confirmed' ? 'part confirmée' : 'a déclaré avoir payé 💸'}
-                    </Txt>
-                    {s.status === 'confirmed' ? (
-                      <Tag label="Payée ✓" tone="green" />
-                    ) : (
-                      <Button
-                        size="sm"
-                        label={busy ? '…' : 'Confirmer'}
-                        icon="checkmark"
-                        variant="secondary"
-                        onPress={() => void confirmShare(s.userId, firstName(s.name))}
-                        disabled={busy}
-                        accessibilityLabel={`Confirmer la part de ${s.name}`}
-                      />
-                    )}
-                  </View>
-                ))
-              ) : (
-                <Txt variant="small" color={colors.textFaint}>
-                  Personne n’a encore déclaré avoir payé sa part.
-                </Txt>
-              )}
-            </>
-          )}
-          <View style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}>
-            <Button size="sm" variant="ghost" label="Relancer sur WhatsApp" icon="logo-whatsapp" onPress={remind} />
-          </View>
-        </>
-      ) : (
-        <>
-          <Txt variant="small" color={colors.textMuted}>
-            {part ? `Ta part : ${part}` : 'Part à voir avec l’organisateur'} — à régler à {organizer} (le terrain, lui, se paie au club).
-          </Txt>
-          {myShare?.status === 'confirmed' ? (
+            {!share ? null : (
+              <>
+                <Divider style={{ marginVertical: spacing.sm }} />
+                {share.shares.length > 0 ? (
+                  share.shares.map((s) => (
+                    <View key={s.userId} style={styles.row}>
+                      <Txt variant="small" style={{ flex: 1 }} numberOfLines={1}>
+                        {firstName(s.name)} — {s.status === 'confirmed' ? 'part confirmée' : 'a déclaré avoir payé 💸'}
+                      </Txt>
+                      {s.status === 'confirmed' ? (
+                        <Tag label="Payée ✓" tone="green" />
+                      ) : (
+                        <Button
+                          size="sm"
+                          label={busy ? '…' : 'Confirmer'}
+                          icon="checkmark"
+                          variant="secondary"
+                          onPress={() => void confirmShare(s.userId, firstName(s.name))}
+                          disabled={busy}
+                          accessibilityLabel={`Confirmer la part de ${s.name}`}
+                        />
+                      )}
+                    </View>
+                  ))
+                ) : (
+                  <Txt variant="small" color={colors.textFaint}>
+                    Personne n’a encore déclaré avoir payé sa part.
+                  </Txt>
+                )}
+              </>
+            )}
             <View style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}>
-              <Tag label="Part confirmée ✓" tone="green" icon="checkmark-circle" />
+              <Button size="sm" variant="ghost" label="Relancer sur WhatsApp" icon="logo-whatsapp" onPress={remind} />
             </View>
-          ) : (
-            <>
-              {/* Boutons proposés seulement quand l’état des parts est CHARGÉ : sans lui, on ne
+          </>
+        ) : (
+          <>
+            <Txt variant="small" color={colors.textMuted}>
+              {part ? `Ta part : ~${part}` : 'Part à voir avec l’organisateur'} — à régler à {organizer} (le terrain, lui, se paie au club).
+            </Txt>
+            {myShare?.status === 'confirmed' ? (
+              <View style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}>
+                <Tag label="Part confirmée ✓" tone="green" icon="checkmark-circle" />
+              </View>
+            ) : (
+              <>
+                {/* Boutons proposés seulement quand l’état des parts est CHARGÉ : sans lui, on ne
                   sait ni s’il existe un lien Wave, ni si j’ai déjà déclaré ma part. Une part
                   déjà déclarée retire les deux (on ne repaie pas ce qu’on vient d’annoncer). */}
-              <View style={styles.actions}>
-                {link && !myShare ? <Button size="sm" label="Payer ma part" icon="card-outline" onPress={pay} /> : null}
-                {share && !myShare ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    label={busy ? '…' : 'J’ai payé ✓'}
-                    icon="checkmark"
-                    onPress={() => void declare()}
-                    disabled={busy}
-                  />
+                <View style={styles.actions}>
+                  {link && !myShare ? <Button size="sm" label="Payer ma part" icon="card-outline" onPress={pay} /> : null}
+                  {share && !myShare ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      label={busy ? '…' : 'J’ai payé ✓'}
+                      icon="checkmark"
+                      onPress={() => void declare()}
+                      disabled={busy}
+                    />
+                  ) : null}
+                </View>
+                {myShare ? (
+                  <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
+                    Tu as déclaré avoir payé — {organizer} confirme la réception.
+                  </Txt>
+                ) : share && !link ? (
+                  <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
+                    {organizer} n’a pas encore mis son lien Wave.
+                  </Txt>
                 ) : null}
-              </View>
-              {myShare ? (
-                <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
-                  Tu as déclaré avoir payé — {organizer} confirme la réception.
-                </Txt>
-              ) : share && !link ? (
-                <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
-                  {organizer} n’a pas encore mis son lien Wave.
-                </Txt>
-              ) : null}
-            </>
-          )}
-        </>
-      )}
-    </View>
+              </>
+            )}
+          </>
+        )}
+      </View>
+    </>
   );
 }
 

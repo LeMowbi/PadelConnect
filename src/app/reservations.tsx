@@ -9,7 +9,7 @@ import { Screen } from '@/components/Screen';
 import { SharePayments } from '@/components/SharePayments';
 import { Button, Card, Divider, EmptyState, SectionHeader, Tag, Txt, type IconName } from '@/components/ui';
 import { ResultCard } from '@/components/ResultCard';
-import { matchTemplates } from '@/lib/matchMessages';
+import { invitedLabel, matchOthers, matchTemplates, setsFromCanon, shareTeamsOf } from '@/lib/matchMessages';
 import { shareViewAsImage } from '@/lib/shareImage';
 import { findClub } from '@/data/clubs';
 import { isCompFinished, seedCompetitions } from '@/data/competitions';
@@ -17,13 +17,13 @@ import { durationLabel } from '@/lib/courtSchedule';
 import { useToast } from '@/components/Toast';
 import { isPlayed, useApp, type Reservation } from '@/store/AppContext';
 import { isReservationOwner } from '@/store/helpers';
-import { addReservationToCalendar } from '@/lib/calendar';
+import { addReservationToCalendar, calendarAvailable } from '@/lib/calendar';
 import { confirmAsync } from '@/lib/confirm';
 import { openWhatsApp } from '@/lib/contact';
 import { fetchMyGroupLessons, leaveGroupLesson, type MyGroupLesson } from '@/lib/groupLessons';
 import { hapticSuccess } from '@/lib/haptics';
 import { fetchMyMatchScores, leaveOpenMatch, setMatchOpen, submitMatchScore, type MatchScore, type MatchSet } from '@/lib/matchResults';
-import { CANCEL_DEADLINE_MS, fetchCancelledReservations } from '@/lib/reservations';
+import { CANCEL_DEADLINE_MS, fetchCancelledReservations, fetchNoShowReservations } from '@/lib/reservations';
 import { SESSION_MIN } from '@/lib/slots';
 import { DAY_MS, MINUTE_MS, MONTHS, dateKeyLabel, dayKey, slotTimestamp } from '@/lib/days';
 import { fcfa, perPlayerOf } from '@/lib/format';
@@ -40,6 +40,8 @@ const PAST_PREVIEW = 5; // passées : 5 dernières + « Voir tout »
 const SHARE_MAX = 8;
 // Grâce d'après-match : le serveur (88) laisse régler les parts jusqu'à 24 h APRÈS la fin du match.
 const SHARE_GRACE_MS = DAY_MS;
+// Absences (« pas venu ») montrées 30 jours : de quoi les voir et joindre le club en cas d'erreur.
+const ABSENCE_WINDOW_MS = 30 * DAY_MS;
 
 // Brouillon de saisie du score : 3 sets max, champs texte vides (jamais muté — les mises à
 // jour recréent le tableau).
@@ -80,7 +82,7 @@ export default function ReservationsScreen() {
   const [msgTarget, setMsgTarget] = useState<Reservation | null>(null); // fiche « messages types » WhatsApp
   // Partage de résultat (image) : la résa ciblée + le partenaire choisi (2v2) + garde anti double-tap.
   const [shareTarget, setShareTarget] = useState<Reservation | null>(null);
-  const [sharePartner, setSharePartner] = useState('');
+  const [sharePartner, setSharePartner] = useState(''); // id du partenaire (jamais le prénom : homonymes)
   const [sharing, setSharing] = useState(false);
   const cardRef = useRef<View>(null); // vue capturée en image
   const [cancellingLesson, setCancellingLesson] = useState<string | null>(null); // garde anti double-tap
@@ -106,6 +108,9 @@ export default function ReservationsScreen() {
   // (status='cancelled') ; on ne montre que MON périmètre (créateur ou participant) — un
   // gérant-joueur ne voit pas ici les annulations des autres clients de son club.
   const [cancelledRows, setCancelledRows] = useState<Reservation[]>([]);
+  // ABSENCES (« pas venu », 87/96) : le club a marqué la résa — elle quitte « À venir »/« Passées »
+  // (statut 'no_show') ; on la montre ici avec la possibilité de joindre le club (R-44).
+  const [noShowRows, setNoShowRows] = useState<Reservation[]>([]);
   const inMyPerimeter = (r: Reservation) => r.userId === state.serverUserId || state.participantReservationIds.includes(r.id);
 
   // PARTS WAVE (18) : état serveur des parts, par réservation PARTAGÉE à venir affichée.
@@ -123,13 +128,15 @@ export default function ReservationsScreen() {
     const rows = await fetchMyGroupLessons();
     if (rows) setGroupLessons(rows); // null = échec réseau → on garde la liste affichée (§8)
   };
+  // Annulées ET absences : les deux traces d'une résa sortie de « À venir » sans être jouée.
   const loadCancelled = async () => {
-    const rows = await fetchCancelledReservations();
+    const [rows, absent] = await Promise.all([fetchCancelledReservations(), fetchNoShowReservations()]);
     // null = échec réseau → on garde l'existant (§8). Lignes BRUTES : le périmètre (créateur ou
     // participant) se filtre AU RENDU — un filtre au chargement figerait participantReservationIds
     // dans la closure de l'écouteur AppState/push (un match rejoint en cours de session serait
     // masqué des « Annulées » jusqu'au prochain montage).
     if (rows) setCancelledRows(rows);
+    if (absent) setNoShowRows(absent);
   };
   useEffect(() => {
     if (!state.serverUserId) return;
@@ -141,6 +148,10 @@ export default function ReservationsScreen() {
     void fetchCancelledReservations().then((rows) => {
       if (!alive || !rows) return;
       setCancelledRows(rows);
+    });
+    void fetchNoShowReservations().then((rows) => {
+      if (!alive || !rows) return;
+      setNoShowRows(rows);
     });
     void fetchMyGroupLessons().then((rows) => {
       if (!alive || !rows) return;
@@ -203,6 +214,8 @@ export default function ReservationsScreen() {
   const upcoming = upcomingAll.filter((r) => !isPending(r) && !leftIds.includes(r.id));
   const past = mine.filter((r) => isPlayed(r, now)).sort((a, b) => b.startsAt - a.startsAt);
   const pastShown = past.slice(0, pastShownCount);
+  // Absences récentes de MON périmètre (même filtre que les annulées), plus récente d'abord.
+  const absences = noShowRows.filter((r) => inMyPerimeter(r) && r.startsAt > now - ABSENCE_WINDOW_MS);
 
   // PARTS WAVE (18) : une résa est PARTAGÉE dès qu'on y joue à plusieurs (invités, match ouvert)
   // ou que c'est celle d'un autre où je suis accepté — seul cas où partager la note a un sens.
@@ -347,10 +360,12 @@ export default function ReservationsScreen() {
     });
     // « canceled » = l'utilisateur a refermé la fiche système lui-même : pas de toast d'erreur.
     if (res === 'canceled') return;
-    toast.show(
-      res === 'added' ? 'Ajouté à ton calendrier ✓' : 'Calendrier indisponible sur cet appareil.',
-      res === 'added' ? undefined : { icon: 'alert-circle' },
-    );
+    if (res === 'unavailable') {
+      toast.show('Calendrier indisponible sur cet appareil.', { icon: 'alert-circle' });
+      return;
+    }
+    // Android ouvre la fiche sans dire si elle a été enregistrée : message NEUTRE (jamais « ajouté ✓ »).
+    toast.show(res === 'added' ? 'Ajouté à ton calendrier ✓' : 'Fiche du calendrier ouverte — enregistre-la pour retrouver ton match.');
   };
 
   // Ouvre la fiche « Le score du match » (saisie vierge à chaque ouverture).
@@ -360,19 +375,20 @@ export default function ReservationsScreen() {
   };
 
   // ── Partage du résultat en image ──────────────────────────────────────────────
+  // Les AUTRES joueurs du match vus par moi (organisateur compris si je suis invité, moi exclu PAR
+  // ID) — base unique des puces « Ton partenaire » et des équipes de la carte (matchMessages).
+  const othersOf = (r: Reservation) => matchOthers(r, isOwner(r), state.serverUserId);
   const openShare = (r: Reservation) => {
     setShareTarget(r);
-    setSharePartner(r.invited[0]?.name ?? ''); // 2v2 : partenaire par défaut = 1ᵉʳ invité
+    setSharePartner(othersOf(r)[0]?.id ?? ''); // 2v2 : partenaire par défaut = 1ᵉʳ des autres joueurs
   };
   const myName = `${state.account?.firstName ?? ''} ${state.account?.lastName ?? ''}`.trim() || 'Moi';
-  // Équipes de la carte : MON équipe (moi + partenaire choisi) vs les autres joueurs.
-  const shareTeams = (() => {
-    if (!shareTarget) return null;
-    const others = shareTarget.invited.map((i) => i.name);
-    if (others.length <= 1) return { teamA: [myName], teamB: others }; // 1v1 : aucun partenaire
-    const idx = Math.max(0, others.indexOf(sharePartner)); // filtre PAR INDEX (noms possiblement égaux)
-    return { teamA: [myName, others[idx]], teamB: others.filter((_, i) => i !== idx) };
-  })();
+  // Réservation d'un COURS dont je suis le COACH : seul un cours collectif est réservé au nom du
+  // coach (un cours individuel l'est au nom de l'élève) — fiche coach + cours à MON nom.
+  const isLessonCoach = (r: Reservation) => !!state.coachProfile && isOwner(r) && r.coachName === myName;
+  // Équipes de la carte : MON équipe (moi + partenaire choisi, par id) vs les autres joueurs.
+  const shareTeams = shareTarget ? shareTeamsOf(shareTarget, state.serverUserId, isOwner(shareTarget), myName, sharePartner) : null;
+  const shareOthers = shareTarget ? othersOf(shareTarget) : [];
   const doShare = async () => {
     if (sharing) return;
     setSharing(true);
@@ -384,10 +400,15 @@ export default function ReservationsScreen() {
   };
 
   const parsed = parseSetDrafts(setDrafts);
-  const sendScore = async () => {
-    if (!scoreTarget || parsed.error || scoreSending) return;
+  // Envoi d'un score (saisie manuelle OU confirmation en un tap) — messages PAR CODE serveur.
+  // Renvoie true quand l'issue est TERMINALE (validé / en attente / conflit / sans autre compte) :
+  // l'appelant referme alors sa feuille ; false = échec réseau (la saisie est conservée).
+  const submitScore = async (target: Reservation, sets: MatchSet[], iWin: boolean): Promise<boolean> => {
+    // D'AUTRES joueurs avaient-ils déjà saisi ? (lu AVANT l'envoi) — sert au message honnête du 2ᵉ « je gagne ».
+    const prior = scores[target.id];
+    const othersEntered = prior ? prior.entries - (prior.mine ? 1 : 0) : 0;
     setScoreSending(true);
-    const res = await submitMatchScore(scoreTarget.id, parsed.sets);
+    const res = await submitMatchScore(target.id, sets);
     setScoreSending(false);
     if (res === 'validated') {
       hapticSuccess();
@@ -401,10 +422,15 @@ export default function ReservationsScreen() {
     } else if (res === 'waiting') {
       // Règle 49 réelle : seule une saisie GAGNANTE restée SEULE est auto-validée à 48 h ;
       // sinon il faut qu'un joueur du camp perdant confirme. Promesse honnête selon le cas.
+      // Victoire « en attente » alors que d'autres avaient saisi : ces saisies concordent et sont
+      // forcément gagnantes (une défaite en miroir aurait validé) — la mienne n'est donc plus seule,
+      // la validation automatique à 48 h ne s'appliquera pas (deux « je gagne » ne valident jamais).
       toast.show(
-        parsed.iWin
-          ? 'Score enregistré — validé dès qu’un adversaire confirme (ou automatiquement sous 48 h si ta saisie reste la seule).'
-          : 'Score enregistré — validé dès qu’un joueur du camp gagnant saisit le même score.',
+        !iWin
+          ? 'Score enregistré — validé dès qu’un joueur du camp gagnant saisit le même score.'
+          : othersEntered > 0
+            ? 'Score enregistré — ton camp l’avait déjà saisi : il sera validé dès qu’un adversaire confirme (plus de validation automatique à 48 h).'
+            : 'Score enregistré — validé dès qu’un adversaire confirme (ou automatiquement sous 48 h si ta saisie reste la seule).',
       );
     } else if (res === 'conflict') {
       // Couvre les DEUX causes serveur (scores discordants OU plafond de « je gagne » atteint) :
@@ -419,16 +445,34 @@ export default function ReservationsScreen() {
         icon: 'alert-circle',
       });
     } else {
-      // Échec réseau : feuille laissée ouverte, la saisie est conservée pour un simple « réessaie ».
+      // Échec réseau : la saisie est conservée pour un simple « réessaie ».
       toast.show('Enregistrement impossible — réessaie', { icon: 'alert-circle' });
-      return;
+      return false;
     }
-    // Les cas terminaux (validé / en attente / conflit / sans autre compte) ferment la feuille.
     // Score saisi (ou refus définitif) : le rappel « Alors, ce match ? » (C2, fin + 20 min) n'a plus
     // lieu d'être — on le retire sans attendre la prochaine resync.
-    void cancelMatchReminder(scoreTarget.id);
-    setScoreTarget(null);
+    void cancelMatchReminder(target.id);
     void loadScores();
+    return true;
+  };
+  const sendScore = async () => {
+    if (!scoreTarget || parsed.error || scoreSending) return;
+    // Les cas terminaux ferment la feuille ; un échec réseau la laisse ouverte.
+    if (await submitScore(scoreTarget, parsed.sets, parsed.iWin)) setScoreTarget(null);
+  };
+  // Confirmation EN UN TAP du score saisi par un autre joueur (mêmes sets, de mon point de vue) :
+  // aucune RPC nouvelle — c'est la saisie normale, pré-remplie. Confirmation d'abord : un tap
+  // de travers (coéquipier qui « confirme » une victoire) bloquerait la validation à 48 h.
+  const quickConfirm = async (r: Reservation, s: MatchScore, iWin: boolean) => {
+    const sets = setsFromCanon(s.score, iWin);
+    if (!sets || scoreSending) return;
+    const who = s.enteredNames || 'l’autre joueur';
+    const yes = await confirmAsync(
+      iWin ? `Ton équipe a gagné ${s.score} ?` : `Ton équipe a perdu ${s.score} ?`,
+      `Seulement si tu jouais CONTRE ${who} : ta confirmation valide le match. Si tu étais dans son équipe, ne saisis rien — deux saisies du même camp ne le valident jamais.`,
+      { confirmLabel: 'Je confirme', cancelLabel: 'Annuler' },
+    );
+    if (yes) await submitScore(r, sets, iWin);
   };
 
   // Quitter un match ouvert qu'on a rejoint : place réellement libérée côté serveur (48).
@@ -546,6 +590,8 @@ export default function ReservationsScreen() {
           <SectionHeader title={`Scores à saisir · ${scorePrompts.length}`} />
           {scorePrompts.map((r) => {
             const s = scores[r.id];
+            // Confirmation en UN TAP seulement sur un score lisible et sans conflit.
+            const oneTap = !s.conflict && setsFromCanon(s.score, true) !== null;
             return (
               <Card key={r.id} style={{ marginBottom: spacing.sm }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
@@ -562,10 +608,42 @@ export default function ReservationsScreen() {
                 <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
                   {s.conflict
                     ? 'Les scores saisis ne concordent pas (ou trop de joueurs se déclarent vainqueurs) — celui qui s’est trompé corrige sa saisie.'
-                    : `${s.enteredNames || 'Un joueur'} a mis ${s.score}. Si tu as perdu, saisis ton score pour valider tout de suite.`}
+                    : // Le coéquipier qui ressaisit le même score bloque la validation au lieu de l'aider.
+                      `${s.enteredNames || 'Un joueur'} a mis ${s.score}. Si tu étais dans l’autre camp, confirme-le pour le valider. Coéquipier : inutile de le ressaisir — deux saisies du même camp ne valident jamais le match.`}
                 </Txt>
                 <Divider style={{ marginVertical: spacing.md }} />
-                <Button size="sm" label="Mettre mon score" icon="trophy-outline" onPress={() => openScore(r)} full />
+                {/* Confirmation en UN TAP (score lisible, pas de conflit) : deux choix explicites,
+                    puis la saisie manuelle pour un autre score. */}
+                {oneTap ? (
+                  <View style={{ gap: spacing.sm, marginBottom: spacing.sm }}>
+                    <Button
+                      size="sm"
+                      label="Mon équipe a perdu · je confirme"
+                      icon="checkmark"
+                      onPress={() => void quickConfirm(r, s, false)}
+                      disabled={scoreSending}
+                      full
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      label="Mon équipe a gagné · même score"
+                      icon="trophy-outline"
+                      onPress={() => void quickConfirm(r, s, true)}
+                      disabled={scoreSending}
+                      full
+                    />
+                  </View>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant={oneTap ? 'ghost' : 'primary'}
+                  label={oneTap ? 'Autre score' : 'Mettre mon score'}
+                  icon={oneTap ? 'create-outline' : 'trophy-outline'}
+                  onPress={() => openScore(r)}
+                  disabled={scoreSending}
+                  full
+                />
                 <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
                   Le match ne compte que si un joueur du camp perdant confirme le score (ou si la saisie du vainqueur reste la seule pendant
                   48 h).
@@ -749,17 +827,20 @@ export default function ReservationsScreen() {
                       </Txt>
                     </View>
                   ) : r.invited.length > 0 ? (
+                    // Créateur : qui a accepté (✓) et qui n'a pas encore répondu (« en attente ») —
+                    // un refus retire l'invité de la liste (serveur), le créateur est prévenu par push.
                     <View style={styles.participants}>
                       <Ionicons name="people-outline" size={14} color={colors.textMuted} />
                       <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
-                        Avec {r.invited.map((i) => i.name).join(', ')}
+                        Avec {r.invited.map(invitedLabel).join(', ')}
                       </Txt>
                     </View>
                   ) : null}
 
                   <Divider style={{ marginVertical: spacing.md }} />
                   {/* Raccourcis contextuels : club + itinéraire + calendrier — chacun dans un
-                      flex:1 pour que la rangée tienne toujours dans la largeur (petits écrans). */}
+                      flex:1 pour que la rangée tienne toujours dans la largeur (petits écrans).
+                      Calendrier masqué là où il ne peut pas marcher (web) : jamais de promesse vide. */}
                   <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm }}>
                     <View style={{ flex: 1 }}>
                       <Button
@@ -786,17 +867,19 @@ export default function ReservationsScreen() {
                         full
                       />
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Button
-                        size="sm"
-                        label="Calendrier"
-                        icon="calendar-outline"
-                        variant="secondary"
-                        onPress={() => void addToCalendar(r)}
-                        pill
-                        full
-                      />
-                    </View>
+                    {calendarAvailable ? (
+                      <View style={{ flex: 1 }}>
+                        <Button
+                          size="sm"
+                          label="Calendrier"
+                          icon="calendar-outline"
+                          variant="secondary"
+                          onPress={() => void addToCalendar(r)}
+                          pill
+                          full
+                        />
+                      </View>
+                    ) : null}
                   </View>
                   <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                     <View style={{ flex: 1 }}>
@@ -889,9 +972,10 @@ export default function ReservationsScreen() {
                         );
                       })()
                     : null}
-                  {/* Parts Wave (18) : sur une résa PARTAGÉE, le créateur colle son lien Wave et
-                      confirme les parts reçues ; chaque partenaire paie la sienne et le déclare.
-                      Affiché seulement pour les résas dont l'état des parts est chargé (SHARE_MAX). */}
+                  {/* Parts Wave (18), OPTIONNELLES : sur une résa PARTAGÉE, le créateur peut déplier
+                      « Partager la note », coller son lien Wave et confirmer les parts reçues ; chaque
+                      partenaire ne voit sa part qu'une fois la note partagée (SharePayments).
+                      Limité aux résas dont l'état des parts est interrogé (SHARE_MAX). */}
                   {state.serverUserId && upcomingShareTargets.some((x) => x.id === r.id) ? (
                     <SharePayments
                       reservation={r}
@@ -995,6 +1079,11 @@ export default function ReservationsScreen() {
                         {dateKeyLabel(r.dateKey)} · {r.time} · {r.court}
                         {scores[r.id]?.score ? ` · ${scores[r.id].score}` : ''}
                       </Txt>
+                      {r.ownerDeleted ? (
+                        <Txt variant="small" color={colors.textFaint} style={{ marginTop: 2 }}>
+                          Match repris d’un ancien joueur
+                        </Txt>
+                      ) : null}
                     </View>
                     {(() => {
                       // Badge résultat (46) : Victoire (score validé) / en attente / discordant — sinon « Jouée ».
@@ -1084,20 +1173,17 @@ export default function ReservationsScreen() {
                       (fenêtre serveur 88) — la carte suit donc la résa dans « Passées » au lieu de
                       disparaître au coup de sifflet, alors que le serveur accepte encore. */}
                   {state.serverUserId && pastShareTargets.some((x) => x.id === r.id) ? (
-                    <>
-                      <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.sm }}>
-                        Règlement d’après-match (jusqu’à 24 h)
-                      </Txt>
-                      <SharePayments
-                        reservation={r}
-                        owner={isOwner(r)}
-                        // Même effectif RÉEL que la carte « À venir » (base de la part par joueur).
-                        players={r.openMatch ? (r.openCapacity ?? 4) : Math.max(1, 1 + r.invited.length)}
-                        meId={state.serverUserId}
-                        share={shares[r.id]}
-                        onReload={() => void reloadShare(r.id)}
-                      />
-                    </>
+                    <SharePayments
+                      reservation={r}
+                      owner={isOwner(r)}
+                      // Match JOUÉ : la part se calcule sur ceux qui ont réellement joué (moi +
+                      // invités), même pour un match ouvert resté incomplet — plus sur la capacité.
+                      players={Math.max(1, 1 + r.invited.length)}
+                      meId={state.serverUserId}
+                      share={shares[r.id]}
+                      onReload={() => void reloadShare(r.id)}
+                      afterMatch
+                    />
                   ) : null}
                 </View>
               </Reveal>
@@ -1113,6 +1199,60 @@ export default function ReservationsScreen() {
           </Card>
         )}
       </View>
+
+      {/* Absences (« pas venu », R-44) : le club a marqué la réservation — elle ne compte pas comme
+          une partie jouée et, pour son auteur, pèse dans sa fiabilité. Jamais en silence : la trace
+          reste 30 jours, avec le moyen de joindre le club en cas d'erreur. */}
+      {absences.length > 0 ? (
+        <View style={{ marginTop: spacing.xl }}>
+          <SectionHeader title={`Absences signalées · ${absences.length}`} />
+          <Card>
+            {absences.map((r, i) => {
+              const clubPhone = findClub(r.clubId, state.customClubs, state.clubInfo)?.contactPhone;
+              return (
+                <View key={r.id}>
+                  {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
+                  <View style={styles.row}>
+                    <View style={{ flex: 1 }}>
+                      <Txt variant="body" color={colors.textMuted} style={{ fontWeight: '600' }}>
+                        {r.clubName}
+                      </Txt>
+                      <Txt variant="small" color={colors.textFaint}>
+                        {dateKeyLabel(r.dateKey)} · {r.time} · {r.court}
+                      </Txt>
+                    </View>
+                    <Tag label="Marquée absente" tone="coral" icon="alert-circle" />
+                  </View>
+                  <View style={styles.clubCancelBox}>
+                    <Txt variant="small" color={colors.coralDark}>
+                      {isOwner(r)
+                        ? `${r.clubName} a marqué ta réservation comme « pas venu » : elle ne compte pas comme partie jouée et pèse dans ta fiabilité.`
+                        : `${r.clubName} a marqué cette réservation comme « pas venu » : la partie ne compte pas.`}{' '}
+                      Une erreur ? Contacte le club.
+                    </Txt>
+                    <View style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        label={clubPhone ? 'Contacter le club' : 'Voir le club'}
+                        icon={clubPhone ? 'logo-whatsapp' : 'business-outline'}
+                        onPress={() =>
+                          clubPhone
+                            ? openWhatsApp(
+                                clubPhone,
+                                `Bonjour, ma réservation du ${dateKeyLabel(r.dateKey)} à ${r.time} (${r.court}) a été marquée « pas venu » dans PadelConnect. Je pense qu’il s’agit d’une erreur : `,
+                              )
+                            : router.push(`/club/${r.clubId}`)
+                        }
+                      />
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+          </Card>
+        </View>
+      ) : null}
 
       {/* Annulées — la trace reste visible (au lieu de disparaître en silence) : mes annulations
           ET celles d'un créateur dont j'avais rejoint le match. Les annulations PAR LE CLUB (75,
@@ -1139,27 +1279,52 @@ export default function ReservationsScreen() {
                         {!r.cancelledByClub && !isOwner(r) && r.bookedBy?.name ? ` · annulée par ${r.bookedBy.name}` : ''}
                       </Txt>
                     </View>
-                    <Tag label={r.cancelledByClub ? 'Annulée par le club' : 'Annulée'} tone="coral" icon="close-circle" />
+                    <Tag
+                      label={r.cancelledByCoach ? 'Annulé par le coach' : r.cancelledByClub ? 'Annulée par le club' : 'Annulée'}
+                      tone="coral"
+                      icon="close-circle"
+                    />
                   </View>
-                  {/* Annulation par le CLUB (75) : le créneau chevauchait une réservation prise hors
-                    application. On explique le motif et, si le club a proposé une alternative, on
-                    la réserve en un tap (réutilise le tunnel de réservation, jour/heure/durée
-                    pré-remplis) — sinon on renvoie vers le club pour choisir un autre créneau. */}
+                  {/* Annulation par le CLUB (75 — chevauchement hors app, pluie, incident…) ou, pour
+                    un cours, par le COACH (96/97, même statut, sans pénalité). Formulation NEUTRE :
+                    le motif dit la vraie cause. Si le club a proposé une alternative, on la réserve
+                    en un tap (tunnel pré-rempli) — sinon on renvoie vers le club. */}
                   {r.cancelledByClub ? (
                     <View style={styles.clubCancelBox}>
                       <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                         <Ionicons name="information-circle-outline" size={16} color={colors.coralDark} />
                         <Txt variant="small" color={colors.coralDark} style={{ flex: 1 }}>
-                          Ce créneau chevauchait une réservation prise hors application.
+                          {r.cancelledByCoach
+                            ? `Ton cours avec ${r.coachName || 'ton coach'} a été annulé côté coach — tu n’es pas pénalisé.`
+                            : r.coachName
+                              ? isLessonCoach(r)
+                                ? `${r.clubName} a annulé ce cours — recrée-le depuis ton Espace Coach.`
+                                : `Ton cours avec ${r.coachName} a été annulé par le club — redemande un créneau à ton coach.`
+                              : `${r.clubName} a dû annuler ce créneau.`}
                           {/* Motif réservé à l'AUTEUR (doctrine 78 / push participants) : il peut
-                            nommer un tiers — les participants ont l'explication générique. */}
-                          {isOwner(r) && r.cancelReason ? ` Motif : ${r.cancelReason}.` : ''}
+                            nommer un tiers — les participants ont l'explication générique. Un cours
+                            annulé côté coach porte un motif technique déjà dit ci-dessus. */}
+                          {isOwner(r) && r.cancelReason && !r.cancelledByCoach ? ` Motif : ${r.cancelReason}.` : ''}
                         </Txt>
                       </View>
-                      {/* Seul l'AUTEUR de la réservation peut re-réserver (le créneau de courtoisie lui
-                        est destiné) : un participant invité voit l'annulation mais n'accapare pas la
-                        proposition à la place du créateur. */}
-                      {isOwner(r) ? (
+                      {/* COURS (R-18) : jamais la proposition du club — elle re-réserverait un terrain
+                        SANS le coach : l'élève redemande un cours, le coach le recrée chez lui.
+                        Sinon, seul l'AUTEUR de la réservation peut re-réserver (le créneau de
+                        courtoisie lui est destiné) : un participant invité voit l'annulation mais
+                        n'accapare pas la proposition à la place du créateur. */}
+                      {r.coachName ? (
+                        isOwner(r) ? (
+                          <View style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              label={isLessonCoach(r) ? 'Ouvrir mon Espace Coach' : 'Redemander un cours'}
+                              icon="school-outline"
+                              onPress={() => router.push(isLessonCoach(r) ? '/coach-admin' : '/cours')}
+                            />
+                          </View>
+                        ) : null
+                      ) : isOwner(r) ? (
                         <>
                           {/* Le tunnel repart vierge (aucun invité pré-rempli) : on prévient
                             honnêtement le créateur d'un match à plusieurs qu'il ré-invitera ses
@@ -1262,10 +1427,22 @@ export default function ReservationsScreen() {
               const target = cancelTarget;
               setCancelTarget(null);
               if (target) {
-                void cancelReservation(target.id).then((ok) => {
-                  // La résa annulée reste visible (section « Annulées ») au lieu de disparaître.
-                  if (ok) setCancelledRows((cur) => [target, ...cur.filter((x) => x.id !== target.id)]);
-                  toast.show(ok ? 'Réservation annulée' : 'Annulation impossible — réessaie', ok ? undefined : { icon: 'alert-circle' });
+                void cancelReservation(target.id).then((st) => {
+                  if (st === 'ok') {
+                    // La résa annulée reste visible (section « Annulées ») au lieu de disparaître.
+                    setCancelledRows((cur) => [target, ...cur.filter((x) => x.id !== target.id)]);
+                    toast.show('Réservation annulée');
+                  } else if (st === 'late') {
+                    // Les 5 h sont passées pendant que l'écran restait ouvert : refus DÉFINITIF.
+                    toast.show('Trop tard : moins de 5 h avant le match — vois directement avec le club.', { icon: 'alert-circle' });
+                  } else if (st === 'gone') {
+                    // Déjà annulée ailleurs, annulée par le club ou marquée absente : le miroir est
+                    // recalé (store) — on relit les annulées/absences pour montrer où elle est passée.
+                    void loadCancelled();
+                    toast.show('Cette réservation n’est plus active — elle a déjà été annulée ou modifiée par le club.', {
+                      icon: 'information-circle',
+                    });
+                  } else toast.show('Connexion impossible — réessaie', { icon: 'cloud-offline-outline' });
                 });
               }
             }}
@@ -1286,7 +1463,10 @@ export default function ReservationsScreen() {
           Choisis un message — il s’ouvre pré-rempli dans WhatsApp, tu choisis le destinataire.
         </Txt>
         <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
-          {(msgTarget ? matchTemplates(msgTarget, `${APP_DOMAIN}/club/${msgTarget.clubId}`, isOwner(msgTarget)) : []).map((t) => (
+          {(msgTarget
+            ? matchTemplates(msgTarget, `${APP_DOMAIN}/club/${msgTarget.clubId}`, isOwner(msgTarget), state.serverUserId)
+            : []
+          ).map((t) => (
             <Pressable
               key={t.key}
               onPress={() => {
@@ -1322,14 +1502,14 @@ export default function ReservationsScreen() {
         {shareTarget && shareTeams ? (
           <>
             {/* Partenaire (2v2 seulement) : qui était avec toi ? Les autres deviennent adversaires. */}
-            {shareTarget.invited.length >= 2 ? (
+            {shareOthers.length >= 2 ? (
               <>
                 <Txt variant="label" color={colors.textMuted}>
                   Ton partenaire
                 </Txt>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm }}>
-                  {shareTarget.invited.map((p) => (
-                    <Chip key={p.id} label={p.name} active={sharePartner === p.name} onPress={() => setSharePartner(p.name)} />
+                  {shareOthers.map((p) => (
+                    <Chip key={p.id} label={p.name} active={sharePartner === p.id} onPress={() => setSharePartner(p.id)} />
                   ))}
                 </View>
               </>
