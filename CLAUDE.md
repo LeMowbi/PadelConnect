@@ -99,8 +99,20 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser. Dét
 --auto-submit --non-interactive --no-wait` (version EXACTE, la même partout : `padel-sortie-ios`,
   `docs/CHECKLIST-STORES.md`, `docs/ANDROID-LANCEMENT.md`). Node figé à **22.22.0** (`.nvmrc`,
   `eas.json`). `expo-system-ui` est un module natif ajouté pour le #69 (build requis).
-- **`app.json` : version 1.0.2, `buildNumber` courant : 68** (EAS `autoIncrement` le bump à chaque
+- **`app.json` : version 1.0.3, `buildNumber` courant : 69** (EAS `autoIncrement` le bump à chaque
   build — ne PAS s'en remettre au suivi manuel ci-dessous, c'est `app.json` qui fait foi).
+  🆕 **Build #69 (v1.0.3) LANCÉ le 2026-10-23 AVEC auto-submit** (build EAS `91f218a1…`, soumission
+  `3bacd7bb…`) depuis `13c3bd7` : vagues 1→3e de l'audit pré-lancement, décisions porteur, SQL 92→98
+  déjà EN PROD, dépendances alignées sur le SDK 56 (`expo install --fix` : expo 56.0.24,
+  react-native-screens 4.26.2 épinglé, 12 modules en patch — revue adversariale des changelogs
+  contre l'usage réel : 0 HIGH/MEDIUM ; expo-doctor 21/22, seul Hermes → SDK 57), fond crème
+  derrière les écrans au balayage retour (`ThemeProvider` de la pile), conseiller de sécurité relu
+  (décision écrite `slot_occupancy`, `docs/AUDIT-SERVEUR.md`). Web `club.padelconnectci.com` ET site
+  `padelconnectci.com` redéployés le même jour sur ce code (bundle et police Ionicons vérifiés en
+  ligne ; `og.png` régénéré). Reste : mise en REVUE de la 1.0.3 dans App Store Connect (clé ASC
+  absente de la session → par le porteur, ou clé à refournir), après chronométrage du sous-titre
+  « en 2 min » sur le #69 installé (`docs/STORE-LISTING.md` §0) et tests TestFlight
+  (navigation 4.26, démarrage à froid, liens, notifications, photos, calendrier, partage).
   🆕 **Build #68 (v1.0.2)** lancé et TERMINÉ sur EAS le 2026-08-17 **AVEC auto-submit** (App
   Store) : embarque TOUS les correctifs de la campagne d'audit « refait autant de fois qu'il le
   faut » (tours 1→9 + post-lancement — classe « écran menteur pendant le submit » fermée, messages
@@ -110,7 +122,7 @@ Tout doit passer AVANT de commit. Commiter par lot cohérent, puis pousser. Dét
   l'ancien) — le site, lui, est déjà à jour et fait foi publiquement.
   ✅ **v1.0.2 PUBLIÉE sur l'App Store le 2026-08-22** (soumise le 21/08 via l'API App Store Connect
   avec une clé d'équipe fournie par le porteur — la clé vit HORS dépôt, jamais commitée ; vérifié
-  le 2026-10-21 par le lookup iTunes, pays CI). **Build #69 à lancer** : il embarquera la campagne
+  le 2026-10-21 par le lookup iTunes, pays CI). **Build #69** (lancé le 2026-10-23, ci-dessus) embarque la campagne
   d'audit n°2, les nouveautés (badges, finitions, Android/assetlinks, CGU in-app, auth-callback) ET
   l'audit pré-lancement du 2026-10-21 (179 correctifs, §10). Web `club.padelconnectci.com`
   **redéployé le 2026-10-21** (la police d'icônes était servie en HTML → toutes les icônes vides ;
