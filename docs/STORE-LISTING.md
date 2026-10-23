@@ -49,7 +49,7 @@ Ces textes décrivent le **binaire #69**. Ils ne doivent partir qu'une fois ces 
       opérateur → Finances). S'il change, corriger « jusqu’à 5 000 FCFA » partout dans ce fichier
       (4 blocs : texte promotionnel, description iOS, nouveautés, description Play ; garder les
       espaces insécables).
-- [ ] `app.json` → `expo.version` passé à **`1.0.3`** AVANT le build #69 (la 1.0.2 est publiée :
+- [x] `app.json` → `expo.version` passé à **`1.0.3`** AVANT le build #69 (la 1.0.2 est publiée :
       App Store Connect refuse un binaire 1.0.2). `autoIncrement` ne touche que `buildNumber`.
 - [ ] Le parcours rapide tient réellement en **moins de 2 minutes** sur le **#69 installé**
       (chronométré : ouvrir l'app connectée → onglet Réserver → réservation confirmée). La promesse
@@ -96,9 +96,9 @@ T=$(mktemp -d) && npm i --prefix "$T" --no-audit --no-fund @resvg/resvg-js@2.6.2
 file site/og.png   # PNG image data, 1200 x 630
 ```
 
-Le `og.png` actuel est décalé d'environ 40 px vers le haut, avec une bande unie en bas : ce rendu,
-fidèle au SVG, le répare au passage. Un aperçu déjà mis en cache par une messagerie peut garder un
-temps l'ancienne image après le redéploiement.
+✅ Commande exécutée le 2026-10-23 (même texte) : l'ancien `og.png`, décalé d'environ 40 px vers le
+haut avec une bande unie en bas, est remplacé par ce rendu fidèle au SVG et `site/` redéployé. Un
+aperçu déjà mis en cache par une messagerie peut garder un temps l'ancienne image.
 
 ---
 
