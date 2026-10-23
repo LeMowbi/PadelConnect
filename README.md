@@ -77,11 +77,11 @@ src/
     reservations.tsx       # Mes réservations (annuler, partager, calendrier) + mes tournois
     classement.tsx, statistiques.tsx  # classement par points + stats joueur
     parrainage.tsx         # code + lien d'invitation · invite/[code] = route entrante
-    coachs/ + cours/       # annuaire coachs + demande de cours · coach-admin (Espace Coach)
+    cours/ (+ coachs → /cours) # coachs réservables + demande de cours · coach-admin (Espace Coach)
     club-admin/            # Espace Club (gérants) · operateur.tsx = console opérateur
     support.tsx, legal.tsx, pourquoi.tsx, decouvrir.tsx, inscrire-club.tsx
   components/              # kit UI (ui.tsx, Chip, Toast, Skeleton, Reveal, PopIn, Stepper…)
-  data/                    # clubs réels (9 fondateurs), coachs (vide au lancement), tournois
+  data/                    # clubs réels (9 fondateurs), tournois
   lib/                     # serveur (Supabase), disponibilité, prix, haptiques, partage…
   store/                   # AppContext (état global + appels serveur) + helpers purs testés
   theme/                   # tokens (couleurs par rôle, typo, ombres) — zéro couleur en dur

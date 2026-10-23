@@ -2,11 +2,10 @@
 // l'alias @/ résolu) : ids uniques, références croisées valides, plages tarifaires
 // continues, équipes de démo uniques. Source réelle — aucun double.
 // NB : les seeds de joueurs/amis de démo ont été retirés (comptes réels uniquement) ;
-// ce test ne couvre donc plus que les données encore embarquées (clubs, tournois, coachs).
+// ce test ne couvre donc plus que les données encore embarquées (clubs, tournois).
 
 import { clubs } from '@/data/clubs';
 import { americanoPodiumTeams, seedCompetitions, teamsToShow, formatFee } from '@/data/competitions';
-import { coaches } from '@/data/coaches';
 import { minPrice, priceTiersFor } from '@/lib/pricing';
 import { weeklyStreak } from '@/store/helpers';
 
@@ -20,17 +19,12 @@ const uniqueIds = (items: { id: string }[]) => new Set(items.map((i) => i.id)).s
 // 1. Ids uniques partout.
 check(uniqueIds(clubs), `Clubs : ${clubs.length} ids uniques`);
 check(uniqueIds(seedCompetitions), `Tournois seeds : ${seedCompetitions.length} ids uniques`);
-check(uniqueIds(coaches), `Coachs : ${coaches.length} ids uniques`);
 
 // 2. Références croisées : tous les clubId pointent vers un club existant.
 const clubIds = new Set(clubs.map((c) => c.id));
 check(
   seedCompetitions.every((c) => !c.clubId || clubIds.has(c.clubId)),
   'Tournois seeds → clubId existants',
-);
-check(
-  coaches.every((c) => !c.clubId || clubIds.has(c.clubId)),
-  'Coachs → clubId existants',
 );
 
 // 3. Tarifs : priceFrom > 0 partout ; plages de Padelta triées, sans trou ni
