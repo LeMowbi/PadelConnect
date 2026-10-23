@@ -89,14 +89,29 @@ export function teamCount(comp: Competition, isRegistered: boolean): number {
 
 // Équipes à afficher : le roster RÉEL pour un tournoi serveur (aucun nom fictif). Un tournoi
 // local (hors session) n’a pas de roster serveur : seule MON équipe (si inscrit) est connue.
-// `myTeam` est mis en tête pour le mettre en avant.
+// `myTeam` est mis en tête pour le mettre en avant. On ne retire QU’UNE occurrence de mon libellé :
+// une autre équipe au même libellé (« Ali & Partenaire » ×2) reste listée, jamais avalée.
 export function teamsToShow(comp: Competition, myTeam?: string): string[] {
   if (comp.server) {
     const list = comp.teamNames ?? [];
     if (!myTeam) return list;
-    return [myTeam, ...list.filter((t) => t !== myTeam)]; // ma team en tête, sans doublon
+    const at = list.indexOf(myTeam);
+    return [myTeam, ...(at < 0 ? list : [...list.slice(0, at), ...list.slice(at + 1)])]; // ma team en tête
   }
   return myTeam ? [myTeam] : [];
+}
+
+// Libellé d’équipe normalisé (casse et espaces ignorés) — sert au pré-contrôle d’inscription.
+function teamKey(team: string): string {
+  return team.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+}
+
+// Une équipe inscrite porte-t-elle DÉJÀ ce libellé « Prénom & Partenaire » ? La clôture désigne le
+// vainqueur par son libellé : deux équipes homonymes rendraient le résultat inattribuable (ni
+// niveau ni points). Pré-contrôle à l’inscription — le roster serveur fait foi (inconnu = libre).
+export function teamNameTaken(comp: Competition, team: string): boolean {
+  const key = teamKey(team);
+  return (comp.teamNames ?? []).some((t) => teamKey(t) === key);
 }
 
 // Podium de l’americano auto-géré (82) traduit en noms d’ÉQUIPE. Le classement americano est
@@ -126,11 +141,17 @@ export function americanoPodiumTeams(comp: Competition, myTeam?: string): { firs
   return { first: ranked[0], second: ranked[1], third: ranked[2] };
 }
 
+// Frais d’inscription GRATUITS ? Champ libre : vide, « Gratuit », « offert(e) » ou un zéro (avec ou
+// sans F / FCFA / XOF) — jamais « Frais : 0 » assorti d’un bouton de règlement.
+export function isFreeFee(fee: string | undefined): boolean {
+  const v = (fee ?? '').trim().toLowerCase();
+  return v === '' || v === 'gratuit' || v === 'offert' || v === 'offerte' || /^0+\s*(f\s*cfa|fcfa|f|xof)?$/.test(v);
+}
+
 // Le tournoi a-t-il des frais d’inscription (≠ gratuit) ? Sert à proposer de contacter
 // l’organisateur pour le règlement.
 export function hasEntryFee(fee: string | undefined): boolean {
-  const v = (fee ?? '').trim().toLowerCase();
-  return v.length > 0 && v !== 'gratuit';
+  return !isFreeFee(fee);
 }
 
 // Frais / récompense saisis librement par l’organisateur : on formate les nombres
@@ -140,6 +161,12 @@ export function formatFee(s: string | undefined): string {
   const v = (s ?? '').trim();
   if (!v) return 'Gratuit';
   return v.replace(/\d{4,}/g, (n) => n.replace(/\B(?=(\d{3})+(?!\d))/g, ' '));
+}
+
+// Libellé des FRAIS D’INSCRIPTION (≠ récompense) : tout frais gratuit (« 0 », « offert »…) s’affiche
+// « Gratuit », sinon formatFee. La récompense garde formatFee (« 0 » n’y veut pas dire gratuit).
+export function entryFeeLabel(fee: string | undefined): string {
+  return isFreeFee(fee) ? 'Gratuit' : formatFee(fee);
 }
 
 // Cycle de vie d’un tournoi : « terminé » = jour de fin STRICTEMENT passé (le jour même = en

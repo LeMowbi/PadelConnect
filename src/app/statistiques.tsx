@@ -11,13 +11,15 @@ import { dateKeyLabel, dayKey } from '@/lib/days';
 import { levelLabel, levelText } from '@/lib/format';
 import { fetchLeaderboard, fetchMyRank } from '@/lib/leaderboard';
 import { fetchMyLevelHistory, type LevelHistoryEntry } from '@/lib/social';
-import { isPlayed, useApp } from '@/store/AppContext';
+import { isLesson, playedMatchTimes, useApp } from '@/store/AppContext';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 // Écran STATISTIQUES JOUEUR (Chantier 6, v2). 100 % réel : parties et tournois lus des
 // statistiques du store (computeStats, mêmes chiffres que le Profil), activité dérivée des
 // réservations passées (miroir local, marche hors-ligne), points/rang/victoires de match lus
 // du classement serveur (null = échec réseau → on affiche « — » sans inventer de chiffre, §8).
+// Un COURS de coach n'est pas une partie (décision porteur n° 3) : ni parties jouées, ni série,
+// ni badges, ni activité, ni points — l'écran le dit sous « Mes chiffres ».
 
 // Forme COURTE et sans point, volontairement distincte de MONTHS (lib/days) : libellés sous les
 // barres du BarChart, à largeur contrainte.
@@ -38,9 +40,10 @@ function deltaLabel(delta: number): string {
   return `${sign > 0 ? '+' : sign < 0 ? '−' : '±'}${levelText(Math.abs(delta), 2)}`;
 }
 
-// Motif de l'ajustement : les tournois officiels (±0,50) restent distincts des matchs validés.
+// Motif de l'ajustement : les tournois officiels (+0,50 vainqueur / −0,25 fin de tableau, inscrits
+// à la clôture depuis la 97 — sans rattrapage des clôtures antérieures) restent distincts des matchs validés.
 function reasonLabel(entry: LevelHistoryEntry): string {
-  if (entry.reason === 'tournament') return 'tournoi';
+  if (entry.reason === 'tournament') return 'tournoi officiel';
   const sign = deltaSign(entry.delta);
   return sign > 0 ? 'victoire' : sign < 0 ? 'défaite' : 'niveau inchangé';
 }
@@ -69,6 +72,8 @@ export default function Statistiques() {
   const [rank, setRank] = useState<number | null | undefined>(undefined);
   const [points, setPoints] = useState<number | null | undefined>(undefined);
   const [matchWins, setMatchWins] = useState<number | null | undefined>(undefined);
+  // « ex æquo » (98, décision n° 10) : vrai seulement si l'égalité se VOIT dans le top 100 reçu.
+  const [tied, setTied] = useState(false);
   // Historique des ajustements de niveau (80) : undefined = chargement, null = échec réseau,
   // [] = aucun ajustement pour l'instant (convention §8).
   const [levelHistory, setLevelHistory] = useState<LevelHistoryEntry[] | null | undefined>(undefined);
@@ -92,6 +97,7 @@ export default function Statistiques() {
       //  • rang > 0 (classé au-delà du top 100) → valeur INCONNUE → « — » (on n'invente pas) ;
       //  • rang null (échec réseau) → « — » aussi.
       const mine = state.serverUserId ? board.find((row) => row.userId === state.serverUserId) : undefined;
+      setTied(mine?.tied === true);
       setPoints(mine ? mine.points : r === 0 ? 0 : null);
       setMatchWins(mine ? mine.matchWins : r === 0 ? 0 : null);
     })();
@@ -105,9 +111,11 @@ export default function Statistiques() {
   // les résas de son périmètre (RLS) → on part de `myReservations` (comme Profil) pour ne pas
   // gonfler « parties jouées » et le graphe d'activité avec les résas des autres joueurs.
   // Les totaux (parties, tournois) viennent de `stats` (computeStats, store) : mêmes chiffres que
-  // le Profil. Le graphe reste sur le miroir (6 mois) sans les invitations jamais acceptées.
-  const playedTs = myReservations.filter((r) => isPlayed(r, now) && !state.pendingInvitationIds.includes(r.id)).map((r) => r.startsAt);
-  const activity = monthlyPlayed(playedTs, now);
+  // le Profil. Le graphe reste sur le miroir (6 mois), avec la MÊME base que `stats.played`
+  // (playedMatchTimes : hors cours, hors invitations jamais acceptées).
+  const activity = monthlyPlayed(playedMatchTimes(myReservations, state.pendingInvitationIds, now), now);
+  // La mention « un cours n'est pas une partie » ne parle qu'à qui a des cours (élève ou coach).
+  const hasLessons = !!state.coachProfile || myReservations.some(isLesson);
   const hasActivity = activity.some((a) => a.value > 0);
 
   // Affichage d'une valeur serveur : « — » si pas encore chargée ou échec réseau.
@@ -131,6 +139,8 @@ export default function Statistiques() {
     friendsCount: state.friends.length,
   });
   const earned = board.filter((b) => b.earned).length;
+  // Rang lisible : « 1ᵉʳ » / « 3ᵉ », suivi de « ex æquo » si l'égalité est visible.
+  const rankLabel = typeof rank === 'number' && rank > 0 ? `${rank === 1 ? '1ᵉʳ' : `${rank}ᵉ`}${tied ? ' ex æquo' : ''}` : null;
 
   return (
     <Screen back title="Mes statistiques" subtitle="Ta progression, en vrai">
@@ -153,11 +163,7 @@ export default function Statistiques() {
               {/* On ne dit « Pas encore classé » QUE si le serveur a répondu rang 0 : un null/undefined
                   (échec réseau ou chargement) ne doit pas faire mentir un joueur réellement classé (§8). */}
               <Txt variant="h3">
-                {typeof rank === 'number' && rank > 0
-                  ? `${rank === 1 ? '1ᵉʳ' : `${rank}ᵉ`} au classement`
-                  : rank === 0
-                    ? 'Pas encore classé'
-                    : 'Classement indisponible'}
+                {rankLabel ? `${rankLabel} au classement` : rank === 0 ? 'Pas encore classé' : 'Classement indisponible'}
               </Txt>
               <Txt variant="muted">
                 {typeof points === 'number'
@@ -191,6 +197,12 @@ export default function Statistiques() {
             bg={colors.greenSoft}
           />
         </View>
+        {/* Décision n° 3 : un coach (ou un élève) qui ne voit pas ses cours ici sait pourquoi. */}
+        {hasLessons ? (
+          <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.sm }}>
+            Les cours avec un coach ne sont pas des parties : ils ne comptent ni dans tes parties, ni dans tes points, ni dans tes badges.
+          </Txt>
+        ) : null}
       </View>
 
       {/* Badges — gamification DOUCE : un simple miroir de ce que le joueur a fait (rien n'est
@@ -255,8 +267,9 @@ export default function Statistiques() {
         </Card>
       </View>
 
-      {/* Évolution du niveau (80) : le niveau s'ajuste tout seul quand un match est VALIDÉ
-          (un perdant reconnaît le score) et aux tournois officiels — rien n'est déclaratif. */}
+      {/* Évolution du niveau (80, 97) : le niveau s'ajuste tout seul quand un match est VALIDÉ
+          (un perdant reconnaît le score) et à la clôture d'un tournoi officiel (compte qui a inscrit
+          l'équipe) — rien n'est déclaratif. */}
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="Évolution du niveau" />
         <Card>
@@ -273,7 +286,9 @@ export default function Statistiques() {
           ) : levelHistory === null ? (
             <Txt variant="muted">Historique indisponible — reviens quand tu es en ligne.</Txt>
           ) : levelHistory.length === 0 ? (
-            <Txt variant="muted">Ton niveau s’ajustera automatiquement après tes premiers matchs validés.</Txt>
+            <Txt variant="muted">
+              Ton niveau s’ajustera automatiquement après tes matchs validés (un perdant confirme le score) et tes tournois officiels.
+            </Txt>
           ) : (
             <View style={{ gap: spacing.sm }}>
               {levelHistory.map((h) => {
@@ -302,7 +317,7 @@ export default function Statistiques() {
       <View style={styles.note}>
         <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
           Tes points : 100 pour un tournoi officiel gagné, 10 pour un tournoi officiel joué, 3 pour une victoire de match confirmée, 2 par
-          partie jouée. Rien n’est inventé — tout se gagne sur le terrain.
+          partie jouée (hors cours). Rien n’est inventé — tout se gagne sur le terrain.
         </Txt>
       </View>
     </Screen>

@@ -8,18 +8,21 @@ import { Confetti } from '@/components/Confetti';
 import { PlayerSheet, type PlayerLike } from '@/components/PlayerSheet';
 import { PopIn } from '@/components/PopIn';
 import { Screen } from '@/components/Screen';
+import { useToast } from '@/components/Toast';
 import { Button, Card, Divider, EmptyState, Tag, Txt } from '@/components/ui';
 import { findClub } from '@/data/clubs';
 import {
   americanoPodiumTeams,
   compDateLabel,
   compFill,
+  entryFeeLabel,
   formatFee,
   hasEntryFee,
   isCompFinished,
   isTournamentPublic,
   seedCompetitions,
   teamCount,
+  teamNameTaken,
   teamsToShow,
   type Competition,
 } from '@/data/competitions';
@@ -45,7 +48,11 @@ import { colors, gradients, radius, shadows, spacing } from '@/theme';
 export default function CompetitionDetail() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { state, registerCompetition, unregisterCompetition, closeCompetition, deleteCompetition, saveAmericano } = useApp();
+  const { state, registerCompetition, unregisterCompetition, closeCompetition, deleteCompetition, cancelCompetition, saveAmericano } =
+    useApp();
+  // Toast GLOBAL pour l'annulation : il survit au retour arrière (succès) et à la fiche qui devient
+  // « introuvable » quand le tournoi quitte le miroir (déjà annulé ailleurs).
+  const appToast = useToast();
 
   const key = Array.isArray(id) ? id[0] : id;
   const comp = [...state.myCompetitions, ...seedCompetitions].find((c) => c.id === key);
@@ -68,6 +75,10 @@ export default function CompetitionDetail() {
   const [savingAm, setSavingAm] = useState(false); // anti double-tap + libellés honnêtes
   const [pickingLoser, setPickingLoser] = useState(false); // 2ᵉ étape de clôture
   const [confirmCancel, setConfirmCancel] = useState(false); // annulation d’un tournoi sans inscrit
+  // Annulation d’un tournoi PUBLIÉ à venir (97) : champ motif ouvert, motif saisi, envoi en cours.
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
   // tone distingue succès (coche) et échec (alerte) — l'icône suivait avant toujours « succès ».
   const [toast, setToast] = useState<{ text: string; tone: 'success' | 'error' } | null>(null);
   const [openPlayer, setOpenPlayer] = useState<PlayerLike | null>(null);
@@ -116,7 +127,11 @@ export default function CompetitionDetail() {
   if (!comp) {
     return (
       <Screen back>
-        <EmptyState icon="alert-circle-outline" title="Tournoi introuvable" />
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Tournoi introuvable"
+          text="Il a peut-être été annulé par le club ou supprimé par son organisateur."
+        />
       </Screen>
     );
   }
@@ -162,11 +177,64 @@ export default function CompetitionDetail() {
     feeContactPhone
       ? openWhatsApp(
           feeContactPhone,
-          `Bonjour, je viens de m’inscrire au tournoi « ${comp.title} » sur PadelConnect — comment régler les frais d’inscription (${formatFee(comp.fee)}) ?`,
+          `Bonjour, je viens de m’inscrire au tournoi « ${comp.title} » sur PadelConnect — comment régler les frais d’inscription (${entryFeeLabel(comp.fee)}) ?`,
         )
       : undefined;
   const { left, pct } = compFill(comp, teams);
   const full = left === 0 && !registered;
+
+  // ANNULATION d’un tournoi PUBLIÉ à venir (97 — pluie, club indisponible…), le jour même compris :
+  // le club hôte et l’opérateur peuvent toujours (miroir de `can_manage_club`) ; l’organisateur
+  // seulement tant qu’aucune équipe n’est inscrite (sinon le serveur répond 'forbidden'). Inscrits et
+  // organisateur sont prévenus par push, motif joint ; les terrains redeviennent réservables.
+  const managesHost = !!comp.clubId && (state.role === 'operator' || (state.role === 'club' && state.serverManagedClubId === comp.clubId));
+  const cancellable = !!comp.server && comp.status === 'approved' && !comp.closed && !result && !played;
+  const showCancel = cancellable && (managesHost || !!comp.createdByMe);
+  // Organisateur (non gérant) : des inscrits → c’est au club d’annuler ; frais PadelConnect dus → même
+  // règle que la suppression (73/M5) : régler ou passer par PadelConnect.
+  const cancelLockedByTeams = !managesHost && teams > 0;
+  const cancelLockedByFee = !managesHost && feeDue;
+  const doCancel = async () => {
+    if (cancelling) return;
+    const reason = cancelReason.trim();
+    if (!reason) {
+      hapticWarning();
+      appToast.show('Indique un motif : il est montré aux inscrits.', { icon: 'alert-circle' });
+      return;
+    }
+    setCancelling(true);
+    const res = await cancelCompetition(comp.id, reason);
+    setCancelling(false);
+    if (res === 'ok') {
+      hapticSuccess();
+      appToast.show(
+        teams > 0
+          ? 'Tournoi annulé — les inscrits et l’organisateur sont prévenus.'
+          : 'Tournoi annulé — ses terrains redeviennent réservables.',
+      );
+      router.back();
+      return;
+    }
+    hapticWarning();
+    // Un message PAR CODE : « réessaie » seulement sur un échec réseau (null).
+    appToast.show(
+      res === 'gone'
+        ? 'Ce tournoi n’est plus publié (déjà annulé ou supprimé).'
+        : res === 'played'
+          ? 'Ce tournoi est terminé ou clôturé : il ne peut plus être annulé.'
+          : res === 'forbidden'
+            ? managesHost
+              ? 'Tu n’as pas les droits pour annuler ce tournoi.'
+              : 'Des équipes se sont inscrites : seul le club hôte peut maintenant annuler ce tournoi.'
+            : res === 'reason'
+              ? 'Indique un motif : il est montré aux inscrits.'
+              : res === 'fees'
+                ? 'Règle d’abord les frais PadelConnect, ou demande au club d’annuler.'
+                : 'Annulation impossible — vérifie ta connexion puis réessaie.',
+      { icon: 'alert-circle' },
+    );
+    if (res === 'gone' || res === 'played' || res === 'forbidden' || res === 'fees') setCancelOpen(false);
+  };
 
   const byClub = comp.organizerType === 'club';
   const partner = (partnerId ? state.friends.find((f) => f.id === partnerId)?.name : partnerName.trim()) ?? '';
@@ -405,7 +473,7 @@ export default function CompetitionDetail() {
         {/* Ce que « Officiel » veut dire, en clair — sinon le badge reste abstrait pour le joueur. */}
         <Txt variant="small" color={colors.white} style={{ marginTop: spacing.sm, opacity: 0.85 }}>
           {comp.official
-            ? 'Tournoi officiel : le résultat compte pour ton niveau PadelConnect.'
+            ? 'Tournoi officiel : le joueur qui a inscrit l’équipe vainqueure gagne +0,50 de niveau.'
             : 'Tournoi entre joueurs : amical — le résultat ne change pas ton niveau.'}
         </Txt>
       </LinearGradient>
@@ -541,7 +609,7 @@ export default function CompetitionDetail() {
         <Info icon="calendar-outline" label="Date" value={compDateLabel(comp)} />
         <Info icon="git-network-outline" label="Format" value={comp.format} />
         <Info icon="podium-outline" label="Niveau" value={comp.level} />
-        <Info icon="cash-outline" label="Inscription" value={formatFee(comp.fee)} />
+        <Info icon="cash-outline" label="Inscription" value={entryFeeLabel(comp.fee)} />
       </Card>
 
       {/* Places — limitées, en équipes */}
@@ -566,10 +634,11 @@ export default function CompetitionDetail() {
           <>
             <Divider style={{ marginVertical: spacing.md }} />
             <View style={styles.teamsWrap}>
-              {teamList.map((t) => (
+              {/* Clé `libellé#rang` : deux équipes homonymes ne partagent jamais la même clé. */}
+              {teamList.map((t, i) => (
                 <Pressable
-                  key={t}
-                  onPress={() => setOpenPlayer({ id: `team:${comp.id}:${t}`, name: t, isTeam: true })}
+                  key={`${t}#${i}`}
+                  onPress={() => setOpenPlayer({ id: `team:${comp.id}:${t}#${i}`, name: t, isTeam: true })}
                   accessibilityRole="button"
                   accessibilityLabel={`Voir l’équipe ${t}`}
                   hitSlop={8}
@@ -851,11 +920,11 @@ export default function CompetitionDetail() {
                 </Txt>
               ) : null}
               <View style={{ marginTop: spacing.sm, gap: 6 }} accessibilityRole="radiogroup">
-                {teamList.map((t) => {
+                {teamList.map((t, i) => {
                   const sel = winnerName === t;
                   return (
                     <Pressable
-                      key={t}
+                      key={`${t}#${i}`}
                       onPress={() => setWinnerPick(t)}
                       style={[styles.teamRow, sel && styles.teamRowSel]}
                       accessibilityRole="radio"
@@ -896,11 +965,11 @@ export default function CompetitionDetail() {
               <View style={{ marginTop: 6, gap: 6 }} accessibilityRole="radiogroup">
                 {teamList
                   .filter((t) => t !== winnerName)
-                  .map((t) => {
+                  .map((t, i) => {
                     const sel = secondName === t;
                     return (
                       <Pressable
-                        key={t}
+                        key={`${t}#${i}`}
                         onPress={() => {
                           setSecondPick(secondName === t ? '' : t);
                           if (thirdName === t) setThirdPick('');
@@ -928,11 +997,11 @@ export default function CompetitionDetail() {
               <View style={{ marginTop: 6, gap: 6 }} accessibilityRole="radiogroup">
                 {teamList
                   .filter((t) => t !== winnerName && t !== secondName)
-                  .map((t) => {
+                  .map((t, i) => {
                     const sel = thirdName === t;
                     return (
                       <Pressable
-                        key={t}
+                        key={`${t}#${i}`}
                         onPress={() => setThirdPick(thirdName === t ? '' : t)}
                         style={[styles.teamRow, sel && styles.teamRowSel]}
                         accessibilityRole="radio"
@@ -970,11 +1039,11 @@ export default function CompetitionDetail() {
               <View style={{ marginTop: spacing.sm, gap: 6 }} accessibilityRole="radiogroup">
                 {teamList
                   .filter((t) => t !== winnerName)
-                  .map((t) => {
+                  .map((t, i) => {
                     const sel = loserName === t;
                     return (
                       <Pressable
-                        key={t}
+                        key={`${t}#${i}`}
                         onPress={() => setLoserName(t)}
                         style={[styles.teamRow, sel && styles.teamRowSel]}
                         accessibilityRole="radio"
@@ -1023,7 +1092,7 @@ export default function CompetitionDetail() {
           {!played && hasEntryFee(comp.fee) && feeContactPhone ? (
             <View style={{ marginTop: spacing.md }}>
               <Txt variant="small" color={colors.textMuted}>
-                Frais d’inscription : <Txt style={{ fontWeight: '600' }}>{formatFee(comp.fee)}</Txt>. Règle-les directement avec
+                Frais d’inscription : <Txt style={{ fontWeight: '600' }}>{entryFeeLabel(comp.fee)}</Txt>. Règle-les directement avec
                 l’organisateur.
               </Txt>
               <View style={{ marginTop: spacing.sm }}>
@@ -1104,6 +1173,11 @@ export default function CompetitionDetail() {
           <Txt variant="muted" style={{ marginTop: 2 }}>
             Le padel se joue à 2 : choisis ton coéquipier.
           </Txt>
+          {/* Seul le compte qui inscrit est crédité (points, niveau, palmarès) : le partenaire n'est
+              qu'un nom — dit avant l'inscription plutôt que découvert à la clôture (R-37). */}
+          <Txt variant="small" color={colors.textFaint} style={{ marginTop: spacing.xs }}>
+            Seul ton compte est inscrit : ton partenaire n’apparaît que par son nom.
+          </Txt>
 
           {state.friends.length > 0 ? (
             <>
@@ -1146,6 +1220,13 @@ export default function CompetitionDetail() {
               icon="add"
               onPress={async () => {
                 if (!canRegister || registering) return;
+                // Deux équipes au MÊME libellé « Prénom & Partenaire » rendraient la clôture
+                // inattribuable (ni niveau ni points) : on demande de préciser AVANT l'envoi.
+                if (teamNameTaken(comp, `${state.account?.firstName ?? ''} & ${partner}`)) {
+                  hapticWarning();
+                  showToast('Une équipe porte déjà ce nom — précise le nom de ton partenaire.', 'error');
+                  return;
+                }
                 setRegistering(true);
                 const res = await registerCompetition(comp.id, partner);
                 setRegistering(false);
@@ -1172,6 +1253,72 @@ export default function CompetitionDetail() {
           </Txt>
         </View>
       )}
+
+      {/* Annulation d’un tournoi publié à venir (97) — motif OBLIGATOIRE, montré aux inscrits. */}
+      {showCancel ? (
+        <Card style={{ marginTop: spacing.lg, borderColor: colors.danger }}>
+          <Txt variant="h3">Annuler le tournoi</Txt>
+          {cancelLockedByTeams ? (
+            <Txt variant="small" color={colors.textMuted} style={{ marginTop: 2 }}>
+              Des équipes sont inscrites : seul {comp.clubName ?? 'le club hôte'} peut annuler ce tournoi. Contacte-le si besoin.
+            </Txt>
+          ) : cancelLockedByFee ? (
+            <Txt variant="small" color={colors.amberDark} style={{ marginTop: 2 }}>
+              Règle d’abord les frais d’organisation (ci-dessus) ou contacte PadelConnect pour annuler ce tournoi.
+            </Txt>
+          ) : cancelOpen ? (
+            <View style={{ marginTop: spacing.sm, gap: spacing.sm }}>
+              <TextInput
+                value={cancelReason}
+                onChangeText={setCancelReason}
+                editable={!cancelling}
+                placeholder="Motif (ex. terrains inondés — tournoi reporté, on vous recontacte)"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                maxLength={300}
+                accessibilityLabel="Motif de l’annulation, montré aux inscrits"
+                style={styles.input}
+              />
+              <Txt variant="small" color={colors.textFaint}>
+                {teams > 0
+                  ? 'Le motif est envoyé aux équipes inscrites et à l’organisateur. Le tournoi disparaît des listes et ses terrains redeviennent réservables.'
+                  : 'Le tournoi disparaît des listes et ses terrains redeviennent réservables.'}
+              </Txt>
+              <Button
+                label={cancelling ? 'Annulation…' : 'Confirmer l’annulation'}
+                icon="close-circle-outline"
+                variant="danger"
+                onPress={() => void doCancel()}
+                disabled={cancelling || !cancelReason.trim()}
+                full
+              />
+              <Button
+                label="Garder le tournoi"
+                variant="secondary"
+                onPress={() => {
+                  setCancelOpen(false);
+                  setCancelReason('');
+                }}
+                disabled={cancelling}
+                full
+              />
+            </View>
+          ) : (
+            <View style={{ marginTop: spacing.sm }}>
+              <Button
+                label="Annuler ce tournoi"
+                icon="close-circle-outline"
+                variant="ghost"
+                onPress={() => {
+                  setCancelOpen(true);
+                  setCancelReason('');
+                }}
+                full
+              />
+            </View>
+          )}
+        </Card>
+      ) : null}
 
       <PlayerSheet player={openPlayer} onClose={() => setOpenPlayer(null)} />
     </Screen>

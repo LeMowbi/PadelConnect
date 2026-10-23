@@ -9,7 +9,7 @@ import { useToast } from '@/components/Toast';
 import { hapticWarning } from '@/lib/haptics';
 import { Button, Txt } from '@/components/ui';
 import { activeClubs, findClub } from '@/data/clubs';
-import { COMP_FORMATS } from '@/data/competitions';
+import { COMP_FORMATS, isFreeFee } from '@/data/competitions';
 import { courtsFor, openSlotsFor, rangeBlocks } from '@/lib/availability';
 import { fetchTournamentFee } from '@/lib/competitionsServer';
 import { DAY_MS, dateKeyLabel, dayKey, nextDays, type DayOption } from '@/lib/days';
@@ -243,7 +243,8 @@ export default function NouvelleCompetition() {
       format,
       level,
       reward: reward.trim(),
-      fee: fee.trim() || 'Gratuit',
+      // « 0 », « offert », vide… → « Gratuit » enregistré tel quel (jamais « Frais : 0 », C-05).
+      fee: isFreeFee(fee) ? 'Gratuit' : fee.trim(),
       slots,
       registered: 0,
       official: asClub || asPadel,
@@ -293,7 +294,12 @@ export default function NouvelleCompetition() {
         error={errors.title}
       />
       <Field label="Récompense (optionnel)" value={reward} onChangeText={setReward} placeholder="Ex. Cagnotte 30 000 FCFA" />
-      <Field label="Frais d’inscription (optionnel)" value={fee} onChangeText={setFee} placeholder="Vide = Gratuit" />
+      <Field
+        label="Frais d’inscription (optionnel)"
+        value={fee}
+        onChangeText={setFee}
+        placeholder="Ex. 5 000 FCFA par équipe — vide = Gratuit"
+      />
 
       <View onLayout={(ev) => (datePos.current = ev.nativeEvent.layout.y)}>
         <Txt variant="label" style={{ marginTop: spacing.lg }}>
@@ -498,6 +504,17 @@ export default function NouvelleCompetition() {
         </View>
       ) : null}
 
+      {/* Confidentialité (R-13) : le numéro de l'organisateur d'un tournoi JOUEUR est servi au club
+          hôte et aux équipes inscrites (fetch_competitions) — dit AVANT l'envoi, jamais découvert après. */}
+      {isPlayerTournament ? (
+        <View style={styles.infoRow}>
+          <Ionicons name="call-outline" size={14} color={colors.textMuted} />
+          <Txt variant="small" color={colors.textMuted} style={{ flex: 1 }}>
+            Ton numéro de téléphone est communiqué au club hôte et aux équipes inscrites, pour le règlement des frais.
+          </Txt>
+        </View>
+      ) : null}
+
       <View style={{ marginTop: spacing.xl }}>
         <Button
           label={submitting ? 'Envoi…' : asClub ? 'Publier le tournoi' : 'Envoyer pour validation'}
@@ -514,6 +531,7 @@ export default function NouvelleCompetition() {
 const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
   durationRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.lg },
   feeBox: {
     flexDirection: 'row',
     alignItems: 'center',

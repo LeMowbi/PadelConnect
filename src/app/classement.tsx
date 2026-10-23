@@ -14,8 +14,10 @@ import { colors, radius, shadows, spacing } from '@/theme';
 // CLASSEMENT GÉNÉRAL par POINTS (modèle « Race » FIP, 46) : le niveau est plafonné à 7 et
 // déclaré à l'inscription — il ne peut pas servir de rang. Les points, eux, se GAGNENT dans
 // l'app (100 = tournoi officiel gagné · 10 = tournoi officiel joué · 3 = victoire de match
-// confirmée · 2 = partie jouée) : infalsifiables, sans plafond. Top 50 + MA position
-// toujours affichée, même hors du top.
+// confirmée · 2 = partie jouée, un cours de coach n'en est pas une) : infalsifiables, sans
+// plafond. Top 50 + MA position toujours affichée, même hors du top.
+// Médailles lues sur le RANG PARTAGÉ (98, décision n° 10), jamais sur la position dans la liste :
+// deux joueurs ex æquo au 1ᵉʳ rang ont chacun 🥇, le suivant est 3ᵉ (🥉).
 const MEDALS = ['🥇', '🥈', '🥉'];
 
 export default function ClassementScreen() {
@@ -54,6 +56,8 @@ export default function ClassementScreen() {
 
   const me = state.serverUserId;
   const myRow = (rows ?? []).find((r) => r.userId === me);
+  // Mon rang : celui du serveur (même rang partagé que les lignes) ; à défaut, celui de ma ligne.
+  const myShownRank = myRank ?? myRow?.rank;
 
   return (
     <Screen back title="Classement" subtitle="Les joueurs PadelConnect, par points" refreshControl={refreshControl}>
@@ -62,11 +66,13 @@ export default function ClassementScreen() {
         <Card style={[styles.meCard, shadows.e2]}>
           <View style={styles.meRank}>
             <Txt variant="h2" color={colors.onSignature}>
-              {myRank ?? (rows ?? []).findIndex((r) => r.userId === me) + 1}
+              {myShownRank}
             </Txt>
           </View>
           <View style={{ flex: 1 }}>
-            <Txt variant="h3">Ta position</Txt>
+            {/* « ex æquo » seulement si l'égalité est VISIBLE dans le top reçu (myRow.tied) : une
+                égalité avec un joueur hors de la liste n'est pas connue — on n'invente rien. */}
+            <Txt variant="h3">{myRow?.tied ? 'Ta position · ex æquo' : 'Ta position'}</Txt>
             <Txt variant="small" color={colors.textMuted}>
               Joue (+2 pts), gagne tes matchs (+3), fais les tournois officiels (+10), gagne-les (+100).
             </Txt>
@@ -100,37 +106,51 @@ export default function ClassementScreen() {
         <Card style={{ marginTop: spacing.lg }}>
           {rows.map((r, i) => {
             const isMe = r.userId === me;
+            const podium = r.rank <= 3;
+            // Compte BLOQUÉ : son rang et ses points restent (le classement ne ment pas), mais son
+            // nom est masqué et sa fiche ne s'ouvre pas — même règle que les avis et les matchs ouverts.
+            const blocked = !isMe && state.blockedUserIds.includes(r.userId);
+            const name = blocked ? 'Joueur bloqué' : r.name;
+            const wonLabel = `${r.wins} tournoi${r.wins > 1 ? 's' : ''} officiel${r.wins > 1 ? 's' : ''} gagné${r.wins > 1 ? 's' : ''}`;
             return (
               <View key={r.userId}>
                 {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
                 <Pressable
-                  onPress={() => setOpenPlayer({ id: r.userId, name: r.name, level: r.level })}
+                  onPress={blocked ? undefined : () => setOpenPlayer({ id: r.userId, name: r.name, level: r.level })}
+                  disabled={blocked}
                   style={({ pressed }) => [styles.row, isMe && styles.rowMe, pressed && { opacity: 0.75 }]}
                   hitSlop={6}
-                  accessibilityRole="button"
+                  accessibilityRole={blocked ? 'text' : 'button'}
                   // Le label REMPLACE la ligne de détail : on y reprend tout ce qu'elle affiche.
-                  accessibilityLabel={`Rang ${i + 1}, ${r.name}${isMe ? ' (toi)' : ''}, ${r.points} points${
-                    r.wins > 0 ? `, ${r.wins} tournoi${r.wins > 1 ? 's' : ''} gagné${r.wins > 1 ? 's' : ''}` : ''
-                  }${r.offPlayed > 0 ? `, ${r.offPlayed} officiel${r.offPlayed > 1 ? 's' : ''} joué${r.offPlayed > 1 ? 's' : ''}` : ''}${
-                    r.matchWins > 0 ? `, ${r.matchWins} victoire${r.matchWins > 1 ? 's' : ''}` : ''
-                  }, ${r.played} partie${r.played > 1 ? 's' : ''}, niveau ${levelText(r.level, 1)} — voir le profil`}
+                  accessibilityLabel={`Rang ${r.rank}${r.tied ? ' ex æquo' : ''}, ${name}${isMe ? ' (toi)' : ''}, ${r.points} points${r.wins > 0 ? `, ${wonLabel}` : ''}${
+                    r.offPlayed > 0 ? `, ${r.offPlayed} officiel${r.offPlayed > 1 ? 's' : ''} joué${r.offPlayed > 1 ? 's' : ''}` : ''
+                  }${r.matchWins > 0 ? `, ${r.matchWins} victoire${r.matchWins > 1 ? 's' : ''}` : ''}, ${r.played} partie${
+                    r.played > 1 ? 's' : ''
+                  }, niveau ${levelText(r.level, 1)}${blocked ? '' : ' — voir le profil'}`}
                 >
                   <Txt variant="h3" style={styles.rank}>
-                    {MEDALS[i] ?? `${i + 1}`}
+                    {MEDALS[r.rank - 1] ?? `${r.rank}`}
                   </Txt>
                   <View style={{ flex: 1 }}>
-                    <Txt variant="body" numberOfLines={1} style={{ fontWeight: isMe ? '800' : '600' }}>
-                      {r.name}
+                    <Txt
+                      variant="body"
+                      numberOfLines={1}
+                      color={blocked ? colors.textMuted : undefined}
+                      style={{ fontWeight: isMe ? '800' : '600' }}
+                    >
+                      {name}
                       {isMe ? ' (toi)' : ''}
                     </Txt>
                     <Txt variant="small" color={colors.textMuted} numberOfLines={1}>
-                      {r.wins > 0 ? `🏆 ${r.wins} tournoi${r.wins > 1 ? 's' : ''} gagné${r.wins > 1 ? 's' : ''} · ` : ''}
+                      {/* En tête de ligne : visible même si la fin du détail est tronquée. */}
+                      {r.tied ? 'Ex æquo · ' : ''}
+                      {r.wins > 0 ? `🏆 ${wonLabel} · ` : ''}
                       {r.offPlayed > 0 ? `${r.offPlayed} officiel${r.offPlayed > 1 ? 's' : ''} joué${r.offPlayed > 1 ? 's' : ''} · ` : ''}
                       {r.matchWins > 0 ? `${r.matchWins} victoire${r.matchWins > 1 ? 's' : ''} · ` : ''}
                       {r.played} partie{r.played > 1 ? 's' : ''} · niv. {levelText(r.level, 1)}
                     </Txt>
                   </View>
-                  <Tag label={`${r.points} pts`} tone={i < 3 ? 'amber' : 'neutral'} />
+                  <Tag label={`${r.points} pts`} tone={podium ? 'amber' : 'neutral'} />
                 </Pressable>
               </View>
             );
@@ -140,7 +160,8 @@ export default function ClassementScreen() {
       <Txt variant="small" color={colors.textMuted} style={{ marginTop: spacing.md }}>
         Les points se gagnent en JOUANT : 100 pour un tournoi officiel gagné (badge doré), 10 pour y participer, 3 par match gagné (chaque
         joueur saisit le score dans « Mes réservations » — le match est validé quand un joueur du camp perdant confirme le même score, ou 48
-        h après une saisie gagnante restée seule), 2 par partie jouée. Tout est vérifié — rien ne se déclare tout seul.
+        h après une saisie gagnante restée seule), 2 par partie jouée (un cours avec un coach n’en est pas une). À égalité de points, de
+        tournois gagnés et de victoires, les joueurs sont ex æquo. Tout est vérifié — rien ne se déclare tout seul.
       </Txt>
 
       <PlayerSheet player={openPlayer} onClose={() => setOpenPlayer(null)} />

@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { Card, Tag, Txt } from './ui';
-import { compDateLabel, compFill, formatFee, isCompFinished, teamCount, type Competition } from '@/data/competitions';
+import { compDateLabel, compFill, entryFeeLabel, formatFee, isCompFinished, teamCount, type Competition } from '@/data/competitions';
 import { dayKey } from '@/lib/days';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
@@ -82,7 +82,7 @@ export function CompetitionCard({ comp }: { comp: Competition }) {
 
       <View style={styles.footer}>
         <Txt variant="muted" numberOfLines={1} style={{ flexShrink: 1 }}>
-          {teams}/{comp.slots} équipes · {formatFee(comp.fee)}
+          {teams}/{comp.slots} équipes · {entryFeeLabel(comp.fee)}
         </Txt>
         {result ? (
           mine?.result === 'win' ? (
