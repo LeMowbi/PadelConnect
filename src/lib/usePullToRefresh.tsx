@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, RefreshControl } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Txt } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing } from '@/theme';

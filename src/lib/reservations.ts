@@ -2,7 +2,8 @@
 // le store garde un MIROIR local (lectures synchrones rapides + résilience hors-ligne).
 // On écrit ici, puis on met à jour le miroir dans AppContext.
 
-import { DAY_MS, HOUR_MS, dayKey } from './days';
+import { isMissingRpc } from './competitionsServer';
+import { DAY_MS, HOUR_MS, dayKey, weekKeyOf } from './days';
 import { isValidPhone } from './phone';
 import type { BlockedRange } from './ranges';
 import { supabase } from './supabase';
@@ -14,7 +15,16 @@ import type { BlockedSlot, Reservation } from '@/store/AppContext';
 // premier plan (et, au-delà du plafond PostgREST de 1000 lignes, des créneaux futurs
 // tomberaient silencieusement → dispo faussée). L'agrégat « depuis le lancement » de l'Espace
 // opérateur devra devenir une RPC serveur si l'historique dépasse cette fenêtre.
-const MIRROR_WINDOW_MS = 180 * DAY_MS;
+export const MIRROR_WINDOW_MS = 180 * DAY_MS;
+
+// Dernière semaine (clé du lundi, AAAA-MM-JJ) dont le miroir des réservations peut manquer des
+// parties : celle que coupe le BORD de la fenêtre de 180 jours (coupure en milieu de semaine), ou,
+// plus récente, celle du plus ancien créneau reçu quand le plafond de lignes est atteint
+// (`coveredFrom`, R-61). Cette semaine et les précédentes ont un revenu SOUS-ÉVALUÉ (base de la
+// commission) : l'historique du club, la relance et le décompte opérateur les écartent.
+export function mirrorPartialWeek(coveredFrom: number | null, now: number): string {
+  return weekKeyOf(Math.max(coveredFrom ?? 0, now - MIRROR_WINDOW_MS));
+}
 // Plafond de lignes du miroir (= plafond PostgREST). Atteint, il retire les créneaux les plus
 // ANCIENS (tri descendant) : `fetchReservations` le signale (`coveredFrom`) pour que les écrans
 // d'agrégats (Finances, historique club) disent « historique incomplet » au lieu de se taire.
@@ -129,13 +139,22 @@ export async function insertReservation(
 // blocages LOINTAINS qui tombent. Le planning gérant (horizon J+60) peut alors afficher « Libre »
 // sur une case bloquée. Aucune corruption, car block_slot fait un upsert. Correctif prévu : un
 // rechargement filtré .eq('club_id', club géré) pour l'Espace Club.
+// Plafond du miroir `blockedSlots` (= plafond PostgREST).
+export const BLOCKED_SLOTS_CAP = 1000;
+// Jour de COUPURE (clé AAAA-MM-JJ) d'un fetchBlockedSlots qui a atteint le plafond : à partir de ce
+// jour (inclus — le tri ne porte que sur date_key, ce jour-là peut être partiel) des fermetures
+// peuvent manquer ; null = réponse complète. Calculé sur la RÉPONSE du serveur, jamais sur le
+// miroir (les blocages/déblocages locaux en déformeraient la longueur et la date maximale).
+export function blockedSlotsCoverage(rows: BlockedSlot[]): string | null {
+  return rows.length >= BLOCKED_SLOTS_CAP ? rows[rows.length - 1].dateKey : null;
+}
 export async function fetchBlockedSlots(): Promise<BlockedSlot[] | null> {
   const { data, error } = await supabase
     .from('blocked_slots')
     .select('club_id, date_key, time, court, reason, duration_min')
     .gte('date_key', dayKey(new Date()))
     .order('date_key', { ascending: true })
-    .limit(1000);
+    .limit(BLOCKED_SLOTS_CAP);
   if (error) return null;
   return (data ?? []).map(
     (r: { club_id: string; date_key: string; time: string; court: string; reason: string | null; duration_min: number | null }) => ({
@@ -286,11 +305,18 @@ export async function blockRecurringRows(b: {
   return { blocked: raw.blocked ?? [], conflicts: raw.conflicts ?? [], taken: raw.taken ?? [] };
 }
 
-// « Arrêter la série » (97) : retire les fermetures RÉCURRENTES À VENIR de ce terrain à cette heure
-// (jamais une date passée) et leurs notes privées. Renvoie le NOMBRE de créneaux retirés (0 = plus
-// rien à arrêter, succès idempotent) ; null = refus (pas gérant de ce club) ou échec réseau.
-export async function unblockRecurringRow(clubId: string, court: string, time: string): Promise<number | null> {
-  const { data, error } = await supabase.rpc('unblock_recurring', { p_club_id: clubId, p_court: court, p_time: time });
+// « Arrêter la série » (97) : retire les fermetures RÉCURRENTES À VENIR de ce terrain, à cette heure,
+// CE jour de la semaine (`dow`, 0 = dimanche) — jamais une date passée — et leurs notes privées. Renvoie le NOMBRE de créneaux retirés (0 = plus
+// rien à arrêter, succès idempotent) ; null = refus (pas gérant de ce club) ou échec réseau ;
+// 'unsupported' = serveur d'avant la 97 (fonction absente, cf. isMissingRpc).
+export async function unblockRecurringRow(
+  clubId: string,
+  court: string,
+  time: string,
+  dow: number,
+): Promise<number | 'unsupported' | null> {
+  const { data, error } = await supabase.rpc('unblock_recurring', { p_club_id: clubId, p_court: court, p_time: time, p_dow: dow });
+  if (isMissingRpc(error)) return 'unsupported';
   if (error || typeof data !== 'number') return null;
   return data;
 }
@@ -446,9 +472,12 @@ export async function linkParticipants(reservationId: string, phones: string[]):
 
 // Téléphone du RÉSERVANT pour le gérant (96) : celui d'un créateur de match ouvert n'est pas stocké
 // sur la résa (51) — lu dans son profil, AU TAP WhatsApp, et JAMAIS mis dans le miroir local.
-// null = pas gérant de ce club, compte sans numéro, ou échec réseau (l'écran le dit sobrement).
-export async function clubReservationPhone(reservationId: string): Promise<string | null> {
+// null = pas gérant de ce club, compte sans numéro, ou échec réseau (l'écran le dit sobrement) ;
+// 'unsupported' = serveur d'avant la 96 (fonction absente, cf. isMissingRpc) : ni la connexion ni
+// le joueur n'y sont pour rien, réessayer ne changerait rien.
+export async function clubReservationPhone(reservationId: string): Promise<string | 'unsupported' | null> {
   const { data, error } = await supabase.rpc('club_reservation_phone', { p_id: reservationId });
+  if (isMissingRpc(error)) return 'unsupported';
   if (error || typeof data !== 'string' || !data.trim()) return null;
   return data;
 }
@@ -468,9 +497,12 @@ export async function fetchMyParticipations(userId: string): Promise<MyParticipa
 }
 
 // L’invité répond à une invitation (Accepter / Refuser) — fonction serveur (SECURITY DEFINER).
-export async function respondInvitation(reservationId: string, accept: boolean): Promise<boolean> {
+// true = enregistré ; false = le SERVEUR a répondu non (match commencé, résa plus active, blocage
+// R-52, invitation absente — refus DÉFINITIF, 96) ; null = échec réseau (réessayer a du sens).
+export async function respondInvitation(reservationId: string, accept: boolean): Promise<boolean | null> {
   const { data, error } = await supabase.rpc('respond_invitation', { p_reservation_id: reservationId, p_accept: accept });
-  return !error && data === true;
+  if (error) return null;
+  return data === true;
 }
 
 // Occupation de TOUS les créneaux pris (vue publique sans identité). Renvoie null en cas

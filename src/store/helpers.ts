@@ -158,6 +158,7 @@ export const initialState: AppState = {
   // Fermetures récurrentes par terrain (54) : { clubId: { 'Terrain 1': ['18:00'] } }.
   clubCourtClosed: {},
   blockedSlots: [],
+  blockedSlotsCoveredUntil: null, // miroir des créneaux fermés complet (sous le plafond de lignes)
   // Fermetures sur période (54) : « Terrain 2 fermé du 10 au 24 juillet (travaux) ».
   blockedRanges: [],
   // Comptes que J'AI bloqués (modération UGC) : miroir persisté — un échec réseau au montage

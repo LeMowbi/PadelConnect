@@ -1,7 +1,10 @@
 // Ajout d’une réservation au calendrier de l’appareil, via la FICHE SYSTÈME « Nouvel
-// événement » pré-remplie (createEventInCalendarAsync) : AUCUNE permission requise — sur
-// iOS 17+, l’ancienne voie programmatique (requestCalendarPermissionsAsync + création
-// directe) échouait, l’accès « complet » au calendrier n’étant plus accordé pareil.
+// événement » pré-remplie (createEventInCalendarAsync) : AUCUNE permission requise à partir
+// d’iOS 17 — l’ancienne voie programmatique (requestCalendarPermissionsAsync + création
+// directe) y échouait, l’accès « complet » au calendrier n’étant plus accordé pareil.
+// ⚠️ De iOS 16.4 à 16.7, la fiche système EXIGE encore la permission calendrier (le module natif
+// la vérifie et lève sinon) : on la demande d’abord (chaîne déjà déclarée par le config plugin,
+// `calendarPermission`) — sans quoi chaque tap affichait « Calendrier indisponible ».
 // Indisponible sur le web (`calendarAvailable` = false → l’UI masque le bouton). Renvoie un
 // statut pour que l’UI affiche un retour clair.
 //
@@ -20,8 +23,10 @@ export const calendarAvailable = Platform.OS === 'ios' || Platform.OS === 'andro
 
 // 'added' = enregistré (iOS le dit) ; 'opened' = fiche ouverte sans savoir si elle a été
 // enregistrée (Android ne renvoie jamais le choix de l’utilisateur) → message NEUTRE ;
-// 'canceled' = fiche refermée par l’utilisateur ; 'unavailable' = web ou échec.
-export type CalendarResult = 'added' | 'opened' | 'canceled' | 'unavailable';
+// 'canceled' = fiche refermée (ou permission refusée À L’INSTANT) par l’utilisateur ;
+// 'denied' = iOS < 17, permission DÉJÀ refusée : iOS ne réaffiche plus jamais la demande, chaque tap
+// serait muet → l’UI dit d’autoriser l’accès dans Réglages ; 'unavailable' = web ou échec.
+export type CalendarResult = 'added' | 'opened' | 'canceled' | 'denied' | 'unavailable';
 
 export async function addReservationToCalendar(input: {
   clubName: string;
@@ -34,6 +39,13 @@ export async function addReservationToCalendar(input: {
 }): Promise<CalendarResult> {
   if (!calendarAvailable) return 'unavailable';
   try {
+    // iOS < 17 : permission préalable (cf. en-tête). Refus DÉJÀ acté (la fenêtre système ne
+    // reviendra pas) → 'denied' ; refus tapé à l’instant dans la fenêtre → 'canceled' (silence).
+    if (Platform.OS === 'ios' && Number.parseInt(String(Platform.Version), 10) < 17) {
+      const current = await Calendar.getCalendarPermissionsAsync();
+      if (!current.granted && !current.canAskAgain) return 'denied';
+      if (!current.granted && !(await Calendar.requestCalendarPermissionsAsync()).granted) return 'canceled';
+    }
     const res = await Calendar.createEventInCalendarAsync({
       title: `Padel · ${input.clubName}`,
       startDate: new Date(input.startsAt),

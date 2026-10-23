@@ -4,6 +4,7 @@
 // (respond_lesson crée la réservation, que le club confirme ensuite comme d’habitude).
 // Convention réseau (CLAUDE.md §8) : `null` en cas d’échec (≠ []/{} = succès vide).
 
+import { isMissingRpc } from './competitionsServer';
 import { DAY_MS } from './days';
 import { supabase } from './supabase';
 
@@ -210,10 +211,12 @@ export async function respondLesson(
 // 'club_cancelled' motif « Cours annulé par le coach » (aucune pénalité pour l'élève, carnet rendu,
 // créneau libéré), l'élève reçoit un push dédié. Un code PAR CAS : 'gone' = plus accepté / résa déjà
 // tombée · 'forbidden' = pas son cours, ou cours COLLECTIF · 'played' = le cours a commencé ·
+// 'unsupported' = serveur d'avant la 96, fonction absente (cf. isMissingRpc) ·
 // 'error' = échec réseau (seul cas où « réessaie » a un sens).
-export type CoachCancelLessonStatus = 'ok' | 'gone' | 'forbidden' | 'played' | 'error';
+export type CoachCancelLessonStatus = 'ok' | 'gone' | 'forbidden' | 'played' | 'unsupported' | 'error';
 export async function coachCancelLesson(id: string): Promise<CoachCancelLessonStatus> {
   const { data, error } = await supabase.rpc('coach_cancel_lesson', { p_id: id });
+  if (isMissingRpc(error)) return 'unsupported';
   if (error) return 'error';
   return data === 'ok' || data === 'gone' || data === 'forbidden' || data === 'played' ? data : 'error';
 }

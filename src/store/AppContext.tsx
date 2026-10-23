@@ -72,6 +72,7 @@ import {
 } from '@/lib/friends';
 import {
   blockRangeRow,
+  blockedSlotsCoverage,
   blockSlotRow,
   CANCEL_DEADLINE_MS,
   cancelReservationRow,
@@ -108,7 +109,7 @@ import {
   type Loyalty,
 } from '@/lib/social';
 import { asLoyalty } from '@/lib/loyalty';
-import { DAY_MS, dayKey, slotTimestamp } from '@/lib/days';
+import { DAY_MS, MINUTE_MS, dayKey, dowOfKey, slotTimestamp } from '@/lib/days';
 import { samePhone } from '@/lib/phone';
 import { alertAsync } from '@/lib/confirm';
 import { overlaps, type CourtSlot } from '@/lib/courtSchedule';
@@ -318,6 +319,10 @@ export type AppState = {
   // source de vérité des horaires quand présente (sinon dérivée de clubSlots@90, cf. courtSchedule).
   courtSlots: Record<string, Record<string, CourtSlot[]>>;
   blockedSlots: BlockedSlot[]; // créneaux fermés hors app par les clubs
+  // Miroir `blockedSlots` TRONQUÉ au plafond (fetchBlockedSlots, tous clubs) : jour de coupure de la
+  // dernière relecture COMPLÈTE (blockedSlotsCoverage) — à partir de ce jour des fermetures peuvent
+  // manquer. null = complet. Les mutations locales (bloquer/débloquer) ne le touchent pas.
+  blockedSlotsCoveredUntil: string | null;
   blockedRanges: BlockedRange[]; // fermetures sur PÉRIODE (54) — terrain ou club entier
   // Fermetures récurrentes PAR TERRAIN (54) : { clubId: { 'Terrain 1': ['18:00'] } }.
   clubCourtClosed: Record<string, Record<string, string[]>>;
@@ -343,6 +348,9 @@ const STORAGE_KEY = 'padelco_state_v4'; // v4 : modèle sans matchs ni victoires
 // Photo choisie à l’inscription : mise de côté ici car il n’y a pas encore de session (e-mail à
 // confirmer). On l’envoie au stockage dès la 1ʳᵉ session, puis on efface cette clé.
 const PENDING_AVATAR_KEY = 'padelco_pending_avatar_uri';
+// Marge sur l'horloge de l'appareil (respondInvitation) : un refus serveur à moins de 5 min du
+// coup d'envoi est lu comme « match commencé » (le téléphone peut retarder sur le serveur).
+const INVITE_CLOSE_MARGIN_MS = 5 * MINUTE_MS;
 export const MAX_CLUB_PHOTOS = 6; // plafond de photos par club (quota de stockage local)
 // Réservations À VENIR max par joueur (anti-blocage des terrains) — MÊME seuil que la garde serveur
 // (reservations_insert_guard, 'too many upcoming reservations') et que respond_lesson ('student_full').
@@ -430,19 +438,25 @@ type AppContextType = {
   setTournamentFee: (amount: number) => Promise<{ ok: boolean }>; // opérateur : frais fixe tournois joueurs
   setWaveLink: (link: string) => Promise<{ ok: boolean }>; // opérateur : lien de paiement Wave (v2)
   confirmTournamentPayment: (id: string) => Promise<{ ok: boolean }>; // opérateur : confirme un paiement Wave
-  unconfirmTournamentPayment: (id: string) => Promise<{ ok: boolean }>; // opérateur : annule un « Paiement reçu » tapé par erreur (97)
+  // Opérateur : annule un « Paiement reçu » tapé par erreur (97). `unsupported` = serveur d'avant
+  // la 97 (fonction absente) : ni réseau ni refus, l'écran dit « bientôt disponible ».
+  unconfirmTournamentPayment: (id: string) => Promise<{ ok: boolean; unsupported?: boolean }>;
   // Americano auto-géré (82) : enregistre l’état (joueurs, terrains, rondes, scores) côté serveur
   // puis met à jour le miroir local. 'gone' = tournoi clôturé/disparu (réessayer est vain) ;
   // 'error' = refus (droits, forme) ou hors-ligne → l’UI ne bascule pas.
   saveAmericano: (id: string, americano: AmericanoState) => Promise<'ok' | 'gone' | 'error'>;
   // Réservations : SERVEUR = source de vérité quand connecté (sinon miroir local, démo).
   addReservation: (r: Omit<Reservation, 'id' | 'createdAt' | 'bookedBy' | 'userId'>) => Promise<AddReservationResult>;
-  // 'late' = moins de 5 h avant le créneau (testé AVANT tout appel, puis sur refus serveur) ;
+  // 'late' = moins de 5 h avant le créneau (testé AVANT tout appel, puis déduit d'un refus serveur
+  // sur une résa encore active) ;
   // 'gone' = la résa n'est plus active (déjà annulée, annulée par le club, « pas venu ») — miroir
   // recalé ; 'error' = échec réseau. Seul 'ok' retire la résa du miroir comme une annulation.
   cancelReservation: (id: string) => Promise<CancelReservationStatus>;
-  // Réservation partagée : l’invité accepte (accept=true) ou refuse son invitation.
-  respondInvitation: (reservationId: string, accept: boolean) => Promise<boolean>;
+  // Réservation partagée : l’invité accepte (accept=true) ou refuse son invitation. 'gone' =
+  // l’invitation n’est plus valable (blocage, résa annulée par le club…) : miroir recalé, jamais
+  // « réessaie » ; 'started' = le match commence (horloge serveur, l’appareil peut retarder),
+  // l’invitation est close ; null = échec réseau (le miroir est conservé).
+  respondInvitation: (reservationId: string, accept: boolean) => Promise<'ok' | 'gone' | 'started' | null>;
   confirmReservationByClub: (id: string) => Promise<boolean>;
   // Envoie une DEMANDE d’ami par numéro (plus d’ajout instantané) : la personne doit accepter.
   sendFriendRequest: (phone: string) => Promise<FriendRequestResult>;
@@ -572,8 +586,9 @@ type AppContextType = {
   // retirée du miroir, succès idempotent ; 'error' = refus (droits) ou hors-ligne, miroir intact.
   unblockRange: (id: string) => Promise<'ok' | 'gone' | 'error'>;
   // « Arrêter la série » d'un habitué (97) : retire les fermetures RÉCURRENTES À VENIR de ce terrain
-  // à cette heure. Renvoie le nombre retiré (0 = plus rien à arrêter) ; null = refus ou réseau.
-  unblockRecurring: (clubId: string, court: string, time: string) => Promise<number | null>;
+  // à cette heure, CE jour de la semaine (`dow`, 0 = dimanche). Renvoie le nombre retiré (0 = plus rien à arrêter) ; null = refus ou réseau ;
+  // 'unsupported' = serveur d'avant la 97 (fonction absente).
+  unblockRecurring: (clubId: string, court: string, time: string, dow: number) => Promise<number | 'unsupported' | null>;
   // Fermetures RÉCURRENTES par terrain (54) — false = échec serveur, miroir intact.
   setCourtClosed: (clubId: string, closed: Record<string, string[]>) => Promise<boolean>;
   // Grille PAR TERRAIN à durée variable (68) : remplace la grille du club. `grid` non vide =
@@ -710,6 +725,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Même course pour la préférence « actus et agenda » (98) : une relecture du profil capturée
   // AVANT setNewsPush peut résoudre APRÈS et remettre l'ancienne valeur sous l'interrupteur.
   const newsPushWriteRef = useRef(0);
+  // Même course pour les RÉSERVATIONS : une relecture partie AVANT « Confirmer », « pas venu »,
+  // une annulation ou une nouvelle résa peut résoudre APRÈS et remettre l'ancien état dans le
+  // miroir (ex. `clubConfirmed: false` sous les yeux du gérant) jusqu'au rafraîchissement suivant.
+  // Chaque écriture réussie sur une résa l'incrémente ; la relecture jette alors sa tranche.
+  const reservationsWriteRef = useRef(0);
+  // Même course pour les BLOCAGES (créneaux fermés + périodes) : une relecture partie AVANT un
+  // blocage/déblocage peut résoudre APRÈS et remontrer l'ancien état — une période fraîchement
+  // fermée disparaissait, et la recréer laissait un DOUBLON serveur (block_range insère à chaque
+  // appel). Chaque écriture réussie l'incrémente ; la relecture jette alors ses deux tranches.
+  const blocksWriteRef = useRef(0);
   // Id du compte serveur COURANT, suivi dans une ref (comme remindersOnRef) : permet à
   // loadSession de détecter une BASCULE de compte (A→B) au moment où elle s'exécute, sans
   // remettre serverUserId dans ses dépendances — pour bumper l'époque et invalider toute
@@ -973,6 +998,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const ovrW = clubOvrWriteRef.current; // écriture club_overrides pendant la relecture → idem
       const coachW = coachWriteRef.current; // écriture fiche coach pendant la relecture → idem
       const waveW = waveWriteRef.current; // écriture du lien Wave pendant la relecture → idem
+      const resW = reservationsWriteRef.current; // écriture sur une résa pendant la relecture → idem
+      const blkW = blocksWriteRef.current; // blocage/déblocage pendant la relecture → idem
       const [
         reservationsRes,
         occ,
@@ -1039,9 +1066,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const comp = competitionSlices(s, serverComps, compRegs);
         return {
           ...s,
-          // En cas d’échec réseau on garde le miroir persisté (offline-friendly).
-          reservations: reservationsRes.ok ? reservationsRes.reservations : s.reservations,
-          reservationsCoveredFrom: reservationsRes.ok ? reservationsRes.coveredFrom : s.reservationsCoveredFrom,
+          // En cas d’échec réseau on garde le miroir persisté (offline-friendly) ; idem si une
+          // écriture sur une résa a eu lieu pendant la relecture (reservationsWriteRef).
+          reservations: reservationsRes.ok && reservationsWriteRef.current === resW ? reservationsRes.reservations : s.reservations,
+          reservationsCoveredFrom:
+            reservationsRes.ok && reservationsWriteRef.current === resW ? reservationsRes.coveredFrom : s.reservationsCoveredFrom,
           occupancy: occ ?? s.occupancy,
           participantReservationIds: split ? split.active : s.participantReservationIds,
           pendingInvitationIds: split ? split.pending : s.pendingInvitationIds,
@@ -1070,9 +1099,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           waveLink: waveWriteRef.current !== waveW ? s.waveLink : waveLinkCfg !== undefined ? waveLinkCfg || null : comp.waveLink,
           tournamentFee: tournamentFee ?? s.tournamentFee,
           // Créneaux fermés hors app (serveur) : source de vérité, visibles par tous les joueurs.
-          blockedSlots: blocked ?? s.blockedSlots,
-          // Fermetures sur période (54) : mêmes règles (null = échec réseau → on garde).
-          blockedRanges: blockedRangesRes ?? s.blockedRanges,
+          // Échec réseau (null) ou blocage écrit pendant la relecture (blocksWriteRef) → on garde.
+          blockedSlots: blocked && blocksWriteRef.current === blkW ? blocked : s.blockedSlots,
+          blockedSlotsCoveredUntil: blocked && blocksWriteRef.current === blkW ? blockedSlotsCoverage(blocked) : s.blockedSlotsCoveredUntil,
+          // Fermetures sur période (54) : mêmes règles.
+          blockedRanges: blockedRangesRes && blocksWriteRef.current === blkW ? blockedRangesRes : s.blockedRanges,
           // Règlements opérateur (persistants). Vide pour les non-opérateurs (RLS).
           operatorPayments: opPayments ?? s.operatorPayments,
           // Actu d’accueil publiée par l’opérateur (visible par TOUS). undefined = échec réseau →
@@ -1147,6 +1178,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const coachW = coachWriteRef.current; // écriture fiche coach pendant la relecture → idem
       const waveW = waveWriteRef.current; // écriture du lien Wave pendant la relecture → idem
       const newsW = newsPushWriteRef.current; // écriture de la préférence « actus » pendant la relecture → idem
+      const resW = reservationsWriteRef.current; // écriture sur une résa pendant la relecture → idem
+      const blkW = blocksWriteRef.current; // blocage/déblocage pendant la relecture → idem
       // Ré-enregistre le jeton de push à CHAQUE retour au premier plan (pas seulement au
       // démarrage/à la connexion) : un utilisateur qui refuse d'abord puis ACTIVE les
       // notifications dans les Réglages iOS est alors capté sans redémarrer l'app. Idempotent,
@@ -1234,8 +1267,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return {
               ...s,
               occupancy: occ ?? s.occupancy,
-              reservations: reservationsRes.ok ? reservationsRes.reservations : s.reservations,
-              reservationsCoveredFrom: reservationsRes.ok ? reservationsRes.coveredFrom : s.reservationsCoveredFrom,
+              reservations: reservationsRes.ok && reservationsWriteRef.current === resW ? reservationsRes.reservations : s.reservations,
+              reservationsCoveredFrom:
+                reservationsRes.ok && reservationsWriteRef.current === resW ? reservationsRes.coveredFrom : s.reservationsCoveredFrom,
               participantReservationIds: split ? split.active : s.participantReservationIds,
               pendingInvitationIds: split ? split.pending : s.pendingInvitationIds,
               friends: friends ?? s.friends,
@@ -1245,8 +1279,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               myLessons: myLessons ?? s.myLessons,
               clubRatings: ratings ?? s.clubRatings,
               operatorNews: news === undefined ? s.operatorNews : news,
-              blockedSlots: blocked ?? s.blockedSlots,
-              blockedRanges: blockedRangesRes ?? s.blockedRanges,
+              blockedSlots: blocked && blocksWriteRef.current === blkW ? blocked : s.blockedSlots,
+              blockedSlotsCoveredUntil:
+                blocked && blocksWriteRef.current === blkW ? blockedSlotsCoverage(blocked) : s.blockedSlotsCoveredUntil,
+              blockedRanges: blockedRangesRes && blocksWriteRef.current === blkW ? blockedRangesRes : s.blockedRanges,
               operatorPayments: opPayments ?? s.operatorPayments,
               customClubs: serverClubs ? mergeServerClubs(s.customClubs, serverClubs) : s.customClubs,
               clubInfo: overrides && clubOvrWriteRef.current === ovrW ? { ...s.clubInfo, ...overrides } : s.clubInfo,
@@ -1940,6 +1976,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unconfirmTournamentPayment: async (id) => {
         const epoch = sessionEpochRef.current;
         const ok = await unconfirmTournamentPaymentRpc(id);
+        if (ok === 'unsupported') return { ok: false, unsupported: true };
         if (!ok) return { ok: false };
         if (sessionEpochRef.current === epoch) {
           setState((s) => ({
@@ -2023,7 +2060,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             if (res.conflict) {
               const [fresh, freshBlocked] = await Promise.all([fetchOccupancy(), res.blocked ? fetchBlockedSlots() : null]);
               if (sessionEpochRef.current === epoch) {
-                setState((s) => ({ ...s, occupancy: fresh ?? s.occupancy, blockedSlots: freshBlocked ?? s.blockedSlots }));
+                setState((s) => ({
+                  ...s,
+                  occupancy: fresh ?? s.occupancy,
+                  blockedSlots: freshBlocked ?? s.blockedSlots,
+                  blockedSlotsCoveredUntil: freshBlocked ? blockedSlotsCoverage(freshBlocked) : s.blockedSlotsCoveredUntil,
+                }));
                 if (res.blocked && state.serverUserId) void refreshCompetitions(state.serverUserId);
               }
               return { ok: false, reason: 'conflict' };
@@ -2033,6 +2075,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return { ok: false, reason: 'network' };
           }
           const created = res.reservation;
+          reservationsWriteRef.current += 1; // invalide les relectures en vol (voir reservationsWriteRef)
           if (sessionEpochRef.current !== epoch) return { ok: false, reason: 'network' }; // déconnexion entre-temps
           setState((s) => ({
             ...s,
@@ -2109,8 +2152,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               void cancelMatchReminder(id); // la résa n'est plus active : plus de rappel
               return 'gone';
             }
-            return tooLate() ? 'late' : 'error';
+            // Résa toujours active ET à moi (le bouton est réservé à l'auteur) : le seul refus
+            // serveur possible est la règle des 5 h, jugée sur l'horloge du SERVEUR — on ne repasse
+            // pas par tooLate() : un téléphone en retard de quelques minutes y lirait « encore à
+            // temps » et annoncerait une panne réseau pour un refus définitif.
+            return 'late';
           }
+          reservationsWriteRef.current += 1; // invalide les relectures en vol (voir reservationsWriteRef)
         }
         if (sessionEpochRef.current !== epoch) return 'ok'; // annulée côté serveur, compte sorti : miroir intact
         void cancelMatchReminder(id); // on retire son rappel local
@@ -2136,6 +2184,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // l'aller-retour RPC ne doit pas muter le miroir du compte sorti.
         const epoch = sessionEpochRef.current;
         const st = await markNoShowRow(id, true);
+        if (st === 'ok') reservationsWriteRef.current += 1; // invalide les relectures en vol
         // On ne mute le miroir QUE sur 'ok' (les refus métier 'played'/'gone'/'forbidden' et les
         // échecs réseau 'error' laissent l'état intact — l'appelant affiche le message adéquat).
         if (st !== 'ok' || sessionEpochRef.current !== epoch) return st;
@@ -2166,6 +2215,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // doit pas injecter la résa d’un club dans le miroir du compte sorti.
         const epoch = sessionEpochRef.current;
         const st = await markNoShowRow(res.id, false);
+        if (st === 'ok') reservationsWriteRef.current += 1; // invalide les relectures en vol
         // On ne mute le miroir QUE sur 'ok' (les refus 'taken'/'gone'/'forbidden' et 'error'
         // laissent l’état intact — l’appelant affiche le message adéquat).
         if (st !== 'ok' || sessionEpochRef.current !== epoch) return st;
@@ -2204,6 +2254,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         const ok = await clubCancelReservationRow(id, reason, proposal);
         if (!ok) return false;
+        reservationsWriteRef.current += 1; // invalide les relectures en vol (voir reservationsWriteRef)
+        blocksWriteRef.current += 1; // invalide les relectures en vol (voir blocksWriteRef) — le créneau d'origine devient un blocked_slot
         if (sessionEpochRef.current !== epoch) return false;
         void cancelMatchReminder(id); // même motif que markNoShow : un créneau annulé n'a pas de score
         setState((s) => ({
@@ -2239,7 +2291,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       // Réservation partagée : l’invité accepte ou refuse. Mise à jour optimiste (on retire
       // l’invitation des « à confirmer » ; si refus, on retire aussi la résa de ma liste), puis
-      // on confirme côté serveur — en cas d’échec on rejoue l’état précédent.
+      // on confirme côté serveur — en cas d’échec on relit le miroir pour dire la vraie cause.
       respondInvitation: async (reservationId, accept) => {
         const epoch = sessionEpochRef.current;
         const prevPending = state.pendingInvitationIds;
@@ -2251,19 +2303,58 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ? s.participantReservationIds
             : s.participantReservationIds.filter((id) => id !== reservationId),
         }));
+        // true = enregistré ; false = refus DÉFINITIF du serveur ; null = échec réseau.
         const ok = await respondInvitationRpc(reservationId, accept);
-        // Garde d’époque : une déconnexion pendant l’appel a déjà vidé ces tranches — la
-        // restauration tardive réinjecterait les données du compte sorti.
-        if (!ok && sessionEpochRef.current === epoch) {
-          setState((s) => ({ ...s, pendingInvitationIds: prevPending, participantReservationIds: prevParts }));
+        if (!ok) {
+          // Refus OU réseau : on relit mes participations + résas pour dire la VRAIE cause au lieu
+          // d'un « réessaie » en boucle (patron cancelReservation) — invitation retirée (blocage,
+          // 96 R-52) ou résa plus active (annulée par le club, R-21) → 'gone' ; réponse déjà
+          // enregistrée (autre appareil) → succès.
+          const [parts, fresh] = await Promise.all([
+            state.serverUserId ? fetchMyParticipations(state.serverUserId) : null,
+            fetchReservations(),
+          ]);
+          // Garde d’époque : une déconnexion pendant l’appel a déjà vidé ces tranches — la
+          // restauration tardive réinjecterait les données du compte sorti.
+          if (sessionEpochRef.current !== epoch) return null;
+          if (!parts || !fresh.ok) {
+            setState((s) => ({ ...s, pendingInvitationIds: prevPending, participantReservationIds: prevParts }));
+            return null; // relecture impossible : échec réseau, le seul cas où « réessaie » a un sens
+          }
+          const split = splitParticipations(parts);
+          setState((s) => ({
+            ...s,
+            reservations: fresh.reservations,
+            reservationsCoveredFrom: fresh.coveredFrom,
+            participantReservationIds: split.active,
+            pendingInvitationIds: split.pending,
+          }));
+          const mine = parts.find((p) => p.reservationId === reservationId);
+          const active = fresh.reservations.some((r) => r.id === reservationId);
+          // Déjà à l'état voulu : succès (un refus n'exige pas que la résa soit encore lisible).
+          const done = mine?.status === (accept ? 'accepted' : 'declined') && (active || !accept);
+          if (!done) {
+            if (mine?.status === 'invited' && active) {
+              // Toujours à confirmer : après un échec RÉSEAU, réessayer a du sens (null). Mais si le
+              // SERVEUR a dit non (ok === false), le refus est définitif — coup d'envoi passé à
+              // l'heure du serveur (l'horloge de l'appareil peut retarder : marge de 5 min) ou
+              // blocage R-52 entre l'invité et le créateur (paire bloquée avant la 96, invitation
+              // jamais retirée ; le serveur ne révèle pas le blocage → 'gone', message générique).
+              if (ok === null) return null;
+              const resa = fresh.reservations.find((r) => r.id === reservationId);
+              return resa && resa.startsAt - Date.now() < INVITE_CLOSE_MARGIN_MS ? 'started' : 'gone';
+            }
+            void cancelMatchReminder(reservationId); // l'invitation n'existe plus : plus de rappel
+            return 'gone';
+          }
         }
         // Refus accepté par le serveur : on retire aussi les rappels locaux déjà posés pour ce
         // match (comme cancelReservation) — sinon « Ton match approche » sonne pour un match refusé.
-        if (ok && !accept) void cancelMatchReminder(reservationId);
+        if (!accept) void cancelMatchReminder(reservationId);
         // Acceptation : le rappel de score (C2) devient dû pour MOI dès maintenant — resync sans
         // attendre le prochain retour au premier plan (l'invitation n'est plus « à confirmer »).
         // Miroir relu APRÈS l'appel (reminderMirrorRef), pas la closure figée avant l'appel RPC.
-        if (ok && accept && sessionEpochRef.current === epoch) {
+        if (accept && sessionEpochRef.current === epoch) {
           const mirror = reminderMirrorRef.current;
           void syncReminders(
             mirror.reservations,
@@ -2273,7 +2364,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             remindersOnRef.current,
           );
         }
-        return ok;
+        return 'ok';
       },
       confirmReservationByClub: async (id) => {
         const epoch = sessionEpochRef.current;
@@ -2282,6 +2373,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (state.serverUserId && res) {
           const ok = await setClubConfirmedRow(id, next);
           if (!ok) return false; // RLS/réseau a refusé → on ne bascule pas l’affichage
+          reservationsWriteRef.current += 1; // invalide les relectures en vol (voir reservationsWriteRef)
         }
         if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps
         setState((s) => ({
@@ -2365,13 +2457,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // un bloqué ne doit plus apparaître dans « Amis », dans les sélecteurs d'invitation ni
         // comme joueur suivi (toggle_favorite_player refuse ensuite tout toggle avec ce compte —
         // le miroir doit tenir seul ; refreshMirror relit favorite_players déjà purgée).
+        // Il SUPPRIME aussi les invitations EN ATTENTE échangées sur les matchs à venir (96, R-52) :
+        // celles reçues de ce compte quittent tout de suite « Mes réservations » (sinon la carte
+        // « Accepter / Refuser » au nom du bloqué restait, chaque tap échouant) ; les miennes (son
+        // entrée dans `invited`, l'effectif) sont recalées par la relecture qui suit.
+        const now = Date.now();
+        const dropped = new Set(
+          state.reservations
+            .filter((r) => r.userId === userId && r.startsAt > now && state.pendingInvitationIds.includes(r.id))
+            .map((r) => r.id),
+        );
+        dropped.forEach((id) => void cancelMatchReminder(id));
         setState((s) => ({
           ...s,
           blockedUserIds: s.blockedUserIds.includes(userId) ? s.blockedUserIds : [...s.blockedUserIds, userId],
           friendRequests: s.friendRequests.filter((r) => r.fromId !== userId),
           friends: s.friends.filter((f) => f.id !== userId),
           favoritePlayerIds: s.favoritePlayerIds.filter((x) => x !== userId),
+          reservations: dropped.size ? s.reservations.filter((r) => !dropped.has(r.id)) : s.reservations,
+          pendingInvitationIds: s.pendingInvitationIds.filter((id) => !dropped.has(id)),
+          participantReservationIds: s.participantReservationIds.filter((id) => !dropped.has(id)),
         }));
+        // Relecture (convention §8 : un fetch en échec garde le miroir) + garde d'époque.
+        if (state.serverUserId) {
+          void Promise.all([fetchReservations(), fetchMyParticipations(state.serverUserId)]).then(([fresh, parts]) => {
+            if (sessionEpochRef.current !== epoch) return;
+            const split = parts ? splitParticipations(parts) : null;
+            setState((s) => ({
+              ...s,
+              reservations: fresh.ok ? fresh.reservations : s.reservations,
+              reservationsCoveredFrom: fresh.ok ? fresh.coveredFrom : s.reservationsCoveredFrom,
+              participantReservationIds: split ? split.active : s.participantReservationIds,
+              pendingInvitationIds: split ? split.pending : s.pendingInvitationIds,
+            }));
+          });
+        }
         return true;
       },
       removeFriend: async (id) => {
@@ -2904,11 +3024,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               reservationsCoveredFrom: fresh.ok ? fresh.coveredFrom : s.reservationsCoveredFrom,
               occupancy: occ ?? s.occupancy,
               blockedSlots: blocked ?? s.blockedSlots,
+              blockedSlotsCoveredUntil: blocked ? blockedSlotsCoverage(blocked) : s.blockedSlotsCoveredUntil,
             }));
             const taken = (fresh.ok && fresh.reservations.some(overCourt)) || (occ ?? []).some(overCourt);
             return taken ? 'taken' : 'error';
           }
         }
+        blocksWriteRef.current += 1; // invalide les relectures en vol (voir blocksWriteRef)
         if (sessionEpochRef.current !== epoch) return 'error'; // déconnexion entre-temps (comme setBoost)
         // Ajout IDEMPOTENT : sur un double-tap concurrent, le garde d'entrée (lu sur l'état capturé)
         // laisse passer deux appels — on re-teste sur l'état FRAIS pour ne jamais dupliquer le créneau.
@@ -2923,6 +3045,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const ok = await unblockSlotRow(clubId, dateKey, time, court);
           if (!ok) return false;
         }
+        blocksWriteRef.current += 1; // invalide les relectures en vol (voir blocksWriteRef)
         if (sessionEpochRef.current !== epoch) return false; // déconnexion entre-temps
         setState((s) => ({
           ...s,
@@ -2934,19 +3057,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       // « Arrêter la série » d'un habitué (97). Écriture honnête : le serveur retire les dates À VENIR
       // (jamais le passé) puis on relit les fermetures ; relecture ratée → on retire du miroir ce que
-      // le serveur a retiré (même terrain, même heure, motif « Récurrent », créneau encore à venir).
+      // le serveur a retiré (même terrain, même heure, même jour de semaine, motif « Récurrent », créneau
+      // encore à venir).
       // Les notes privées (nom de l'habitué) vivent hors du store : l'écran les relit lui-même.
-      unblockRecurring: async (clubId, court, time) => {
+      unblockRecurring: async (clubId, court, time, dow) => {
         if (!state.serverUserId) return null;
         const epoch = sessionEpochRef.current;
-        const n = await unblockRecurringRow(clubId, court, time);
-        if (n === null) return null;
+        const n = await unblockRecurringRow(clubId, court, time, dow);
+        if (n === null || n === 'unsupported') return n;
+        blocksWriteRef.current += 1; // invalide les relectures en vol (voir blocksWriteRef)
         // Relue même à 0 : une série arrêtée sur un autre appareil quitte aussi ce planning.
         const fresh = await fetchBlockedSlots();
         if (sessionEpochRef.current !== epoch) return n;
         const now = Date.now();
         setState((s) => ({
           ...s,
+          blockedSlotsCoveredUntil: fresh ? blockedSlotsCoverage(fresh) : s.blockedSlotsCoveredUntil,
           blockedSlots:
             fresh ??
             s.blockedSlots.filter(
@@ -2955,6 +3081,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   x.clubId === clubId &&
                   x.court === court &&
                   x.time === time &&
+                  dowOfKey(x.dateKey) === dow &&
                   x.reason === RECURRING_REASON &&
                   slotTimestamp(x.dateKey, x.time) > now
                 ),
@@ -2970,6 +3097,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const epoch = sessionEpochRef.current;
         const { status, id } = await blockRangeRow(input);
         if (status !== 'ok') return status;
+        blocksWriteRef.current += 1; // invalide les relectures en vol (voir blocksWriteRef)
         const fresh = await fetchBlockedRanges();
         if (sessionEpochRef.current === epoch) {
           // Relecture ratée juste après un succès serveur ? On insère quand même la ligne créée
@@ -3003,6 +3131,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setState((s) => ({ ...s, blockedRanges: fresh }));
           return 'gone';
         }
+        blocksWriteRef.current += 1; // invalide les relectures en vol (voir blocksWriteRef)
         setState((s) => ({ ...s, blockedRanges: s.blockedRanges.filter((r) => r.id !== id) }));
         return 'ok';
       },

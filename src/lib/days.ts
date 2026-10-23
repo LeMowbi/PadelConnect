@@ -66,6 +66,12 @@ export function dateKeyLabel(key: string): string {
   return `${DAYS_SHORT[date.getUTCDay()]} ${d} ${MONTHS[m - 1]}`;
 }
 
+// Jour de la semaine d'une clé AAAA-MM-JJ (0 = dimanche, comme extract(dow) en SQL), à midi UTC.
+export function dowOfKey(key: string): number {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12)).getUTCDay();
+}
+
 // ——— Semaine calendaire (lundi → dimanche) — base de la facturation hebdomadaire ———
 
 // Clé stable d’une semaine = la date de son LUNDI (AAAA-MM-JJ).

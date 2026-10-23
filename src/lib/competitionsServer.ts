@@ -8,6 +8,14 @@ import { safeAmericano } from '@/lib/americano';
 import { dateKeyLabel } from '@/lib/days';
 import { supabase } from './supabase';
 
+// Fonction serveur ABSENTE (base pas encore mise à jour : build publié avant le collage des SQL
+// 92→98) : PostgREST répond PGRST202 (« function not found » dans son cache de schéma), Postgres
+// 42883 (undefined_function). Ce n'est NI une panne réseau NI un refus métier : « réessaie » ne
+// changerait rien — l'écran doit le dire (« bientôt disponible ») au lieu de boucler.
+export function isMissingRpc(error: { code?: string } | null): boolean {
+  return !!error && (error.code === 'PGRST202' || error.code === '42883');
+}
+
 type CompetitionRow = {
   id: string;
   organizer_id: string;
@@ -130,9 +138,58 @@ export async function confirmTournamentPayment(id: string): Promise<boolean> {
 }
 
 // Opérateur : annule un « Paiement reçu » tapé par erreur (97) → 'paid' redevient 'unpaid'.
-// false = refus (pas opérateur, tournoi sans frais, déjà non payé) ou échec réseau.
-export async function unconfirmTournamentPayment(id: string): Promise<boolean> {
+// false = refus (pas opérateur, tournoi sans frais, déjà non payé) ou échec réseau ;
+// 'unsupported' = serveur d'avant la 97 (fonction absente, cf. isMissingRpc).
+export async function unconfirmTournamentPayment(id: string): Promise<boolean | 'unsupported'> {
   const { data, error } = await supabase.rpc('operator_unconfirm_tournament_payment', { p_id: id });
+  if (isMissingRpc(error)) return 'unsupported';
+  return !error && data === true;
+}
+
+// Opérateur : tournois ANNULÉS dont les frais étaient déjà encaissés (98, payment_status
+// 'refund_due') — PadelConnect doit rembourser l'organisateur par Wave. null = échec réseau ;
+// [] = rien à rembourser, ou serveur d'avant la 98 (fonction absente, cf. isMissingRpc).
+export type RefundDue = {
+  id: string;
+  title: string;
+  clubName: string;
+  organizer: string;
+  organizerPhone: string | null;
+  commission: number;
+  reason: string;
+  dateKey: string;
+};
+type RefundDueRow = {
+  id: string;
+  title: string;
+  club_name: string | null;
+  organizer_name: string | null;
+  organizer_phone: string | null;
+  commission: number | null;
+  cancel_reason: string | null;
+  date_key: string;
+};
+export async function fetchRefundsDue(): Promise<RefundDue[] | null> {
+  const { data, error } = await supabase.rpc('operator_refunds_due');
+  if (isMissingRpc(error)) return [];
+  if (error) return null;
+  return ((data ?? []) as RefundDueRow[]).map((r) => ({
+    id: r.id,
+    title: r.title,
+    clubName: r.club_name ?? '',
+    organizer: r.organizer_name ?? '',
+    organizerPhone: r.organizer_phone || null,
+    commission: Number(r.commission ?? 0),
+    reason: r.cancel_reason ?? '',
+    dateKey: r.date_key,
+  }));
+}
+
+// Opérateur : « Remboursé ✓ » (98) — 'refund_due' → 'refunded'. false = refus (pas opérateur,
+// déjà soldé) ou échec réseau — l'app relit la liste ; 'unsupported' = serveur d'avant la 98.
+export async function markRefunded(id: string): Promise<boolean | 'unsupported'> {
+  const { data, error } = await supabase.rpc('operator_mark_refunded', { p_id: id });
+  if (isMissingRpc(error)) return 'unsupported';
   return !error && data === true;
 }
 
@@ -239,10 +296,12 @@ export async function deleteCompetition(id: string): Promise<boolean> {
 // 'gone' = introuvable ou plus publié · 'forbidden' = pas le droit (ou organisateur avec inscrits) ·
 // 'played' = déjà clôturé ou terminé · 'reason' = motif vide (obligatoire, tronqué à 300 car.) ·
 // 'fees' (98, décision n° 14) = organisateur seul avec des frais PadelConnect encore dus — il règle,
-// ou le club annule. null = échec réseau (seul cas où « réessaie » a un sens).
-export type CancelCompetitionStatus = 'ok' | 'gone' | 'forbidden' | 'played' | 'reason' | 'fees';
+// ou le club annule. 'unsupported' = serveur d'avant la 97 (fonction absente, cf. isMissingRpc).
+// null = échec réseau (seul cas où « réessaie » a un sens).
+export type CancelCompetitionStatus = 'ok' | 'gone' | 'forbidden' | 'played' | 'reason' | 'fees' | 'unsupported';
 export async function cancelCompetition(id: string, reason: string): Promise<CancelCompetitionStatus | null> {
   const { data, error } = await supabase.rpc('cancel_competition', { p_id: id, p_reason: reason.trim() });
+  if (isMissingRpc(error)) return 'unsupported';
   if (error) return null;
   return data === 'ok' || data === 'gone' || data === 'forbidden' || data === 'played' || data === 'reason' || data === 'fees'
     ? data

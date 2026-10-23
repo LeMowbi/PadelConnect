@@ -147,6 +147,11 @@ eq(
 eq(asLoyalty({ played: 3, claimed: 0 }), null, 'hydratation : forme 82 (sans cap ni playedAll) → null, jamais fcfa(undefined)');
 eq(asLoyalty({ played: 3, playedAll: 5, claimed: 0, cap: '5000' }), null, 'hydratation : plafond non numérique → null');
 eq(asLoyalty({ played: 3, playedAll: 5, claimed: 0, cap: Number.NaN }), null, 'hydratation : NaN → null');
+eq(
+  asLoyalty({ played: 3, playedAll: 5, claimed: 0, cap: null }),
+  { played: 3, playedAll: 5, claimed: 0, cap: null },
+  'hydratation : serveur d’avant la 92 (cap null) conservé — « bientôt disponible » hors-ligne',
+);
 eq(asLoyalty(null), null, 'hydratation : null → null');
 eq(asLoyalty(undefined), null, 'hydratation : absent → null');
 eq(asLoyalty('x'), null, 'hydratation : valeur non objet → null');
