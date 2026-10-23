@@ -12,11 +12,16 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ci.padelco.app",
-      "buildNumber": "68",
-      "associatedDomains": ["applinks:padelconnectci.com", "webcredentials:padelconnectci.com"],
+      "buildNumber": "69",
+      "associatedDomains": [
+        "applinks:padelconnectci.com",
+        "webcredentials:padelconnectci.com"
+      ],
       "infoPlist": {
         "CFBundleDevelopmentRegion": "fr",
-        "CFBundleLocalizations": ["fr"]
+        "CFBundleLocalizations": [
+          "fr"
+        ]
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -58,7 +63,10 @@
               "path": "/auth-callback"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
