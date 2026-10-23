@@ -120,5 +120,34 @@ const base = (over: Partial<Row> = {}): Row => ({
   check(str.openLevelMin === 3, 'numeric en chaîne « 3 » → 3');
 }
 
+// 9) Cours annulé par le COACH (96) ou coach supprimé (97) : 'club_cancelled' (aucune pénalité
+// pour l'élève) MAIS cancelledByCoach → la carte ne dit pas « Annulée par le club ».
+{
+  const r = rowToReservation(base({ status: 'club_cancelled', cancel_reason: 'Cours annulé par le coach' }));
+  check(r.cancelledByClub === true && r.cancelledByCoach === true, 'cours annulé par le coach → cancelledByCoach = true');
+  check(r.cancelReason === 'Cours annulé par le coach', 'cours annulé par le coach → motif affichable conservé');
+  const gone = rowToReservation(base({ status: 'club_cancelled', cancel_reason: 'Coach indisponible' }));
+  check(gone.cancelledByCoach === true, 'coach indisponible (compte supprimé) → cancelledByCoach = true');
+  const club = rowToReservation(base({ status: 'club_cancelled', cancel_reason: 'Déjà pris au téléphone' }));
+  check(club.cancelledByCoach === false, 'motif rédigé par le club → cancelledByCoach = false');
+  const own = rowToReservation(base({ status: 'cancelled', cancel_reason: 'Cours annulé par le coach' }));
+  check(own.cancelledByCoach === false, 'statut cancelled (joueur) → jamais cancelledByCoach');
+}
+
+// 10) Club supprimé (97) : le marqueur technique 'club_deleted' n'est JAMAIS montré comme motif.
+{
+  const r = rowToReservation(base({ status: 'cancelled', cancel_reason: 'club_deleted' }));
+  check(r.cancelReason === undefined, 'marqueur club_deleted → cancelReason indéfini (jamais affiché)');
+  check(r.cancelledByClub === false && r.cancelledByCoach === false, 'marqueur club_deleted → ni club ni coach');
+}
+
+// 11) Compte supprimé (98, décision n° 9) : `owner_deleted` → `ownerDeleted` ; colonne absente
+// (serveur d'avant la 98) ou null → false.
+{
+  check(rowToReservation(base({ owner_deleted: true })).ownerDeleted === true, 'owner_deleted = true → ownerDeleted');
+  check(rowToReservation(base()).ownerDeleted === false, 'owner_deleted absent (avant la 98) → false');
+  check(rowToReservation(base({ owner_deleted: null })).ownerDeleted === false, 'owner_deleted null → false');
+}
+
 console.log(failed === 0 ? '\nTOUS LES TESTS reservationsMap PASSENT.' : `\n${failed} test(s) en échec.`);
 process.exit(failed === 0 ? 0 : 1);

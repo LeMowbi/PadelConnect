@@ -129,6 +129,13 @@ export async function confirmTournamentPayment(id: string): Promise<boolean> {
   return !error && data === true;
 }
 
+// Opérateur : annule un « Paiement reçu » tapé par erreur (97) → 'paid' redevient 'unpaid'.
+// false = refus (pas opérateur, tournoi sans frais, déjà non payé) ou échec réseau.
+export async function unconfirmTournamentPayment(id: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('operator_unconfirm_tournament_payment', { p_id: id });
+  return !error && data === true;
+}
+
 // Mes inscriptions (équipe = moi + partenaire) → { compId: partner }. null = échec réseau.
 export async function fetchMyCompRegistrations(): Promise<Record<string, string> | null> {
   const { data, error } = await supabase.rpc('fetch_my_registrations');
@@ -224,6 +231,22 @@ export async function closeCompetition(id: string, close: CompClose): Promise<bo
 export async function deleteCompetition(id: string): Promise<boolean> {
   const { data, error } = await supabase.rpc('delete_competition', { p_id: id });
   return !error && data === true;
+}
+
+// ANNULATION d'un tournoi PUBLIÉ (97 — pluie, club indisponible…) : ≠ suppression, les inscrits et
+// l'organisateur sont prévenus (push) et les terrains libérés. Club hôte et opérateur : toujours ;
+// organisateur : seulement sans inscrit. Le jour même reste annulable. Un code PAR CAS :
+// 'gone' = introuvable ou plus publié · 'forbidden' = pas le droit (ou organisateur avec inscrits) ·
+// 'played' = déjà clôturé ou terminé · 'reason' = motif vide (obligatoire, tronqué à 300 car.) ·
+// 'fees' (98, décision n° 14) = organisateur seul avec des frais PadelConnect encore dus — il règle,
+// ou le club annule. null = échec réseau (seul cas où « réessaie » a un sens).
+export type CancelCompetitionStatus = 'ok' | 'gone' | 'forbidden' | 'played' | 'reason' | 'fees';
+export async function cancelCompetition(id: string, reason: string): Promise<CancelCompetitionStatus | null> {
+  const { data, error } = await supabase.rpc('cancel_competition', { p_id: id, p_reason: reason.trim() });
+  if (error) return null;
+  return data === 'ok' || data === 'gone' || data === 'forbidden' || data === 'played' || data === 'reason' || data === 'fees'
+    ? data
+    : null;
 }
 
 // Frais fixe (FCFA) appliqué aux tournois joueurs — lu à la création (affichage) et réglé

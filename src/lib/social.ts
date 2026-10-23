@@ -25,8 +25,8 @@ export async function fetchFavoritePlayerIds(): Promise<string[] | null> {
 
 export type PublicReliability = { played: number; presencePct: number };
 
-// Taux de présence AGRÉGÉ de joueurs (badge « Fiable · N % »). Le détail (annulations…)
-// reste réservé au club. null = échec réseau. Clé du Record = userId.
+// Taux de présence AGRÉGÉ de joueurs (badge « Fiable · N % »), cours exclus (98, décision n° 3).
+// Le détail (annulations…) reste réservé au club. null = échec réseau. Clé du Record = userId.
 export async function fetchPublicReliability(userIds: string[]): Promise<Record<string, PublicReliability> | null> {
   if (userIds.length === 0) return {};
   const { data, error } = await supabase.rpc('public_reliability', { p_user_ids: userIds.slice(0, 50) });
@@ -140,6 +140,17 @@ export async function fetchMatchAlerts(): Promise<boolean | null> {
   return data.match_alerts === true;
 }
 
+// ─── Push « actus et agenda PadelConnect » (98, décision porteur n° 17) ─────────
+
+// Activés par défaut, désactivables dans Profil → Notifications ; notify-club v50 ne diffuse les
+// actus et l'agenda qu'aux comptes `news_push = true`. true = enregistré ; false = refus (hors
+// session) ou échec réseau — jamais un faux ✓. La LECTURE vient du profil, chargé par le store
+// (tranche `newsPush`, session + premier plan).
+export async function setNewsPush(on: boolean): Promise<boolean> {
+  const { data, error } = await supabase.rpc('set_news_push', { p_on: on });
+  return !error && data === true;
+}
+
 // ─── Suivre un club (81) — synchronise le cœur favori LOCAL vers le serveur ─────
 
 // SET idempotent (pas un toggle) : re-jouable sans risque après un échec réseau. Best-effort —
@@ -157,9 +168,12 @@ export async function fetchMyFollowedClubIds(): Promise<string[] | null> {
   return ((data ?? []) as { club_id: string }[]).map((r) => r.club_id).filter(Boolean);
 }
 
-// ─── Fidélité (82, règle cible 92) ──────────────────────────────────────────────
+// ─── Fidélité (82, règle cible 92, décisions 98) ────────────────────────────────
 // « 10 réservations CRÉÉES et JOUÉES = −50 % sur le prochain match (jusqu'au plafond), offert
-// par PadelConnect ». Logique pure (code, remise, progression) : src/lib/loyalty.ts.
+// par PadelConnect ». Logique pure (code, remise, progression) : src/lib/loyalty.ts. Depuis la 98,
+// `my_loyalty` exclut les cours (décision n° 3) et ne compte dans `claimed` que les réclamations
+// de la règle cible (décision n° 4 : les anciennes repartent à zéro, mais restent listées et
+// servables par my_loyalty_claims, numéros de cycle conservés).
 
 // Type du compteur (et sa garde d'hydratation `asLoyalty`) : src/lib/loyalty.ts.
 export type { Loyalty };

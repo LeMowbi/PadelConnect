@@ -44,6 +44,9 @@ check(initialState.officialResults.length === 0, 'Première ouverture : palmarè
 check(Object.keys(initialState.compRegistrations).length === 0, 'Première ouverture : aucune inscription');
 check(Object.keys(initialState.compResults).length === 0, 'Première ouverture : aucun résultat');
 check(initialState.myCompetitions.length === 0 && initialState.reservations.length === 0, 'Première ouverture : ni tournoi ni résa');
+check(initialState.reservationsCoveredFrom === null, 'Première ouverture : aucun bandeau « historique incomplet »');
+// Préférence « actus et agenda » (98) : null = pas encore lue — jamais un interrupteur inventé.
+check(initialState.newsPush === null, 'Première ouverture : préférence « actus et agenda » non lue (null)');
 
 // 2) Clôture LOCALE (miroir de la branche « Mode LOCAL » de closeCompetition) : vainqueur + (option)
 // dernière équipe ; le niveau ne bouge que pour un tournoi OFFICIEL auquel je suis inscrit.

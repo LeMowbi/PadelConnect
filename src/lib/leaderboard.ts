@@ -1,7 +1,8 @@
 // Classement général des joueurs (46) : par POINTS gagnés dans l'app (modèle « Race » FIP —
 // le niveau est plafonné à 7 ET déclaré à l'inscription, il ne peut pas servir de rang).
 // 100 pts = tournoi officiel gagné · 10 pts = tournoi officiel joué · 3 pts = victoire de
-// match confirmée · 2 pts = partie jouée. Convention réseau §8 : null = échec réseau.
+// match confirmée · 2 pts = partie jouée (un COURS n'en est pas une, 98). Convention réseau §8 :
+// null = échec réseau.
 
 import { supabase } from './supabase';
 
@@ -14,12 +15,18 @@ export type LeaderboardRow = {
   offPlayed: number; // tournois officiels JOUÉS (participations, valent ×10 pts)
   played: number; // parties jouées
   points: number; // le RANG : gagné dans l'app, infalsifiable, sans plafond
+  // Rang PARTAGÉ (98, décision n° 10) : points, tournois gagnés ET victoires égaux → même rang,
+  // au standard sportif (1, 1, 3). C'est lui qu'on affiche, jamais la position dans la liste.
+  rank: number;
+  // « ex æquo » : une AUTRE ligne reçue porte le même rang. Une égalité avec un joueur hors de la
+  // liste (coupée à `limit`) n'est pas vue — le rang reste juste, seule la mention manque.
+  tied: boolean;
 };
 
 export async function fetchLeaderboard(limit = 50): Promise<LeaderboardRow[] | null> {
   const { data, error } = await supabase.rpc('fetch_leaderboard', { p_limit: limit });
   if (error) return null;
-  return (
+  const rows = (
     (data ?? []) as {
       user_id: string;
       name: string;
@@ -29,8 +36,9 @@ export async function fetchLeaderboard(limit = 50): Promise<LeaderboardRow[] | n
       off_played: number;
       played: number;
       points: number;
+      rank?: number | null;
     }[]
-  ).map((r) => ({
+  ).map((r, i) => ({
     userId: r.user_id,
     name: r.name,
     level: Number(r.level),
@@ -39,12 +47,17 @@ export async function fetchLeaderboard(limit = 50): Promise<LeaderboardRow[] | n
     offPlayed: r.off_played ?? 0,
     played: r.played,
     points: r.points ?? 0,
+    // Serveur d'avant la 98 (pas de colonne `rank`) : les lignes arrivent déjà ordonnées → la
+    // position fait foi, comme l'ancien row_number() — aucun « ex æquo » inventé.
+    rank: typeof r.rank === 'number' ? r.rank : i + 1,
   }));
+  return rows.map((r, i) => ({ ...r, tied: rows[i - 1]?.rank === r.rank || rows[i + 1]?.rank === r.rank }));
 }
 
-// Ma position exacte (même au-delà du top affiché). null = échec réseau ; 0 = non classé
-// (0 point) — distinction introduite côté serveur pour que l'app puisse masquer la carte
-// « Ta position » sans la confondre avec une panne réseau (cf. audit).
+// Ma position exacte (même au-delà du top affiché) — rang PARTAGÉ depuis la 98 (même valeur que
+// `LeaderboardRow.rank`). null = échec réseau ; 0 = non classé (0 point) — distinction introduite
+// côté serveur pour que l'app puisse masquer la carte « Ta position » sans la confondre avec une
+// panne réseau (cf. audit).
 export async function fetchMyRank(): Promise<number | null> {
   const { data, error } = await supabase.rpc('my_leaderboard_rank');
   if (error || typeof data !== 'number') return null;

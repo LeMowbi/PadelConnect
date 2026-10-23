@@ -15,11 +15,20 @@ import type { BlockedSlot, Reservation } from '@/store/AppContext';
 // tomberaient silencieusement → dispo faussée). L'agrégat « depuis le lancement » de l'Espace
 // opérateur devra devenir une RPC serveur si l'historique dépasse cette fenêtre.
 const MIRROR_WINDOW_MS = 180 * DAY_MS;
+// Plafond de lignes du miroir (= plafond PostgREST). Atteint, il retire les créneaux les plus
+// ANCIENS (tri descendant) : `fetchReservations` le signale (`coveredFrom`) pour que les écrans
+// d'agrégats (Finances, historique club) disent « historique incomplet » au lieu de se taire.
+const MIRROR_ROW_CAP = 1000;
 
 // Annulation gratuite jusqu'à 5 h avant le créneau — règle UNIQUE côté client (miroir de la garde
 // serveur 09_cancel_security). Consommée par l'écran « Mes réservations » (bouton Annuler) ET par
 // le rappel « dernière fenêtre » (notifications.ts) : un seul endroit à ajuster pour les deux.
 export const CANCEL_DEADLINE_MS = 5 * HOUR_MS;
+
+// Motif PUBLIC générique d'une fermeture récurrente (83) : seul texte que block_recurring écrit dans
+// blocked_slots.reason (le nom de l'habitué vit dans blocked_slot_notes) — sert à reconnaître une
+// série (liste « Habitués », « Arrêter la série ») et à purger le miroir après unblock_recurring.
+export const RECURRING_REASON = 'Récurrent';
 
 // Occupation d’un créneau (sans identité) — alimente la disponibilité cross-joueur.
 // `durationMin` (défaut 90) → chevauchement d'intervalle côté client (créneaux 1h/1h30).
@@ -253,7 +262,9 @@ export async function unblockSlotRow(clubId: string, dateKey: string, time: stri
 
 // Créneau RÉCURRENT (83) : ferme le même (terrain, heure, durée) sur plusieurs dates (calculées
 // par `recurringDates`). Résultat HONNÊTE du serveur : `blocked` = dates posées, `conflicts` =
-// dates refusées (une résa joueur y vit déjà). null = refus global (droits, bornes) ou réseau.
+// dates refusées (une résa joueur OU un tournoi publié y vit déjà), `taken` = dates où une AUTRE
+// fermeture était déjà posée (jamais écrasée, 97 — absente d'un serveur plus ancien → []).
+// null = refus global (droits, bornes) ou réseau.
 export async function blockRecurringRows(b: {
   clubId: string;
   court: string;
@@ -261,7 +272,7 @@ export async function blockRecurringRows(b: {
   durationMin: 60 | 90;
   dateKeys: string[];
   reason: string;
-}): Promise<{ blocked: string[]; conflicts: string[] } | null> {
+}): Promise<{ blocked: string[]; conflicts: string[]; taken: string[] } | null> {
   const { data, error } = await supabase.rpc('block_recurring', {
     p_club_id: b.clubId,
     p_court: b.court,
@@ -271,17 +282,36 @@ export async function blockRecurringRows(b: {
     p_reason: b.reason,
   });
   if (error || !data) return null;
-  const raw = data as { blocked?: string[]; conflicts?: string[] };
-  return { blocked: raw.blocked ?? [], conflicts: raw.conflicts ?? [] };
+  const raw = data as { blocked?: string[]; conflicts?: string[]; taken?: string[] };
+  return { blocked: raw.blocked ?? [], conflicts: raw.conflicts ?? [], taken: raw.taken ?? [] };
+}
+
+// « Arrêter la série » (97) : retire les fermetures RÉCURRENTES À VENIR de ce terrain à cette heure
+// (jamais une date passée) et leurs notes privées. Renvoie le NOMBRE de créneaux retirés (0 = plus
+// rien à arrêter, succès idempotent) ; null = refus (pas gérant de ce club) ou échec réseau.
+export async function unblockRecurringRow(clubId: string, court: string, time: string): Promise<number | null> {
+  const { data, error } = await supabase.rpc('unblock_recurring', { p_club_id: clubId, p_court: court, p_time: time });
+  if (error || typeof data !== 'number') return null;
+  return data;
 }
 
 // Annulation : passe par la fonction serveur (SECURITY DEFINER) qui vérifie l’auteur ET le
 // délai des 5h (règle non contournable côté serveur) et met la résa en statut 'cancelled'
 // (le créneau se libère, mais la trace reste pour que le club voie l’annulation).
-export async function cancelReservationRow(id: string): Promise<boolean> {
+// false = refus serveur (moins de 5 h, déjà annulée / annulée par le club / « pas venu ») ;
+// null = échec réseau — l'appelant ne doit pas confondre les deux (« réessaie » n'a de sens
+// que sur null).
+export async function cancelReservationRow(id: string): Promise<boolean | null> {
   const { data, error } = await supabase.rpc('cancel_reservation', { p_id: id });
-  return !error && data === true;
+  if (error) return null;
+  return data === true;
 }
+
+// Issue d'une annulation joueur (store `cancelReservation`) — un message PAR CODE :
+// 'late' = moins de 5 h avant le créneau (refus définitif : voir directement avec le club) ;
+// 'gone' = la résa n'est plus active (déjà annulée, annulée par le club, « pas venu ») — le miroir
+// est déjà recalé ; 'error' = échec réseau (seul cas où « réessaie » a un sens).
+export type CancelReservationStatus = 'ok' | 'late' | 'gone' | 'error';
 
 // Annulation par le CLUB (75) : chevauchement avec une réservation HORS APP. Le gérant du club actif
 // (ou l'opérateur) annule la résa joueur (statut 'club_cancelled' → ne pénalise pas la fiabilité du
@@ -313,7 +343,10 @@ export async function setClubConfirmedRow(id: string, value: boolean): Promise<b
 // Mes réservations ACTIVES (RLS) — pour un compte club/opérateur, la RLS renvoie aussi
 // celles de son club / toutes. On exclut les annulées (status='cancelled') : elles ne
 // comptent ni dans la liste joueur ni dans la base de commission. Trié par date de créneau.
-export async function fetchReservations(): Promise<{ ok: boolean; reservations: Reservation[] }> {
+// `coveredFrom` : null = toute la fenêtre est couverte ; sinon le plafond de lignes est ATTEINT et
+// c'est le début (ms) du plus ancien créneau reçu — un créneau antérieur OU ÉGAL peut manquer, une
+// semaine qui contient cet instant est donc incomplète (bandeau « Historique incomplet avant le … »).
+export async function fetchReservations(): Promise<{ ok: boolean; reservations: Reservation[]; coveredFrom: number | null }> {
   // Tri DESCENDANT + plafond explicite : si le périmètre dépasse le cap PostgREST (1000 lignes,
   // possible pour l'opérateur), la troncature retire les plus ANCIENNES — un tri ascendant
   // aurait silencieusement perdu les résas récentes/futures (finances et plannings faussés).
@@ -323,9 +356,11 @@ export async function fetchReservations(): Promise<{ ok: boolean; reservations: 
     .eq('status', 'booked')
     .gte('starts_at', Date.now() - MIRROR_WINDOW_MS) // récent + futur seulement (cf. MIRROR_WINDOW_MS)
     .order('starts_at', { ascending: false })
-    .limit(1000);
-  if (error) return { ok: false, reservations: [] };
-  return { ok: true, reservations: (data ?? []).map((r) => rowToReservation(r as Row)) };
+    .limit(MIRROR_ROW_CAP);
+  if (error) return { ok: false, reservations: [], coveredFrom: null };
+  const reservations = (data ?? []).map((r) => rowToReservation(r as Row));
+  const coveredFrom = reservations.length >= MIRROR_ROW_CAP ? reservations[reservations.length - 1].startsAt : null;
+  return { ok: true, reservations, coveredFrom };
 }
 
 // Réservations ANNULÉES du périmètre (RLS) — pour un compte club/opérateur, ce sont les
@@ -366,6 +401,8 @@ export async function fetchNoShowReservations(): Promise<Reservation[] | null> {
 // Fonction serveur (SECURITY DEFINER) qui vérifie le rôle/le club. Renvoie un CODE (87) pour
 // distinguer le refus MÉTIER (match déjà joué et noté) d’un échec réseau — sinon le gérant voyait
 // « réessaie » sur un refus définitif et retentait à l’infini. 'error' = échec réseau/serveur.
+// 'played' = score VALIDÉ, qu'un perdant l'ait confirmé OU qu'il l'ait été à 48 h (98, décision
+// n° 7) : le club ne peut plus effacer un match que l'app a noté.
 export type NoShowStatus = 'ok' | 'played' | 'taken' | 'gone' | 'forbidden' | 'error';
 export async function markNoShowRow(id: string, value: boolean): Promise<NoShowStatus> {
   const { data, error } = await supabase.rpc('mark_no_show', { p_id: id, p_value: value });
@@ -374,7 +411,10 @@ export async function markNoShowRow(id: string, value: boolean): Promise<NoShowS
   return s === 'ok' || s === 'played' || s === 'taken' || s === 'gone' || s === 'forbidden' ? s : 'error';
 }
 
-// Fiabilité des joueurs (annulations + absences) par id de compte — club/opérateur seulement.
+// Fiabilité des joueurs (annulations + absences, 14 jours glissants) par id de compte — club/opérateur
+// seulement. Depuis la 98 : seules les annulations faites à MOINS DE 24 H du match comptent
+// (décision n° 18 — une annulation permise de longue date n'est pas un manque de fiabilité), et
+// les cours sont exclus (décision n° 3).
 // Convention réseau : `null` en cas d’échec ({} = aucun joueur demandé / aucun résultat).
 export type Reliability = { cancelled: number; noShow: number };
 export async function fetchReliability(userIds: string[]): Promise<Record<string, Reliability> | null> {
@@ -392,13 +432,25 @@ export async function fetchReliability(userIds: string[]): Promise<Record<string
 // Réservation PARTAGÉE : rattache les amis invités (par leur numéro) à la réservation.
 // La résolution numéro → compte se fait côté serveur (fonction SECURITY DEFINER), donc on
 // n’expose jamais les profils. Les non-inscrits sont simplement ignorés.
-// false = le rattachement a échoué (réseau) : les invités ne recevront ni push ni la résa
-// chez eux — l'appelant doit le dire (la réservation elle-même, elle, reste valide).
-export async function linkParticipants(reservationId: string, phones: string[]): Promise<boolean> {
+// Renvoie le NOMBRE d'invités rattachés (link_participants, 73) : un numéro invalide, changé ou
+// un compte bloqué (dans un sens ou l'autre) n'est pas compté → l'appelant compare au nombre
+// d'invités et prévient d'un ton NEUTRE (sans révéler un blocage). null = échec réseau : aucun
+// invité ne recevra ni push ni la résa chez lui (la réservation elle-même reste valide).
+export async function linkParticipants(reservationId: string, phones: string[]): Promise<number | null> {
   const clean = phones.map((p) => p.trim()).filter((p) => isValidPhone(p));
-  if (clean.length === 0) return true;
-  const { error } = await supabase.rpc('link_participants', { p_reservation_id: reservationId, p_phones: clean });
-  return !error;
+  if (clean.length === 0) return 0;
+  const { data, error } = await supabase.rpc('link_participants', { p_reservation_id: reservationId, p_phones: clean });
+  if (error) return null;
+  return typeof data === 'number' ? data : 0;
+}
+
+// Téléphone du RÉSERVANT pour le gérant (96) : celui d'un créateur de match ouvert n'est pas stocké
+// sur la résa (51) — lu dans son profil, AU TAP WhatsApp, et JAMAIS mis dans le miroir local.
+// null = pas gérant de ce club, compte sans numéro, ou échec réseau (l'écran le dit sobrement).
+export async function clubReservationPhone(reservationId: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('club_reservation_phone', { p_id: reservationId });
+  if (error || typeof data !== 'string' || !data.trim()) return null;
+  return data;
 }
 
 // Les réservations où JE suis invité (participant), AVEC le statut de mon invitation.

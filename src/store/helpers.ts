@@ -4,15 +4,38 @@
 import type { CustomClub } from '@/data/clubs';
 import type { ClubConfig } from '@/lib/clubsServer';
 import type { ServerCompetitions } from '@/lib/competitionsServer';
-import { addWeeks, weekKeyOf } from '@/lib/days';
+import { addWeeks, MINUTE_MS, weekKeyOf } from '@/lib/days';
 import type { MyParticipation } from '@/lib/reservations';
-import type { AppState, CompResult, OfficialResult, Reservation } from './AppContext';
+import { SESSION_MIN } from '@/lib/slots';
+import type { AppState, CompResult, OfficialResult, Reservation, Stats } from './AppContext';
 
 export const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 export const clampLevel = (n: number) => Math.min(7, Math.max(1, Math.round(n * 100) / 100));
 
 export const LEVEL_STEP = 0.5; // bonus de niveau pour l’équipe vainqueure d’un tournoi officiel
 export const LEVEL_PENALTY = 0.25; // malus de niveau pour l’équipe classée dernière (facultatif)
+
+// Une réservation est « jouée » dès que son heure de FIN est passée (automatique, jamais déclaré).
+// La fin dépend de la durée PROPRE du créneau (1h ou 1h30), pas d'une durée fixe.
+// (Ré-exportée par AppContext, d'où les écrans l'importent.)
+export function isPlayed(r: Reservation, now = Date.now()): boolean {
+  return r.startsAt + (r.durationMin || SESSION_MIN) * MINUTE_MS <= now;
+}
+
+// Un COURS de coach (résa portant le nom du coach : cours privé, ou cours collectif au nom du
+// coach) n'est PAS une partie (décision porteur n° 3) : ni « Parties jouées », ni série, ni badges,
+// ni graphe d'activité. Miroir EXACT du serveur (98 : `coalesce(coach_name, '') = ''` dans le
+// classement, la fidélité et la fiabilité) — un nom vide n'est pas un cours.
+export function isLesson(r: { coachName?: string }): boolean {
+  return (r.coachName ?? '') !== '';
+}
+
+// Heures de début des PARTIES jouées : finies, hors cours, hors invitations jamais acceptées (même
+// règle que le serveur, `rp.status = 'accepted'`). Base UNIQUE de « Parties jouées », de la série
+// et du graphe d'activité de Statistiques — `reservations` = MES résas (myReservations).
+export function playedMatchTimes(reservations: Reservation[], pendingInvitationIds: string[], now: number): number[] {
+  return reservations.filter((r) => isPlayed(r, now) && !isLesson(r) && !pendingInvitationIds.includes(r.id)).map((r) => r.startsAt);
+}
 
 // Série en cours 🔥 : semaines calendaires CONSÉCUTIVES avec au moins une partie jouée, en
 // remontant depuis la semaine courante. Une semaine EN COURS sans partie ne casse pas la
@@ -28,6 +51,30 @@ export function weeklyStreak(playedStartsAt: number[], now: number): number {
     cursor = addWeeks(cursor, -1);
   }
   return streak;
+}
+
+// Statistiques du Profil / de Statistiques (parties, tournois, série). `serverPlayed` = compteur
+// serveur (my_loyalty.played_all : créateur OU invité accepté, hors cours, TOUT l'historique —
+// `played` ne compte que les réservations CRÉÉES, base de la fidélité 92) ; le miroir local est
+// borné à 180 j → sans lui, les trophées RÉGRESSAIENT quand les vieilles résas sortaient de la
+// fenêtre. max() : le miroir est à jour à la seconde, le serveur n'est relu qu'au premier plan —
+// une partie tout juste finie ne « disparaît » pas.
+export function computeStats(
+  reservations: Reservation[],
+  officialResults: OfficialResult[],
+  pendingInvitationIds: string[],
+  serverPlayed: number | null,
+  now = Date.now(),
+): Stats {
+  const played = playedMatchTimes(reservations, pendingInvitationIds, now);
+  return {
+    played: Math.max(serverPlayed ?? 0, played.length),
+    tournamentsPlayed: officialResults.length,
+    // `won` (amical compris) ; repli sur `result` pour les palmarès persistés avant ce champ.
+    tournamentsWon: officialResults.filter((o) => o.won ?? o.result === 'win').length,
+    // Série en cours (semaines consécutives avec ≥ 1 partie) — affichée sur le profil.
+    streakWeeks: weeklyStreak(played, now),
+  };
 }
 
 // Repli de frAuthError pour un message NON reconnu : l’appelant le compare pour tracer le brut
@@ -101,6 +148,7 @@ export const initialState: AppState = {
   participantReservationIds: [],
   pendingInvitationIds: [],
   occupancy: [],
+  reservationsCoveredFrom: null, // miroir des résas complet (pas de troncature au plafond de lignes)
   storageFull: false,
   managedClubId: 'padelta',
   clubSlots: {},
@@ -121,6 +169,9 @@ export const initialState: AppState = {
   // disparaît au chargement quand aucune actu n’est réellement publiée.
   operatorNews: null,
   dismissedNewsId: null,
+  // Préférence SERVEUR « actus et agenda » (98, activée par défaut côté serveur) : null = pas encore
+  // lue (ou serveur d'avant la 98) — l'interrupteur du Profil ne s'affiche qu'une fois lue.
+  newsPush: null,
 };
 
 // Config club serveur → tranches du store. Le serveur fait foi pour les clubs qu’il connaît ;
@@ -168,6 +219,7 @@ export function loggedOutState(s: AppState): AppState {
     serverManagedClubId: null,
     serverUserId: null,
     reservations: [],
+    reservationsCoveredFrom: null,
     participantReservationIds: [],
     pendingInvitationIds: [],
     occupancy: [],
@@ -187,6 +239,7 @@ export function loggedOutState(s: AppState): AppState {
     loyalty: null, // compteur serveur lié au compte → purgé à la déconnexion
     blockedUserIds: [], // liste liée au compte → purgée à la déconnexion
     favoritePlayerIds: [], // idem : les joueurs suivis appartiennent au compte
+    newsPush: null, // préférence serveur du compte → relue à la prochaine session
     // Préférences liées au compte : sans reset, le compte SUIVANT sur le même appareil hérite des
     // choix du précédent. dismissedNewsId : sinon B ne voit jamais l'actu GLOBALE que A avait fermée.
     // managedClubId : remis au défaut (pilote seulement le filtre local, l'accès reste gardé par le rôle).

@@ -7,6 +7,10 @@ import { serverRowToClub, type Club, type CustomClub, type PriceTier } from '@/d
 import type { CourtSlot } from './courtSchedule';
 import { supabase } from './supabase';
 
+// Sentinelle renvoyée (type texte inchangé, 97) par grant/revoke/approve quand la cible est le
+// compte OPÉRATEUR lui-même : rien n'est écrit côté serveur, ce n'est jamais un nom de joueur.
+const OPERATOR_SENTINEL = '__operator__';
+
 // Surcharge de page club, telle que servie/stockée (mêmes champs que le store local clubInfo).
 export type ClubOverride = {
   name?: string;
@@ -259,10 +263,16 @@ export async function setOperatorPayment(key: string, status: 'sent' | 'paid' | 
 // Opérateur : donne l’accès « Espace Club » à un joueur (par son numéro) pour un club donné —
 // n’importe quel club, y compris les 9 de base. Renvoie le nom du joueur promu si trouvé.
 // `error: true` = échec RÉSEAU (≠ ok:false seul = numéro vraiment inconnu, convention §8).
-export async function grantClubAccessByPhone(phone: string, clubId: string): Promise<{ ok: boolean; name?: string; error?: boolean }> {
+// `operator: true` = le numéro est celui du compte OPÉRATEUR (97) : rien n'a été écrit — sans ce
+// cas dédié, la sentinelle serveur s'affichait comme le nom d'un gérant promu (faux succès).
+export async function grantClubAccessByPhone(
+  phone: string,
+  clubId: string,
+): Promise<{ ok: boolean; name?: string; error?: boolean; operator?: boolean }> {
   const { data, error } = await supabase.rpc('grant_club_access_by_phone', { p_phone: phone.trim(), p_club_id: clubId });
   if (error) return { ok: false, error: true };
   if (!data) return { ok: false };
+  if (data === OPERATOR_SENTINEL) return { ok: false, operator: true };
   return { ok: true, name: data as string };
 }
 
@@ -284,10 +294,12 @@ export async function switchManagedClub(clubId: string): Promise<boolean> {
 }
 
 // Opérateur : retire l’accès gérant d’un joueur (par son numéro). Renvoie son nom si trouvé.
-export async function revokeClubAccessByPhone(phone: string): Promise<{ ok: boolean; name?: string; error?: boolean }> {
+// `operator: true` = numéro du compte opérateur lui-même (97) : rien n'a été retiré.
+export async function revokeClubAccessByPhone(phone: string): Promise<{ ok: boolean; name?: string; error?: boolean; operator?: boolean }> {
   const { data, error } = await supabase.rpc('revoke_club_access_by_phone', { p_phone: phone.trim() });
   if (error) return { ok: false, error: true };
   if (!data) return { ok: false };
+  if (data === OPERATOR_SENTINEL) return { ok: false, operator: true };
   return { ok: true, name: data as string };
 }
 
@@ -312,8 +324,11 @@ export async function createClub(input: {
 
 // Approuve une demande de club : crée le club + donne l’accès gérant au demandeur
 // (fonction serveur SECURITY DEFINER réservée à l’opérateur). Renvoie l’id du club créé.
-export async function approveClubRequest(requestId: string): Promise<{ ok: boolean; clubId?: string }> {
+// ok:false = refus (demandeur supprimé / non confirmé, 97) ou échec réseau ; `operator: true` = la
+// demande vient du compte opérateur lui-même (rien n'a été créé).
+export async function approveClubRequest(requestId: string): Promise<{ ok: boolean; clubId?: string; operator?: boolean }> {
   const { data, error } = await supabase.rpc('approve_club_request', { p_request_id: requestId });
   if (error || !data) return { ok: false };
+  if (data === OPERATOR_SENTINEL) return { ok: false, operator: true };
   return { ok: true, clubId: data as string };
 }

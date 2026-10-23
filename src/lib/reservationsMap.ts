@@ -30,16 +30,27 @@ export type Row = {
   open_level_max: number | null;
   open_capacity: number | null; // 2 = 1v1 · 4 = 2v2 (v2)
   status: string | null; // 'booked' | 'cancelled' | 'no_show' | 'club_cancelled' (75)
-  cancel_reason: string | null; // motif d'une annulation par le club (75)
+  cancel_reason: string | null; // motif d'une annulation par le club (75) ou du cours par le coach (96/97)
   proposed_court: string | null; // proposition d'alternative (terrain / jour / heure / durée) — 75
   proposed_date_key: string | null;
   proposed_time: string | null;
   proposed_duration_min: number | null;
+  owner_deleted?: boolean | null; // 98 : résa passée reprise du compte supprimé de son auteur (absente avant la 98)
   created_at: string | null;
 };
 
+// Motifs que le SERVEUR pose quand c'est le COACH (et non le club) qui fait tomber un cours :
+// annulation par le coach (96, coach_cancel_lesson) ou compte du coach supprimé (97, delete_account).
+// La résa passe alors en 'club_cancelled' (aucune pénalité pour l'élève) : sans ce drapeau, la
+// carte de l'élève annoncerait à tort « Annulée par le club ».
+const COACH_CANCEL_REASONS = ['Cours annulé par le coach', 'Coach indisponible'];
+// Marqueur TECHNIQUE d'une résa annulée parce que son club a été supprimé (97, delete_club) :
+// lu par notify-club, jamais affiché (ce n'est pas un motif rédigé pour le joueur).
+const CLUB_DELETED_MARKER = 'club_deleted';
+
 // Ligne serveur → modèle local.
 export function rowToReservation(row: Row): Reservation {
+  const reason = row.cancel_reason && row.cancel_reason !== CLUB_DELETED_MARKER ? row.cancel_reason : undefined;
   // startsAt CANONIQUE : recalculé depuis (date_key + time) en heure fixe Abidjan, pour
   // neutraliser un éventuel fuseau erroné de l’appareil qui a créé la résa (le starts_at
   // stocké ne sert que de repli si la date/heure manquent). Repli sûr contre NaN.
@@ -73,7 +84,8 @@ export function rowToReservation(row: Row): Reservation {
     // Annulation par le CLUB (75) : motif + proposition d'alternative, portés par le même canal que
     // les annulées (fetchCancelledReservations fait select *). Absents = annulation joueur normale.
     cancelledByClub: row.status === 'club_cancelled',
-    cancelReason: row.cancel_reason ?? undefined,
+    cancelledByCoach: row.status === 'club_cancelled' && !!reason && COACH_CANCEL_REASONS.includes(reason),
+    cancelReason: reason,
     proposal:
       row.proposed_court || row.proposed_time || row.proposed_date_key
         ? {
@@ -85,6 +97,7 @@ export function rowToReservation(row: Row): Reservation {
               : (row.duration_min ?? 90)) as 60 | 90,
           }
         : undefined,
+    ownerDeleted: row.owner_deleted === true,
     createdAt: Number.isFinite(createdTs) ? createdTs : Date.now(),
   };
 }

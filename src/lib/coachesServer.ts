@@ -41,6 +41,9 @@ export type Lesson = {
   price?: number; // prix du terrain (la réservation créée le reprend)
   durationMin: number; // durée FIGÉE du créneau (60|90, 68) — repli 90 si absente (données héritées)
   status: 'pending' | 'accepted' | 'declined' | 'cancelled';
+  // Cours ANNULÉ PAR LE COACH (96, coach_cancel_lesson) — absent = annulé par l'élève, le club, ou
+  // à la suite de l'annulation de la réservation : la carte de l'élève dit qui a annulé.
+  cancelledBy?: 'coach';
   reservationId?: string;
 };
 
@@ -60,6 +63,7 @@ type LessonRow = {
   price: number | null;
   duration_min: number | null;
   status: Lesson['status'];
+  cancelled_by?: string | null; // 'coach' | null (96) — absente d'un serveur antérieur
   reservation_id: string | null;
 };
 
@@ -80,6 +84,7 @@ function toLesson(r: LessonRow): Lesson {
     price: r.price ?? undefined,
     durationMin: r.duration_min ?? 90,
     status: r.status,
+    cancelledBy: r.cancelled_by === 'coach' ? 'coach' : undefined,
     reservationId: r.reservation_id ?? undefined,
   };
 }
@@ -201,6 +206,18 @@ export async function respondLesson(
     : 'error';
 }
 
+// LE COACH annule un cours INDIVIDUEL déjà ACCEPTÉ (96) : la résa de l'élève passe en
+// 'club_cancelled' motif « Cours annulé par le coach » (aucune pénalité pour l'élève, carnet rendu,
+// créneau libéré), l'élève reçoit un push dédié. Un code PAR CAS : 'gone' = plus accepté / résa déjà
+// tombée · 'forbidden' = pas son cours, ou cours COLLECTIF · 'played' = le cours a commencé ·
+// 'error' = échec réseau (seul cas où « réessaie » a un sens).
+export type CoachCancelLessonStatus = 'ok' | 'gone' | 'forbidden' | 'played' | 'error';
+export async function coachCancelLesson(id: string): Promise<CoachCancelLessonStatus> {
+  const { data, error } = await supabase.rpc('coach_cancel_lesson', { p_id: id });
+  if (error) return 'error';
+  return data === 'ok' || data === 'gone' || data === 'forbidden' || data === 'played' ? data : 'error';
+}
+
 // L’élève annule sa demande EN ATTENTE (un cours accepté = une réservation → annulation normale).
 export async function cancelLessonRequest(id: string): Promise<boolean> {
   const { data, error } = await supabase.rpc('cancel_lesson_request', { p_id: id });
@@ -221,7 +238,8 @@ export async function fetchMyLessons(userId: string): Promise<Lesson[] | null> {
   return ((data ?? []) as LessonRow[]).map(toLesson);
 }
 
-// Les cours côté COACH (RLS : coach_id = moi). Demandes en attente d’abord, puis par date.
+// Les cours d’un coach (RLS : le coach lui-même, ou le GÉRANT du club — cours de son club ; SectionMonClub
+// compte ainsi ses cours à venir avant un retrait, T-16). Plus récents d’abord.
 export async function fetchCoachLessons(userId: string): Promise<Lesson[] | null> {
   // Fenêtre 180 j + plafond (comme les réservations) : l'écran n'affiche que le récent.
   const { data, error } = await supabase

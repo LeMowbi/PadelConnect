@@ -22,6 +22,9 @@ export type OpenMatch = {
   // Fourchette de niveau (81) : null = ouvert à tous. Le refus est SERVEUR (join → 'level').
   levelMin: number | null;
   levelMax: number | null;
+  // Prix FIGÉ du terrain (FCFA, 96) — la part se calcule sur la capacité. null = inconnu (serveur
+  // plus ancien ou résa sans prix) : l'écran n'affiche alors aucun montant, jamais « 0 ».
+  price: number | null;
 };
 
 export async function fetchOpenMatches(): Promise<OpenMatch[] | null> {
@@ -45,6 +48,7 @@ export async function fetchOpenMatches(): Promise<OpenMatch[] | null> {
       duration_min: number;
       open_level_min: number | null;
       open_level_max: number | null;
+      price?: number | null; // dernière colonne (96) — absente d'un serveur antérieur
     }[]
   ).map((r) => ({
     id: r.id,
@@ -63,6 +67,7 @@ export async function fetchOpenMatches(): Promise<OpenMatch[] | null> {
     durationMin: r.duration_min ?? 90,
     levelMin: r.open_level_min == null ? null : Number(r.open_level_min),
     levelMax: r.open_level_max == null ? null : Number(r.open_level_max),
+    price: r.price != null && Number(r.price) > 0 ? Number(r.price) : null,
   }));
 }
 
