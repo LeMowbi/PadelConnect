@@ -3,7 +3,7 @@
 //   node --experimental-strip-types tests/pricing.test.ts
 // (les imports de types de pricing.ts sont effacés à l'exécution — aucun double).
 
-import { groupTiersByLabel, minPrice, price60Of, priceForSlot, priceTiersFor, validateTiers } from '../src/lib/pricing.ts';
+import { commissionOf, groupTiersByLabel, minPrice, price60Of, priceForSlot, priceTiersFor, validateTiers } from '../src/lib/pricing.ts';
 import { perPlayer } from '../src/lib/format.ts';
 
 let failed = 0;
@@ -31,8 +31,8 @@ check(priceForSlot(padelta, '07:00') === 10000, 'Borne 07:00 pile → heures cre
 check(priceForSlot(padelta, '16:00') === 30000, 'Borne 16:00 pile → prime time (frontière creuse/prime)');
 check(priceForSlot(padelta, '20:30') === 15000, 'Borne 20:30 pile → soirée (frontière prime/soirée)');
 check(priceForSlot(padelta, '23:59') === 15000, 'Borne 23:59 → soirée (plage jusqu’à 24:00 exclu)');
-// Hors plages (ex. 06:00 si le club ouvre tôt) → repli sur le MIN des plages (choix assumé).
-check(priceForSlot(padelta, '06:00') === 10000, 'Créneau hors plages (06:00) → repli prix minimum');
+// Hors plages (ex. 06:00 si le club ouvre tôt) → repli sur la plage la plus PROCHE (07:00 → creuses).
+check(priceForSlot(padelta, '06:00') === 10000, 'Créneau hors plages (06:00) → plage la plus proche (heures creuses)');
 check(priceForSlot(padelta, '07:30') === 10000, 'Padelta 07:30 → 10 000');
 check(minPrice(padelta) === 10000, 'Fiche « dès » = min des plages (10 000)');
 
@@ -55,7 +55,20 @@ check(priceForSlot(broken, '18:00') === 12000, 'Plages invalides ignorées → t
 // Répartition & commission sur le prix RÉEL (tests 2 et 5 de la mission).
 check(perPlayer(30000) === '7 500 FCFA', 'Part par joueur à 30 000 → « 7 500 FCFA » (message partenaires)');
 check(perPlayer(10000) === '2 500 FCFA', 'Part par joueur à 10 000 → « 2 500 FCFA »');
-check(Math.round(30000 * 0.1) === 3000, 'Commission 10 % sur une résa 18:00 Padelta → 3 000');
+check(commissionOf(30000, 0.1) === 3000, 'Commission 10 % sur une résa 18:00 Padelta → 3 000');
+
+// ——— Commission d'une unité de facturation (club × semaine) — R-66 ———
+// UN seul arrondi sur le volume du club (jamais un arrondi par résa) : 2 × 1 050 à 7 % = 147,
+// pas round(73,5) + round(73,5) = 148 (l'écart que l'opérateur voyait entre deux écrans).
+check(commissionOf(2 * 1050, 0.07) === 147, '2 × 1 050 à 7 % → 147 (un arrondi sur le volume, pas 148)');
+check(Math.round(1050 * 0.07) * 2 === 148, 'Contre-épreuve : arrondi par résa → 148 (le défaut corrigé)');
+check(commissionOf(45000, 0.1) === 4500, '3 × 15 000 à 10 % → 4 500');
+check(commissionOf(0, 0.1) === 0, 'Aucune partie → 0');
+check(commissionOf(12000, 0) === 0, 'Taux 0 % → 0');
+// Imprécision flottante absorbée : 1 350 × 0,35 = 472,49999999999994 en double → 473 (472,5 exact).
+check(1350 * 0.35 < 472.5, 'Contre-épreuve : 1 350 × 0,35 tombe SOUS 472,5 en flottant');
+check(commissionOf(1350, 0.35) === 473, '1 350 à 35 % → 473 (472,5 arrondi au franc supérieur, flottant absorbé)');
+check(commissionOf(12350, 0.07) === 865, '12 350 à 7 % → 865 (864,5 arrondi)');
 
 // ——— Validation des plages à l'enregistrement (v4.5.2, fonction pure) ———
 const tier = (start: string, end: string, price = 10000) => ({ start, end, price });
@@ -123,16 +136,28 @@ check(
 );
 // Rétro-compat : sans bornes fournies, on garde 07:00 → 24:00.
 check(validateTiers([tier('07:00', '24:00')]).ok === true, 'Sans bornes → défaut 07:00→24:00 (rétro-compat)');
-// Grille libre : un horaire ajouté AVANT la couverture des plages est vendu au prix minimum
-// (repli priceForSlot) — d'où l'avertissement à l'ajout — et re-valider des plages inchangées
-// contre l'amplitude ÉLARGIE échouerait : ClubInfoCard ne re-valide que des plages MODIFIÉES.
-check(
-  priceForSlot(
-    { priceFrom: 12000, priceTiers: [tier('08:00', '16:00'), tier('16:00', '23:00', 30000)] } as Parameters<typeof priceForSlot>[0],
-    '06:30',
-  ) === 10000,
-  'Créneau libre hors plages (06:30) → repli prix minimum (l’ajout affiche un avertissement)',
-);
+// Grille libre : un horaire ajouté HORS de la couverture des plages est vendu au prix de la plage
+// la plus PROCHE (repli priceForSlot, R-67) — d'où l'avertissement à l'ajout — et re-valider des
+// plages inchangées contre l'amplitude ÉLARGIE échouerait : ClubInfoCard ne re-valide que des
+// plages MODIFIÉES.
+const widened = {
+  priceFrom: 12000,
+  priceTiers: [tier('08:00', '16:00'), tier('16:00', '23:00', 30000)],
+} as Parameters<typeof priceForSlot>[0];
+check(priceForSlot(widened, '06:30') === 10000, 'Créneau libre avant les plages (06:30) → plage 08:00–16:00 (la plus proche)');
+// R-67 : une heure tardive ajoutée APRÈS la dernière plage (chère) n'est plus bradée au minimum.
+check(priceForSlot(widened, '23:00') === 30000, 'Créneau 23:00 après la dernière plage → 30 000 (plus proche), pas le minimum 10 000');
+check(priceForSlot(widened, '23:30', 60) === 20000, 'Créneau 1h 23:30 hors plages → prix 1h de la plage la plus proche (⅔ de 30 000)');
+// Trou entre deux plages (grille libre) : la plus proche gagne ; à égalité, celle qui PRÉCÈDE.
+const holed = {
+  priceFrom: 12000,
+  priceTiers: [tier('08:00', '12:00', 10000), tier('14:00', '23:00', 30000)],
+} as Parameters<typeof priceForSlot>[0];
+check(priceForSlot(holed, '12:30') === 10000, 'Trou 12:00–14:00, créneau 12:30 → plage qui vient de finir (10 000)');
+check(priceForSlot(holed, '13:30') === 30000, 'Trou 12:00–14:00, créneau 13:30 → plage qui commence à 14:00 (30 000)');
+check(priceForSlot(holed, '13:00') === 10000, 'Trou 12:00–14:00, créneau 13:00 (équidistant) → plage qui précède (10 000)');
+// Heure illisible → ceinture de sécurité inchangée : prix minimum.
+check(priceForSlot(holed, 'xx') === 10000, 'Heure invalide → repli prix minimum (ceinture de sécurité)');
 check(
   validateTiers([tier('08:00', '16:00'), tier('16:00', '23:00')], 6 * 60 + 30, 23 * 60).ok === false,
   'Amplitude élargie (06:30) + plages inchangées → validation en échec (d’où la re-validation UNIQUEMENT si modifiées)',
@@ -181,7 +206,7 @@ check(shared[0].label === 'Journée' && shared[0].items.length === 2, 'Onglet «
 check(groupTiersByLabel([]).length === 0, 'Aucune plage → aucun onglet');
 
 // ——— Deux prix par plage (1h / 1h30) — modularité des durées ———
-// price60 saisi : utilisé tel quel ; absent : dérivé au prorata (⅔) et borné au plancher (1000).
+// price60 saisi : utilisé tel quel ; absent : dérivé au prorata (⅔ arrondi à la centaine) et borné au plancher (1000).
 const twoPrice = {
   priceFrom: 10000,
   priceTiers: [
@@ -198,12 +223,31 @@ check(priceForSlot(twoPrice, '09:00') === 9000, 'Défaut sans durée = 1h30 (ré
 check(price60Of({ start: '', end: '', price: 12000 }) === 8000, 'price60Of(12000) = 8000');
 check(price60Of({ start: '', end: '', price: 1200 }) === 1000, 'price60Of(1200) planché à 1000 (pas 800)');
 check(price60Of({ start: '', end: '', price: 9000, price60: 5000 }) === 5000, 'price60Of respecte price60 saisi');
+// T-10 (décision porteur n° 12) : le ⅔ DÉRIVÉ est arrondi à la CENTAINE — jamais « 16 667 FCFA ».
+check(price60Of({ start: '', end: '', price: 25000 }) === 16700, 'price60Of(25000) = 16 700 (⅔ = 16 666,67, arrondi à la centaine)');
+check(price60Of({ start: '', end: '', price: 10000 }) === 6700, 'price60Of(10000) = 6 700 (et non 6 667)');
+check(price60Of({ start: '', end: '', price: 14000 }) === 9300, 'price60Of(14000) = 9 300 (9 333,33 arrondi à la centaine inférieure)');
+check(price60Of({ start: '', end: '', price: 1575 }) === 1100, 'price60Of(1575) = 1 100 (1 050 pile → centaine supérieure)');
+check(price60Of({ start: '', end: '', price: 1600 }) === 1100, 'price60Of(1600) = 1 100 (1 066,67, au-dessus du plancher)');
+check(price60Of({ start: '', end: '', price: 25000, price60: 16650 }) === 16650, 'price60 SAISI jamais arrondi (16 650 reste 16 650)');
+// Invariants sur toute la plage de prix saisissables : centaine ronde (ou plancher), à ±50 du ⅔
+// exact, jamais au-dessus du prix 1h30 (validateTiers l'exige d'un prix 1h SAISI).
+let derivedBad = 0;
+for (let p = 1000; p <= 1000000; p += 7) {
+  const d = price60Of({ start: '', end: '', price: p });
+  if (d % 100 !== 0 || d > p || (d !== 1000 && Math.abs(d - (p * 2) / 3) > 50)) derivedBad++;
+}
+check(derivedBad === 0, 'Prix 1h dérivé : centaine ronde, ±50 du ⅔, ≤ prix 1h30 (1 000 → 1 000 000 FCFA)');
 // minPrice ne compte QUE les durées offertes.
 check(minPrice(twoPrice, new Set([90])) === 9000, 'minPrice {90} = min des 1h30 (9 000)');
 check(minPrice(twoPrice, new Set([60, 90])) === 6000, 'minPrice {60,90} = 6 000 (le 1h le moins cher)');
 check(minPrice(twoPrice) === 9000, 'minPrice défaut {90} → 9 000 (jamais un « dès 1h » non offert)');
-// Club sans plage : le 1h dérive du tarif unique.
-check(priceForSlot(simple, '18:00', 60) === Math.max(1000, Math.round((14000 * 2) / 3)), 'Club sans plage · 1h = dérivé du tarif unique');
+// Club sans plage : le 1h dérive du tarif unique, MÊME arrondi à la centaine (T-10).
+check(priceForSlot(simple, '18:00', 60) === 9300, 'Club sans plage · 1h = ⅔ du tarif unique arrondi à la centaine (9 300)');
+check(
+  minPrice({ priceFrom: 25000 } as Parameters<typeof minPrice>[0], new Set([60])) === 16700,
+  'Club sans plage, 1h seul · « dès » 16 700',
+);
 // validateTiers : price60 hors bornes refusé, absent accepté.
 check(validateTiers([{ start: '07:00', end: '24:00', price: 9000, price60: 500 }]).ok === false, 'price60 < 1000 → bloqué');
 check(validateTiers([{ start: '07:00', end: '24:00', price: 9000, price60: 6000 }]).ok === true, 'price60 valide → OK');

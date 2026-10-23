@@ -79,8 +79,8 @@ export function LoyaltySettings({
       </View>
       <Divider />
       <Txt variant="muted">
-        10 réservations créées et jouées = −50 % sur le prochain match, offert par PadelConnect. Le club sert la remise sur présentation du
-        code du joueur ; elle est déduite de son décompte de la semaine, ligne par ligne ci-dessus.
+        10 réservations créées et jouées (ni invitations, ni cours, ni absences) = −50 % sur le prochain match, offert par PadelConnect. Le
+        club sert la remise sur présentation du code du joueur ; elle est déduite de son décompte de la semaine, ligne par ligne ci-dessus.
       </Txt>
 
       <Txt variant="label">Plafond de la remise (FCFA)</Txt>

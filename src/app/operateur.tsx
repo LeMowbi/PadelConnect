@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
@@ -29,12 +29,16 @@ import { COMMISSION_RATE, isPlayed, useApp, type ServerClubRequest, type ServerS
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { DAY_MS, addWeeks, dateKeyLabel, dayKey, weekKeyOf, weekLabel } from '@/lib/days';
 import { fcfa, pctLabel } from '@/lib/format';
+import { commissionOf } from '@/lib/pricing';
 import { openWhatsApp } from '@/lib/contact';
 import { shareText } from '@/lib/share';
 import { colors, font, radius, shadows, spacing } from '@/theme';
 
 // Onglets de l'Espace opérateur — même motif que l'Espace Club (SegmentedControl).
 const OP_SECTIONS = ['Aperçu', 'Finances', 'Clubs', 'Demandes'] as const;
+
+// Taux de commission PROPRE au club (accord négocié) — repli sur le taux par défaut (10 %).
+const rateFor = (rates: Record<string, number>, clubId: string) => rates[clubId] ?? COMMISSION_RATE;
 
 export default function Operateur() {
   const router = useRouter();
@@ -61,6 +65,7 @@ export default function Operateur() {
     setTournamentFee,
     setWaveLink,
     confirmTournamentPayment,
+    unconfirmTournamentPayment,
   } = useApp();
   const toast = useToast();
   const [section, setSection] = useState<(typeof OP_SECTIONS)[number]>('Aperçu');
@@ -252,8 +257,8 @@ export default function Operateur() {
     }
   };
 
-  // FIDÉLITÉ (82) : réclamations « 10 parties = 1 récompense » à remettre en main propre. Mêmes
-  // conventions que les avis signalés : un échec réseau ≠ « rien à servir », chargement au
+  // FIDÉLITÉ (92) : réclamations de remise à servir (secours opérateur ; les réclamations de
+  // l'ancienne règle 82 restent listées et servables avec leur code, 98). Mêmes conventions que les avis signalés : un échec réseau ≠ « rien à servir », chargement au
   // montage + pull-to-refresh, action honnête (on attend le serveur avant de barrer la ligne).
   const [claims, setClaims] = useState<LoyaltyClaim[]>([]);
   const [claimsError, setClaimsError] = useState(false);
@@ -321,6 +326,14 @@ export default function Operateur() {
       alive = false;
     };
   }, []);
+  // Retour au PREMIER PLAN : un club a pu servir une remise pendant que l'app dormait — on relit,
+  // sinon le décompte affiché resterait celui de l'ouverture de l'écran.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') void loadLoyaltyServed();
+    });
+    return () => sub.remove();
+  }, [loadLoyaltyServed]);
   // Déductions par « club:semaine » (clé = celle de operatorPayments).
   const servedByKey = useMemo(() => loyaltyServedByWeek(loyaltyServed ?? []), [loyaltyServed]);
 
@@ -406,87 +419,163 @@ export default function Operateur() {
   // Approbation : demande de confirmation (action forte : crée le club + donne l’accès).
   const [approveTarget, setApproveTarget] = useState<ServerClubRequest | null>(null);
   const [approving, setApproving] = useState(false);
+  // Club créé : la feuille passe en « Club en ligne » et propose de PRÉVENIR le gérant (R-49) —
+  // sans ce geste, il ne l'apprenait qu'en rouvrant l'app par hasard.
+  const [approvedDone, setApprovedDone] = useState(false);
+  const closeApprove = () => {
+    setApproveTarget(null);
+    setApprovedDone(false);
+  };
   const confirmApprove = async () => {
-    if (!approveTarget || approving) return;
+    if (!approveTarget || approving || approvedDone) return;
+    const target = approveTarget;
     setApproving(true);
-    const { ok } = await approveClubRequest(approveTarget.id);
-    setApproving(false);
-    if (ok) {
-      setRequests((cur) => cur.map((r) => (r.id === approveTarget.id ? { ...r, status: 'approved' } : r)));
-      setApproveTarget(null);
-      toast.show('Club créé et accès accordé ✅');
-    } else {
-      toast.show('Approbation impossible — réessaie', { icon: 'alert-circle' });
+    const res = await approveClubRequest(target.id);
+    if (res.ok) {
+      setApproving(false);
+      setRequests((cur) => cur.map((r) => (r.id === target.id ? { ...r, status: 'approved' } : r)));
+      setApprovedDone(true);
+      hapticSuccess();
+      return;
     }
+    if (res.operator) {
+      // 97 (R-58) : la demande vient du compte opérateur lui-même — rien n'a été créé.
+      setApproving(false);
+      closeApprove();
+      toast.show('Cette demande vient de ton compte opérateur : tu gères déjà tous les clubs, rien n’a été créé.', {
+        icon: 'information-circle',
+      });
+      return;
+    }
+    // Refus DÉFINITIF (97, R-55 : demandeur supprimé ou jamais confirmé) ou échec réseau ? La RPC
+    // rend null dans les deux cas : on relit les demandes pour savoir — « réessaie » sur un refus
+    // définitif échouerait à l'infini (même motif que serveClaim).
+    const { ok, requests: rows } = await fetchRequestsRef.current();
+    setApproving(false);
+    if (!ok) {
+      toast.show('Connexion impossible — réessaie', { icon: 'cloud-offline-outline' });
+      return;
+    }
+    setReqError(false);
+    setRequests(rows);
+    closeApprove();
+    const fresh = rows.find((x) => x.id === target.id);
+    if (!fresh) toast.show('Demande retirée entre-temps — liste mise à jour.', { icon: 'information-circle' });
+    else if (fresh.status === 'approved') toast.show('Déjà approuvée — le club existe (onglet Clubs).', { icon: 'information-circle' });
+    else
+      toast.show(
+        'Approbation refusée : le compte qui a fait cette demande a été supprimé ou n’a jamais confirmé son inscription. Aucun club créé — demande-lui de confirmer son compte (ou d’en recréer un et de refaire sa demande).',
+        { icon: 'alert-circle' },
+      );
+  };
+  // Message WhatsApp au gérant dont le club vient d'être créé (R-49).
+  const notifyApproved = (req: ServerClubRequest) => {
+    openWhatsApp(
+      req.contact_phone ?? '',
+      `Bonjour 👋 Bonne nouvelle : « ${req.name} » est en ligne sur PadelConnect ✅\n` +
+        'Ouvre l’app (Profil → Espace Club), ou club.padelconnectci.com sur ordinateur, pour régler tes terrains, tes horaires et tes tarifs.',
+    );
+    closeApprove();
   };
 
   // Le décompte est HEBDOMADAIRE (semaine calendaire lundi → dimanche).
   const thisWeek = weekKeyOf(Date.now());
   const [week, setWeek] = useState(thisWeek);
 
-  // La commission se calcule UNIQUEMENT sur les parties JOUÉES de la semaine
+  // Miroir des résas TRONQUÉ au plafond de lignes (R-61) : la semaine qui contient le plus ancien
+  // créneau reçu, et toutes les précédentes, peuvent manquer de parties — leurs montants seraient
+  // sous-évalués. Elles sortent de la relance, leur décompte ne part pas au club et l'écran le DIT
+  // (« Historique incomplet avant le … » = lundi de la première semaine COMPLÈTE, comme l'historique
+  // de l'Espace Club).
+  const coveredFrom = state.reservationsCoveredFrom;
+  const partialWeek = coveredFrom !== null ? weekKeyOf(coveredFrom) : null;
+  const fullFromLabel = partialWeek !== null ? dateKeyLabel(addWeeks(partialWeek, 1)) : null;
+  const weekIncomplete = partialWeek !== null && week <= partialWeek;
+
+  // La commission se calcule UNIQUEMENT sur les parties JOUÉES
   // (une résa à venir peut encore être annulée — le club contesterait).
+  // Règle T-11 (décision porteur n° 13) : le miroir ne contient que des résas 'booked'
+  // (fetchReservations) et un « pas venu » en sort dès qu'il est posé (markNoShow) → AUCUNE
+  // commission sur une absence, ni sur une annulation (joueur ou club). Une séance décomptée d'un
+  // CARNET reste une résa 'booked' à son prix figé → commission MAINTENUE (jouée via l'app). Un
+  // cours de coach aussi : il n'est pas une « partie » pour le joueur (T-3), mais son terrain se
+  // réserve dans l'app (respond_lesson), commission inchangée.
   // TOUT le bloc dérivé des réservations est mémoïsé : le miroir opérateur contient les
   // résas de TOUS les clubs, et sans useMemo chaque frappe dans un champ du formulaire
   // ré-exécutait ces passes complètes (priceOf → findClub par résa) à chaque re-rendu.
   const { reservations, clubCommission, customClubs, clubInfo } = state;
-  const { weekUpcoming, rows, allTimePlayed, allTimeCommission, thisWeekCommission, servedTotal } = useMemo(() => {
-    // Prix d’une résa — MÊME règle partout (hebdo et cumulé) pour que le chiffre vitrine
-    // ne sous-estime jamais la somme des semaines : prix figé, sinon tarif actuel du club.
+  // Unités de facturation (club × semaine, clé = celle de operatorPayments) des parties JOUÉES du
+  // miroir : base UNIQUE de tous les montants de commission de l'écran — ligne du club, décompte,
+  // export, relance, « cette semaine », cumul 6 mois. Chaque unité est arrondie UNE fois
+  // (commissionOf) : plus de 147 ici et 148 là pour la même semaine (R-66).
+  const billing = useMemo(() => {
+    // Prix d’une résa — MÊME règle partout : prix figé, sinon tarif actuel du club.
     const priceOf = (r: (typeof reservations)[number]) => r.price ?? findClub(r.clubId, customClubs, clubInfo)?.priceFrom ?? 0;
-    // Taux de commission PROPRE au club (accord négocié) — repli sur le taux par défaut (10 %).
-    const rateOf = (clubId: string) => clubCommission[clubId] ?? COMMISSION_RATE;
-
-    const weekAll = reservations.filter((r) => weekKeyOf(r.startsAt) === week);
-    const played = weekAll.filter((r) => isPlayed(r));
-    const groups = new Map<string, { clubName: string; count: number; revenue: number; items: typeof reservations }>();
-    for (const r of played) {
+    const units = new Map<
+      string,
+      { clubId: string; wk: string; clubName: string; count: number; revenue: number; items: typeof reservations }
+    >();
+    for (const r of reservations) {
+      if (!isPlayed(r)) continue;
+      const wk = weekKeyOf(r.startsAt);
+      const key = loyaltyWeekKey(r.clubId, wk);
       // Volume = somme des PRIX RÉELS des créneaux réservés (figés à la réservation).
-      const g = groups.get(r.clubId) ?? { clubName: r.clubName, count: 0, revenue: 0, items: [] };
-      g.count += 1;
-      g.revenue += priceOf(r);
-      g.items.push(r);
-      groups.set(r.clubId, g);
+      const u = units.get(key) ?? { clubId: r.clubId, wk, clubName: r.clubName, count: 0, revenue: 0, items: [] };
+      u.count += 1;
+      u.revenue += priceOf(r);
+      u.items.push(r);
+      units.set(key, u);
     }
-    // Commission cumulée sur la fenêtre du miroir (~6 derniers mois, MIRROR_WINDOW_MS) — chiffre
-    // vitrine. Chaque résa est commissionnée au taux de SON club (pas un taux global), pour rester exact.
-    const allPlayedRes = reservations.filter((r) => isPlayed(r));
+    return units;
+  }, [reservations, customClubs, clubInfo]);
+
+  const { weekUpcoming, rows, allTimePlayed, allTimeCommission, thisWeekCommission, servedTotal } = useMemo(() => {
     // Remises fidélité (92) : `loyalty` = servies par le club sur la semaine du service, `net` =
     // commission − remises (ce que le club règle VRAIMENT ; négatif = PadelConnect lui doit la
     // différence). Les cumuls vitrine les déduisent aussi (même fenêtre de 6 mois).
     // Un club qui a servi une remise SANS partie jouée en app cette semaine a quand même sa ligne
     // (0 partie, net négatif) : sinon sa remise disparaissait du décompte, de l'export et du total.
     const weekLoyalty = loyaltyByClubForWeek(servedByKey, week);
+    const groups = new Map<string, { clubName: string; count: number; revenue: number; items: typeof reservations }>();
+    for (const u of billing.values()) {
+      if (u.wk === week) groups.set(u.clubId, { clubName: u.clubName, count: u.count, revenue: u.revenue, items: u.items });
+    }
     for (const clubId of Object.keys(weekLoyalty)) {
       if (!groups.has(clubId)) {
         const clubName = findClub(clubId, customClubs, clubInfo)?.name ?? clubId;
         groups.set(clubId, { clubName, count: 0, revenue: 0, items: [] });
       }
     }
+    // Commission cumulée sur la fenêtre du miroir (~6 derniers mois, MIRROR_WINDOW_MS) — chiffre
+    // vitrine — et celle de la semaine EN COURS (indépendante du sélecteur ‹ › des Finances, un
+    // aperçu stable). Chaque unité au taux de SON club (pas un taux global), pour rester exact.
+    let allTimePlayed = 0;
+    let allTimeGross = 0;
+    let thisWeekGross = 0;
+    for (const u of billing.values()) {
+      const commission = commissionOf(u.revenue, rateFor(clubCommission, u.clubId));
+      allTimePlayed += u.count;
+      allTimeGross += commission;
+      if (u.wk === thisWeek) thisWeekGross += commission;
+    }
     const servedTotal = Object.values(servedByKey).reduce((s, v) => s + v, 0);
     const servedThisWeek = Object.entries(servedByKey).reduce((s, [k, v]) => (k.endsWith(`:${thisWeek}`) ? s + v : s), 0);
     return {
-      weekUpcoming: weekAll.length - played.length,
+      weekUpcoming: reservations.filter((r) => weekKeyOf(r.startsAt) === week && !isPlayed(r)).length,
       rows: [...groups.entries()]
         .map(([clubId, g]) => {
-          const commission = Math.round(g.revenue * rateOf(clubId));
+          const rate = rateFor(clubCommission, clubId);
+          const commission = commissionOf(g.revenue, rate);
           const loyalty = weekLoyalty[clubId] ?? 0;
-          return { clubId, ...g, rate: rateOf(clubId), commission, loyalty, net: commission - loyalty };
+          return { clubId, ...g, rate, commission, loyalty, net: commission - loyalty };
         })
         .sort((a, b) => b.revenue - a.revenue || b.loyalty - a.loyalty),
-      allTimePlayed: allPlayedRes.length,
-      allTimeCommission: Math.round(allPlayedRes.reduce((s, r) => s + priceOf(r) * rateOf(r.clubId), 0)) - servedTotal,
-      // Commission de la semaine EN COURS (indépendante du sélecteur ‹ › de la « Santé
-      // plateforme », un aperçu stable) — sinon naviguer vers une semaine passée la changerait.
-      thisWeekCommission:
-        Math.round(
-          reservations
-            .filter((r) => weekKeyOf(r.startsAt) === thisWeek && isPlayed(r))
-            .reduce((s, r) => s + priceOf(r) * rateOf(r.clubId), 0),
-        ) - servedThisWeek,
+      allTimePlayed,
+      allTimeCommission: allTimeGross - servedTotal,
+      thisWeekCommission: thisWeekGross - servedThisWeek,
       servedTotal,
     };
-  }, [reservations, clubCommission, customClubs, clubInfo, week, thisWeek, servedByKey]);
+  }, [billing, reservations, clubCommission, customClubs, clubInfo, week, thisWeek, servedByKey]);
 
   // Tournois JOUEURS publiés avec un frais fixe → à encaisser (Wave). Non réglés d’abord,
   // puis par date décroissante. On garde les réglés visibles (historique récent).
@@ -518,46 +607,32 @@ export default function Operateur() {
   // Relance : impayés des semaines passées PRÉSENTES DANS LE MIROIR (~6 derniers mois, cf.
   // MIRROR_WINDOW_MS) — au-delà, les résas ne sont plus rapatriées, donc un impayé de plus de
   // 6 mois n'apparaît pas ici (à traiter par une vraie RPC d'agrégat serveur si le volume grandit).
-  // Total estimé au taux de chaque club + semaine la plus ancienne à traiter (le tap y amène
+  // Les semaines du miroir TRONQUÉ (R-61) en sortent aussi : leur montant serait sous-évalué.
+  // Total au taux de chaque club + semaine la plus ancienne à traiter (le tap y amène
   // directement). La semaine EN COURS est exclue : elle se facture à sa clôture.
   // Dans l'AUTRE sens aussi : `owed` = ce que PadelConnect doit REVERSER aux clubs (remises
   // fidélité > commission sur une semaine passée non soldée) — sinon cette dette n'apparaissait
   // que sur la semaine sélectionnée et s'oubliait une fois la semaine passée.
   const unpaid = useMemo(() => {
-    // Commission par « club:semaine » non soldé, puis NET (remises fidélité déduites) par ligne —
-    // même règle que « Reste à encaisser » / « À reverser » : un net négatif ne masque pas la dette
-    // d'un autre club, il est totalisé à part.
-    const commissionByKey = new Map<string, { wk: string; commission: number }>();
-    for (const r of state.reservations) {
-      if (!isPlayed(r)) continue;
-      const wk = weekKeyOf(r.startsAt);
-      if (wk >= thisWeek) continue;
-      if (state.operatorPayments[`${r.clubId}:${wk}`] === 'paid') continue;
-      const price = r.price ?? findClub(r.clubId, state.customClubs, state.clubInfo)?.priceFrom ?? 0;
-      const key = loyaltyWeekKey(r.clubId, wk);
-      const cur = commissionByKey.get(key) ?? { wk, commission: 0 };
-      cur.commission += price * (state.clubCommission[r.clubId] ?? COMMISSION_RATE);
-      commissionByKey.set(key, cur);
-    }
-    // Remises servies par un club SANS partie jouée en app cette semaine-là : pas de commission,
-    // mais une ligne quand même (même règle que le décompte hebdo, loyaltyByClubForWeek).
-    for (const key of Object.keys(servedByKey)) {
-      const wk = key.slice(key.lastIndexOf(':') + 1);
-      if (wk >= thisWeek || commissionByKey.has(key) || state.operatorPayments[key] === 'paid') continue;
-      commissionByKey.set(key, { wk, commission: 0 });
-    }
+    // NET (remises fidélité déduites) par « club:semaine » non soldé — même règle que « Reste à
+    // encaisser » / « À reverser » : un net négatif ne masque pas la dette d'un autre club, il est
+    // totalisé à part. Les remises servies par un club SANS partie jouée en app cette semaine-là
+    // ont leur ligne aussi (pas de commission), comme dans le décompte hebdo.
     let total = 0;
     let owed = 0;
     const weeks = new Set<string>();
-    for (const [key, { wk, commission }] of commissionByKey) {
-      const net = Math.round(commission) - (servedByKey[key] ?? 0);
+    for (const key of new Set([...billing.keys(), ...Object.keys(servedByKey)])) {
+      const wk = key.slice(key.lastIndexOf(':') + 1);
+      if (wk >= thisWeek || (partialWeek !== null && wk <= partialWeek) || state.operatorPayments[key] === 'paid') continue;
+      const u = billing.get(key);
+      const net = (u ? commissionOf(u.revenue, rateFor(state.clubCommission, u.clubId)) : 0) - (servedByKey[key] ?? 0);
       if (net === 0) continue;
       if (net > 0) total += net;
       else owed -= net;
       weeks.add(wk);
     }
     return { total, owed, weeksCount: weeks.size, oldest: [...weeks].sort()[0] ?? null };
-  }, [state.reservations, state.operatorPayments, state.clubCommission, state.customClubs, state.clubInfo, thisWeek, servedByKey]);
+  }, [billing, servedByKey, state.operatorPayments, state.clubCommission, thisWeek, partialWeek]);
   // Libellé de la relance (pastille hors Finances + rappel en Finances) : les DEUX sens.
   const unpaidLabel =
     [unpaid.total > 0 ? `Reste à encaisser : ${fcfa(unpaid.total)}` : null, unpaid.owed > 0 ? `À reverser : ${fcfa(unpaid.owed)}` : null]
@@ -582,17 +657,48 @@ export default function Operateur() {
   const statusLabel = (row: (typeof rows)[number], st: ReturnType<typeof statusOf>) =>
     st === 'paid' ? (row.net < 0 ? 'Reversé' : 'Payé') : st === 'sent' ? 'Décompte envoyé' : row.net < 0 ? 'À reverser' : 'À facturer';
 
-  // Remises fidélité pas (encore) lues : un décompte envoyé ou exporté SANS la déduction serait
-  // faux — on refuse plutôt que d'envoyer un chiffre que le club contesterait.
-  const loyaltyUnknown = () => {
-    if (Array.isArray(loyaltyServed)) return false;
-    toast.show('Remises fidélité non lues — tire pour rafraîchir avant d’envoyer le décompte', { icon: 'cloud-offline-outline' });
+  // Geste financier en cours (décompte, export, « Marquer payé ») : un seul à la fois — chacun relit
+  // d'abord les remises fidélité (anti double-tap pendant l'aller-retour).
+  const [finBusy, setFinBusy] = useState<string | null>(null);
+  // Remises fidélité RELUES juste avant un geste qui fige un montant : une remise servie par un club
+  // depuis le dernier chargement changerait le net, et le club contesterait le chiffre envoyé. On
+  // refuse si la lecture échoue (jamais de décompte sans la déduction) ou si les remises de la
+  // semaine `wk` ont bougé pour les clubs concernés (`only` = un seul club) : l'écran affiche alors
+  // les nouveaux montants, à vérifier avant de recommencer. true = les montants affichés sont à jour.
+  const loyaltyStillCurrent = async (wk: string, shown: { clubId: string; loyalty: number }[], only?: string) => {
+    const now = Date.now();
+    const lines = await fetchOperatorLoyaltyServed(now - 183 * DAY_MS, now + DAY_MS);
+    if (!lines) {
+      toast.show('Remises fidélité non lues — vérifie ta connexion, puis recommence', { icon: 'cloud-offline-outline' });
+      return false;
+    }
+    setLoyaltyServed(lines);
+    const fresh = loyaltyByClubForWeek(loyaltyServedByWeek(lines), wk);
+    const ids = only ? [only] : [...new Set([...Object.keys(fresh), ...shown.map((r) => r.clubId)])];
+    if (ids.some((id) => (fresh[id] ?? 0) !== (shown.find((r) => r.clubId === id)?.loyalty ?? 0))) {
+      toast.show('Une remise fidélité vient d’être servie : montants mis à jour — vérifie-les, puis recommence', {
+        icon: 'information-circle',
+      });
+      return false;
+    }
     return true;
   };
 
   // Message Wave formaté, prêt à envoyer au club.
-  const sendHistory = (row: (typeof rows)[number]) => {
-    if (loyaltyUnknown()) return;
+  const sendHistory = async (row: (typeof rows)[number]) => {
+    if (finBusy) return;
+    // Semaine du miroir tronqué (R-61) : ses parties ne sont pas toutes chargées — le club
+    // recevrait un montant sous-évalué.
+    if (weekIncomplete) {
+      toast.show(`Semaine incomplète (historique chargé à partir du ${fullFromLabel}) : décompte non envoyable d’ici`, {
+        icon: 'alert-circle',
+      });
+      return;
+    }
+    setFinBusy(`send:${row.clubId}`);
+    const current = await loyaltyStillCurrent(week, [row], row.clubId);
+    setFinBusy(null);
+    if (!current) return;
     const lines = [...row.items]
       .sort((a, b) => a.startsAt - b.startsAt)
       // Date ABSOLUE dérivée de dateKey (jamais le libellé relatif « Sem. dernière »).
@@ -610,13 +716,15 @@ export default function Operateur() {
           : `${row.loyalty > 0 ? `Net à régler : *${fcfa(row.net)}*\n` : ''}À régler par Wave 🙏`;
     const message =
       `*PadelConnect — Décompte semaine ${weekLabel(week)}*\n${row.clubName}\n\n` +
-      `Parties jouées : ${row.count}\n` +
+      `Créneaux joués : ${row.count}\n` +
       `Volume estimé : ${fcfa(row.revenue)}\n` +
       `Commission PadelConnect (${pctLabel(row.rate)}\u00a0%) : ${row.loyalty > 0 ? fcfa(row.commission) : `*${fcfa(row.commission)}*`}\n` +
       // Remises fidélité servies par le club cette semaine : remboursées par déduction.
       (row.loyalty > 0 ? `Remises fidélité servies (remboursées) : −${fcfa(row.loyalty)}\n` : '') +
       `${settle}\n` +
-      (lines ? `\nDétail :\n${lines}` : '');
+      (lines ? `\nDétail :\n${lines}` : '') +
+      // T-11, écrit dans chaque décompte pour éviter les litiges (même règle que `billing`).
+      '\n\n_Commission sur les créneaux réservés dans l’app et joués, cours et séances de carnet compris ; jamais sur une absence ni une annulation._';
     const phone = findClub(row.clubId, state.customClubs, state.clubInfo)?.contactPhone ?? '';
     // Sans numéro connu, WhatsApp s’ouvre quand même (message prêt) mais SANS destinataire :
     // on le dit à l’opérateur pour qu’il choisisse le bon contact au lieu de croire à un envoi.
@@ -633,13 +741,17 @@ export default function Operateur() {
   };
 
   // Export de TOUTE la semaine (tableau CSV, séparateur « ; ») à partager (comptabilité).
-  const exportWeek = () => {
+  const exportWeek = async () => {
+    if (finBusy) return;
     if (rows.length === 0) {
       toast.show('Rien à exporter sur cette semaine', { icon: 'alert-circle' });
       return;
     }
-    if (loyaltyUnknown()) return;
-    const header = 'Club;Parties;Volume(FCFA);Taux(%);Commission(FCFA);Fidélité(FCFA);Net(FCFA);Statut';
+    setFinBusy('export');
+    const current = await loyaltyStillCurrent(week, rows);
+    setFinBusy(null);
+    if (!current) return;
+    const header = 'Club;Créneaux;Volume(FCFA);Taux(%);Commission(FCFA);Fidélité(FCFA);Net(FCFA);Statut';
     const body = rows
       .map((r) => {
         const label = statusLabel(r, statusOf(r.clubId));
@@ -647,12 +759,31 @@ export default function Operateur() {
       })
       .join('\n');
     const total = `TOTAL;${totalCount};${totalRevenue};;${totalCommission};${totalLoyalty};${totalCommission - totalLoyalty};`;
-    const message = `PadelConnect — Décompte semaine ${weekLabel(week)}\n\n${header}\n${body}\n${total}`;
+    // Semaine du miroir tronqué (R-61) : le tableau le DIT en tête (montants sous-évalués).
+    const warning = weekIncomplete ? `⚠️ Historique incomplet : seuls les créneaux à partir du ${fullFromLabel} sont tous chargés.\n` : '';
+    const message = `PadelConnect — Décompte semaine ${weekLabel(week)}\n${warning}\n${header}\n${body}\n${total}`;
     // Via lib/share : feuille native sur mobile, repli presse-papiers sur le web de bureau
     // (l'Espace opérateur web est une cible réelle) — plus de rejet non géré ni d'export « muet ».
     void shareText(message).then((r) => {
       if (r === 'copied') toast.show('Décompte copié dans le presse-papiers ✅');
     });
+  };
+
+  // « Marquer payé / reversé » d'une semaine PASSÉE (la semaine en cours n'est pas soldable) : le
+  // club a réglé le net qu'on lui a annoncé — on revérifie d'abord ses remises fidélité, sinon la
+  // ligne passerait « Payé ✓ » sur un montant qui n'est plus le bon.
+  const markPaid = async (row: (typeof rows)[number]) => {
+    if (finBusy) return;
+    setFinBusy(`paid:${row.clubId}`);
+    if (!(await loyaltyStillCurrent(week, [row], row.clubId))) {
+      setFinBusy(null);
+      return;
+    }
+    const { ok } = await setPaymentStatus(row.clubId, week, 'paid');
+    setFinBusy(null);
+    if (ok)
+      hapticSuccess(); // accusé APRÈS confirmation serveur (pas avant)
+    else toast.show('Changement impossible — réessaie', { icon: 'alert-circle' });
   };
 
   // Garde d’accès : l’Espace opérateur n’est rendu que si le RÔLE serveur === 'operator'.
@@ -722,7 +853,18 @@ export default function Operateur() {
         <View style={styles.infoBanner}>
           <Ionicons name="information-circle" size={17} color={colors.amberDark} />
           <Txt variant="small" color={colors.amberDark} style={{ flex: 1 }}>
-            Chaque fin de semaine : envoie le décompte à chaque club par WhatsApp, il te règle par Wave, tu marques « Payé ».
+            Chaque fin de semaine : envoie le décompte à chaque club par WhatsApp, il te règle par Wave, tu marques « Payé ». Commission sur
+            les créneaux joués (cours et séances de carnet compris), jamais sur une absence ni une annulation.
+          </Txt>
+        </View>
+      ) : null}
+      {/* Miroir tronqué (R-61) : dit AVANT tout montant que les semaines anciennes sont incomplètes. */}
+      {section === 'Finances' && fullFromLabel ? (
+        <View style={styles.infoBanner}>
+          <Ionicons name="alert-circle-outline" size={17} color={colors.amberDark} />
+          <Txt variant="small" color={colors.amberDark} style={{ flex: 1 }}>
+            Historique incomplet avant le {fullFromLabel} : trop de réservations à charger d’un coup. Les semaines plus anciennes sont
+            exclues de la relance et leur décompte ne s’envoie pas d’ici.
           </Txt>
         </View>
       ) : null}
@@ -782,8 +924,10 @@ export default function Operateur() {
             <Txt variant="label">Commission PadelConnect — 6 derniers mois</Txt>
             <Txt style={styles.heroValue}>{fcfa(allTimeCommission)}</Txt>
             <Txt variant="small" color={colors.textMuted}>
-              {allTimePlayed} partie{allTimePlayed > 1 ? 's' : ''} jouée{allTimePlayed > 1 ? 's' : ''} · réglées par Wave (hors app)
+              {allTimePlayed} créneau{allTimePlayed > 1 ? 'x' : ''} joué{allTimePlayed > 1 ? 's' : ''} · commission réglée par Wave (hors
+              app)
               {servedTotal > 0 ? ` · remises fidélité déduites (${fcfa(servedTotal)})` : ''}
+              {fullFromLabel ? ` · historique incomplet avant le ${fullFromLabel} (cumul sous-estimé)` : ''}
             </Txt>
           </Card>
 
@@ -841,10 +985,21 @@ export default function Operateur() {
           <Card>
             <Txt variant="label">Semaine {weekLabel(week)}</Txt>
             <View style={styles.totals}>
-              <StatTile value={totalCount} label="Parties jouées" color={colors.green} bg={colors.greenSoft} />
+              <StatTile value={totalCount} label="Créneaux joués" color={colors.green} bg={colors.greenSoft} />
               <StatTile value={fcfa(totalRevenue)} label="Volume" color={colors.green} bg={colors.greenSoft} />
-              <StatTile value={fcfa(totalDue)} label="Reste à encaisser" color={colors.amberDark} bg={colors.amberSoft} />
+              {/* Semaine du miroir tronqué (R-61) : aucun « reste à encaisser » chiffré, il serait faux. */}
+              <StatTile
+                value={weekIncomplete ? '—' : fcfa(totalDue)}
+                label="Reste à encaisser"
+                color={colors.amberDark}
+                bg={colors.amberSoft}
+              />
             </View>
+            {weekIncomplete ? (
+              <Txt variant="small" color={colors.amberDark} style={{ marginTop: spacing.sm }}>
+                Semaine incomplète : toutes ses réservations ne sont pas chargées, les montants ci-dessous sont sous-estimés.
+              </Txt>
+            ) : null}
             {totalOwed > 0 ? (
               <Txt variant="small" color={colors.amberDark} style={{ marginTop: spacing.sm }}>
                 À reverser aux clubs : {fcfa(totalOwed)} (remises fidélité supérieures à leur commission).
@@ -861,14 +1016,26 @@ export default function Operateur() {
                 Remises fidélité non lues (connexion) : le reste à encaisser peut être surestimé — tire pour rafraîchir.
               </Txt>
             ) : null}
-            <Button size="sm" variant="ghost" label="Exporter la semaine (tableau)" icon="download-outline" onPress={exportWeek} full />
+            <Button
+              size="sm"
+              variant="ghost"
+              label={finBusy === 'export' ? 'Vérification…' : 'Exporter la semaine (tableau)'}
+              icon="download-outline"
+              disabled={finBusy !== null}
+              onPress={() => void exportWeek()}
+              full
+            />
           </Card>
 
           <View style={{ marginTop: spacing.xl }}>
             <SectionHeader title="Par club" />
             {rows.length === 0 ? (
               <Card>
-                <Txt variant="muted">Aucune partie jouée sur la semaine {weekLabel(week)}.</Txt>
+                <Txt variant="muted">
+                  {weekIncomplete
+                    ? `Semaine ${weekLabel(week)} non chargée (historique incomplet avant le ${fullFromLabel}).`
+                    : `Aucun créneau joué sur la semaine ${weekLabel(week)}.`}
+                </Txt>
               </Card>
             ) : (
               rows.map((r) => {
@@ -883,7 +1050,7 @@ export default function Operateur() {
                         </Txt>
                         <Txt variant="muted">
                           {r.count === 0 ? (
-                            'Aucune partie en app cette semaine'
+                            'Aucun créneau joué en app cette semaine'
                           ) : (
                             <>
                               {r.count} résa{r.count > 1 ? 's' : ''} · volume ≈ {fcfa(r.revenue)} · {pctLabel(r.rate)}
@@ -915,10 +1082,11 @@ export default function Operateur() {
                       <View style={{ flex: 1 }}>
                         <Button
                           size="sm"
-                          label="Envoyer le décompte"
+                          label={finBusy === `send:${r.clubId}` ? 'Vérification…' : 'Envoyer le décompte'}
                           icon="logo-whatsapp"
                           variant="secondary"
-                          onPress={() => sendHistory(r)}
+                          disabled={finBusy !== null}
+                          onPress={() => void sendHistory(r)}
                           full
                         />
                       </View>
@@ -941,16 +1109,18 @@ export default function Operateur() {
                         // jamais réglé. Elle se solde à sa clôture, comme le dit la relance.
                         <Button
                           size="sm"
-                          label={week === thisWeek ? 'À solder lundi' : r.net < 0 ? 'Marquer reversé' : 'Marquer payé'}
-                          icon="checkmark-circle"
-                          disabled={week === thisWeek}
-                          onPress={() =>
-                            void setPaymentStatus(r.clubId, week, 'paid').then(({ ok }) => {
-                              if (ok)
-                                hapticSuccess(); // accusé APRÈS confirmation serveur (pas avant)
-                              else toast.show('Changement impossible — réessaie', { icon: 'alert-circle' });
-                            })
+                          label={
+                            week === thisWeek
+                              ? 'À solder lundi'
+                              : finBusy === `paid:${r.clubId}`
+                                ? '…'
+                                : r.net < 0
+                                  ? 'Marquer reversé'
+                                  : 'Marquer payé'
                           }
+                          icon="checkmark-circle"
+                          disabled={week === thisWeek || finBusy !== null}
+                          onPress={() => void markPaid(r)}
                         />
                       )}
                     </View>
@@ -1037,7 +1207,24 @@ export default function Operateur() {
               comps={playerTournamentsToBill}
               onConfirm={async (id) => {
                 const { ok } = await confirmTournamentPayment(id);
-                toast.show(ok ? 'Paiement confirmé ✅' : 'Confirmation impossible — réessaie', ok ? undefined : { icon: 'alert-circle' });
+                // Refus possible sur un tournoi ANNULÉ entre-temps (T-12 : frais annulés) — même
+                // libellé honnête que onUnconfirm, sans promettre qu'un nouvel essai aboutira.
+                toast.show(
+                  ok
+                    ? 'Paiement confirmé ✅'
+                    : 'Confirmation impossible (connexion, ou tournoi annulé par son club — frais annulés) — la liste se met à jour au prochain chargement',
+                  ok ? undefined : { icon: 'alert-circle' },
+                );
+              }}
+              onUnconfirm={async (id) => {
+                // 97 (R-68) : false = refus (déjà « à régler », tournoi sans frais) ou échec réseau.
+                const { ok } = await unconfirmTournamentPayment(id);
+                toast.show(
+                  ok
+                    ? 'Paiement annulé — le tournoi repasse « à régler »'
+                    : 'Annulation impossible (connexion, ou tournoi déjà « à régler ») — la liste se met à jour au prochain chargement',
+                  ok ? undefined : { icon: 'alert-circle' },
+                );
               }}
             />
           </View>
@@ -1635,33 +1822,61 @@ export default function Operateur() {
         </>
       ) : null}
 
-      {/* Confirmation d’approbation — action forte : crée le club + donne l’accès gérant. */}
+      {/* Confirmation d’approbation — action forte : crée le club + donne l’accès gérant. Une fois
+          le club créé, la même feuille propose de prévenir le gérant (R-49). */}
       <BottomSheet
         visible={approveTarget !== null}
-        title={approveTarget ? `Approuver « ${approveTarget.name} » ?` : 'Approuver ce club ?'}
-        subtitle="Le club sera créé et visible par tous les joueurs."
-        onClose={() => (approving ? null : setApproveTarget(null))}
+        title={
+          approvedDone && approveTarget
+            ? `« ${approveTarget.name} » est en ligne ✅`
+            : approveTarget
+              ? `Approuver « ${approveTarget.name} » ?`
+              : 'Approuver ce club ?'
+        }
+        subtitle={approvedDone ? 'Club créé et accès gérant accordé.' : 'Le club sera créé et visible par tous les joueurs.'}
+        onClose={() => (approving ? null : closeApprove())}
       >
-        <View style={styles.approveBox}>
-          <Ionicons name="sparkles" size={18} color={colors.signature} />
-          <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
-            Le demandeur obtiendra l’accès à{' '}
-            <Txt variant="small" style={{ fontWeight: '700' }}>
-              son Espace Club
-            </Txt>{' '}
-            dès sa prochaine ouverture de l’app. Aucune manipulation technique de ta part.
-          </Txt>
-        </View>
-        <View style={{ gap: spacing.sm, marginTop: spacing.lg }}>
-          <Button
-            label={approving ? 'Création…' : 'Oui, créer le club'}
-            icon="checkmark-circle"
-            onPress={confirmApprove}
-            disabled={approving}
-            full
-          />
-          <Button label="Annuler" variant="secondary" onPress={() => setApproveTarget(null)} disabled={approving} full />
-        </View>
+        {approvedDone && approveTarget ? (
+          <>
+            <View style={styles.approveBox}>
+              <Ionicons name="megaphone-outline" size={18} color={colors.signature} />
+              <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
+                {approveTarget.contact_phone
+                  ? 'Préviens le gérant : il n’est pas notifié automatiquement. Son Espace Club s’ouvre à sa prochaine ouverture de l’app.'
+                  : 'Aucun numéro dans la demande : préviens le gérant par ton canal habituel. Son Espace Club s’ouvre à sa prochaine ouverture de l’app.'}
+              </Txt>
+            </View>
+            <View style={{ gap: spacing.sm, marginTop: spacing.lg }}>
+              {approveTarget.contact_phone ? (
+                <Button label="Prévenir par WhatsApp" icon="logo-whatsapp" onPress={() => notifyApproved(approveTarget)} full />
+              ) : null}
+              <Button label="Fermer" variant="secondary" onPress={closeApprove} full />
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={styles.approveBox}>
+              <Ionicons name="sparkles" size={18} color={colors.signature} />
+              <Txt variant="small" color={colors.text} style={{ flex: 1 }}>
+                Le demandeur obtiendra l’accès à{' '}
+                <Txt variant="small" style={{ fontWeight: '700' }}>
+                  son Espace Club
+                </Txt>{' '}
+                dès sa prochaine ouverture de l’app. Aucune manipulation technique de ta part.
+              </Txt>
+            </View>
+            <View style={{ gap: spacing.sm, marginTop: spacing.lg }}>
+              <Button
+                label={approving ? 'Création…' : 'Oui, créer le club'}
+                icon="checkmark-circle"
+                onPress={confirmApprove}
+                disabled={approving}
+                full
+              />
+              <Button label="Annuler" variant="secondary" onPress={closeApprove} disabled={approving} full />
+            </View>
+          </>
+        )}
       </BottomSheet>
 
       {/* Confirmation de suppression — serveur : définitif ; base : retrait réversible de l’app. */}

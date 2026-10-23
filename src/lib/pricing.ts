@@ -1,5 +1,5 @@
 // Tarification par plage horaire. Chaque gérant définit librement jusqu’à 3 plages
-// (heure de début, heure de fin, prix 1h30 + prix 1h optionnel — dérivé à ⅔ si vide). Sans plage,
+// (heure de début, heure de fin, prix 1h30 + prix 1h optionnel — dérivé à ⅔, arrondi à la centaine, si vide). Sans plage,
 // le club garde son tarif unique (priceFrom) — rétro-compatible. Le prix RÉEL d’un créneau est stocké sur la
 // réservation au moment de la création (cf. addReservation), pour que la commission
 // opérateur et la répartition « par joueur » soient exactes même si le tarif change.
@@ -13,14 +13,21 @@ export function priceTiersFor(club: Club): PriceTier[] {
   return (club.priceTiers ?? []).filter((t) => t.price > 0 && t.start && t.end);
 }
 
-// Prix 1h d’une plage : `price60` s’il est saisi, sinon dérivé au prorata (⅔) et borné au plancher.
+// Prix 1h DÉRIVÉ d’un prix 1h30 : ⅔ arrondi à la CENTAINE (T-10 : 16 700, jamais « 16 667 FCFA »),
+// borné au plancher. Une seule division (× 2 / 300) : un ⅔ qui tombe pile sur 50 (1 575 → 1 050)
+// reste exact et part à la centaine supérieure. Recopié tel quel par le site (prix60Derive, site.js).
+function derived60(price90: number): number {
+  return Math.max(PRICE_MIN, Math.round((price90 * 2) / 300) * 100);
+}
+
+// Prix 1h d’une plage : `price60` s’il est saisi (jamais arrondi), sinon dérivé (derived60).
 export function price60Of(tier: PriceTier): number {
-  return tier.price60 && tier.price60 > 0 ? tier.price60 : Math.max(PRICE_MIN, Math.round((tier.price * 2) / 3));
+  return tier.price60 && tier.price60 > 0 ? tier.price60 : derived60(tier.price);
 }
 
 // Prix 1h dérivé du tarif unique d’un club sans plage (priceFrom = prix 1h30 indicatif).
 function flat60(club: Club): number {
-  return Math.max(PRICE_MIN, Math.round((club.priceFrom * 2) / 3));
+  return derived60(club.priceFrom);
 }
 
 // Prix d’une session selon sa DURÉE (60|90) pour une plage.
@@ -43,25 +50,48 @@ export function minPrice(club: Club, offered: Set<60 | 90> = new Set([90])): num
 }
 
 // Prix d’un créneau « HH:MM » pour une DURÉE (défaut 1h30) : l’heure choisit la plage, la durée
-// choisit la colonne (1h/1h30). Sinon le tarif unique. Le repli `minPrice` est une CEINTURE DE
-// SÉCURITÉ silencieuse : grâce à validateTiers, une saisie valide couvre les heures d’ouverture sans
-// trou. Comparaison NUMÉRIQUE (« 9:00 » serait sinon mal classée face à « 16:00 »).
+// choisit la colonne (1h/1h30). Sinon le tarif unique. Comparaison NUMÉRIQUE (« 9:00 » serait
+// sinon mal classée face à « 16:00 »).
+// Créneau HORS de toute plage (le gérant a élargi ses horaires sans retoucher ses plages — il en
+// est averti à l’ajout) : prix de la plage la plus PROCHE dans le temps (celle qui vient de finir
+// ou celle qui va commencer ; à égalité, celle qui PRÉCÈDE — le créneau prolonge la plage qu’il
+// suit). Le prix minimum du club aurait bradé une heure chère ajoutée en fin de soirée (R-67).
+// Une heure illisible garde la ceinture de sécurité historique : le prix minimum.
 export function priceForSlot(club: Club, time: string, durationMin: number = 90): number {
   const tiers = priceTiersFor(club);
   if (tiers.length) {
     const tm = timeToMinutes(time);
-    const match =
-      tm === null
-        ? undefined
-        : tiers.find((t) => {
-            const s = timeToMinutes(t.start);
-            const e = timeToMinutes(t.end);
-            return s !== null && e !== null && tm >= s && tm < e;
-          });
-    if (match) return priceOfTier(match, durationMin);
+    if (tm === null) return minPrice(club, new Set([durationMin === 60 ? 60 : 90]));
+    let nearest: PriceTier | undefined;
+    let nearestGap = Infinity;
+    let nearestStart = Infinity;
+    for (const t of tiers) {
+      const s = timeToMinutes(t.start);
+      const e = timeToMinutes(t.end);
+      if (s === null || e === null) continue;
+      if (tm >= s && tm < e) return priceOfTier(t, durationMin); // l’heure tombe dans la plage
+      const gap = tm < s ? s - tm : tm - e; // fin EXCLUSIVE : un créneau à `e` pile est à 0 min
+      if (gap < nearestGap || (gap === nearestGap && s < nearestStart)) {
+        nearest = t;
+        nearestGap = gap;
+        nearestStart = s;
+      }
+    }
+    if (nearest) return priceOfTier(nearest, durationMin);
     return minPrice(club, new Set([durationMin === 60 ? 60 : 90]));
   }
   return durationMin === 60 ? flat60(club) : club.priceFrom;
+}
+
+// ——— Commission PadelConnect (Espace opérateur) ———
+// Commission d’une UNITÉ DE FACTURATION (un club × une semaine) : volume = somme des prix figés
+// des parties jouées, × le taux PROPRE au club, arrondi UNE seule fois au franc. Tous les montants
+// de l’opérateur (ligne du club, décompte WhatsApp, export, relance, « cette semaine », cumul
+// 6 mois) additionnent CES montants : arrondir par résa ou sur un total global donnait 148 ici et
+// 147 là pour la même semaine (R-66). Le produit est d’abord ramené au millionième : en double,
+// 1 350 × 0,35 vaut 472,49999999999994 et serait arrondi à 472 au lieu de 473.
+export function commissionOf(revenue: number, rate: number): number {
+  return Math.round(Math.round(revenue * rate * 1e6) / 1e6);
 }
 
 // ——— Regroupement d’affichage par plage nommée (fiche club, purement visuel) ———

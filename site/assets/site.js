@@ -446,9 +446,9 @@
     return h * 60 + min;
   }
 
-  // Prix 1h dérivé (⅔, borné au plancher) — price60Of / flat60.
+  // Prix 1h dérivé : ⅔ arrondi à la CENTAINE, borné au plancher — derived60 (price60Of / flat60).
   function prix60Derive(prix) {
-    return Math.max(PRICE_MIN, Math.round((prix * 2) / 3));
+    return Math.max(PRICE_MIN, Math.round((prix * 2) / 300) * 100);
   }
 
   // Durées (60|90) RÉELLEMENT ouvertes sur les terrains du club. Sans grille par terrain

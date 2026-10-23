@@ -46,6 +46,13 @@ eq(sitePrice(30000, [], { 'Terrain 1': [{ t: '08:00', d: 60, x: true }] }, T1), 
 eq(sitePrice(30000, [], null, T1), 30000, 'sans grille par terrain → 1h30 seulement');
 eq(sitePrice(30000, [], {}, T1), 30000, 'grille vide {} ≡ absente → 1h30 seulement');
 eq(sitePrice(1200, [], { 'Terrain 1': [{ t: '08:00', d: 60 }] }, T1), 1000, 'prix 1h dérivé borné au plancher 1 000');
+// T-10 : le ⅔ dérivé est arrondi à la CENTAINE, comme dans l'app (jamais « dès 16 667 FCFA »).
+eq(sitePrice(25000, [], { 'Terrain 1': [{ t: '08:00', d: 60 }] }, T1), 16700, 'tarif unique 25 000 en 1h → dès 16 700');
+eq(
+  sitePrice(25000, [{ start: '07:00', end: '24:00', price: 14000 }], { 'Terrain 1': [{ t: '09:00', d: 60 }] }, T1),
+  9300,
+  'plage 14 000 sans prix 1h → dès 9 300 (9 333 arrondi)',
+);
 const padelta: PriceTier[] = [
   { start: '07:00', end: '16:00', price: 10000 },
   { start: '16:00', end: '20:30', price: 30000 },
@@ -77,14 +84,14 @@ for (let n = 0; n < 5000; n++) {
           ...(alea() < 0.3 ? { x: true } : {}),
         }));
   }
-  const priceFrom = choisir([1200, 10000, 30000]);
+  const priceFrom = choisir([1200, 1575, 10000, 25000, 30000]);
   const tiers: PriceTier[] =
     alea() < 0.5
       ? []
       : Array.from({ length: 1 + Math.floor(alea() * 3) }, () => ({
           start: choisir(['07:00', '']),
           end: '24:00',
-          price: choisir([0, 9000, 20000]),
+          price: choisir([0, 1600, 9000, 14000, 20000]),
           ...(alea() < 0.5 ? { price60: choisir([0, 5000, 15000]) } : {}),
         }));
   if (sitePrice(priceFrom, tiers, cs, courts) !== appPrice(priceFrom, tiers, cs, courts)) ecarts++;

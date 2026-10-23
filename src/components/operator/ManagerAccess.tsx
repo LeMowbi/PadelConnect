@@ -11,7 +11,8 @@ import { colors } from '@/theme';
 // Accès gérant : l’opérateur saisit le numéro du joueur (qui a déjà créé un compte) et
 // choisit le club. Le joueur devient gérant et voit son Espace Club au prochain retour.
 // Multi-clubs (55) : donner un 2ᵉ club S'AJOUTE (le gérant bascule depuis son Espace Club) ;
-// « Retirer l'accès » retire TOUS ses clubs d'un coup.
+// « Retirer l'accès » retire TOUS ses clubs d'un coup. Le numéro du compte OPÉRATEUR lui-même
+// est refusé côté serveur (97, R-58 : `operator: true`) — message dédié, jamais un faux « Accès ✅ ».
 export function ManagerAccess({
   clubs,
   onGrant,
@@ -19,8 +20,8 @@ export function ManagerAccess({
   toast,
 }: {
   clubs: { id: string; name: string; area: string }[];
-  onGrant: (phone: string, clubId: string) => Promise<{ ok: boolean; name?: string; error?: boolean }>;
-  onRevoke: (phone: string) => Promise<{ ok: boolean; name?: string; error?: boolean }>;
+  onGrant: (phone: string, clubId: string) => Promise<{ ok: boolean; name?: string; error?: boolean; operator?: boolean }>;
+  onRevoke: (phone: string) => Promise<{ ok: boolean; name?: string; error?: boolean; operator?: boolean }>;
   toast: ReturnType<typeof useToast>;
 }) {
   const [phone, setPhone] = useState('');
@@ -33,12 +34,14 @@ export function ManagerAccess({
   const grant = async () => {
     if (busy || !clubId || !phoneOk) return;
     setBusy('grant');
-    const { ok, name, error } = await onGrant(phone, clubId);
+    const { ok, name, error, operator } = await onGrant(phone, clubId);
     setBusy(null);
     if (ok) {
       toast.show(`${name || 'Gérant'} → accès ${selected?.name ?? 'club'} ✅`);
       setPhone('');
       setClubId(null);
+    } else if (operator) {
+      toast.show('Ce numéro est celui du compte opérateur : il gère déjà tous les clubs, rien n’a changé.', { icon: 'information-circle' });
     } else if (error) {
       // Échec RÉSEAU ≠ « numéro inconnu » : ne pas envoyer le gérant recréer un compte pour rien.
       toast.show('Connexion impossible — réessaie', { icon: 'alert-circle' });
@@ -50,11 +53,15 @@ export function ManagerAccess({
   const revoke = async () => {
     if (busy || !phoneOk) return;
     setBusy('revoke');
-    const { ok, name, error } = await onRevoke(phone);
+    const { ok, name, error, operator } = await onRevoke(phone);
     setBusy(null);
     if (ok) {
       toast.show(`Accès retiré à TOUS ses clubs (${name || 'joueur'})`);
       setPhone('');
+    } else if (operator) {
+      toast.show('Ce numéro est celui du compte opérateur : son accès ne se retire pas d’ici, rien n’a changé.', {
+        icon: 'information-circle',
+      });
     } else if (error) {
       toast.show('Connexion impossible — réessaie', { icon: 'alert-circle' });
     } else {
