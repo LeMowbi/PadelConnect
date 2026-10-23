@@ -8,10 +8,12 @@
 //     transition vient d'une annulation joueur ou de delete_club ; marqueur `club_deleted`
 //     (97) → push neutre en plus à l'AUTEUR (« ton créneau n'a plus lieu »).
 //   • reservations UPDATE (booked → club_cancelled) → AUTEUR (motif, proposition — jamais pour un
-//     cours) + participants ; cours annulé PAR LE COACH (96, lessons.cancelled_by) → push dédié à
-//     l'élève ; créneau LIBÉRÉ (aucune fermeture posée : coach qui annule ou supprimé) → gérants
-//     et liste d'attente prévenus ; élèves d'un cours collectif d'un coach supprimé relus dans
-//     lesson_cancel_notices (97).
+//     cours) + participants, même si le créneau a commencé (pluie en cours de match) ; cours
+//     annulé PAR LE COACH (96, lessons.cancelled_by) → push dédié à l'élève ; coach qui a
+//     supprimé son compte → « choisis un autre coach » ; cours COLLECTIF → rien ici (la résa est
+//     au nom du coach : la branche lessons prévient coach et élèves) ; créneau LIBÉRÉ (aucune
+//     fermeture posée : coach qui annule ou supprimé) → gérants et liste d'attente prévenus ;
+//     élèves d'un cours collectif d'un coach supprimé relus dans lesson_cancel_notices (97).
 //   • reservations UPDATE (booked → no_show) → push factuel au CRÉATEUR (« marqué pas venu »).
 //   • reservation_participants INSERT → notif à l'AMI INVITÉ (nouvelle invitation à jouer).
 //   • reservation_participants UPDATE (accepted) → notif à l'AUTEUR (un invité a accepté, NOMMÉ).
@@ -21,7 +23,8 @@
 //   • competitions UPDATE (pending → published) → notif à l'ORGANISATEUR (tournoi validé) ET, si
 //     frais > 0, à l'OPÉRATEUR (« frais à encaisser ») — donc seulement après validation du club.
 //   • competitions UPDATE (pending → rejected) → notif à l'ORGANISATEUR (tournoi refusé).
-//   • competitions UPDATE (published → cancelled, 97) → INSCRITS + ORGANISATEUR (motif) ; frais
+//   • competitions UPDATE (published → cancelled, 97) → INSCRITS + ORGANISATEUR (motif ; jamais à
+//     l'organisateur qui l'a annulé lui-même — 98 `cancelled_by`) ; frais
 //     déjà encaissés d'un tournoi annulé par le club / l'opérateur (98 : 'refund_due') → OPÉRATEUR.
 //   • friend_requests INSERT (pending) → notif au DESTINATAIRE (nouvelle demande d'ami).
 //   • friend_requests UPDATE (→ pending) → notif au DESTINATAIRE (demande RENVOYÉE après un refus :
@@ -93,6 +96,8 @@ type Notif = {
   // Début du créneau (ms epoch) d'un push lié à une partie : il ne sert plus une fois la partie
   // commencée → durée de vie Expo (`ttl`) jusqu'au début, et AUCUN envoi si c'est déjà commencé
   // (sinon « Un créneau s'est libéré, fonce » arrivait après le match sur un Android en veille).
+  // JAMAIS sur une annulation par le club ou d'un cours : le club peut annuler un créneau EN
+  // COURS (pluie, terrain impraticable — 78) et le joueur doit l'apprendre, avec la proposition.
   startsAt?: number;
   // Diffusion non transactionnelle (actu, agenda, annonce club) : priorité normale, 72 h de vie.
   broadcast?: boolean;
@@ -616,25 +621,65 @@ async function handle(payload: {
     // (97), qui passent par le même statut pour ne pas compter d'annulation à l'élève.
     // Tap sur la notif → « Mes réservations ». Formulation NEUTRE (pluie, panne, chevauchement…) :
     // « a dû annuler », jamais une cause supposée.
+    // `startsAt` ne sert qu'au push gérant « Créneau libéré » et à la liste d'attente (plus bas) :
+    // les push d'ANNULATION partent même si le créneau a commencé (cf. type Notif).
     const startsAt = slotStart(record.starts_at);
     const club = await recordClubName(record);
     const when = `du ${record.date_label ?? ''} à ${record.time ?? ''}`;
     const coach = String(record.coach_name ?? '').trim();
     const reasonPart = record.cancel_reason ? ` Motif : ${record.cancel_reason}.` : '';
-    // Cours annulé PAR SON COACH (lessons.cancelled_by, 96) → push dédié à l'élève, jamais
-    // « annulé par le club ».
+    // Cours : la lesson rattachée dit QUI annule et QUI est l'auteur de la résa.
+    //  • annulé PAR SON COACH (lessons.cancelled_by, 96) → push dédié à l'élève ;
+    //  • cours COLLECTIF (capacity > 1) : la résa est au nom du COACH (create_group_lesson) — la
+    //    branche lessons prévient déjà le coach et les élèves → rien ici pour l'« auteur » ;
+    //  • coach qui a SUPPRIMÉ son compte (delete_account : motif « Coach indisponible », lesson
+    //    effacée par la cascade avant ce webhook) → l'élève ne peut plus « redemander à son coach ».
     let byCoach = false;
+    let groupHost = false;
+    let coachGone = false;
+    let lessonUnknown = false;
     if (coach) {
-      const { data: lsn } = await supabase.from('lessons').select('cancelled_by').eq('reservation_id', record.id).limit(1);
-      byCoach = (lsn ?? []).some((l: { cancelled_by: string | null }) => l.cancelled_by === 'coach');
+      const { data: lsn, error: lsnErr } = await supabase
+        .from('lessons')
+        .select('cancelled_by, capacity, coach_id')
+        .eq('reservation_id', record.id)
+        .limit(1);
+      const rows = (lsn ?? []) as { cancelled_by: string | null; capacity: number | null; coach_id: string }[];
+      byCoach = rows.some((l) => l.cancelled_by === 'coach');
+      groupHost = rows.some((l) => Number(l.capacity ?? 1) > 1 || l.coach_id === record.user_id);
+      coachGone = !lsnErr && rows.length === 0 && record.cancel_reason === 'Coach indisponible';
+      if (lsnErr) {
+        lessonUnknown = true;
+        await logIssue(`lesson d'une résa annulée non relue (${record.id}) — ${lsnErr.message}`);
+      }
     }
-    if (byCoach) {
+    if (groupHost) {
+      // Cours collectif : coach et élèves prévenus par la branche lessons (aucun doublon absurde
+      // « Ton cours avec <toi-même> » au coach).
+    } else if (byCoach) {
       notifs.push({
         targets: await userToken(record.user_id),
         title: 'Cours annulé par ton coach',
         body: `${coach} a annulé ton cours ${when} (${club}) — aucune pénalité pour toi, redemande un créneau quand tu veux.`,
         data: { kind: 'reservation', id: record.id, event: 'cancelled' },
-        startsAt,
+      });
+    } else if (coachGone) {
+      notifs.push({
+        targets: await userToken(record.user_id),
+        title: 'Cours annulé',
+        body: `Ton cours avec ${coach} ${when} (${club}) est annulé : ton coach n’est plus disponible sur PadelConnect. Aucune pénalité pour toi — choisis un autre coach dans « Réserver un cours ».`,
+        data: { kind: 'reservation', id: record.id, event: 'cancelled' },
+      });
+    } else if (lessonUnknown) {
+      // Lesson NON RELUE : l'auteur peut être l'élève OU le coach d'un cours collectif, et le coach
+      // a peut-être supprimé son compte → texte NEUTRE, vrai dans tous les cas (ni « Ton cours avec
+      // <toi-même> », ni « Redemande un créneau à ton coach »). L'élève d'un cours individuel n'a
+      // que ce push (la branche lessons ne prévient que le coach) : on ne le coupe pas.
+      notifs.push({
+        targets: await userToken(record.user_id),
+        title: 'Cours annulé',
+        body: `Ton cours ${when} (${club}) est annulé.${reasonPart}`,
+        data: { kind: 'reservation', id: record.id, event: 'cancelled' },
       });
     } else if (coach) {
       // Un COURS ne se re-réserve pas sans le coach : jamais de proposition d'alternative.
@@ -643,7 +688,6 @@ async function handle(payload: {
         title: 'Cours annulé',
         body: `Ton cours avec ${coach} ${when} (${club}) est annulé.${reasonPart} Redemande un créneau à ton coach.`,
         data: { kind: 'reservation', id: record.id, event: 'cancelled' },
-        startsAt,
       });
     } else {
       // Motif et proposition d'alternative (jour/heure/terrain) : pour l'AUTEUR seulement.
@@ -655,7 +699,6 @@ async function handle(payload: {
         title: 'Créneau annulé par le club',
         body: `${club} a dû annuler ton créneau ${when}.${reasonPart}${proposalPart}`,
         data: { kind: 'reservation', id: record.id, event: 'cancelled' },
-        startsAt,
       });
     }
     // Participants (amis invités / match ouvert) : prévenus eux aussi que le créneau saute, mais
@@ -673,7 +716,6 @@ async function handle(payload: {
         // regarde que l'auteur de la résa — un participant n'a pas à le recevoir (confidentialité).
         body: `${club} a dû annuler le créneau ${when}.`,
         data: { kind: 'reservation', id: record.id, event: 'cancelled' },
-        startsAt,
       });
     }
     // Cours COLLECTIF d'un coach SUPPRIMÉ (97) : la cascade a effacé la résa du coach et ses
@@ -699,7 +741,6 @@ async function handle(payload: {
           title: 'Cours collectif annulé',
           body: `Le cours collectif ${when} (${club}) n’aura pas lieu : le coach n’est plus disponible.`,
           data: { kind: 'reservation' },
-          startsAt,
         });
       }
     }
@@ -888,17 +929,20 @@ async function handle(payload: {
   } else if (table === 'competitions' && type === 'UPDATE' && record.status === 'cancelled' && oldRecord.status === 'published') {
     // Tournoi ANNULÉ (97 : club hôte, opérateur, organisateur sans inscrit, ou club retiré) →
     // les INSCRITS et l'ORGANISATEUR sont prévenus, motif joint. Texte RELU en base (anti-
-    // phishing, idiome actu/agenda) ; inscrits en relation de blocage avec l'organisateur exclus
-    // — FAIL-CLOSED : si les blocages ne se lisent pas, seul l'organisateur est prévenu.
+    // phishing, idiome actu/agenda). L'organisateur qui vient d'annuler LUI-MÊME (98,
+    // `cancelled_by` — gérant qui annule le tournoi de son club, organisateur sans inscrit) ne
+    // reçoit pas son propre geste. Aucun filtre de blocage sur les inscrits : un tournoi qui a des
+    // inscrits n'est annulable que par le club ou l'opérateur — le message vient d'eux et concerne
+    // l'inscription de chacun (sans ce push, le tournoi disparaît de sa liste en silence).
     const { data: comp } = await supabase
       .from('competitions')
-      .select('id, title, club_id, club_name, organizer_id, cancel_reason, status, commission, payment_status')
+      .select('id, title, club_id, club_name, organizer_id, cancel_reason, status, commission, payment_status, cancelled_by')
       .eq('id', record.id)
       .maybeSingle();
     if (comp && comp.status === 'cancelled') {
       const club = comp.club_name || (await clubName(String(comp.club_id ?? '')));
       const reason = comp.cancel_reason ? ` Motif : ${comp.cancel_reason}.` : '';
-      if (comp.organizer_id) {
+      if (comp.organizer_id && comp.organizer_id !== comp.cancelled_by) {
         notifs.push({
           targets: await userToken(comp.organizer_id),
           title: 'Ton tournoi est annulé',
@@ -911,20 +955,8 @@ async function handle(payload: {
         .select('user_id')
         .eq('competition_id', comp.id)
         .limit(500);
-      let regIds = [...new Set((regs ?? []).map((r: { user_id: string }) => r.user_id))].filter((id) => id && id !== comp.organizer_id);
+      const regIds = [...new Set((regs ?? []).map((r: { user_id: string }) => r.user_id))].filter((id) => id && id !== comp.organizer_id);
       if (regErr) await logIssue(`inscrits d'un tournoi annulé non relus (${comp.id}) — ${regErr.message}`);
-      if (regIds.length && comp.organizer_id) {
-        const { data: blocks, error: blkErr } = await supabase
-          .from('blocked_users')
-          .select('blocker_id, blocked_id')
-          .or(`blocker_id.eq.${comp.organizer_id},blocked_id.eq.${comp.organizer_id}`);
-        if (blkErr || !blocks) {
-          regIds = [];
-        } else {
-          const excluded = new Set(blocks.flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]));
-          regIds = regIds.filter((id) => !excluded.has(id));
-        }
-      }
       if (regIds.length) {
         const targets: string[] = [];
         for (let i = 0; i < regIds.length; i += 100) {
@@ -1057,9 +1089,10 @@ async function handle(payload: {
   ) {
     // (Cours annulé PAR LE COACH lui-même, 96 : rien ici — il le sait, et l'élève reçoit son push
     // dédié via la branche reservations club_cancelled.)
-    // La réservation née du cours n'a plus lieu (annulation de l'élève OU « pas venu »
-    // marqué par le club — trigger lessons_follow_reservation) → prévenir le COACH.
-    // Formulation NEUTRE : on ne sait pas ici lequel des deux cas s'est produit.
+    // La réservation née du cours n'a plus lieu (annulation de l'élève, « pas venu » marqué par
+    // le club, ou annulation PAR LE CLUB — trigger lessons_follow_reservation) → prévenir le COACH.
+    // Formulation NEUTRE : on ne sait pas ici lequel des cas s'est produit — sans annoncer un
+    // terrain libre (le club qui annule RE-BLOQUE le créneau, 78).
     // Formulation dédiée pour un COURS COLLECTIF (sa lesson porte student_name = « Cours
     // collectif » — « Le cours avec Cours collectif » serait absurde).
     notifs.push({
@@ -1067,8 +1100,8 @@ async function handle(payload: {
       title: 'Cours annulé',
       body:
         Number(record.capacity ?? 1) > 1
-          ? `Ton cours collectif du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} est annulé — le créneau est libéré, les élèves inscrits sont prévenus.`
-          : `Le cours avec ${record.student_name ?? 'un joueur'} du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} n’aura pas lieu — le créneau est libéré.`,
+          ? `Ton cours collectif du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} est annulé — les élèves inscrits sont prévenus.`
+          : `Le cours avec ${record.student_name ?? 'un joueur'} du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} n’aura pas lieu.`,
       data: { kind: 'lesson' },
     });
     // COURS COLLECTIF (83, capacity > 1) : les ÉLÈVES inscrits doivent aussi le savoir —
@@ -1088,7 +1121,6 @@ async function handle(payload: {
           title: 'Cours collectif annulé',
           body: `Le cours collectif du ${record.date_label ?? record.date_key ?? ''} à ${record.time ?? ''} (${await recordClubName(record)}) n’aura pas lieu.`,
           data: { kind: 'reservation', ...(record.reservation_id ? { id: record.reservation_id, event: 'cancelled' as const } : {}) },
-          startsAt: slotStart(record.starts_at),
         });
       }
     }
@@ -1201,14 +1233,35 @@ async function handle(payload: {
           // Texte HONNÊTE sur la règle anti-collusion : la confirmation d'un ADVERSAIRE valide ;
           // celle d'un coéquipier du gagnant BLOQUERAIT la validation à 48 h (deux « je gagne »
           // ne valident jamais) — on le dit, au lieu d'inviter tout le monde à saisir.
-          notifs.push({
-            targets: await tokensFor(others),
-            title: 'Score à saisir 🎾',
-            body: record.i_won
-              ? `${await userName(record.user_id)} a mis le score de votre match ${when}. Si tu étais dans l’autre camp, confirme-le pour le valider. Coéquipiers : inutile, il sera validé sous 48 h.`
-              : `${await userName(record.user_id)} a mis le score de votre match ${when}. Si tu étais dans l’autre camp, confirme-le pour le valider.`,
-            data: { kind: 'reservation', id: record.reservation_id },
-          });
+          // Nom du saisisseur masqué (« Un joueur ») auprès des joueurs en relation de blocage
+          // avec lui, comme à l'écran (96, R-32) ; blocages illisibles → masqué pour tous
+          // (fail-closed sur le NOM, jamais sur l'information).
+          const tail = record.i_won
+            ? ` a mis le score de votre match ${when}. Si tu étais dans l’autre camp, confirme-le pour le valider. Coéquipiers : inutile, il sera validé sous 48 h.`
+            : ` a mis le score de votre match ${when}. Si tu étais dans l’autre camp, confirme-le pour le valider.`;
+          const { data: blocks, error: blkErr } = await supabase
+            .from('blocked_users')
+            .select('blocker_id, blocked_id')
+            .or(`blocker_id.eq.${record.user_id},blocked_id.eq.${record.user_id}`);
+          const hidden = new Set((blocks ?? []).flatMap((b: { blocker_id: string; blocked_id: string }) => [b.blocker_id, b.blocked_id]));
+          const named = blkErr ? [] : others.filter((id) => !hidden.has(id));
+          const masked = blkErr ? others : others.filter((id) => hidden.has(id));
+          if (named.length) {
+            notifs.push({
+              targets: await tokensFor(named),
+              title: 'Score à saisir 🎾',
+              body: `${await userName(record.user_id)}${tail}`,
+              data: { kind: 'reservation', id: record.reservation_id },
+            });
+          }
+          if (masked.length) {
+            notifs.push({
+              targets: await tokensFor(masked),
+              title: 'Score à saisir 🎾',
+              body: `Un joueur${tail}`,
+              data: { kind: 'reservation', id: record.reservation_id },
+            });
+          }
         }
       }
     }

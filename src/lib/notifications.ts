@@ -386,12 +386,14 @@ export function routeForNotification(data: NotificationData | null | undefined):
       // Demande de cours reçue → l’Espace Coach (Accepter / Refuser).
       return '/coach-admin';
     case 'club_reservation':
-    case 'club_tournament':
       // Push destiné au GÉRANT (nouvelle résa / annulation / demande de tournoi) → un seul
       // tap ouvre l’Espace Club au lieu de laisser naviguer Profil → Espace Club à la main.
       // `clubId` (R-47) : un gérant MULTI-CLUBS peut recevoir le push d'un club qui n'est pas son
       // club actif — l'Espace Club le lit et propose de basculer. Ancien push sans clubId : inchangé.
       return data.clubId ? `/club-admin?clubId=${encodeURIComponent(data.clubId)}` : '/club-admin';
+    case 'club_tournament':
+      // Demande de tournoi : l'Espace Club ouvre directement l'onglet Tournois (section=Tournois).
+      return data.clubId ? `/club-admin?clubId=${encodeURIComponent(data.clubId)}&section=Tournois` : '/club-admin?section=Tournois';
     case 'tournament':
       return data.id ? `/competition/${data.id}` : '/competitions';
     case 'news':

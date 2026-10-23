@@ -280,7 +280,17 @@ eq(
   '/club-admin?clubId=district%20club',
   'tap gérant : clubId transmis (encodé)',
 );
-eq(routeForNotification({ kind: 'club_tournament' }), '/club-admin', 'tap gérant : ancien push sans clubId → Espace Club (inchangé)');
+eq(
+  routeForNotification({ kind: 'club_tournament' }),
+  '/club-admin?section=Tournois',
+  'tap gérant : demande de tournoi sans clubId → onglet Tournois',
+);
+eq(
+  routeForNotification({ kind: 'club_tournament', clubId: 'c1' }),
+  '/club-admin?clubId=c1&section=Tournois',
+  'tap gérant : demande de tournoi → club concerné, onglet Tournois',
+);
+eq(routeForNotification({ kind: 'club_reservation' }), '/club-admin', 'tap gérant : ancien push sans clubId → Espace Club (inchangé)');
 eq(
   routeForNotification({ kind: 'reservation', id: 'rc', event: 'cancelled' }),
   '/reservations',
