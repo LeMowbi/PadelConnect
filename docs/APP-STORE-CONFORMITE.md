@@ -94,7 +94,7 @@ Les textes demandés à l'utilisateur sont déjà rédigés (Réglages → app) 
 ## 4. Suppression de compte (obligatoire Apple ✅)
 
 Déjà dans l'app : **Profil → Supprimer mon compte** (efface le compte et les données côté serveur,
-immédiat et définitif). Depuis les `92`, `97` et `98` (à appliquer ensemble avant le build #69), ce
+immédiat et définitif). Depuis les `92`, `97` et `98` (appliquées en production le 2026-10-23), ce
 qui ne peut pas disparaître sans casser l'historique des autres est **anonymisé** : tournois publiés
 ou clôturés de l'organisateur (« Compte supprimé », sans téléphone ; ceux en attente ou refusés sont
 supprimés), matchs passés joués avec des partenaires (sa place devient « Ancien joueur », ses saisies

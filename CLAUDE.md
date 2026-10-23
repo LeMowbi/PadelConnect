@@ -143,9 +143,13 @@ type` (`mark_no_show`, `confirm_share_paid`) — échec BRUYANT, jamais silencie
   Reste au porteur : FCM Android (compte Google Play à créer, guide `docs/ANDROID-LANCEMENT.md`) —
   le lien Wave des frais de tournoi EST configuré en base (vérifié 2026-10-21) et l'empreinte EAS
   d'assetlinks est posée (celle de Play App Signing s'ajoutera au lancement Play).
-  🆕 **À coller ENSEMBLE avant le build #69** : SQL `92`, `93`, `94`, `96`, `97`, `98` (écrites et
-  prouvées en local / transaction annulée, PAS encore en prod — la `95` y est déjà), puis déployer
-  **notify-club v50** APRÈS la 98 (elle lit `profiles.news_push` et `competitions.cancelled_by`).
+  ✅ **SQL `92`, `93`, `94`, `96`, `97`, `98` APPLIQUÉES EN PROD le 2026-10-23** (API Management, les
+  six fichiers en UNE transaction, sha256 `4faf0b0c…` ; répétition annulée 20/20 AVANT, mêmes 20
+  assertions 20/20 APRÈS : objets, ACL anon, vue d'occupation, 11 webhooks, `news_push`, fidélité
+  créateur/invité/cours, classement + rang, « pas venu » sur score validé, `delete_account` complet ;
+  données intactes : 2 résas, 15 profils ; définitions d'avant sauvegardées hors dépôt) — la `95` y
+  était déjà. **notify-club v50 déployée APRÈS la 98** (compteur plateforme 48, `verify_jwt`
+  préservé ; démarrage prouvé : appel sans secret → 401 de son propre contrôle).
   ⚠️ Après la 98, ne JAMAIS recoller seules la `80`, la `92`, la `96` ni la `97` (la `80` : sa
   `submit_match_score` / `apply_match_level` laisserait un TIERS saisir et valider le score à la place
   anonyme d'un compte supprimé ; la `92` et la `97` passent SANS erreur et annulent en silence les
@@ -154,7 +158,7 @@ type` (`mark_no_show`, `confirm_share_paid`) — échec BRUYANT, jamais silencie
   n'est qu'un EXEMPLE : la règle est GÉNÉRALE — ne jamais recoller seule une migration antérieure à la
   dernière appliquée, toujours reprendre la suite jusqu'à la `98` incluse (ex. la `91` seule ramène
   `block_user` d'avant la 96 ; les `85`/`86` seules ramènent un `delete_account` d'avant la 97/98).
-  (`notify-club` est déployée — **v48** du dépôt le 2026-10-21, compteur plateforme 47 : push gérant
+  (`notify-club` est déployée — **v50** du dépôt le 2026-10-23, compteur plateforme 48 : push gérant
   avec nom du club, favoris/alertes de niveau plafonnées à la source, liste d'attente one-shot
   honnête, agenda, annonces club jusqu'à 500 suiveurs, parts Wave, cours collectifs ; exclusion
   des bloqués FAIL-CLOSED, fan-out paginés ; secret partagé `x-webhook-secret` comparé en temps
@@ -171,11 +175,11 @@ type` (`mark_no_show`, `confirm_share_paid`) — échec BRUYANT, jamais silencie
 - Policies **UPDATE de Storage** : toujours `using` **ET** `with check` (sinon on peut déplacer un
   objet dans le dossier d'autrui).
 - Les migrations sont des fichiers numérotés dans `supabase/` — l'opérateur les colle dans
-  **SQL Editor → Run**. Migrations actuelles : `02` → `98` (voir dossier `supabase/`) — `02` → `91`
-  et `95` **appliquées en base** ; `92`→`94`, `96`→`98` écrites et prouvées en local, **à coller
-  ensemble avant le #69** (98 = décisions porteur du 2026-10-22 — avec aussi `operator_refunds_due()` /
+  **SQL Editor → Run**. Migrations actuelles : `02` → `98` (voir dossier `supabase/`) — **TOUTES
+  appliquées en base** (`92`→`94` et `96`→`98` le 2026-10-23 en une transaction, prouvées 20/20
+  avant et après, cf. §7) (98 = décisions porteur du 2026-10-22 — avec aussi `operator_refunds_due()` /
   `operator_mark_refunded(uuid)`, `competitions.cancelled_by`, le `search_path` figé de 8 fonctions
-  (4 trigger + 4 pures, R-80), `delete_competition` sous verrou `'reg:'` et le rattrapage R-16 rejoué —, puis notify-club v50 ; ⚠️ après la 98, ne JAMAIS
+  (4 trigger + 4 pures, R-80), `delete_competition` sous verrou `'reg:'` et le rattrapage R-16 rejoué —, puis notify-club v50 déployée ; ⚠️ après la 98, ne JAMAIS
   recoller seules la `80`, la `92`, la `96` ni la `97` (la `92` et la `97` passent SANS erreur et
   annulent en silence les décisions 4, 9 et 14 ; la `96` s'arrête sur 42P13 — pour la recoller :
   `drop function public.fetch_leaderboard(integer)`, puis `96`, `97`, `98` dans l'ordre) — liste
@@ -857,9 +861,18 @@ Expo, Supabase, Anthropic, superpowers vendorisées, Markdown seul) et `.claude/
   5/5** ; balayage : plus aucune relation sans RLS modifiable. ⚠️ Tout `drop view`/`create view`
   REMET les droits par défaut : reposer revoke/grant. **Vague 3b** (chantiers décidés) **fusionnée**
   avec SQL **92** (fidélité cible), **93** (index), **94** (anti-abus) — écrites + prouvées en
-  transaction annulée sur la prod (7/7), **à appliquer juste avant le build #69**. Fiches stores :
+  transaction annulée sur la prod (7/7), **appliquées le 2026-10-23** (cf. §7). Fiches stores :
   `docs/STORE-LISTING.md`. **Vague 3c** (correctifs M2→M11, SQL **96**/**97**, notify-club **v49**)
-  EN COURS.
+  FAITE.
+- **Vagues 3d-3e (2026-10-22/23) ✅** : décisions porteur intégrées (SQL 98, notify-club v50, écrans)
+  puis relecture fraîche adversariale de TOUT (8 lentilles dont SQL EXÉCUTÉES 02→98 sur Postgres 16,
+  traçabilité des 139 constats) : 46 constats au tour 0 (0 HIGH, 7 MEDIUM) → 0 HIGH/MEDIUM au tour 3,
+  puis 2 passes de clôture jusqu'aux derniers LOW (séries d'habitués re-posées : note mise à jour,
+  `renamed`/`resized`/`resized_other`, nom comparé hors casse/espaces — 97 prouvée 6/6 en local ;
+  compteurs d'écriture limités à l'époque courante ; plus aucune promesse de durée non chronométrée
+  dans le binaire : « en quelques gestes » ; procédure de repli du chronométrage complète, og.png
+  compris). Icônes : uniquement Ionicons (import par famille + règle ESLint) → ≈ 3,7 Mo de polices
+  en moins. Cadence verte à chaque commit. Puis 92→98 + notify-club v50 EN PROD (§7).
 - **Décisions porteur du 2026-10-22 (« tout ok » sur les recommandations)** : un cours de coach
   n'est PAS une partie (classement, fidélité) ; les réclamations de fidélité de l'ancienne règle
   repartent à zéro ; « pas venu » INTERDIT sur un match au score validé ; compte supprimé → ses
@@ -870,7 +883,7 @@ Expo, Supabase, Anthropic, superpowers vendorisées, Markdown seul) et `.claude/
   `/cours`) ; notifications « actus et agenda » activées par défaut, désactivables dans le profil ;
   badge « annulations » du gérant limité aux annulations à moins de 24 h ; Reanimated/Worklets :
   retrait IMPOSSIBLE en l'état (décision 19 re-soumise, cf. §5). Volet serveur = SQL **98** +
-  notify-club **v50** (écrites + prouvées en local, à coller avec 92→97 avant le #69). APRÈS le #69 : « pas venu » par joueur,
+  notify-club **v50** (appliquées / déployée en prod le 2026-10-23). APRÈS le #69 : « pas venu » par joueur,
   départ < 5 h visible du créateur, contestation fermée à J+7, partenaire de tournoi lié à un
   compte (avec garde-fou « tournoi bidon »). Prix recalculé par le serveur : seulement après la
   saisie des tarifs des 9 fondateurs. À fournir par le porteur : identité juridique + récépissé

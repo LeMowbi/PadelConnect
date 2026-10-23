@@ -42,8 +42,9 @@ Ces textes décrivent le **binaire #69**. Ils ne doivent partir qu'une fois ces 
       `supabase/92_fidelite_cible.sql`, « Alors, ce match ? », `PLANNING_HORIZON_DAYS = 60` et
       `CFBundleDevelopmentRegion: "fr"` présents). C'est cette branche qui fait foi pour le build ;
       la case reste à cocher sur le **binaire #69** lui-même.
-- [ ] **SQL `92` (fidélité) appliquée et prouvée en production** : sans elle, le compteur et le code
-      de fidélité ne marchent pas, et la promesse serait fausse.
+- [x] **SQL `92` (fidélité) appliquée et prouvée en production** : sans elle, le compteur et le code
+      de fidélité ne marchent pas, et la promesse serait fausse. ✅ Appliquée le 2026-10-23 avec
+      93→98 (une transaction, 20/20 assertions avant et après ; plafond lu en base : 5 000 FCFA).
 - [ ] Le **plafond de fidélité** réglé par l'opérateur vaut toujours **5 000 FCFA** (Espace
       opérateur → Finances). S'il change, corriger « jusqu’à 5 000 FCFA » partout dans ce fichier
       (4 blocs : texte promotionnel, description iOS, nouveautés, description Play ; garder les
