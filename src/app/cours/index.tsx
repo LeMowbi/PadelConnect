@@ -5,7 +5,7 @@ import { View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { SkeletonCard } from '@/components/Skeleton';
 import { Button, Card, Divider, EmptyState, IconCircle, SectionHeader, Tag, Txt } from '@/components/ui';
-import { findClub } from '@/data/clubs';
+import { activeClubs } from '@/data/clubs';
 import { fetchBookableCoaches, type ServerCoach } from '@/lib/coachesServer';
 import { fcfa } from '@/lib/format';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
@@ -16,7 +16,8 @@ type BookableCoach = ServerCoach & { clubId: string };
 
 // RÉSERVER UN COURS — annuaire des coachs réservables de TOUS les clubs (44), groupés par
 // club. Un tap ouvre le tunnel de demande de cours (le terrain n'est réservé qu'à
-// l'acceptation du coach — même parcours que depuis la fiche club).
+// l'acceptation du coach — même parcours que depuis la fiche club). Seul annuaire des coachs :
+// l'ancienne adresse /coachs renvoie ici (T-19).
 export default function CoursScreen() {
   const router = useRouter();
   const { state } = useApp();
@@ -27,6 +28,12 @@ export default function CoursScreen() {
     setCoaches((cur) => cs ?? (cur === undefined ? null : cur)); // échec → on garde l'existant
   };
   const { refreshControl } = usePullToRefresh(load);
+  // « Réessayer » après un échec du premier chargement : squelette réaffiché pendant la relance
+  // (même motif que retryCoaches de cours/[coachId].tsx) — jamais un bouton inerte.
+  const retry = () => {
+    setCoaches(undefined);
+    void load();
+  };
   useEffect(() => {
     let alive = true;
     void fetchBookableCoaches().then((cs) => alive && setCoaches(cs));
@@ -35,16 +42,13 @@ export default function CoursScreen() {
     };
   }, []);
 
-  // Groupement par club (l'ordre serveur est déjà par club) — nom résolu côté app.
-  const groups: { clubId: string; clubName: string; items: BookableCoach[] }[] = [];
-  for (const c of coaches ?? []) {
-    const g = groups.find((x) => x.clubId === c.clubId);
-    if (g) g.items.push(c);
-    else {
-      const club = findClub(c.clubId, state.customClubs, state.clubInfo);
-      groups.push({ clubId: c.clubId, clubName: club?.name ?? 'Club', items: [c] });
-    }
-  }
+  // Groupement par club, dans l'ORDRE des listes joueurs (activeClubs est trié par compareClubs :
+  // Padelta d'abord, §9). Seuls les clubs VISIBLES et RÉSERVABLES comptent : un coach d'un club
+  // masqué par l'opérateur ou « Bientôt » n'est pas proposé (le tunnel y est fermé).
+  const groups = activeClubs(state.customClubs, state.clubInfo)
+    .filter((club) => !club.comingSoon)
+    .map((club) => ({ clubId: club.id, clubName: club.name, items: (coaches ?? []).filter((c) => c.clubId === club.id) }))
+    .filter((g) => g.items.length > 0);
 
   return (
     <Screen back title="Réserver un cours" subtitle="Avec un coach déclaré par son club" refreshControl={refreshControl}>
@@ -60,7 +64,7 @@ export default function CoursScreen() {
             Impossible de charger les coachs — vérifie ta connexion.
           </Txt>
           <View style={{ marginTop: spacing.md }}>
-            <Button size="sm" label="Réessayer" icon="refresh" variant="secondary" onPress={() => void load()} />
+            <Button size="sm" label="Réessayer" icon="refresh" variant="secondary" onPress={retry} />
           </View>
         </Card>
       ) : groups.length === 0 ? (

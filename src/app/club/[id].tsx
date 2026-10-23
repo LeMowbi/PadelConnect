@@ -18,7 +18,6 @@ import { ClubGroupLessons } from '@/components/ClubGroupLessons';
 import { ClubNewsSection } from '@/components/ClubNewsSection';
 import { ClubPassCard } from '@/components/ClubPassCard';
 import { ClubPhoto } from '@/components/ClubPhoto';
-import { ContactButtons } from '@/components/ContactButtons';
 import { OpenMatches } from '@/components/OpenMatches';
 import { RatingStars } from '@/components/RatingStars';
 import { Reveal } from '@/components/Reveal';
@@ -29,7 +28,6 @@ import { SkeletonLines } from '@/components/Skeleton';
 import { StickyBar } from '@/components/StickyBar';
 import { clubGallery, defaultCourts, findClub, offersForClub } from '@/data/clubs';
 import type { PriceTier } from '@/data/clubs';
-import { coaches } from '@/data/coaches';
 import { compDateLabel, isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { isPlayed, useApp } from '@/store/AppContext';
 import { canAccessClub } from '@/lib/access';
@@ -265,14 +263,9 @@ export default function ClubDetail() {
     .sort((a, b) => a.dateKey.localeCompare(b.dateKey));
   const compsShown = showAllComps ? clubComps : clubComps.slice(0, HUB_PREVIEW);
   const courtCount = (state.clubCourts[club.id] ?? defaultCourts(club)).length;
-  // Coachs de l'annuaire (fiches réelles gérées par le porteur) — les coachs déclarés par les
-  // clubs ont TOUS un compte (Espace Coach) et arrivent via serverCoaches, réservables dans l'app.
-  const clubCoaches = coaches.filter((c) => c.clubId === club.id).map((c) => ({ id: c.id, name: c.name, sub: c.level, phone: c.phone }));
-  // « Ses coachs » (22) : liste repliée à 3 lignes AU TOTAL — les coachs réservables d’abord,
-  // l’annuaire ensuite (il complète les places restantes de l’aperçu).
-  const coachTotal = serverCoaches.length + clubCoaches.length;
+  // « Ses coachs » (22) : liste repliée à 3 lignes. Un coach a TOUJOURS un compte (Espace Coach,
+  // déclaré par le club) : l'annuaire statique « par téléphone » a été supprimé (T-19).
   const serverCoachesShown = showAllCoaches ? serverCoaches : serverCoaches.slice(0, HUB_PREVIEW);
-  const clubCoachesShown = showAllCoaches ? clubCoaches : clubCoaches.slice(0, Math.max(0, HUB_PREVIEW - serverCoachesShown.length));
   // Source de vérité : les avis VÉRIFIÉS du serveur (un joueur ne peut noter qu’après avoir joué),
   // MOINS ceux des comptes que j’ai bloqués (modération UGC — ils n’apparaissent plus chez moi).
   const reviews = serverReviews.filter((r) => !state.blockedUserIds.includes(r.userId));
@@ -771,18 +764,15 @@ export default function ClubDetail() {
         </Card>
       ) : null}
 
-      {/* Coachs du club — les coachs SERVEUR (comptes promus par le club) sont réservables
-          dans l’app ; les fiches saisies à la main restent joignables par téléphone/WhatsApp. */}
-      {serverCoaches.length > 0 || clubCoaches.length > 0 ? (
+      {/* Coachs du club — comptes promus par le club, réservables dans l’app. */}
+      {serverCoaches.length > 0 ? (
         <Card style={{ marginTop: spacing.lg }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}>
             <Ionicons name="school-outline" size={18} color={colors.signature} />
             <Txt variant="h3">Coachs du club</Txt>
           </View>
           <Txt variant="small" color={colors.textFaint}>
-            {serverCoaches.length > 0
-              ? 'Réserve ton cours dans l’app : le coach accepte, le terrain est réservé, le club confirme.'
-              : 'La réservation d’un cours se fait directement avec le coach.'}
+            Réserve ton cours dans l’app : le coach accepte, le terrain est réservé, le club confirme.
           </Txt>
           {serverCoachesShown.map((c, i) => (
             <View key={c.userId}>
@@ -801,6 +791,9 @@ export default function ClubDetail() {
                 {/* Ma propre fiche de coach : pas de cours avec soi-même (le serveur le refuse). */}
                 {c.userId === state.serverUserId ? (
                   <Tag label="Toi" tone="signature" />
+                ) : club.comingSoon ? (
+                  // Club « Bientôt » : pas encore réservable, les cours non plus (R-84).
+                  <Tag label="Bientôt" tone="neutral" />
                 ) : c.slots.length === 0 ? (
                   <Tag label="Bientôt dispo" tone="neutral" />
                 ) : (
@@ -814,37 +807,21 @@ export default function ClubDetail() {
               </View>
             </View>
           ))}
-          {serverCoachesShown.length > 0 && clubCoachesShown.length > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
-          {clubCoachesShown.map((c, i) => (
-            <View key={c.id}>
-              {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
-              <View style={[styles.coachRow, { marginTop: i === 0 && serverCoachesShown.length === 0 ? spacing.md : 0 }]}>
-                <IconCircle icon="person" color={colors.signature} bg={colors.signatureSoft} size={38} />
-                <View style={{ flex: 1 }}>
-                  <Txt variant="body" style={{ fontWeight: '600' }}>
-                    {c.name}
-                  </Txt>
-                  <Txt variant="muted">{c.sub}</Txt>
-                </View>
-              </View>
-              {c.phone ? <ContactButtons phone={c.phone} style={{ marginTop: spacing.sm }} /> : null}
-            </View>
-          ))}
           {/* Aperçu replié à 3 coachs (22) — le club peut en avoir beaucoup plus. */}
-          {coachTotal > HUB_PREVIEW ? (
+          {serverCoaches.length > HUB_PREVIEW ? (
             <View style={{ marginTop: spacing.sm }}>
               <Button
                 size="sm"
                 variant="ghost"
-                label={showAllCoaches ? 'Réduire' : `Voir les ${coachTotal} coachs du club`}
+                label={showAllCoaches ? 'Réduire' : `Voir les ${serverCoaches.length} coachs du club`}
                 icon={showAllCoaches ? 'chevron-up' : 'chevron-down'}
                 onPress={() => setShowAllCoaches((v) => !v)}
               />
             </View>
           ) : null}
-          {/* D1 : accès à l’annuaire global des coachs (la tuile du hub a été retirée). */}
+          {/* Accès aux coachs RÉSERVABLES de tous les clubs (/cours) — le seul annuaire (R-81). */}
           <Pressable
-            onPress={() => router.push('/coachs')}
+            onPress={() => router.push('/cours')}
             hitSlop={6}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.md }}
             accessibilityRole="button"

@@ -10,7 +10,8 @@ import { Button, Card, Divider, IconCircle, SectionHeader, Tag, Txt } from '@/co
 import { activeClubs, findClub } from '@/data/clubs';
 import { seedCompetitions } from '@/data/competitions';
 import { courtsFor, freeCourtSlotsAt, openSlotsFor, type AvailCtx } from '@/lib/availability';
-import { fetchCoachLessons, respondLesson, type CoachProfile, type Lesson } from '@/lib/coachesServer';
+import { coachCancelLesson, fetchCoachLessons, respondLesson, type CoachProfile, type Lesson } from '@/lib/coachesServer';
+import { confirmAsync } from '@/lib/confirm';
 import { durationLabel } from '@/lib/courtSchedule';
 import { MINUTE_MS, dateKeyLabel, nextDays, slotTimestamp } from '@/lib/days';
 import { fcfa } from '@/lib/format';
@@ -19,11 +20,12 @@ import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { priceForSlot } from '@/lib/pricing';
 import { usePullToRefresh } from '@/lib/usePullToRefresh';
 import { useTodayKey } from '@/lib/useTodayKey';
-import { useApp } from '@/store/AppContext';
+import { MAX_UPCOMING, useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
 // ESPACE COACH — réservé aux comptes promus coach par leur club (table coaches, serveur).
-// Le coach y reçoit les demandes de cours (Accepter / Refuser), voit ses cours à venir et
+// Le coach y reçoit les demandes de cours (Accepter / Refuser), voit ses cours à venir (qu’il
+// peut annuler avant leur début — 96, l’élève est prévenu sans pénalité) et
 // règle sa fiche (spécialité, tarif indicatif, disponibilités). RÈGLE CLEF : le terrain n’est
 // réservé QUE lorsqu’il accepte — l’acceptation crée la réservation, que le club confirme
 // ensuite comme n’importe laquelle (double validation coach + club).
@@ -49,6 +51,12 @@ export default function CoachAdmin() {
     const ls = await fetchCoachLessons(userId);
     if (ls) setLoaded({ lessons: ls, failed: false });
     else setLoaded((cur) => (cur.lessons === null ? { lessons: null, failed: true } : cur));
+  };
+  // « Réessayer » après un échec du tout premier chargement : squelette réaffiché pendant la
+  // relance (failed repassé à false) — plus de bouton inerte qu'on tape en boucle sans retour.
+  const retryLessons = () => {
+    setLoaded({ lessons: null, failed: false });
+    void reload();
   };
   const reloadGroupLessons = async () => {
     if (!clubId) return;
@@ -223,12 +231,49 @@ export default function CoachAdmin() {
       });
     } else if (res === 'student_full') {
       hapticWarning();
-      toast.show('L’élève a trop de réservations à venir — il doit en libérer avant que tu acceptes', { icon: 'alert-circle' });
+      toast.show(`L’élève a déjà ${MAX_UPCOMING} réservations à venir (le maximum) — il doit en libérer avant que tu acceptes`, {
+        icon: 'alert-circle',
+      });
     } else if (res === 'gone') {
       toast.show('Cette demande n’est plus valable (créneau passé ou annulée)', { icon: 'alert-circle' });
     } else if (res === 'forbidden') {
       hapticWarning();
       toast.show('Tu n’es plus le coach de ce cours — impossible d’y répondre', { icon: 'alert-circle' });
+    } else {
+      hapticWarning();
+      toast.show('Connexion impossible — vérifie ton réseau et réessaie', { icon: 'cloud-offline-outline' });
+    }
+    void reload();
+  };
+
+  // Le COACH annule un cours individuel ACCEPTÉ (96) : confirmation d'abord (confirmAsync = aussi
+  // sur le web), puis écriture HONNÊTE — la carte ne quitte « Cours à venir » qu'après le OUI du
+  // serveur (relecture). La résa de l'élève passe en « annulée » sans pénalité pour lui (créneau
+  // libéré, carnet rendu) et il reçoit un push dédié. Un message PAR CODE : seul 'error' invite à
+  // réessayer, les refus définitifs disent pourquoi.
+  const cancelAccepted = async (l: Lesson) => {
+    if (busyId) return;
+    const yes = await confirmAsync(
+      'Annuler ce cours ?',
+      `${l.studentName} — ${l.dateLabel} à ${l.time} (${l.court}). Le terrain est libéré et l’élève est prévenu.`,
+      { confirmLabel: 'Annuler le cours', cancelLabel: 'Garder le cours', destructive: true },
+    );
+    if (!yes) return;
+    setBusyId(l.id);
+    const res = await coachCancelLesson(l.id);
+    setBusyId(null);
+    if (res === 'ok') {
+      hapticSuccess();
+      toast.show('Cours annulé — le terrain est libéré, l’élève est prévenu');
+      void refreshSession(); // la réservation sort du planning du club
+    } else if (res === 'played') {
+      hapticWarning();
+      toast.show('Le cours a déjà commencé — il ne peut plus être annulé', { icon: 'alert-circle' });
+    } else if (res === 'gone') {
+      toast.show('Ce cours n’est plus actif (déjà annulé par l’élève ou par le club)', { icon: 'alert-circle' });
+    } else if (res === 'forbidden') {
+      hapticWarning();
+      toast.show('Tu n’es plus le coach de ce cours — impossible de l’annuler', { icon: 'alert-circle' });
     } else {
       hapticWarning();
       toast.show('Connexion impossible — vérifie ton réseau et réessaie', { icon: 'cloud-offline-outline' });
@@ -277,7 +322,7 @@ export default function CoachAdmin() {
               Impossible de charger tes cours — vérifie ta connexion.
             </Txt>
             <View style={{ marginTop: spacing.md }}>
-              <Button size="sm" label="Réessayer" icon="refresh" variant="secondary" onPress={() => void reload()} />
+              <Button size="sm" label="Réessayer" icon="refresh" variant="secondary" onPress={retryLessons} />
             </View>
           </Card>
         ) : pending.length === 0 ? (
@@ -333,8 +378,21 @@ export default function CoachAdmin() {
           upcoming.map((l) => (
             <Card key={l.id} style={{ marginTop: spacing.sm }}>
               <LessonRow lesson={l} />
-              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm }}>
                 <Tag label="Terrain réservé ✓" tone="green" />
+                <View style={{ flex: 1 }} />
+                {/* Annulable tant que le cours n'a pas commencé (le serveur renvoie 'played' sinon). */}
+                {l.startsAt > now ? (
+                  <Button
+                    size="sm"
+                    label={busyId === l.id ? 'Annulation…' : 'Annuler le cours'}
+                    icon="close"
+                    variant="danger"
+                    onPress={() => void cancelAccepted(l)}
+                    disabled={busyId !== null}
+                    pill
+                  />
+                ) : null}
               </View>
             </Card>
           ))
@@ -432,7 +490,7 @@ export default function CoachAdmin() {
                   ) : l.status === 'declined' ? (
                     <Tag label="Refusé" tone="neutral" />
                   ) : l.status === 'cancelled' ? (
-                    <Tag label="Annulé" tone="coral" />
+                    <Tag label={l.cancelledBy === 'coach' ? 'Annulé par toi' : 'Annulé'} tone="coral" />
                   ) : (
                     <Tag label="Expiré" tone="neutral" />
                   )}

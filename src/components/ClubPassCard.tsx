@@ -47,7 +47,7 @@ export function ClubPassCard({ clubId }: { clubId: string }) {
             Carnet : {remaining} séance{plural} restante{plural}
           </Txt>
           <Txt variant="small" color={colors.textMuted}>
-            Le club décompte une séance à chaque partie jouée ici.
+            Le club décompte une séance quand tu joues une partie que tu as réservée ici.
           </Txt>
           {/* Plusieurs carnets dans le même club : le détail, sinon le total suffit. */}
           {mine.length > 1

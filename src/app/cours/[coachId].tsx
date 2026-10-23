@@ -107,6 +107,20 @@ export default function CoursScreen() {
     );
   }
 
+  // Un club « Bientôt » n'est pas encore réservable — les cours non plus (garde aussi le lien
+  // direct ; même écran que le tunnel de réservation reserver/[clubId].tsx).
+  if (club.comingSoon) {
+    return (
+      <Screen back title="Réserver un cours" subtitle={club.name}>
+        <EmptyState
+          icon="time-outline"
+          title="Bientôt sur PadelConnect"
+          text="Ce club arrive très vite. Les cours seront réservables dès qu’il aura finalisé son inscription."
+        />
+      </Screen>
+    );
+  }
+
   const coach = coaches?.find((c) => c.userId === coachId);
 
   if (coaches === null) {

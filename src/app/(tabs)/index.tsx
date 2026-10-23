@@ -16,6 +16,7 @@ import { activeClubs, findClub } from '@/data/clubs';
 import { isTournamentPublic, seedCompetitions } from '@/data/competitions';
 import { durationLabel } from '@/lib/courtSchedule';
 import { DAY_MS, MONTHS, dayKey } from '@/lib/days';
+import { FRIENDS_GOAL } from '@/lib/badges';
 import { hapticLight } from '@/lib/haptics';
 import { initials } from '@/lib/format';
 import { fetchLeaderboard, type LeaderboardRow } from '@/lib/leaderboard';
@@ -29,8 +30,9 @@ import { isPlayed, useApp } from '@/store/AppContext';
 import { isReservationOwner } from '@/store/helpers';
 import { colors, gradients, radius, shadows, spacing } from '@/theme';
 
-// Accès rapide — 4 raccourcis UTILES sans onglet dédié (demande porteur : ni Coachs-annuaire
-// ni Parrainage ici — les cours se réservent DANS l'app, et le parrainage vit dans Profil).
+// Accès rapide — 4 raccourcis UTILES sans onglet dédié (demande porteur : pas de Parrainage ici,
+// il vit dans Profil). Les cours se réservent DANS l'app : « Réserver un cours » (/cours) est le
+// seul annuaire des coachs (l'annuaire statique « par téléphone » a été supprimé, T-19).
 // Le classement a sa propre carte podium plus bas → ici on met « Matchs ouverts » (écran dédié).
 type Action = { icon: keyof typeof Ionicons.glyphMap; label: string; route: string; tint: string; bg: string };
 const ACTIONS: Action[] = [
@@ -257,7 +259,7 @@ export default function HomeScreen() {
       { label: '5 parties', current: played, target: 5, cta: 'reserve' },
       { label: '20 parties', current: played, target: 20, cta: 'reserve' },
       { label: 'Premier tournoi', current: tournamentsPlayed, target: 1, cta: 'tournament' },
-      { label: '5 amis', current: friendsCount, target: 5, cta: 'invite' },
+      { label: `${FRIENDS_GOAL} amis`, current: friendsCount, target: FRIENDS_GOAL, cta: 'invite' },
     ];
 
     // Garder ceux où il manque exactement 1 ou 2 unités et qui ne sont pas encore atteints.
@@ -289,7 +291,7 @@ export default function HomeScreen() {
   const notifyPartners = () => {
     if (!upcoming) return;
     // Même message que le modèle « On joue ! » de « Mes réservations » (toujours en tête de liste).
-    openWhatsApp('', matchTemplates(upcoming, `${APP_DOMAIN}/club/${upcoming.clubId}`, iOwn)[0].body);
+    openWhatsApp('', matchTemplates(upcoming, `${APP_DOMAIN}/club/${upcoming.clubId}`, iOwn, state.serverUserId)[0].body);
   };
 
   // B-R2 : équipe incomplète si toi + invités < capacité (1v1 → dès 0 invité, 2v2 → < 3) —
@@ -844,14 +846,15 @@ export default function HomeScreen() {
                   <View key={r.userId}>
                     {i > 0 ? <Divider style={{ marginVertical: spacing.sm }} /> : null}
                     <View style={styles.podiumRow}>
+                      {/* Médaille du RANG serveur (98, ex æquo « 1, 1, 3 ») — même règle que /classement. */}
                       <Txt variant="h3" style={styles.podiumMedal}>
-                        {['🥇', '🥈', '🥉'][i]}
+                        {['🥇', '🥈', '🥉'][r.rank - 1]}
                       </Txt>
-                      <Txt variant="body" numberOfLines={1} style={{ flex: 1, fontWeight: i === 0 ? '800' : '600' }}>
+                      <Txt variant="body" numberOfLines={1} style={{ flex: 1, fontWeight: r.rank === 1 ? '800' : '600' }}>
                         {r.name}
                         {r.userId === state.serverUserId ? ' (toi)' : ''}
                       </Txt>
-                      <Tag label={`${r.points} pts`} tone={i === 0 ? 'amber' : 'neutral'} />
+                      <Tag label={`${r.points} pts`} tone={r.rank === 1 ? 'amber' : 'neutral'} />
                     </View>
                   </View>
                 ))
