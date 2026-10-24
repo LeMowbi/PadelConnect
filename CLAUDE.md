@@ -642,6 +642,12 @@ Tout vérifié et corrigé via les API (Brevo + Cloudflare + Supabase Management
   était resté en anglais), apostrophes doublées corrigées, et phrase de réassurance ajoutée au mail
   de confirmation (« si la page affiche une erreur, ton adresse est déjà confirmée — ouvre l'app »).
 - **Comptes fantômes** : une inscription jamais confirmée ne squatte plus le numéro (SQL 74, M2).
+- **Durcissement du 2026-10-24 (audit post-#69, sans build, API Management)** : « Secure email
+  change » ACTIVÉ (les deux adresses confirment), avis « e-mail changé » / « mot de passe changé »
+  ACTIVÉS en français, protection « mots de passe divulgués » ACTIVÉE (plan Pro ; refus déjà
+  traduit par `frAuthError`), `rate_limit_email_sent` 60 → 30/h. À suivre côté client au #70 :
+  minimum 8 caractères (gardes `< 6` → `< 8` + message), texte du changement d'adresse (« sur les
+  DEUX adresses »), puis captcha Turnstile ; détail : `docs/AUDIT-SERVEUR.md` (avertissements).
 - Résiduel UX connu (mineur, mitigé par la phrase de réassurance) : un lien de confirmation d'une
   inscription NATIVE ouvert sur ORDINATEUR redirige vers `padelco://` (page morte) — la confirmation
   passe quand même. Vrai fix = page d'atterrissage https `auth-callback` sur le site + build (plus tard).

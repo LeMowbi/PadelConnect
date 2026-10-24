@@ -46,9 +46,18 @@
 >   (§8 : RPC SECURITY DEFINER + `auth.uid()` + ACL), chaque fonction contrôle l'appelant.
 > - `rls_enabled_no_policy` (`competitions`, `competition_registrations`, `match_results`,
 >   `lesson_cancel_notices`, `rate_counters`) : accepté — accès UNIQUEMENT par RPC, voulu.
-> - `auth_leaked_password_protection` et `auth_otp_long_expiry` : acceptés — la protection contre
->   les mots de passe divulgués exige le plan Pro (décision porteur sur le plan Supabase) ; les liens
->   d'e-mail valent 24 h volontairement (« lien expiré » piégeait les joueurs, 2026-07-11).
+> - `auth_leaked_password_protection` : **FERMÉ le 2026-10-24** (`password_hibp_enabled = true`,
+>   l'organisation est sur le plan Pro ; l'app traduit déjà le refus : « Mot de passe trop facile à
+>   deviner »). Posés le même jour via l'API Management (`PATCH /config/auth`, sans build) :
+>   **« Secure email change »** (les DEUX adresses confirment un changement d'e-mail — l'app gère
+>   déjà `kind=change`), avis **« e-mail changé » / « mot de passe changé »** activés avec sujets et
+>   gabarits en FRANÇAIS (charte des mails de confirmation), `rate_limit_email_sent` 60 → **30/h**
+>   (plafond GLOBAL au projet : un attaquant pouvait épuiser le quota Brevo). Restent pour le #70
+>   (le client doit suivre) : longueur minimale 8 (le message de l'app dit encore « 6 »),
+>   réauthentification au changement de mot de passe, captcha Turnstile sur inscription / connexion /
+>   mot de passe oublié.
+> - `auth_otp_long_expiry` : accepté — les liens d'e-mail valent 24 h volontairement (« lien
+>   expiré » piégeait les joueurs, 2026-07-11).
 > - `function_search_path_mutable` : fermé par la 98 (`alter function … set search_path = public`
 >   sur les 4 fonctions trigger `protect_level`, `reservations_price_guard`, `strip_open_match_phone`,
 >   `support_stamp_resolved` et les 4 fonctions pures `phone10`, `hhmm_to_min`, `durations_60_90`,
